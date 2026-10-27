@@ -206,7 +206,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         .ai
         .data
         .as_ref()
-        .filter(|(f, _, _)| *f == folder)
+        .filter(|(f, d, _)| *f == folder && date.is_none_or(|x| x == *d))
         .map(|(_, _, t)| t.clone());
 
     // the map, the day, the scenarios in force, and the export
@@ -272,6 +272,10 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         if let Some(t) = data.as_ref() {
             export(l, t, &list[item]);
         }
+    }
+    if !can_export {
+        l.ui.p()
+            .rounded(export_r, omsi_ui::theme::CONTROL_RADIUS, PANEL.alpha(0.6));
     }
     l.ui.tooltip(
         export_r,

@@ -537,7 +537,6 @@ pub fn clock(minutes: f32) -> String {
     format!("{:02}:{:02}", (m / 60) % 24, m % 60)
 }
 
-/// `YYYY-MM-DD` of a YYYYMMDD day.
 /// The tour mask bits `date` (YYYYMMDD) selects: (its weekday's, bits 0-6 from Monday, or
 /// public holiday's, bit 7; its school holidays', bit 8, or school days', bit 9).
 fn day_bits(calendar: &omsi_map::Calendar, date: i32) -> (i32, i32) {
@@ -570,6 +569,7 @@ fn weekday(date: i32) -> i32 {
     (days - ref_days + 2).rem_euclid(7)
 }
 
+/// `YYYY-MM-DD` of a YYYYMMDD day.
 pub fn day(date: i32) -> String {
     format!(
         "{:04}-{:02}-{:02}",
