@@ -1,8 +1,11 @@
 //! Artificial object paths.
-use super::*;
+use glam::DVec3;
+use omsi_scenery::SceneryObject;
 use omsi_sim::ai::{AiBody, MotionKind};
 use omsi_sim::traffic::{AiState, Network};
+use omsi_sim::traffic::{Lane, LaneBuilder, LaneKind};
 use omsi_vehicle::{Axle, Vehicle};
+use openomsi_game::testing::scene::*;
 
 fn path(
     keyword: &str,

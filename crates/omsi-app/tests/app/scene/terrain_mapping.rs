@@ -1,6 +1,15 @@
 //! Exercise the production tile upload with a painted, cut terrain and mapped
 //! surfaces. No installed map content or live game state is needed.
-use super::*;
+use glam::{DVec3, Mat4};
+use hashbrown::HashMap;
+use omsi_geometry::MeshData;
+use omsi_render::{RenderPhase, Renderer, Scene};
+use omsi_scenery::Spline;
+use omsi_texture::{Image, TextureData};
+use openomsi_game::testing;
+use openomsi_game::testing::scene::*;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 struct Fixture(PathBuf);
 
@@ -98,7 +107,7 @@ fn mapped_splines_and_objects_use_uncut_base_while_ground_keeps_paint() {
             ..Default::default()
         },
     });
-    let instance = crate::startup::graphics_instance();
+    let instance = testing::startup::graphics_instance();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
@@ -245,7 +254,7 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
         .object_type("arrow.sco")
         .expect("synthetic route arrow must load");
     assert!(object.sco.is_help_arrow);
-    let instance = crate::startup::graphics_instance();
+    let instance = testing::startup::graphics_instance();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,

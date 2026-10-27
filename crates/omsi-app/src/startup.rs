@@ -285,7 +285,7 @@ pub(crate) fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::Ins
 }
 
 /// Use the native supported API for both windowed and offscreen rendering.
-pub(crate) fn graphics_instance() -> wgpu::Instance {
+pub fn graphics_instance() -> wgpu::Instance {
     let descriptor = instance_descriptor(None);
     #[cfg(feature = "server")]
     if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {

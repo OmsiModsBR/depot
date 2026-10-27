@@ -2,14 +2,19 @@
 //! comes through `openomsi_game::testing` (the `test-support` feature).
 
 mod bus_service;
+mod editor;
 mod humans;
 mod journey;
 mod line_times;
+mod map_surface;
 mod money;
 mod on_foot;
 mod player;
+mod scene;
 mod schedule;
 mod schedule_paper;
 mod services;
 mod situation;
+mod tiles;
 mod traffic;
+mod world_load;

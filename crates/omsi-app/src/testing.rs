@@ -54,6 +54,9 @@ pub mod bus_service {
 pub mod cli {
     pub use crate::cli::*;
 }
+pub mod editor {
+    pub use crate::editor::*;
+}
 pub mod humans {
     pub use crate::humans::*;
 
@@ -64,8 +67,14 @@ pub mod humans {
 pub mod journey {
     pub use crate::journey::*;
 }
+pub mod lights {
+    pub use crate::lights::*;
+}
 pub mod line_times {
     pub use crate::line_times::*;
+}
+pub mod map_surface {
+    pub use crate::map_surface::*;
 }
 pub mod money {
     pub use crate::money::*;
@@ -78,6 +87,10 @@ pub mod player {
 }
 pub mod scene {
     pub use crate::scene::*;
+
+    pub mod ground_query {
+        pub use crate::scene::ground_query::*;
+    }
 }
 pub mod schedule {
     pub use crate::schedule::*;
@@ -91,6 +104,15 @@ pub mod services {
 pub mod situation {
     pub use crate::situation::*;
 }
+pub mod startup {
+    pub use crate::startup::*;
+}
+pub mod tiles {
+    pub use crate::tiles::*;
+}
 pub mod traffic {
     pub use crate::traffic::*;
+}
+pub mod world_load {
+    pub use crate::world_load::*;
 }
