@@ -122,6 +122,8 @@ glow. The `OMSI_NO_CORONAS` flag turns them off here too. A device that cannot m
 draws the scene without coronas and says so once in the log. Rain streaks and snowflakes the
 renderer draws as coronas come with them; the snowfall's own pass is not here.
 
+A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
+
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky, smoke,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
