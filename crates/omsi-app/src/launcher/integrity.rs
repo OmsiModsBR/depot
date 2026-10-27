@@ -130,6 +130,8 @@ fn tabs(kind: usize, r: &Report) -> Vec<Category> {
             Category::Splines,
             Category::Models,
             Category::Textures,
+            Category::AiLists,
+            Category::Timetable,
             Category::Paths,
         ]
     } else {
@@ -1309,6 +1311,8 @@ mod tests {
                 Category::Splines,
                 Category::Models,
                 Category::Textures,
+                Category::AiLists,
+                Category::Timetable,
                 Category::Paths
             ]
         );

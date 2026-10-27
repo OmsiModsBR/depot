@@ -12,4 +12,5 @@ omsi-model = { path = "../omsi-model" }
 omsi-scenery = { path = "../omsi-scenery" }
 omsi-o3d = { path = "../omsi-o3d" }
 omsi-texture = { path = "../omsi-texture" }
+omsi-timetable = { path = "../omsi-timetable" }
 omsi-vehicle = { path = "../omsi-vehicle" }
