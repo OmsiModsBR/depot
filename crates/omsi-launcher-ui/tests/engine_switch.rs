@@ -30,6 +30,8 @@ fn sidebar(ui: &mut Ui, engine: Option<EngineSwitch>) -> Option<Nav> {
         badges: &[],
         footer: ("Driver", "Level 1"),
         engine,
+        footer_ask: false,
+        compact: false,
     }
     .draw(ui, 900.0)
 }

@@ -1698,13 +1698,10 @@ impl Launcher {
             && self.page == Page::Controls
             && self.pages.controls_tab == 0
             && self.pages.kb.dialog.is_some();
-<<<<<<< HEAD
         // (and OmsiLaunch's install or removal dialogs)
         let engine = !mobile && !matches!(self.state.original.flow, original::Flow::Idle);
-=======
         // (and the integrity report's export over Diagnostics)
         let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
->>>>>>> feat/original-engine-launch
         if self.browser.is_some() || crash || reset || disconnected {
             self.pages.pads.cancel_feedback_test();
         }
@@ -1715,11 +1712,8 @@ impl Launcher {
             || window
             || drive
             || keys
-<<<<<<< HEAD
-            || engine)
-=======
+            || engine
             || diag)
->>>>>>> feat/original-engine-launch
             .then(|| {
                 let i = self.ui.input.clone();
                 self.ui.input.mouse = Vec2::new(-1e4, -1e4);
@@ -2282,12 +2276,9 @@ impl Launcher {
                 logo: self.logo,
                 badges: &badges,
                 footer: (&name, &level),
-<<<<<<< HEAD
                 engine,
-=======
                 footer_ask: ask,
                 compact: self.sidebar_compact(),
->>>>>>> feat/original-engine-launch
             }
             .draw(&mut self.ui, size.y)
         };

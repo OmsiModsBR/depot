@@ -60,12 +60,9 @@ impl Shell {
             logo: self.logo,
             badges: &[],
             footer: ("Project Depot", "preview"),
-<<<<<<< HEAD
             engine: None,
-=======
             footer_ask: false,
             compact: false,
->>>>>>> feat/original-engine-launch
         };
         if let Some(Nav::Page(p)) = bar.draw(ui, h) {
             self.page = p;
@@ -420,10 +417,8 @@ pub struct Sidebar<'a> {
     pub badges: &'a [(Page, String, omsi_ui::Color)],
     /// The line at the foot: a name and, smaller, what it is.
     pub footer: (&'a str, &'a str),
-<<<<<<< HEAD
     /// The Depot | OMSI 2 switch under the logo, when the original engine can be started.
     pub engine: Option<EngineSwitch>,
-=======
     /// The right-hand part of the foot line asks for something ("Create" a driver): in the
     /// accent, not muted.
     pub footer_ask: bool,
@@ -460,7 +455,6 @@ fn sliding(ui: &mut Ui, name: &str, marks: &[(Page, Rect)], page: Page) -> Optio
         mix(a.w, b.w),
         mix(a.h, b.h),
     ))
->>>>>>> feat/original-engine-launch
 }
 
 /// The id the foot line is clickable under.
@@ -484,31 +478,24 @@ impl Sidebar<'_> {
             ui.image(Rect::new(18.0, 26.0, lw, lw * aspect), tex, 0.0);
         }
         let mut nav = None;
-<<<<<<< HEAD
         // (the switch takes a row's worth under the logo; the list below it is pushed down)
-        let shift = if self.engine.is_some() {
+        let shift = if self.engine.is_some() && !self.compact {
             SWITCH_H + 10.0
         } else {
             0.0
         };
-        if let Some(sw) = self.engine {
+        if let Some(sw) = self.engine.filter(|_| !self.compact) {
             let r = Rect::new(18.0, NAV_TOP - 12.0, SIDEBAR_W - 36.0, SWITCH_H);
             if let Some(omsi2) = engine_switch(ui, r, sw) {
                 nav = Some(Nav::Engine(omsi2));
             }
         }
+        let mut marks = Vec::new();
         let row = nav_row(h, shift);
         for (i, &page) in Page::listed().iter().enumerate() {
             let top = NAV_TOP + shift + i as f32 * row;
-            if self.entry(ui, page, Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0)) {
-=======
-        let mut marks = Vec::new();
-        let row = nav_row(h);
-        for (i, &page) in Page::listed().iter().enumerate() {
-            let top = NAV_TOP + i as f32 * row;
             let r = Rect::new(8.0, top, w - 17.0, row - 2.0);
             if self.entry(ui, page, r) {
->>>>>>> feat/original-engine-launch
                 nav = Some(Nav::Page(page));
             }
             marks.push((page, r));
