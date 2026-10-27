@@ -59,8 +59,8 @@ fn map(root: &Path) {
     write(
         root,
         "Maps/Test/TTData/36.ttl",
-        "[newtour]\n1\nBuses\n0\n\n[addtrip]\nA\n0\n300\n\n[addtrip]\nB\n0\n1290\n\n\
-         [newtour]\n2\nGhosts\n0\n",
+        "[newtour]\n1\nBuses\n1023\n\n[addtrip]\nA\n0\n300\n\n[addtrip]\nB\n0\n1290\n\n\
+         [newtour]\n2\nGhosts\n1023\n\n[newtour]\n3\nBuses\n864\n\n[addtrip]\nC\n0\n600\n",
     );
     write(
         root,
@@ -126,6 +126,15 @@ fn groups_fleet_lines_parking_and_people_as_on_the_day() {
         ("05:00".into(), "21:30".into())
     );
     assert!(line.tours[0].group_known && !line.tours[1].group_known);
+    // tour 3 runs on Saturdays and Sundays only: not on this Monday
+    assert_eq!(line.tours.len(), 2);
+    let saturday = AiTraffic::load(&root, &root.join("Maps/Test"), 20040619);
+    let tours: Vec<&str> = saturday.lines[0]
+        .tours
+        .iter()
+        .map(|x| x.number.as_str())
+        .collect();
+    assert_eq!(tours, ["1", "2", "3"]);
 
     assert_eq!(t.parklists.len(), 2);
     assert_eq!((t.parklists[0].index, t.parklists[1].index), (0, 2));

@@ -25,6 +25,7 @@ impl Checker<'_> {
                 lists.push((own, l));
             }
         }
+        let has_own = !lists.is_empty();
         for c in chrono_dirs {
             let file = ["ailists_#upd.cfg", "ailists.cfg"]
                 .iter()
@@ -41,11 +42,16 @@ impl Checker<'_> {
             .iter()
             .flat_map(|(_, l)| l.groups.iter().map(|g| g.name.trim().to_ascii_lowercase()))
             .collect();
-        for (path, l) in &lists {
+        for (i, (path, l)) in lists.iter().enumerate() {
             if self.stopped() {
                 return;
             }
-            self.ai_vehicles(path, l, lists.first().map(|(_, m)| m));
+            let map = if has_own && i > 0 {
+                lists.first().map(|(_, m)| m)
+            } else {
+                None
+            };
+            self.ai_vehicles(path, l, map);
         }
         self.random_groups(map_dir, &groups, !lists.is_empty());
         self.parked_cars(map_dir);
@@ -95,46 +101,68 @@ impl Checker<'_> {
         }
     }
 
-    /// The vehicles of one AI list's groups and depots; `map` is the map's own list, whose
-    /// depot file a scenario's update keeps when it names none.
+    /// The vehicles of one AI list's groups and depots; `map` is the map's own list when `l` is
+    /// a scenario's update: a group of the update keeps the map's depot file when it names none,
+    /// and the map's buses of that group take the depot file the update names.
     fn ai_vehicles(&mut self, path: &Path, l: &AiLists, map: Option<&AiLists>) {
         let by = self.rel(path);
         for g in &l.groups {
             for v in &g.vehicles {
                 self.ai_vehicle(&v.file, &by);
             }
-            let hof = g.hof.clone().or_else(|| {
-                map?.groups
+            let base = map.and_then(|m| {
+                m.groups
                     .iter()
-                    .find(|m| m.name.eq_ignore_ascii_case(&g.name) && m.is_depot == g.is_depot)?
-                    .hof
-                    .clone()
+                    .find(|b| b.name.eq_ignore_ascii_case(&g.name) && b.is_depot == g.is_depot)
             });
+            let hof = g.hof.clone().or_else(|| base?.hof.clone());
+            let hof = hof.as_deref().map(str::trim).filter(|h| !h.is_empty());
             for t in &g.typgroups {
                 let Some(found) = self.ai_vehicle(&t.file, &by) else {
                     continue;
                 };
-                let Some(hof) = hof.as_deref().filter(|h| !h.trim().is_empty()) else {
-                    continue;
-                };
-                let Some(dir) = found.parent() else { continue };
-                if omsi_vehicle::hof::depot_in(dir, hof).is_none() {
-                    self.add(
-                        Severity::Warning,
-                        "depot-missing",
-                        format!("{}/{}.hof", self.rel(dir), hof.trim()),
-                        &by,
-                        format!(
-                            "The depot \"{}\" the AI depot \"{}\" names is not in this vehicle's \
-                             folder; these buses have no depot file to take their lines and \
-                             destinations from.",
-                            hof.trim(),
-                            g.name.trim()
-                        ),
-                        None,
-                    );
+                if let Some(hof) = hof {
+                    self.depot_of(&found, hof, g.name.trim(), &by);
                 }
             }
+            // the map's buses of a group whose depot file the update changes (the map's list
+            // already says which of them are missing)
+            let Some(base) = base else { continue };
+            let Some(new) = g.hof.as_deref().map(str::trim).filter(|h| !h.is_empty()) else {
+                continue;
+            };
+            if base
+                .hof
+                .as_deref()
+                .is_some_and(|h| h.trim().eq_ignore_ascii_case(new))
+            {
+                continue;
+            }
+            for t in &base.typgroups {
+                let path = resolve_path(self.root, t.file.trim());
+                if !t.file.trim().is_empty() && vfs::is_file(&path) {
+                    self.depot_of(&path, new, g.name.trim(), &by);
+                }
+            }
+        }
+    }
+
+    /// Whether the depot file `hof` is in the folder of the AI bus `found`.
+    fn depot_of(&mut self, found: &Path, hof: &str, group: &str, by: &str) {
+        let Some(dir) = found.parent() else { return };
+        if omsi_vehicle::hof::depot_in(dir, hof).is_none() {
+            self.add(
+                Severity::Warning,
+                "depot-missing",
+                format!("{}/{}.hof", self.rel(dir), hof),
+                by,
+                format!(
+                    "The depot \"{hof}\" the AI depot \"{group}\" names is not in this vehicle's \
+                     folder; these buses have no depot file to take their lines and destinations \
+                     from."
+                ),
+                None,
+            );
         }
     }
 
