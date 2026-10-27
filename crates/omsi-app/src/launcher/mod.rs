@@ -331,6 +331,9 @@ impl Launcher {
             chrome: Default::default(),
             logo_accent: omsi_ui::theme::current_accent(),
         };
+        // (every button of the launcher names itself after the mouse rests on it a second)
+        app.ui.auto_tips = true;
+        omsi_ui::theme::set_motion(windows_motion());
         // no original installation found anywhere: the launcher still opens, on Setup, and says
         // what it needs (only starting a session needs the game)
         if omsi_cfg::missing_original_essentials(std::path::Path::new(&app.state.config.root)).len()
@@ -826,6 +829,7 @@ impl ApplicationHandler for Launcher {
         } else if !self.focused && !omsi_cfg::flags::BACKGROUND.is_set() {
             0.1
         } else if self.last_input.elapsed().as_secs_f32() > 3.0
+            && !self.ui.moving()
             && self.dragging.is_none()
             && self.script.is_empty()
         {
@@ -1129,6 +1133,8 @@ impl Launcher {
         self.focused = f;
         if f {
             self.root_ok = None;
+            // (Windows' "Animation effects" may have changed while the window was away)
+            omsi_ui::theme::set_motion(windows_motion());
         }
         if !f {
             self.pages.pads.cancel_feedback_test();
@@ -1714,7 +1720,11 @@ impl Launcher {
                 self.page_anim = 1.0;
             }
             let rail_w = self.rail_w();
-            self.page_anim = (self.page_anim + self.ui.dt / 0.15).min(1.0);
+            self.page_anim = if omsi_ui::theme::motion() {
+                (self.page_anim + self.ui.dt / omsi_ui::theme::MOTION_NORMAL).min(1.0)
+            } else {
+                1.0
+            };
             // (no wider than a page reads well: on a wide screen the rest is margin, the page
             // in the middle - the panels stretched across 2000 px with their text at one end;
             // under the top bar, the heading a little closer to it than to the window's edge)
@@ -1741,8 +1751,15 @@ impl Launcher {
                 w,
                 h,
             );
-            let e = 1.0 - (1.0 - self.page_anim).powi(3);
-            let content = Rect::new(content.x + 8.0 * (1.0 - e), content.y, content.w, content.h);
+            // (a page comes in as Windows 11's do: rising 12 px into place; its panels' glass
+            // stays as it is, nothing fades)
+            let e = omsi_ui::theme::ease_out(self.page_anim);
+            let content = Rect::new(
+                content.x,
+                content.y + 12.0 * (1.0 - e),
+                content.w,
+                content.h,
+            );
             let glass = self.draw_backdrop();
             omsi_ui::theme::set_glass(glass);
             match self.page {
@@ -1770,6 +1787,32 @@ impl Launcher {
         }
         if let Some(i) = saved {
             self.ui.input = i;
+            // (a window over the page fades in with the page's darkening, as Windows 11's
+            // dialogs do; each one again when it opens)
+            let which = if disconnected {
+                "disconnect"
+            } else if crash {
+                "crash"
+            } else if reset {
+                "reset"
+            } else if self.browser.is_none() && window {
+                match self.start.popup {
+                    Some(start::Popup::StartPoint) => "start-point",
+                    Some(start::Popup::Weather) => "weather",
+                    _ => "explore",
+                }
+            } else if self.browser.is_none() && drive {
+                "drive"
+            } else if self.browser.is_none() && keys {
+                "keys"
+            } else {
+                "browser"
+            };
+            let a = self.ui.appear(
+                omsi_ui::widgets::id_of(&format!("dialog:{which}")),
+                omsi_ui::theme::MOTION_NORMAL,
+            );
+            self.ui.push_fade(a);
             if disconnected {
                 self.draw_disconnect_dialog();
             } else if crash {
@@ -1787,6 +1830,7 @@ impl Launcher {
             } else {
                 self.draw_browser();
             }
+            self.ui.pop_fade();
         }
         // a game starts: the last picture before the launcher gives its graphics device up
         // (see `frame`), which stays in the window until the game ends
@@ -2165,12 +2209,14 @@ impl Launcher {
             Some(p) => (p.level, p.name.clone()),
             None => (1, self.state.config.profile.clone()),
         };
-        let name = if name.is_empty() {
-            "No driver".to_string()
+        // (no driver yet: no level to show, and the foot asks for one - it opens Profile)
+        let ask = name.is_empty();
+        let name = if ask { "No driver".to_string() } else { name };
+        let level = if ask {
+            "Create".to_string()
         } else {
-            name
+            omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string())
         };
-        let level = omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string());
         let page = self.page.shown().unwrap_or(UiPage::Drive);
         let nav = if self.top_nav() {
             omsi_launcher_ui::shell::TopBar {
@@ -2185,6 +2231,7 @@ impl Launcher {
                 logo: self.logo,
                 badges: &badges,
                 footer: (&name, &level),
+                footer_ask: ask,
             }
             .draw(&mut self.ui, size.y)
         };
@@ -2236,7 +2283,12 @@ impl Launcher {
         };
         let has_bus = self.vehicles.current().is_some() && !self.state.choice.map.is_empty();
         self.vehicles.set_picture(has_bus.then_some(picture));
+        let none = !self.root_ok();
+        self.vehicles.set_no_folder(none);
         self.vehicles.draw(&mut self.ui, body);
+        if self.vehicles.take_open_setup() {
+            self.go(Page::Setup);
+        }
         // (the bus the next start uses: its card shows what is chosen for it)
         if let Some(file) = self
             .vehicles
@@ -2383,7 +2435,12 @@ impl Launcher {
         self.refresh_catalogs();
         omsi_launcher_ui::shell::page_heading(&mut self.ui, UiPage::Maps, area.x, area.y - 28.0);
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
+        let none = !self.root_ok();
+        self.maps.set_no_folder(none);
         self.maps.draw(&mut self.ui, body);
+        if self.maps.take_open_setup() {
+            self.go(Page::Setup);
+        }
         // the chosen map's picture, read from its folder on a thread
         if let Some(file) = self.maps.current().map(str::to_string) {
             self.map_pic
@@ -2434,6 +2491,8 @@ impl Launcher {
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
         let games = self.state.instances.iter().filter(|i| i.running).count();
         let root_ok = self.root_ok();
+        // (each chip's dot says how it stands at a glance: green when all is well, amber when
+        // something is missing; none while there is nothing to say - a game not running)
         let chips = [
             (
                 if games == 0 {
@@ -2441,7 +2500,7 @@ impl Launcher {
                 } else {
                     "Game: running".to_string()
                 },
-                games > 0,
+                (games > 0).then_some(OK),
             ),
             (
                 (if root_ok {
@@ -2450,7 +2509,7 @@ impl Launcher {
                     "OMSI 2 folder: not chosen"
                 })
                 .to_string(),
-                false,
+                Some(if root_ok { OK } else { WARN }),
             ),
             (
                 (if self.preview.live {
@@ -2459,19 +2518,19 @@ impl Launcher {
                     "Preview helper: stopped"
                 })
                 .to_string(),
-                self.preview.live,
+                self.preview.live.then_some(OK),
             ),
         ];
         let mut at = x;
-        for (t, lit) in chips {
-            // (a lit chip leads with its dot, the words after it)
-            let dot = if lit { 12.0 } else { 0.0 };
+        for (t, dot_c) in chips {
+            // (a chip with a dot leads with it, the words after it)
+            let dot = if dot_c.is_some() { 12.0 } else { 0.0 };
             let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
             let r = Rect::new(at, cy - 12.0, w, 24.0);
             self.ui.p().rounded(r, 12.0, PANEL);
             self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
-            if lit {
-                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, OK);
+            if let Some(c) = dot_c {
+                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, c);
             }
             let tx = Rect::new(r.x + dot, r.y, w - dot, 24.0);
             self.ui
@@ -2629,6 +2688,31 @@ fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::Render
         shadow_size: 1024,
         render_scale: 1.0,
         ..settings.render_options()
+    }
+}
+
+/// Whether Windows animates its controls (Settings > Accessibility > Visual effects >
+/// Animation effects): off, the launcher shows every change at once too. Elsewhere, on.
+fn windows_motion() -> bool {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        };
+        let mut on = windows::core::BOOL(1);
+        let read = unsafe {
+            SystemParametersInfoW(
+                SPI_GETCLIENTAREAANIMATION,
+                0,
+                Some(&mut on as *mut _ as *mut std::ffi::c_void),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+            )
+        };
+        read.is_err() || on.as_bool()
+    }
+    #[cfg(not(windows))]
+    {
+        true
     }
 }
 
