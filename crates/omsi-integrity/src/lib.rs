@@ -14,9 +14,11 @@
 mod image_size;
 mod map;
 mod report;
+mod text;
 mod vehicle;
 
 pub use image_size::{image_size, next_pow2};
-pub use map::check_map;
-pub use report::{Finding, Report, Severity};
-pub use vehicle::check_vehicle;
+pub use map::{check_map, check_map_with};
+pub use report::{Category, Finding, Progress, Report, Severity};
+pub use text::TextOptions;
+pub use vehicle::{check_vehicle, check_vehicle_with};

@@ -1,6 +1,6 @@
 //! A small map built from scratch in a temporary folder: nothing here is game content.
 
-use omsi_integrity::{check_map, image_size, next_pow2, Severity};
+use omsi_integrity::{check_map, check_map_with, image_size, next_pow2, Progress, Severity};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -60,7 +60,8 @@ fn a_complete_map_has_no_findings() {
     let r = check_map(&root, &root.join("Maps/Test"));
     assert!(r.findings.is_empty(), "{:#?}", r.findings);
     assert_eq!((r.tiles, r.objects, r.splines, r.textures), (1, 1, 1, 3));
-    assert!(r.is_complete());
+    assert_eq!(r.meshes, 1);
+    assert!(r.is_complete() && !r.cancelled);
     let _ = fs::remove_dir_all(&root);
 }
 
@@ -576,5 +577,31 @@ fn two_missing_textures_of_one_name_in_different_folders_are_two_findings() {
         .map(|f| f.file.as_str())
         .collect();
     assert_eq!(missing.len(), 2, "{missing:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn progress_counts_the_tiles_and_a_cancel_stops_the_check() {
+    let root = temp_root("progress");
+    complete(&root);
+    write(
+        &root,
+        "Maps/Test/global.cfg",
+        "[name]\nTest\n\n[map]\n0\n0\ntile_0_0.map\n\n[map]\n1\n0\ntile_1_0.map\n",
+    );
+    write(&root, "Maps/Test/tile_0_0.map", TILE);
+    write(&root, "Maps/Test/tile_1_0.map", TILE);
+    let p = Progress::new();
+    let r = check_map_with(&root, &root.join("Maps/Test"), &p);
+    assert_eq!(p.steps(), Some((2, 2)));
+    assert_eq!(r.tiles, 2);
+    assert!(!r.cancelled);
+
+    // cancelled before it starts: no tile is read, and the report says it is a part only
+    let p = Progress::new();
+    p.cancel();
+    let r = check_map_with(&root, &root.join("Maps/Test"), &p);
+    assert_eq!(r.tiles, 0);
+    assert!(r.cancelled);
     let _ = fs::remove_dir_all(&root);
 }

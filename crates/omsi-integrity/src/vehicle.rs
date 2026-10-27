@@ -1,5 +1,5 @@
 use crate::map::{is_null_texture, Checker};
-use crate::report::{Report, Severity};
+use crate::report::{Progress, Report, Severity};
 use omsi_cfg::{resolve_path, vfs, CfgFile};
 use omsi_model::Model;
 use omsi_vehicle::sound::SoundCfg;
@@ -9,7 +9,13 @@ use std::path::{Path, PathBuf};
 /// Check one vehicle file (`.bus`, `.ovh`, ...): its model with meshes and textures, scripts
 /// and variable lists, sound set and the other files it names. `root` is the OMSI 2 folder.
 pub fn check_vehicle(root: &Path, vehicle_file: &Path) -> Report {
-    let mut c = Checker::new(root);
+    check_vehicle_with(root, vehicle_file, &Progress::new())
+}
+
+/// [`check_vehicle`] that stops when `progress` is cancelled (a vehicle has no steps to
+/// count: [`Progress::steps`] stays empty).
+pub fn check_vehicle_with(root: &Path, vehicle_file: &Path, progress: &Progress) -> Report {
+    let mut c = Checker::new(root, progress);
     c.report.map = vehicle_file
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
