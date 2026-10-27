@@ -460,6 +460,58 @@ fn natural_key(s: &str) -> (bool, u64, String) {
 }
 
 /// `HH:MM` of minutes after midnight.
+/// A vehicle that can be put into an AI group: a `.ovh` or `.bus` of a folder of `Vehicles`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VehicleFile {
+    /// As a list names it (`Vehicles\\<folder>\\<file>`).
+    pub file: String,
+    /// Its `[friendlyname]`, empty when it has none.
+    pub name: String,
+    /// A bus (`.bus`), else a car or truck (`.ovh`).
+    pub bus: bool,
+}
+
+/// The vehicles of the installation and the installed mods (each folder of `Vehicles` in
+/// every content root, the first root's file of a name winning), by folder and file name.
+pub fn vehicle_files(root: &Path) -> Vec<VehicleFile> {
+    let mut dirs = omsi_cfg::read_dir_merged("Vehicles");
+    if omsi_cfg::content_roots().is_empty() {
+        dirs = vfs::list_dir(&resolve_path(root, "Vehicles"))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(_, d)| *d)
+            .map(|(n, _)| resolve_path(root, "Vehicles").join(n))
+            .collect();
+    }
+    let mut names = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for d in dirs.iter().filter(|d| vfs::is_dir(d)) {
+        let Some(folder) = d.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+            continue;
+        };
+        for (n, is_dir) in vfs::list_dir(d).unwrap_or_default() {
+            let n = n.to_string_lossy().into_owned();
+            let lower = n.to_ascii_lowercase();
+            let bus = lower.ends_with(".bus");
+            if is_dir || !(bus || lower.ends_with(".ovh")) {
+                continue;
+            }
+            let file = format!("Vehicles\\{folder}\\{n}");
+            if !seen.insert(file.to_ascii_lowercase()) {
+                continue;
+            }
+            out.push(VehicleFile {
+                name: friendly(&d.join(&n), &mut names),
+                file,
+                bus,
+            });
+        }
+    }
+    out.sort_by_key(|v| natural_key(&v.file));
+    out
+}
+
 pub fn clock(minutes: f32) -> String {
     let m = minutes.round().max(0.0) as i64;
     format!("{:02}:{:02}", (m / 60) % 24, m % 60)

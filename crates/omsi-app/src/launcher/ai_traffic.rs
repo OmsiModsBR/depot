@@ -1,7 +1,8 @@
 //! The AI traffic tab of the Diagnostics page: a map's AI lists as the game takes them on a
 //! chosen day (`omsi_integrity::AiTraffic`) - the car groups and their weights, the depots'
 //! fleets behind the timetable's tours, the parking lists, the people and drivers, and the
-//! random traffic's density over the day. It only reads; nothing on it changes a file.
+//! random traffic's density over the day. Edit lists changes the map's own car groups and
+//! parking lists (see `ai_edit`); everything else here only reads.
 
 use super::Launcher;
 use omsi_integrity::traffic::{clock, day, Listed, TrafficGroup};
@@ -24,7 +25,7 @@ pub struct AiView {
     /// The map's folder and day being read, and the answer.
     loading: Option<(String, i32, Receiver<AiTraffic>)>,
     /// The map's folder and day read, and what was read.
-    data: Option<(String, i32, Arc<AiTraffic>)>,
+    pub(super) data: Option<(String, i32, Arc<AiTraffic>)>,
     /// 0 car groups, 1 bus fleet and lines, 2 parked cars, 3 people, 4 traffic density.
     tab: usize,
     group: usize,
@@ -44,12 +45,19 @@ pub struct AiView {
     map_file: String,
     /// The last frame showed a vehicle's preview (the page's own bus is not asked for then).
     showing: bool,
+    /// The map's lists being edited.
+    pub edit: Option<super::ai_edit::Editor>,
 }
 
 impl AiView {
     /// The tab shows the preview of one of its vehicles.
     pub fn shows_vehicle(&self) -> bool {
         self.showing
+    }
+
+    /// A window of the editing lies over the tab.
+    pub fn dialog_open(&self) -> bool {
+        self.edit.as_ref().is_some_and(|e| e.dialog_open())
     }
 }
 
@@ -85,7 +93,7 @@ fn read(root: PathBuf, folder: String, date: i32) -> Receiver<AiTraffic> {
 }
 
 /// The panel's chosen row in a list of `n`, kept inside it.
-fn keep(i: usize, n: usize) -> usize {
+pub(super) fn keep(i: usize, n: usize) -> usize {
     i.min(n.saturating_sub(1))
 }
 
@@ -124,7 +132,15 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             today()
         };
     }
-    let item = keep(l.pages.diag.ai.item.unwrap_or(0), list.len());
+    let mut item = keep(l.pages.diag.ai.item.unwrap_or(0), list.len());
+    // (while its lists are edited, the map stays)
+    if let Some(e) = l.pages.diag.ai.edit.as_ref() {
+        match list.iter().position(|x| x.1 == e.folder) {
+            Some(i) => item = i,
+            None => l.pages.diag.ai.edit = None,
+        }
+    }
+    let editing = l.pages.diag.ai.edit.is_some();
     let folder = list[item].1.clone();
     l.pages.diag.ai.showing = false;
     l.pages.diag.ai.map_file = l
@@ -184,7 +200,20 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let mut it = item;
     let sel_w = 300.0f32.min(area.w * 0.3);
     let map_r = Rect::new(area.x, area.y, sel_w, h);
-    if l.ui.select_as_is("ai-map", map_r, &mut it, &names) {
+    if editing {
+        l.ui.p()
+            .rounded(map_r, omsi_ui::theme::CONTROL_RADIUS, PANEL_2);
+        l.ui.p()
+            .rounded_border(map_r, omsi_ui::theme::CONTROL_RADIUS, 1.0, LINE);
+        l.ui.text_in_as_is(
+            &names[item],
+            Rect::new(map_r.x + 12.0, map_r.y, map_r.w - 24.0, map_r.h),
+            13.0,
+            Weight::Regular,
+            MUTED,
+        );
+        l.ui.tooltip(map_r, "Stop editing to look at another map.");
+    } else if l.ui.select_as_is("ai-map", map_r, &mut it, &names) {
         l.pages.diag.ai.item = Some(it);
         reset(l);
     }
@@ -233,10 +262,41 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         export_r,
         "Saves everything on this tab for the chosen map and day as a text file.",
     );
+    if !editing {
+        let edit_r = Rect::new(export_r.x - 10.0 - 150.0, area.y, 150.0, h);
+        let why = super::ai_edit::cannot_edit(l, &folder);
+        let clicked = l.ui.button(
+            "ai:edit",
+            edit_r,
+            "Edit lists",
+            Some("tune"),
+            ButtonKind::Normal,
+        );
+        if why.is_some() {
+            l.ui.p()
+                .rounded(edit_r, omsi_ui::theme::CONTROL_RADIUS, PANEL.alpha(0.6));
+        }
+        l.ui.tooltip(
+            edit_r,
+            why.unwrap_or(
+                "Change the map's car groups and parking lists. The files are copied before each save.",
+            ),
+        );
+        if clicked && why.is_none() {
+            let name = names[item].clone();
+            super::ai_edit::start(l, &folder, &name);
+        }
+    }
+
+    // the editing banner
+    let mut ty = area.y + h + 12.0;
+    if editing {
+        super::ai_edit::banner(l, Rect::new(area.x, ty, area.w, 46.0));
+        ty += 58.0;
+    }
 
     // a tab for each part of the traffic
-    let ty = area.y + h + 12.0;
-    let counts = data
+    let mut counts = data
         .as_ref()
         .map(|t| {
             [
@@ -248,6 +308,9 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             ]
         })
         .unwrap_or_default();
+    if let Some(e) = l.pages.diag.ai.edit.as_ref() {
+        (counts[0], counts[2]) = super::ai_edit::counts(e);
+    }
     let labels = [
         (
             "Car groups",
@@ -281,6 +344,15 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         area.w,
         (area.bottom() - ty - 56.0).max(160.0),
     );
+    // the lists being edited are the map's own, read from its files
+    if l.pages.diag.ai.edit.is_some() && matches!(l.pages.diag.ai.tab, 0 | 2) {
+        if l.pages.diag.ai.tab == 0 {
+            super::ai_edit::car_groups(l, body);
+        } else {
+            super::ai_edit::parked(l, body);
+        }
+        return;
+    }
     let Some(t) = data else {
         let r = body;
         l.ui.solid(r);
@@ -459,7 +531,7 @@ fn count_tabs(
 
 /// The three panels of a tab: the lists at the left, what the chosen one holds in the middle,
 /// and the details of the chosen entry at the right.
-fn columns(body: Rect) -> (Rect, Rect, Rect) {
+pub(super) fn columns(body: Rect) -> (Rect, Rect, Rect) {
     let gap = 12.0;
     let lw = (body.w * 0.2).clamp(200.0, 260.0);
     let rw = (body.w * 0.24).clamp(240.0, 330.0);
@@ -475,7 +547,7 @@ fn columns(body: Rect) -> (Rect, Rect, Rect) {
 }
 
 /// A line of quiet text at the foot of a panel.
-fn foot(l: &mut Launcher, r: Rect, s: &str) {
+pub(super) fn foot(l: &mut Launcher, r: Rect, s: &str) {
     l.ui.p().rect(
         Rect::new(r.x + 1.0, r.bottom() - 50.0, r.w - 2.0, 1.0),
         LINE,
@@ -491,7 +563,7 @@ fn foot(l: &mut Launcher, r: Rect, s: &str) {
 }
 
 /// A list of entries (title, line under it, status) in a panel; the entry clicked, if any.
-fn entries(
+pub(super) fn entries(
     l: &mut Launcher,
     id: &str,
     r: Rect,
@@ -538,11 +610,11 @@ fn entries(
 }
 
 /// A column of a table: its heading, its share of the width, and how it is aligned.
-struct Col(&'static str, f32, Align);
+pub(super) struct Col(pub(super) &'static str, pub(super) f32, pub(super) Align);
 
 /// A table (heading row, then rows of cells) in `r`; the row clicked, if any. A row whose
 /// status is not `Found` gets a dot of its colour; `dim` rows are drawn quieter.
-fn table(
+pub(super) fn table(
     l: &mut Launcher,
     id: &str,
     r: Rect,
@@ -611,7 +683,7 @@ fn table(
 }
 
 /// The details of the chosen entry: (label, value) rows under the card's title.
-fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
+pub(super) fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
     card(&mut l.ui, r, "Details", None);
     let mut y = r.y + 50.0;
     let lw = (r.w * 0.36).max(90.0);
@@ -643,7 +715,13 @@ fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
 /// The vehicle `file` in `paint` (empty: its own) at the top of `r`, as the preview helper
 /// draws it: the picture kept from an earlier time at once, the live view when it is turned.
 /// Returns the rest of `r`, under it.
-fn vehicle_view(l: &mut Launcher, r: Rect, file: &str, paint: &str, exists: bool) -> Rect {
+pub(super) fn vehicle_view(
+    l: &mut Launcher,
+    r: Rect,
+    file: &str,
+    paint: &str,
+    exists: bool,
+) -> Rect {
     let h = (r.w * 0.68).min(r.h * 0.5).max(120.0);
     let top = Rect::new(r.x, r.y, r.w, h);
     if !exists || l.state.in_game() || l.pages.diag.ai.map_file.is_empty() {
@@ -682,7 +760,7 @@ fn vehicle_view(l: &mut Launcher, r: Rect, file: &str, paint: &str, exists: bool
     )
 }
 
-fn status_of(exists: bool) -> Status {
+pub(super) fn status_of(exists: bool) -> Status {
     if exists {
         Status::Found
     } else {
@@ -698,7 +776,7 @@ fn worst(all: impl IntoIterator<Item = bool>) -> Status {
     }
 }
 
-fn weight_text(w: f32) -> String {
+pub(super) fn weight_text(w: f32) -> String {
     if w.fract() == 0.0 {
         format!("{w:.0}")
     } else {
@@ -707,7 +785,7 @@ fn weight_text(w: f32) -> String {
 }
 
 /// `one` for one, else `more` with the count in place of `%{n}`, translated.
-fn many(n: usize, one: &str, more: &str) -> String {
+pub(super) fn many(n: usize, one: &str, more: &str) -> String {
     if n == 1 {
         omsi_ui::tr(one).to_string()
     } else {
@@ -715,12 +793,12 @@ fn many(n: usize, one: &str, more: &str) -> String {
     }
 }
 
-fn percent(x: f32) -> String {
+pub(super) fn percent(x: f32) -> String {
     format!("{:.1} %", x * 100.0)
 }
 
 /// What the game calls a vehicle: its friendly name, else its file's name.
-fn shown_name(name: &str, file: &str) -> String {
+pub(super) fn shown_name(name: &str, file: &str) -> String {
     if name.is_empty() {
         file.rsplit(['\\', '/']).next().unwrap_or(file).to_string()
     } else {
