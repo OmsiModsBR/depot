@@ -487,6 +487,7 @@ impl ApplicationHandler for App {
                 #[cfg(windows)]
                 if let Some(d) = self.d3d9.as_ref() {
                     d.set_vsync(desktop_vsync);
+                    d.set_quality(self.settings.msaa, u32::from(self.settings.anisotropy));
                 }
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
@@ -3107,9 +3108,28 @@ impl ApplicationHandler for App {
                         }
                         let (outside_temp, inside_temp) = vehicle_temperatures(p);
                         // (on foot the map follows the walker, not the bus left standing)
-                        let (at, heading) = match self.on_foot.as_ref() {
-                            Some(f) => (f.pos, f.heading),
-                            None => (p.vehicle.position, p.vehicle.heading),
+                        // (with `nav_follow_view` the route keeps following the bus, and the maps
+                        // follow the walker or, in the free camera (F4), the camera)
+                        let (at, heading, focus) = if self.settings.nav_follow_view && !vr_active {
+                            let focus = match (self.view == "free", self.camera.as_ref()) {
+                                (true, Some(c)) => Some(nav::NavFocus {
+                                    kind: nav::FocusKind::Camera,
+                                    at: c.position,
+                                    heading: c.yaw as f64,
+                                }),
+                                _ => self.on_foot.as_ref().map(|f| nav::NavFocus {
+                                    kind: nav::FocusKind::Walker,
+                                    at: f.pos,
+                                    heading: f.heading,
+                                }),
+                            };
+                            (p.vehicle.position, p.vehicle.heading, focus)
+                        } else {
+                            let (at, heading) = match self.on_foot.as_ref() {
+                                Some(f) => (f.pos, f.heading),
+                                None => (p.vehicle.position, p.vehicle.heading),
+                            };
+                            (at, heading, None)
                         };
                         let car_line =
                             |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
@@ -3126,6 +3146,7 @@ impl ApplicationHandler for App {
                             players: Vec::new(),
                             bus: at,
                             heading,
+                            focus,
                             speed_kmh: p.vehicle.motion().velocity_kmh(),
                             outside_temp,
                             inside_temp,

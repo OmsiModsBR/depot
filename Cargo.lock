@@ -2810,10 +2810,12 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-game-controller",
  "objc2-io-kit",
+ "omsi-app",
  "omsi-audio",
  "omsi-cfg",
  "omsi-content",
  "omsi-geometry",
+ "omsi-integrity",
  "omsi-launcher-core",
  "omsi-launcher-ui",
  "omsi-map",
@@ -2947,6 +2949,7 @@ dependencies = [
  "omsi-o3d",
  "omsi-scenery",
  "omsi-texture",
+ "omsi-timetable",
  "omsi-vehicle",
 ]
 

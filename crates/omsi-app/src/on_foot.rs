@@ -23,28 +23,28 @@ pub(crate) const AVATAR_KEY: u32 = 0;
 pub(crate) const REMOTE_KEY: u32 = 1_000_000;
 
 /// Walking and running pace (m/s), how quickly the walker gets to it (1/s), jump speed.
-const WALK: f64 = 1.45;
-const RUN: f64 = 4.3;
+pub const WALK: f64 = 1.45;
+pub const RUN: f64 = 4.3;
 const ACCEL: f64 = 7.0;
 const JUMP: f64 = 4.0;
 /// How far the eyes go down kneeling (m: from a standing person's 1.6 to about a metre), and
 /// the shuffle on the knees (m/s).
-const KNEEL_DROP: f64 = 0.6;
-const KNEEL_WALK: f64 = 0.5;
+pub const KNEEL_DROP: f64 = 0.6;
+pub const KNEEL_WALK: f64 = 0.5;
 /// How near a door (m) G gets in.
 const DOOR_REACH: f64 = 3.2;
 /// The walker's radius against walls and vehicles (m).
 const RADIUS: f64 = 0.28;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FootCam {
+pub enum FootCam {
     /// Out of the walker's eyes (F1).
     First,
     /// The free camera (F4): the walker stands where it was.
     Free,
 }
 
-pub(crate) struct OnFoot {
+pub struct OnFoot {
     /// The feet on the ground.
     pub pos: DVec3,
     pub heading: f64,
@@ -89,7 +89,7 @@ pub(crate) struct OnFoot {
 
 /// What a walk leads to once walked.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Then {
+pub enum Then {
     Nothing,
     /// the own bus's wheel
     Wheel,
@@ -100,7 +100,7 @@ pub(crate) enum Then {
 /// A step the walker takes by itself: from `from` to `to` (world, feet) over `dur` seconds,
 /// then inside `after` (a bus and the cabin point) or on the ground.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Transit {
+pub struct Transit {
     pub from: DVec3,
     pub to: DVec3,
     pub t: f32,
@@ -144,7 +144,7 @@ impl OnFoot {
     }
 
     /// Down on the knees, or up again; not on a seat. True when it did.
-    fn toggle_kneel(&mut self) -> bool {
+    pub fn toggle_kneel(&mut self) -> bool {
         if self.seat.is_some() {
             return false;
         }
@@ -153,7 +153,7 @@ impl OnFoot {
     }
 
     /// The eyes on their way down or up, over about a third of a second.
-    fn ease_crouch(&mut self, dt: f32) {
+    pub fn ease_crouch(&mut self, dt: f32) {
         let want = if self.kneel && self.seat.is_none() {
             1.0
         } else {
@@ -166,12 +166,12 @@ impl OnFoot {
     }
 
     /// How much lower than a standing person's the eyes are.
-    fn eye_drop(&self) -> DVec3 {
+    pub fn eye_drop(&self) -> DVec3 {
         DVec3::new(0.0, 0.0, -(self.crouch as f64) * KNEEL_DROP)
     }
 
     /// The pace W A S D ask for: a walk, a run (Shift), on the knees a shuffle.
-    fn pace(&self, run: bool) -> f64 {
+    pub fn pace(&self, run: bool) -> f64 {
         if self.kneel {
             KNEEL_WALK
         } else if run {
@@ -1647,63 +1647,5 @@ impl App {
             }
         }
         self.online.remote_walkers = now;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn walker() -> OnFoot {
-        OnFoot {
-            pos: DVec3::ZERO,
-            heading: 0.0,
-            vel: DVec2::ZERO,
-            lift: 0.0,
-            vz: 0.0,
-            seat: None,
-            inside: None,
-            cam: FootCam::First,
-            yaw: 0.0,
-            pitch: 0.0,
-            eye: None,
-            eye_yaw: 0.0,
-            lag: DVec3::ZERO,
-            settle: 0.0,
-            view_before: "driver".into(),
-            kind: 0,
-            face_seat: false,
-            transit: None,
-            arrive: None,
-            kneel: false,
-            crouch: 0.0,
-        }
-    }
-
-    /// C kneels: the eyes go down to about a metre over a moment (a picture from below,
-    /// #1148), the walk becomes a shuffle, and C again stands up; not on a seat.
-    #[test]
-    fn kneeling_lowers_the_eyes_and_slows_the_walk() {
-        let mut f = walker();
-        assert_eq!(f.eye_drop(), DVec3::ZERO);
-        assert_eq!(f.pace(false), WALK);
-        assert!(f.toggle_kneel() && f.kneel);
-        f.ease_crouch(0.05);
-        assert!(f.crouch > 0.2 && f.crouch < 0.9, "{}", f.crouch);
-        for _ in 0..60 {
-            f.ease_crouch(1.0 / 60.0);
-        }
-        assert_eq!(f.crouch, 1.0);
-        assert_eq!(f.eye_drop().z, -KNEEL_DROP);
-        assert_eq!((f.pace(false), f.pace(true)), (KNEEL_WALK, KNEEL_WALK));
-        assert!(f.toggle_kneel() && !f.kneel);
-        for _ in 0..60 {
-            f.ease_crouch(1.0 / 60.0);
-        }
-        assert_eq!(f.eye_drop(), DVec3::ZERO);
-        assert_eq!(f.pace(true), RUN);
-        // (seated: nothing to kneel on)
-        f.seat = Some((BusId::Player, 3));
-        assert!(!f.toggle_kneel() && !f.kneel);
     }
 }

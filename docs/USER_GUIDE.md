@@ -246,6 +246,7 @@ as designed; `navigator_opacity` in older files),
 `nav_ai` (the other AI vehicles as dots on the navigator and the city map; on by default),
 `nav_surface` (the map's own surface, icons, names and bus lines when the map brings them, see [MAP_PACKAGE.md](MAP_PACKAGE.md); on by default),
 `nav_light` (the light look of the navigator and the city map; off by default),
+`nav_follow_view` (on foot the maps show a walker icon, in the free camera F4 a camera icon they are centred on; off by default),
 `boarding`, `detail_textures`, `exact_fare`, `enhanced`, `fullscreen`, `vsync`, `volume`
 and `drive_keys`, plus `render_scale` (`auto` or a fraction: the picture is drawn smaller
 and upscaled), `post_aa` (`fxaa`, the enhanced renderer's, or `off`), `view_distance` (m,

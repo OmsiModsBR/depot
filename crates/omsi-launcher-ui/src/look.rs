@@ -15,6 +15,8 @@ pub const BG: Color = omsi_ui::theme::BG;
 pub const SIDE: Color = omsi_ui::theme::RAIL;
 pub const PANEL: Color = omsi_ui::theme::PANEL;
 pub const PANEL_2: Color = omsi_ui::theme::FIELD;
+/// Around a picture that does not fill its card (the map's): darker than the card.
+pub const PICTURE_BG: Color = Color::hex(0x18191c);
 pub const LINE: Color = omsi_ui::theme::EDGE;
 pub const FG: Color = omsi_ui::theme::TEXT;
 pub const MUTED: Color = omsi_ui::theme::TEXT_DIM;
@@ -28,6 +30,8 @@ pub const OK: Color = omsi_ui::theme::OK;
 pub const WARN: Color = omsi_ui::theme::WARN;
 
 pub const SIDEBAR_W: f32 = 248.0;
+/// The sidebar with only its icons (a narrow window).
+pub const SIDEBAR_COMPACT_W: f32 = 56.0;
 /// A sidebar entry's height and the space under it (Windows 11's navigation view).
 pub const NAV_ROW: f32 = 42.0;
 pub const NAV_ITEM_H: f32 = 40.0;

@@ -1479,7 +1479,10 @@ impl State {
                                 None => {
                                     note = omsi_ui::tr(" - line %{line} does not run on %{date}")
                                         .replace("%{line}", &line.to_string())
-                                        .replace("%{date}", &self.choice.date.to_string());
+                                        .replace(
+                                            "%{date}",
+                                            &super::start::date_shown(&self.choice.date),
+                                        );
                                     self.choice.line = None;
                                     self.choice.tour = None;
                                 }
@@ -1497,7 +1500,7 @@ impl State {
                         self.set_status(
                             omsi_ui::tr("%{n} lines on %{date}%{note}")
                                 .replace("%{n}", &self.lines.len().to_string())
-                                .replace("%{date}", &self.choice.date.to_string())
+                                .replace("%{date}", &super::start::date_shown(&self.choice.date))
                                 .replace("%{note}", &note),
                             !note.is_empty(),
                         );

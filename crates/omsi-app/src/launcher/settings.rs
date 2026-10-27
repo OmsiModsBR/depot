@@ -676,6 +676,13 @@ pub static OPTS: &[Opt] = &[
         "As in OMSI 2",
     ),
     toggle(GENERAL, "Navigator", "nav_ai", "AI vehicles on the map", ""),
+    toggle(
+        GENERAL,
+        "Navigator",
+        "nav_follow_view",
+        "Minimap on foot and in the free camera",
+        "On foot the minimap shows a walker icon; in the free camera (F4) it centres on a camera icon and moves with the camera instead of staying on the bus",
+    ),
     pick(
         GENERAL,
         "Navigator",
@@ -2200,6 +2207,15 @@ fn choose(o: &Opt, st: &mut Store, value: &str) {
             .unwrap_or(json!(value)),
         _ => json!(value),
     };
+    // (DirectX9 is for older hardware: choosing it brings the anti-aliasing and anisotropic
+    // filtering down to 2x and 4x, which the player may raise again)
+    if o.key == "graphics_api" && v == json!("d3d9") && cfg!(windows) {
+        for (key, most) in [("msaa", 2), ("anisotropy", 4)] {
+            if st.get(key).as_i64().is_some_and(|n| n > most) {
+                st.set(key, json!(most));
+            }
+        }
+    }
     st.set(o.key, v);
 }
 
@@ -3296,7 +3312,7 @@ pub fn reset_dialog(l: &mut Launcher) {
     let size = l.ui.size;
     let full = Rect::new(0.0, 0.0, size.x, size.y);
     l.ui.solid(full);
-    l.ui.p().rect(full, Color::rgba(0, 0, 0, 0.62));
+    l.ui.p().rect(full, super::start::SCRIM);
     let w = (size.x - 48.0).min(520.0);
     let h = 190.0;
     let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
@@ -3687,6 +3703,7 @@ mod tests {
         "navigator",
         "nav_arrows",
         "nav_ai",
+        "nav_follow_view",
         "navigator_corner",
         // (the Interface section, drawn on its own before)
         "ui_accent",

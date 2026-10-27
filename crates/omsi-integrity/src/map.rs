@@ -1,5 +1,5 @@
 use crate::image_size::{image_size, next_pow2};
-use crate::report::{Finding, Report, Severity};
+use crate::report::{Finding, Progress, Report, Severity};
 use omsi_cfg::{resolve_path, vfs};
 use omsi_map::{GlobalCfg, Tile};
 use omsi_model::{MaterialDef, Model};
@@ -14,7 +14,13 @@ const MAX_PATH: usize = 259;
 /// the OMSI 2 folder the map's content lives in. A caller that wants mod folders searched
 /// first adds them as content roots (`omsi_cfg::add_content_root`) before.
 pub fn check_map(root: &Path, map_dir: &Path) -> Report {
-    let mut c = Checker::new(root);
+    check_map_with(root, map_dir, &Progress::new())
+}
+
+/// [`check_map`] that tells `progress` how far it is (a step per tile) and stops when it is
+/// cancelled.
+pub fn check_map_with(root: &Path, map_dir: &Path, progress: &Progress) -> Report {
+    let mut c = Checker::new(root, progress);
     c.report.map = map_dir
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -35,6 +41,7 @@ struct Pending {
 
 pub(crate) struct Checker<'a> {
     pub(crate) root: &'a Path,
+    pub(crate) progress: &'a Progress,
     pub(crate) report: Report,
     pending: BTreeMap<(&'static str, String), Pending>,
     seen_sco: HashSet<PathBuf>,
@@ -50,12 +57,13 @@ pub(crate) struct Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    pub(crate) fn new(root: &'a Path) -> Self {
+    pub(crate) fn new(root: &'a Path, progress: &'a Progress) -> Self {
         // (the folder listings the loaders keep are dropped: files may have changed since an
         // earlier check)
         omsi_cfg::content_changed();
         Checker {
             root,
+            progress,
             report: Report::default(),
             pending: BTreeMap::new(),
             seen_sco: HashSet::new(),
@@ -69,13 +77,23 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Where a missing texture was first looked for, as the finding's identity: two objects
+    /// that lack different files of the same name are two findings, and a comparison with a
+    /// baseline tells them apart.
+    pub(crate) fn missing_target(&self, dirs: &[&Path], name: &str) -> String {
+        match dirs.first() {
+            Some(d) => self.rel(&d.join(name.replace('\\', "/"))),
+            None => name.to_string(),
+        }
+    }
+
+    /// The caller cancelled the check: stop where it is.
+    pub(crate) fn stopped(&self) -> bool {
+        self.progress.cancelled()
+    }
+
     pub(crate) fn rel(&self, p: &Path) -> String {
-        // (always written with `/`, whatever the system)
-        p.strip_prefix(self.root)
-            .unwrap_or(p)
-            .display()
-            .to_string()
-            .replace('\\', "/")
+        rel_to(self.root, p)
     }
 
     pub(crate) fn add(
@@ -98,6 +116,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(crate) fn finish(mut self) -> Report {
+        self.report.cancelled = self.stopped();
         for ((code, file), p) in std::mem::take(&mut self.pending) {
             self.report.findings.push(Finding {
                 severity: p.severity,
@@ -106,6 +125,7 @@ impl<'a> Checker<'a> {
                 message: p.message,
                 detail: p.detail,
                 referenced_by: (!p.first_by.is_empty()).then_some((p.first_by, p.users.len())),
+                known: false,
             });
         }
         self.report
@@ -143,7 +163,12 @@ impl<'a> Checker<'a> {
         // (the game looks for chrono folders at any depth below `Chrono`)
         let mut chrono_dirs = Vec::new();
         collect_dirs(&resolve_path(map_dir, "Chrono"), 4, &mut chrono_dirs);
+        self.progress.set_total(global.tiles.len());
         for t in &global.tiles {
+            if self.stopped() {
+                return;
+            }
+            self.progress.step();
             let path = resolve_path(map_dir, &t.file);
             let tile_name = self.rel(&path);
             if !vfs::is_file(&path) {
@@ -196,11 +221,17 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        if !self.stopped() {
+            self.ai_lists(map_dir, &chrono_dirs);
+        }
     }
 
     /// The objects, splines and replacements a tile (or a chrono patch of one) names.
     fn tile_content(&mut self, tile: &Tile, tile_name: &str, count: bool) {
         for o in tile.objects.iter().chain(&tile.attach_objects) {
+            if self.stopped() {
+                return;
+            }
             self.report.objects += count as usize;
             self.object(&o.file, tile_name);
         }
@@ -238,7 +269,7 @@ impl<'a> Checker<'a> {
             None => self.add(
                 Severity::Warning,
                 "texture-missing",
-                name.to_string(),
+                self.missing_target(&[self.root], name),
                 by,
                 "A ground texture is missing; that ground shows white.".into(),
                 None,
@@ -246,7 +277,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn object(&mut self, rel: &str, by: &str) {
+    pub(crate) fn object(&mut self, rel: &str, by: &str) {
         if rel.trim().is_empty() {
             return;
         }
@@ -321,14 +352,25 @@ impl<'a> Checker<'a> {
         fallback_bases: &[PathBuf],
         file: &str,
     ) {
-        // (a vehicle names them from its own folder, which may not be the model.cfg's)
-        self.masters = omsi_model::load_texchanges(model_dir, &model.texchanges);
-        for b in fallback_bases {
-            if self.masters.is_empty() {
-                self.masters = omsi_model::load_texchanges(b, &model.texchanges);
+        // each list is named from the vehicle's own folder (an object's: from its model.cfg's)
+        self.masters.clear();
+        for f in &model.texchanges {
+            let bases = fallback_bases
+                .iter()
+                .map(PathBuf::as_path)
+                .chain(std::iter::once(model_dir));
+            for b in bases {
+                if vfs::is_file(&resolve_path(b, f)) {
+                    let got = omsi_model::load_texchanges(b, std::slice::from_ref(f));
+                    self.masters.extend(got);
+                    break;
+                }
             }
         }
         for md in &model.meshes {
+            if self.stopped() {
+                break;
+            }
             if md.file.trim().is_empty() {
                 continue;
             }
@@ -368,7 +410,10 @@ impl<'a> Checker<'a> {
         self.long_path(path, by);
         if !self.mesh_cache.contains_key(path) {
             let loaded = match omsi_o3d::load_mesh(path) {
-                Ok(m) => Some(m.materials),
+                Ok(m) => {
+                    self.report.meshes += 1;
+                    Some(m.materials)
+                }
                 Err(e) => {
                     self.add(
                         Severity::Error,
@@ -450,7 +495,7 @@ impl<'a> Checker<'a> {
                     None => self.add(
                         Severity::Warning,
                         "texture-missing",
-                        name.to_string(),
+                        self.missing_target(&dir_refs, name),
                         &mesh_name,
                         "A texture a mesh names is missing; the surface shows white.".into(),
                         None,
@@ -508,7 +553,7 @@ impl<'a> Checker<'a> {
                 None => self.add(
                     Severity::Warning,
                     "texture-missing",
-                    name.to_string(),
+                    self.missing_target(&dir_refs, name),
                     &file,
                     "A texture a spline names is missing; the road or rail shows white.".into(),
                     None,
@@ -517,7 +562,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn texture(&mut self, path: &Path, by: &str) {
+    pub(crate) fn texture(&mut self, path: &Path, by: &str) {
         if let Some(file) = self.seen_texture.get(path) {
             // (checked already: each finding about it counts one more file that names it)
             for code in ["texture-npot", "texture-unreadable", "path-too-long"] {
@@ -608,7 +653,7 @@ pub(crate) fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 
 /// A texture name that stands for "no texture": exporters write `null.bmp` into slots that
 /// have none.
-fn is_null_texture(name: &str) -> bool {
+pub(crate) fn is_null_texture(name: &str) -> bool {
     let n = name.trim();
     n.is_empty()
         || Path::new(&n.replace('\\', "/"))
@@ -664,4 +709,21 @@ fn collect_dirs(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
             collect_dirs(&sub, depth - 1, out);
         }
     }
+}
+
+/// `p` as a report names it: from `root` (always written with `/`, whatever the system); a
+/// file of another content root, the Depot content folder or a mounted archive, goes by its
+/// path in that root, so that a report sent along names no folder of the user's.
+pub(crate) fn rel_to(root: &Path, p: &Path) -> String {
+    let in_root = p.strip_prefix(root).ok().or_else(|| {
+        omsi_cfg::content_roots()
+            .iter()
+            .filter_map(|r| p.strip_prefix(r).ok())
+            .min_by_key(|rest| rest.as_os_str().len())
+    });
+    in_root
+        .unwrap_or(p)
+        .display()
+        .to_string()
+        .replace('\\', "/")
 }
