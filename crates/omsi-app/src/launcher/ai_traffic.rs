@@ -40,6 +40,17 @@ pub struct AiView {
     person: Option<usize>,
     /// 0 weekdays, 1 Saturday, 2 Sunday or holiday.
     day: usize,
+    /// The map's `global.cfg` (as the map list names it), for the preview's light.
+    map_file: String,
+    /// The last frame showed a vehicle's preview (the page's own bus is not asked for then).
+    showing: bool,
+}
+
+impl AiView {
+    /// The tab shows the preview of one of its vehicles.
+    pub fn shows_vehicle(&self) -> bool {
+        self.showing
+    }
 }
 
 const ROW: f32 = 30.0;
@@ -115,6 +126,14 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     }
     let item = keep(l.pages.diag.ai.item.unwrap_or(0), list.len());
     let folder = list[item].1.clone();
+    l.pages.diag.ai.showing = false;
+    l.pages.diag.ai.map_file = l
+        .state
+        .maps
+        .iter()
+        .find(|m| m.file.split('/').nth(1) == Some(folder.as_str()))
+        .map(|m| m.file.clone())
+        .unwrap_or_default();
     let date = omsi_map::ailists::date_code(&l.pages.diag.ai.date);
 
     // the answer of a read, and a new read when the map or the day changed
@@ -621,6 +640,48 @@ fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
     }
 }
 
+/// The vehicle `file` in `paint` (empty: its own) at the top of `r`, as the preview helper
+/// draws it: the picture kept from an earlier time at once, the live view when it is turned.
+/// Returns the rest of `r`, under it.
+fn vehicle_view(l: &mut Launcher, r: Rect, file: &str, paint: &str, exists: bool) -> Rect {
+    let h = (r.w * 0.68).min(r.h * 0.5).max(120.0);
+    let top = Rect::new(r.x, r.y, r.w, h);
+    if !exists || l.state.in_game() || l.pages.diag.ai.map_file.is_empty() {
+        l.ui.solid(top);
+        l.ui.p()
+            .rounded(top, omsi_ui::theme::RADIUS, omsi_ui::theme::FIELD);
+        let why = if !exists {
+            "The file is missing: there is nothing to show."
+        } else if l.state.in_game() {
+            "No preview while the game runs."
+        } else {
+            "No preview for this map."
+        };
+        l.ui.text_in(why, top, 12.5, Weight::Regular, MUTED, Align::Center);
+    } else {
+        let c = &l.state.choice;
+        let look = super::showroom::Look {
+            root: PathBuf::from(l.state.config.root.trim()),
+            map: l.pages.diag.ai.map_file.clone(),
+            bus: file.to_string(),
+            paint: paint.to_string(),
+            weather: c.weather.clone(),
+            time: c.time,
+            date: l.pages.diag.ai.date.clone(),
+        };
+        l.preview.want_picture(look);
+        l.preview.focus_x = 0.5;
+        l.preview(top);
+        l.pages.diag.ai.showing = true;
+    }
+    Rect::new(
+        r.x,
+        top.bottom() + 12.0,
+        r.w,
+        (r.bottom() - top.bottom() - 12.0).max(80.0),
+    )
+}
+
 fn status_of(exists: bool) -> Status {
     if exists {
         Status::Found
@@ -778,9 +839,10 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
                 .replace("%{w}", &weight_text(v.weight))
                 .replace("%{total}", &weight_text(g.total_weight()))
                 .replace("%{p}", &percent(g.chance(k)));
+            let rest = vehicle_view(l, right_r, &v.file, "", v.exists);
             details(
                 l,
-                right_r,
+                rest,
                 &[
                     ("Vehicle", shown_name(&v.name, &v.file)),
                     ("File", v.file.clone()),
@@ -1065,9 +1127,10 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
                     .replace("%{a}", &day(f))
                     .replace("%{b}", &day(u)),
             };
+            let rest = vehicle_view(l, right_r, &ft.file, &e.paint, ft.exists);
             details(
                 l,
-                right_r,
+                rest,
                 &[
                     ("Bus", shown_name(&ft.name, &ft.file)),
                     ("File", ft.file.clone()),

@@ -59,6 +59,11 @@ impl DiagView {
     pub fn dialog_open(&self) -> bool {
         self.tab == 1 && self.export.is_some()
     }
+
+    /// The AI traffic tab shows one of its vehicles in the preview.
+    pub fn shows_vehicle(&self) -> bool {
+        self.tab == 2 && self.ai.shows_vehicle()
+    }
 }
 
 /// A check running in the background; cancelling it stops it within a file read.
