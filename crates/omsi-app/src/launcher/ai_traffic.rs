@@ -26,6 +26,10 @@ pub struct AiView {
     loading: Option<(String, i32, Receiver<AiTraffic>)>,
     /// The map's folder and day read, and what was read.
     pub(super) data: Option<(String, i32, Arc<AiTraffic>)>,
+    /// The OMSI 2 folder and the content's generation (`omsi_cfg::content_generation`) of what
+    /// was read: another folder, or a change to the content (a timetable saved, a mod
+    /// installed), reads it again.
+    seen: Option<(String, u64)>,
     /// 0 car groups, 1 bus fleet and lines, 2 parked cars, 3 people, 4 traffic density.
     tab: usize,
     group: usize,
@@ -151,6 +155,17 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         .map(|m| m.file.clone())
         .unwrap_or_default();
     let date = omsi_map::ailists::date_code(&l.pages.diag.ai.date);
+
+    // what was read is dropped when the OMSI 2 folder or its content changed
+    let now = (
+        l.state.config.root.trim().to_string(),
+        omsi_cfg::content_generation(),
+    );
+    if l.pages.diag.ai.seen.as_ref() != Some(&now) {
+        l.pages.diag.ai.data = None;
+        l.pages.diag.ai.loading = None;
+        l.pages.diag.ai.seen = Some(now);
+    }
 
     // the answer of a read, and a new read when the map or the day changed
     if let Some((f, d, rx)) = l.pages.diag.ai.loading.as_ref() {
@@ -685,31 +700,36 @@ pub(super) fn table(
 /// The details of the chosen entry: (label, value) rows under the card's title.
 pub(super) fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
     card(&mut l.ui, r, "Details", None);
-    let mut y = r.y + 50.0;
     let lw = (r.w * 0.36).max(90.0);
-    for (k, v) in rows {
-        l.ui.p()
-            .rect(Rect::new(r.x + 1.0, y - 4.0, r.w - 2.0, 1.0), LINE);
-        clipped(
-            &mut l.ui,
-            k,
-            r.x + 17.0,
-            y + 13.0,
-            lw - 10.0,
-            12.0,
-            Weight::Regular,
-            MUTED,
-        );
-        l.ui.text_in_as_is(
-            v,
-            Rect::new(r.x + 17.0 + lw, y, r.w - lw - 30.0, 26.0),
-            12.5,
-            Weight::Regular,
-            FG,
-        );
-        l.ui.tooltip(Rect::new(r.x, y - 4.0, r.w, 30.0), v);
-        y += 31.0;
-    }
+    // (the rows scroll when the card is short: under a vehicle's picture)
+    let list = Rect::new(r.x, r.y + 46.0, r.w, (r.h - 50.0).max(0.0));
+    l.ui.scroll_area("ai-details", list, &mut |ui, v| {
+        let mut y = v.y + 4.0;
+        for (k, val) in rows {
+            ui.p()
+                .rect(Rect::new(v.x + 1.0, y - 4.0, v.w - 2.0, 1.0), LINE);
+            clipped(
+                ui,
+                k,
+                v.x + 17.0,
+                y + 13.0,
+                lw - 10.0,
+                12.0,
+                Weight::Regular,
+                MUTED,
+            );
+            ui.text_in_as_is(
+                val,
+                Rect::new(v.x + 17.0 + lw, y, v.w - lw - 30.0, 26.0),
+                12.5,
+                Weight::Regular,
+                FG,
+            );
+            ui.tooltip(Rect::new(v.x, y - 4.0, v.w, 30.0), val);
+            y += 31.0;
+        }
+        y - v.y
+    });
 }
 
 /// The vehicle `file` in `paint` (empty: its own) at the top of `r`, as the preview helper

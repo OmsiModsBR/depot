@@ -94,6 +94,7 @@ pub struct TrafficLine {
     pub file: String,
     pub priority: i32,
     pub user_allowed: bool,
+    /// The tours that run on the day (their mask has its weekday or holiday and school period).
     pub tours: Vec<TrafficTour>,
     /// The bus types its `car_use` gives (`[onlytypes]`: 1.0, `[types_prefered]`: its
     /// probability), when one is in force.
@@ -353,6 +354,11 @@ impl AiTraffic {
             uses.extend(CarUse::load_dir(c));
         }
         uses.retain(|u| u.valid_on(date));
+        // a tour runs on the days its mask has: the weekday or public holiday, and the school
+        // days or school holidays
+        let calendar =
+            omsi_map::Calendar::load(&resolve_path(map_dir, "Holidays.txt")).unwrap_or_default();
+        let bits = day_bits(&calendar, date);
         for line in &tt.lines {
             let types = uses
                 .iter()
@@ -368,6 +374,7 @@ impl AiTraffic {
                 tours: line
                     .tours
                     .iter()
+                    .filter(|tour| runs(&tour.extra, bits))
                     .map(|tour| {
                         let deps = tour.trips.iter().map(|x| x.departure);
                         TrafficTour {
@@ -518,6 +525,38 @@ pub fn clock(minutes: f32) -> String {
 }
 
 /// `YYYY-MM-DD` of a YYYYMMDD day.
+/// The tour mask bits `date` (YYYYMMDD) selects: (its weekday's, bits 0-6 from Monday, or
+/// public holiday's, bit 7; its school holidays', bit 8, or school days', bit 9).
+fn day_bits(calendar: &omsi_map::Calendar, date: i32) -> (i32, i32) {
+    let day = if calendar.is_holiday(date) {
+        1 << 7
+    } else {
+        1 << weekday(date)
+    };
+    let school = if calendar.in_holiday_range(date) {
+        1 << 8
+    } else {
+        1 << 9
+    };
+    (day, school)
+}
+
+/// Whether a tour whose mask is `extra` (all days when it is no number) runs on a day of `bits`.
+fn runs(extra: &str, bits: (i32, i32)) -> bool {
+    let mask = extra.trim().parse::<i32>().unwrap_or(1023);
+    mask & bits.0 != 0 && mask & bits.1 != 0
+}
+
+/// The day of the week of `date` (YYYYMMDD), 0 = Monday ... 6 = Sunday.
+fn weekday(date: i32) -> i32 {
+    let (y, m, d) = (date / 10000, (date / 100) % 100, date % 100);
+    // days from 1 March of year 0 (Gregorian), whose 1 March 2000 was a Wednesday
+    let (y, m) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
+    let days = 365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d - 1;
+    let ref_days = 365 * 2000 + 2000 / 4 - 2000 / 100 + 2000 / 400;
+    (days - ref_days + 2).rem_euclid(7)
+}
+
 pub fn day(date: i32) -> String {
     format!(
         "{:04}-{:02}-{:02}",
