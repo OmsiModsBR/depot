@@ -12,6 +12,7 @@ pub mod disk;
 pub mod index;
 pub mod install;
 pub mod instances;
+pub mod original_engine;
 pub mod screenshots;
 
 use anyhow::{anyhow, Context, Result};
@@ -33,6 +34,9 @@ pub struct Config {
     /// The content folder chosen under Setup (empty: beside the game program).
     #[serde(default)]
     pub content: String,
+    /// Opening the original OMSI 2 through OmsiLaunch (off until turned on under Setup).
+    #[serde(default)]
+    pub original_engine: original_engine::OriginalEngineConfig,
 }
 
 pub fn data_dir() -> PathBuf {

@@ -1,0 +1,15 @@
+[package]
+name = "fake-omsilaunch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Test fixture: a stand-in for OmsiLaunch.exe that answers like the documented command line"
+
+[[bin]]
+name = "fake-omsilaunch"
+path = "src/main.rs"
+
+[dev-dependencies]
+omsi-launcher-core = { path = "../../crates/omsi-launcher-core" }
+serde_json.workspace = true
