@@ -685,7 +685,9 @@ impl ApplicationHandler for Launcher {
                             self.ui.input.pressed = true;
                             // a drag on the preview turns the bus (the panels lie over it:
                             // what the mouse is over is theirs, not the bus's)
-                            if (!self.ui.over_ui || self.page == Page::Vehicles)
+                            if (!self.ui.over_ui
+                                || self.page == Page::Vehicles
+                                || self.page == Page::Diagnostics)
                                 && self
                                     .preview_rect
                                     .map(|r| r.contains(self.ui.input.mouse))
@@ -1267,6 +1269,7 @@ impl Launcher {
             && !look.map.is_empty()
             && !self.state.in_game()
             && self.page != Page::Vehicles
+            && !(self.page == Page::Diagnostics && self.pages.diag.shows_vehicle())
         {
             self.preview.want_picture(look);
         }
