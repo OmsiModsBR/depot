@@ -44,7 +44,7 @@ pub(crate) const DEFAULT_PORT: u16 = 38088;
 /// How far a player is heard (m) when the host does not say.
 pub(crate) const DEFAULT_RANGE: f32 = 20.0;
 /// TeamSpeak's limit on a nickname's length (characters).
-const MAX_NICK: usize = 30;
+pub const MAX_NICK: usize = 30;
 /// Inside a bus with the other one outside it (or in another bus): heard through the
 /// bodywork at this share of the open-air loudness.
 const MUFFLED: f32 = 0.35;
@@ -61,14 +61,15 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The plugin answers `hello` within this long, or it is not one that knows the key (an
 /// older one, or something else on its port).
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(not(test))]
+#[cfg(not(feature = "test-support"))]
 const RECONNECT: Duration = Duration::from_secs(3);
-#[cfg(test)]
+// (the tests' links come and go, and wait less for the next attempt)
+#[cfg(feature = "test-support")]
 const RECONNECT: Duration = Duration::from_millis(20);
 
 /// The voice server a session uses, as its host names it.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct VoiceServer {
+pub struct VoiceServer {
     /// The voice server's unique id (the one in its info panel). Never empty: the plugin
     /// moves nobody about on a voice server the session does not name.
     pub server_uid: String,
@@ -86,7 +87,7 @@ impl VoiceServer {
     /// `voice_channel_password`, `voice_range`, `voice_radio`. None without a channel,
     /// without the voice server's unique id, or when the answer to `voice?` would not fit a
     /// command.
-    pub(crate) fn from_kv(get: impl Fn(&str) -> Option<String>) -> Option<VoiceServer> {
+    pub fn from_kv(get: impl Fn(&str) -> Option<String>) -> Option<VoiceServer> {
         let channel = get("voice_channel")
             .map(|c| c.trim().to_string())
             .filter(|c| !c.is_empty())?;
@@ -137,7 +138,7 @@ impl VoiceServer {
     }
 
     /// The host's answer to `voice?`.
-    pub(crate) fn command(server: Option<&VoiceServer>) -> String {
+    pub fn command(server: Option<&VoiceServer>) -> String {
         match server {
             Some(s) => format!(
                 "voice {} {} {} {} {}",
@@ -152,7 +153,7 @@ impl VoiceServer {
     }
 
     /// The host's answer as a joining game reads it: Some(None) for a session without voice.
-    pub(crate) fn parse_command(text: &str) -> Option<Option<VoiceServer>> {
+    pub fn parse_command(text: &str) -> Option<Option<VoiceServer>> {
         let rest = text.strip_prefix("voice ")?.trim();
         if rest == "-" {
             return Some(None);
@@ -195,7 +196,7 @@ pub(crate) fn hosted() -> Option<VoiceServer> {
     VoiceServer::host_file()
 }
 
-fn parse_kv(text: &str) -> std::collections::HashMap<String, String> {
+pub fn parse_kv(text: &str) -> std::collections::HashMap<String, String> {
     text.lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
@@ -246,7 +247,7 @@ fn dec(s: &str) -> String {
 
 /// A player's nickname in the voice channel: their name (letters, digits and a few signs)
 /// and their id in the session, within TeamSpeak's 30 characters.
-pub(crate) fn nickname(name: &str, id: u32) -> String {
+pub fn nickname(name: &str, id: u32) -> String {
     let tail = format!(" #{id}");
     let clean: String = name
         .chars()
@@ -277,7 +278,7 @@ pub(crate) fn key_path() -> Option<PathBuf> {
 
 /// The key in `path`, made the first time (32 random bytes as hex, readable by this user
 /// only).
-fn plugin_key(path: &Path) -> Option<String> {
+pub fn plugin_key(path: &Path) -> Option<String> {
     if let Ok(k) = std::fs::read_to_string(path) {
         let k = k.trim();
         if k.len() >= 32 && k.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -306,7 +307,7 @@ fn plugin_key(path: &Path) -> Option<String> {
 
 /// `bytes` random bytes as hex: std's `RandomState` keys come from the system's random
 /// source.
-fn random_hex(bytes: usize) -> String {
+pub fn random_hex(bytes: usize) -> String {
     use std::hash::{BuildHasher, Hasher};
     let mut out = String::with_capacity(bytes * 2);
     let mut n = 0u64;
@@ -513,7 +514,7 @@ fn link_thread(
 
 /// What the game knows of the voice chat.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Status {
+pub struct Status {
     /// The plugin is there.
     pub linked: bool,
     /// The plugin is on the session's voice server, in its channel.
@@ -525,7 +526,7 @@ pub(crate) struct Status {
 
 /// A player as the voice chat places them, each frame.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Speaker {
+pub struct Speaker {
     pub id: u32,
     pub name: String,
     /// Where their head is.
@@ -540,7 +541,7 @@ pub(crate) struct Speaker {
 
 /// Where we hear from: the camera, and which bus it is in.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Listener {
+pub struct Listener {
     pub at: DVec3,
     /// Degrees, 0 = north, clockwise (the camera's yaw).
     pub yaw: f32,
@@ -552,13 +553,13 @@ pub(crate) struct Listener {
 }
 
 /// The game's side of the voice chat during a session.
-pub(crate) struct Voice {
+pub struct Voice {
     link: Option<Link>,
     addr: SocketAddr,
     /// The file of the key the plugin knows the game by (`key_path`).
-    key: Option<PathBuf>,
+    pub key: Option<PathBuf>,
     /// Why the plugin would not have us, until it does.
-    refused: Option<String>,
+    pub refused: Option<String>,
     /// How long the session has gone without the plugin (the HUD's hint is for the first
     /// seconds of it only).
     unlinked_t: f32,
@@ -583,7 +584,7 @@ pub(crate) struct Voice {
 
 impl Voice {
     /// The voice chat of a session (`port` 0: the default).
-    pub(crate) fn new(port: u16) -> Voice {
+    pub fn new(port: u16) -> Voice {
         let port = if port == 0 { DEFAULT_PORT } else { port };
         Voice {
             link: None,
@@ -604,7 +605,7 @@ impl Voice {
     }
 
     /// The host's voice server is known (we host, or its answer came).
-    pub(crate) fn set_server(&mut self, server: Option<VoiceServer>) {
+    pub fn set_server(&mut self, server: Option<VoiceServer>) {
         if self.server.as_ref() != Some(&server) {
             match &server {
                 Some(s) => log::info!(
@@ -653,7 +654,7 @@ impl Voice {
 
     /// Once a frame: take in what the plugin said, tell it the session, where we are and
     /// where the others are.
-    pub(crate) fn tick(
+    pub fn tick(
         &mut self,
         dt: f32,
         me: (&str, u32),
@@ -801,17 +802,17 @@ impl Voice {
     }
 
     /// Is this player speaking now?
-    pub(crate) fn speaks(&self, name: &str, id: u32) -> bool {
+    pub fn speaks(&self, name: &str, id: u32) -> bool {
         !self.talking.is_empty() && self.talking.contains(&nickname(name, id))
     }
 
     /// Is this player keying the bus radio now?
-    pub(crate) fn on_radio(&self, name: &str, id: u32) -> bool {
+    pub fn on_radio(&self, name: &str, id: u32) -> bool {
         !self.radioing.is_empty() && self.radioing.contains(&nickname(name, id))
     }
 
     /// The HUD's line, when there is something to say.
-    pub(crate) fn hud_line(&self) -> Option<String> {
+    pub fn hud_line(&self) -> Option<String> {
         self.server()?;
         if !self.status.linked {
             if let Some(r) = &self.refused {
@@ -844,14 +845,14 @@ impl Drop for Voice {
 
 /// The camera's yaw as SaltyChat's `Rotation` (and GreenTeaSpeak's `yawDeg`) has it: GTA's
 /// heading, 0 = north and counter-clockwise, -180..180.
-fn saltychat_yaw(yaw: f32) -> f32 {
+pub fn saltychat_yaw(yaw: f32) -> f32 {
     let r = (-yaw + 180.0).rem_euclid(360.0) - 180.0;
     (r * 10.0).round() / 10.0
 }
 
 /// A player heard through a bus's bodywork: the volume (0..1) the plugin is to use instead
 /// of its own fall-off with distance; None in the open (or both in the same bus).
-fn heard_volume(me: &Listener, o: &Speaker, range: f32) -> Option<f32> {
+pub fn heard_volume(me: &Listener, o: &Speaker, range: f32) -> Option<f32> {
     if me.inside == o.inside {
         return None;
     }
@@ -914,317 +915,4 @@ pub(crate) fn speakers(
         });
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Read;
-    use std::net::TcpListener;
-
-    #[test]
-    fn the_hosts_answer_round_trips() {
-        let s = VoiceServer {
-            server_uid: "abc+/=Def".into(),
-            channel: "OMSI - In game".into(),
-            password: "p|w 100%".into(),
-            range: 25.0,
-            radio: false,
-        };
-        let c = VoiceServer::command(Some(&s));
-        assert!(!c.contains('|') && c.len() < omsi_net::MAX_CHAT);
-        assert_eq!(VoiceServer::parse_command(&c), Some(Some(s)));
-        // (an older host naming no voice_radio: the bus radio is on)
-        assert_eq!(
-            VoiceServer::parse_command("voice 20 AbC= 5 -"),
-            Some(Some(VoiceServer {
-                server_uid: "AbC=".into(),
-                channel: "5".into(),
-                password: String::new(),
-                range: 20.0,
-                radio: true
-            }))
-        );
-        // (an older host naming no voice server's unique id: no voice chat)
-        let open = VoiceServer {
-            server_uid: String::new(),
-            channel: "12".into(),
-            password: String::new(),
-            range: 20.0,
-            radio: true,
-        };
-        assert_eq!(
-            VoiceServer::parse_command(&VoiceServer::command(Some(&open))),
-            Some(None)
-        );
-        assert_eq!(
-            VoiceServer::parse_command(&VoiceServer::command(None)),
-            Some(None)
-        );
-        assert_eq!(VoiceServer::parse_command("trigger x"), None);
-    }
-
-    #[test]
-    fn server_cfg_keys() {
-        let kv = parse_kv("# x\nvoice_server_uid = AbC=\nvoice_channel = 5\nvoice_range = 1000\nvoice_radio = 0\n");
-        let s = VoiceServer::from_kv(|k| kv.get(k).cloned()).unwrap();
-        assert_eq!(
-            (s.server_uid.as_str(), s.channel.as_str(), s.range, s.radio),
-            ("AbC=", "5", 200.0, false)
-        );
-        assert!(VoiceServer::from_kv(|_| None).is_none());
-        // no unique id: the plugin would move players on whatever server they are on
-        let kv = parse_kv("voice_channel = 5\n");
-        assert!(VoiceServer::from_kv(|k| kv.get(k).cloned()).is_none());
-        // too long to tell the players whole
-        let kv = parse_kv(&format!(
-            "voice_server_uid = AbC=\nvoice_channel = 5\nvoice_channel_password = {}\n",
-            "p-".repeat(40)
-        ));
-        assert!(VoiceServer::from_kv(|k| kv.get(k).cloned()).is_none());
-        let kv = parse_kv(&format!(
-            "voice_server_uid = AbC=\nvoice_channel = 5\nvoice_channel_password = {}\n",
-            "p".repeat(100)
-        ));
-        assert!(VoiceServer::from_kv(|k| kv.get(k).cloned()).is_some());
-    }
-
-    fn scratch_key(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("omsi-voice-test-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir.join("voice-plugin.key")
-    }
-
-    #[test]
-    fn the_key_is_made_once_and_kept() {
-        let path = scratch_key("key");
-        let k = plugin_key(&path).unwrap();
-        assert_eq!(k.len(), 64);
-        assert!(k.bytes().all(|b| b.is_ascii_hexdigit()));
-        assert_eq!(plugin_key(&path).as_deref(), Some(k.as_str()));
-        assert_ne!(random_hex(32), random_hex(32));
-        let _ = std::fs::remove_dir_all(path.parent().unwrap());
-    }
-
-    #[test]
-    fn the_hint_to_start_greenteaspeak_goes_after_a_while() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        let mut v = Voice::new(port);
-        v.key = Some(scratch_key("hint"));
-        v.set_server(Some(VoiceServer {
-            server_uid: "UID".into(),
-            channel: "7".into(),
-            password: String::new(),
-            range: 20.0,
-            radio: true,
-        }));
-        v.tick(1.0, ("Max", 1), None, &[]);
-        assert!(v
-            .hud_line()
-            .is_some_and(|l| l.contains("start GreenTeaSpeak")));
-        for _ in 0..12 {
-            v.tick(1.0, ("Max", 1), None, &[]);
-        }
-        assert_eq!(v.hud_line(), None);
-    }
-
-    #[test]
-    fn a_plugin_that_refuses_is_said_so() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let mut v = Voice::new(port);
-        v.key = Some(scratch_key("refused"));
-        v.set_server(Some(VoiceServer {
-            server_uid: "UID".into(),
-            channel: "7".into(),
-            password: String::new(),
-            range: 20.0,
-            radio: true,
-        }));
-        v.tick(0.1, ("Max", 1), None, &[]);
-        let (mut conn, _) = listener.accept().unwrap();
-        // Follow the plugin protocol: read hello before refusing. Closing with the
-        // client's unread hello can reset the TCP connection on Windows and discard
-        // the refusal before the game sees it.
-        conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-        let mut first = String::new();
-        BufReader::new(conn.try_clone().unwrap())
-            .read_line(&mut first)
-            .unwrap();
-        let hello: Value = serde_json::from_str(&first).unwrap();
-        assert_eq!(hello["type"], "hello");
-        conn.write_all(
-            b"{\"type\":\"refused\",\"error\":\"another Project Depot game is already linked\"}\n",
-        )
-        .unwrap();
-        drop(conn);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < deadline && v.refused.is_none() {
-            v.tick(0.01, ("Max", 1), None, &[]);
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        assert_eq!(
-            v.hud_line().as_deref(),
-            Some("Voice: another Project Depot game is already linked")
-        );
-        assert!(!v.status.linked);
-        let _ = std::fs::remove_dir_all(v.key.as_ref().unwrap().parent().unwrap());
-    }
-
-    #[test]
-    fn nicknames_fit_and_tell_players_apart() {
-        assert_eq!(nickname("Max Mustermann", 3), "Max Mustermann #3");
-        assert_eq!(nickname("  a|b\tc ", 12), "a b c #12");
-        assert_eq!(nickname("", 2), "Driver #2");
-        let long = nickname("Maximilian Alexander von Mustermannshausen", 1234);
-        assert!(
-            long.chars().count() <= MAX_NICK && long.ends_with(" #1234"),
-            "{long}"
-        );
-    }
-
-    #[test]
-    fn yaw_is_gtas_heading() {
-        assert_eq!(saltychat_yaw(0.0), 0.0);
-        assert_eq!(saltychat_yaw(90.0), -90.0); // east: GTA -90
-        assert_eq!(saltychat_yaw(270.0), 90.0);
-        assert_eq!(saltychat_yaw(-90.0), 90.0);
-    }
-
-    #[test]
-    fn a_bus_muffles_the_voice() {
-        let me = Listener {
-            at: DVec3::ZERO,
-            yaw: 0.0,
-            inside: Some(1),
-            on_radio: true,
-            radio_keyed: false,
-        };
-        let near = Speaker {
-            id: 2,
-            name: "b".into(),
-            at: DVec3::new(10.0, 0.0, 0.0),
-            inside: None,
-            on_radio: false,
-            radio_keyed: false,
-        };
-        assert_eq!(heard_volume(&me, &near, 20.0), Some(0.18));
-        let aboard = Speaker {
-            inside: Some(1),
-            ..near.clone()
-        };
-        assert_eq!(heard_volume(&me, &aboard, 20.0), None);
-    }
-
-    #[test]
-    fn the_plugin_is_told_the_session_and_the_positions() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let mut v = Voice::new(port);
-        let key_file = scratch_key("link");
-        v.key = Some(key_file.clone());
-        v.set_server(Some(VoiceServer {
-            server_uid: "UID".into(),
-            channel: "7".into(),
-            password: String::new(),
-            range: 20.0,
-            radio: true,
-        }));
-        let me = Listener {
-            at: DVec3::new(1_234_567.0, -2_000_000.0, 50.0),
-            yaw: 90.0,
-            inside: None,
-            on_radio: true,
-            radio_keyed: true,
-        };
-        let others = [Speaker {
-            id: 2,
-            name: "Anna".into(),
-            at: DVec3::new(1_234_570.0, -2_000_000.0, 51.6),
-            inside: None,
-            on_radio: true,
-            radio_keyed: true,
-        }];
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let mut conn = None;
-        listener.set_nonblocking(true).unwrap();
-        while conn.is_none() && Instant::now() < deadline {
-            v.tick(0.2, ("Max", 1), Some(me), &others);
-            if let Ok((c, _)) = listener.accept() {
-                conn = Some(c);
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let mut conn = conn.expect("the game links to the plugin");
-        conn.set_nonblocking(false).unwrap();
-        // the first line is hello with the key of the file
-        let mut first = String::new();
-        BufReader::new(conn.try_clone().unwrap())
-            .read_line(&mut first)
-            .unwrap();
-        let hello: Value = serde_json::from_str(&first).unwrap();
-        assert_eq!(hello["type"], "hello");
-        assert_eq!(
-            hello["key"].as_str(),
-            std::fs::read_to_string(&key_file).ok().as_deref()
-        );
-        conn.write_all(b"{\"type\":\"welcome\"}\n{\"type\":\"state\",\"inChannel\":true}\n{\"type\":\"talk\",\"nickname\":\"Anna #2\",\"talking\":true}\n").unwrap();
-        conn.set_read_timeout(Some(Duration::from_millis(50)))
-            .unwrap();
-        let mut got = String::new();
-        while Instant::now() < deadline && !got.contains("\"players\"") {
-            v.tick(0.2, ("Max", 1), Some(me), &others);
-            let mut buf = [0u8; 4096];
-            if let Ok(n) = conn.read(&mut buf) {
-                got.push_str(&String::from_utf8_lossy(&buf[..n]));
-            }
-        }
-        let lines: Vec<Value> = got
-            .lines()
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect();
-        let init = lines
-            .iter()
-            .find(|l| l["type"] == "initiate")
-            .expect("initiate");
-        assert_eq!(
-            (
-                init["serverUid"].as_str(),
-                init["channel"].as_str(),
-                init["nickname"].as_str()
-            ),
-            (Some("UID"), Some("7"), Some("Max #1"))
-        );
-        let me_line = lines.iter().find(|l| l["type"] == "self").expect("self");
-        assert_eq!(
-            (me_line["x"].as_f64(), me_line["yaw"].as_f64()),
-            (Some(-433.0), Some(-90.0))
-        );
-        assert_eq!(
-            (me_line["onRadio"].as_bool(), me_line["keyed"].as_bool()),
-            (Some(true), Some(true))
-        );
-        let players = lines
-            .iter()
-            .find(|l| l["type"] == "players")
-            .expect("players");
-        assert_eq!(players["players"][0]["nickname"], "Anna #2");
-        assert_eq!(players["players"][0]["x"].as_f64(), Some(-430.0));
-        assert!(players["players"][0]["volume"].is_null());
-        assert_eq!(players["players"][0]["radio"].as_bool(), Some(true));
-        // what the plugin said came in
-        let until = Instant::now() + Duration::from_secs(2);
-        while Instant::now() < until && !(v.status.in_channel && v.speaks("Anna", 2)) {
-            v.tick(0.01, ("Max", 1), Some(me), &others);
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        assert!(v.status.in_channel);
-        assert!(v.speaks("Anna", 2));
-        assert!(v.on_radio("Anna", 2));
-        assert_eq!(v.hud_line(), None);
-        let _ = std::fs::remove_dir_all(key_file.parent().unwrap());
-    }
 }

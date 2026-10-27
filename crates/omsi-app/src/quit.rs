@@ -23,10 +23,10 @@ pub fn signal_name(sig: i32) -> &'static str {
 
 const SIGHUP: i32 = 1;
 const SIGINT: i32 = 2;
-const SIGTERM: i32 = 15;
+pub const SIGTERM: i32 = 15;
 
 #[cfg(unix)]
-mod sys {
+pub(crate) mod sys {
     pub type Handler = usize;
     pub const SIG_DFL: Handler = 0;
     pub const SIG_IGN: Handler = 1;
@@ -104,29 +104,4 @@ pub fn install(wake: impl FnOnce(i32) + Send + 'static) {
 /// The signal that asked the game to end, if one did.
 pub fn requested() -> Option<i32> {
     Some(REQUESTED.load(Ordering::SeqCst)).filter(|s| *s != 0)
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_signal_wakes_the_loop_once() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        install(move |sig| tx.send(sig).unwrap());
-        assert!(requested().is_none());
-        // SAFETY: raising a handled signal in our own process
-        unsafe { sys::raise(SIGTERM) };
-        assert_eq!(
-            rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap(),
-            SIGTERM
-        );
-        assert_eq!(requested(), Some(SIGTERM));
-        // woken once: the watcher is done (and has dropped its sender)
-        assert_eq!(
-            rx.recv_timeout(std::time::Duration::from_millis(300)),
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
-        );
-        // (a second signal would end the test process: not raised here)
-    }
 }
