@@ -61,6 +61,7 @@ impl Shell {
             badges: &[],
             footer: ("Project Depot", "preview"),
             footer_ask: false,
+            compact: false,
         };
         if let Some(Nav::Page(p)) = bar.draw(ui, h) {
             self.page = p;
@@ -306,6 +307,18 @@ pub struct Sidebar<'a> {
     /// The right-hand part of the foot line asks for something ("Create" a driver): in the
     /// accent, not muted.
     pub footer_ask: bool,
+    /// Only the icons, in a narrow strip (a narrow window, as Windows 11's navigation view
+    /// does): each name in a tooltip.
+    pub compact: bool,
+}
+
+/// The sidebar's width: whole, or only its icons (`Sidebar::compact`).
+pub fn sidebar_w(compact: bool) -> f32 {
+    if compact {
+        SIDEBAR_COMPACT_W
+    } else {
+        SIDEBAR_W
+    }
 }
 
 /// Where the chosen entry's accent mark stands: at `page`'s entry, or on its way there from
@@ -337,11 +350,13 @@ pub fn footer_id() -> u64 {
 impl Sidebar<'_> {
     /// Draw it; what was clicked.
     pub fn draw(&self, ui: &mut Ui, h: f32) -> Option<Nav> {
-        let side = Rect::new(0.0, 0.0, SIDEBAR_W, h);
+        let w = sidebar_w(self.compact);
+        let side = Rect::new(0.0, 0.0, w, h);
         ui.solid(side);
         ui.p().rect(side, omsi_ui::theme::surface(SIDE));
-        ui.p().rect(Rect::new(SIDEBAR_W - 1.0, 0.0, 1.0, h), LINE);
-        if let Some((tex, aspect)) = self.logo {
+        ui.p().rect(Rect::new(w - 1.0, 0.0, 1.0, h), LINE);
+        // (the wordmark needs the whole width: a compact bar goes without it)
+        if let Some((tex, aspect)) = self.logo.filter(|_| !self.compact) {
             // (the wordmark 27 points high, as the concept's lettering)
             let lh = 27.0;
             let lw = (lh / aspect.max(0.01)).min(SIDEBAR_W - 40.0);
@@ -352,7 +367,7 @@ impl Sidebar<'_> {
         let row = nav_row(h);
         for (i, &page) in Page::listed().iter().enumerate() {
             let top = NAV_TOP + i as f32 * row;
-            let r = Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0);
+            let r = Rect::new(8.0, top, w - 17.0, row - 2.0);
             if self.entry(ui, page, r) {
                 nav = Some(Nav::Page(page));
             }
@@ -361,7 +376,7 @@ impl Sidebar<'_> {
         let foot = Page::foot();
         for (i, &page) in foot.iter().enumerate() {
             let top = h - WHO_H - 8.0 - (foot.len() - i) as f32 * FOOT_ROW;
-            let r = Rect::new(8.0, top, SIDEBAR_W - 17.0, FOOT_ROW - 2.0);
+            let r = Rect::new(8.0, top, w - 17.0, FOOT_ROW - 2.0);
             if self.entry(ui, page, r) {
                 nav = Some(Nav::Page(page));
             }
@@ -375,31 +390,52 @@ impl Sidebar<'_> {
                 .rounded(Rect::new(r.x, r.center().y - 9.0, 3.0, 18.0), 1.5, accent());
         }
         ui.p()
-            .rect(Rect::new(8.0, h - WHO_H - 1.0, SIDEBAR_W - 17.0, 1.0), LINE);
-        let line = Rect::new(8.0, h - WHO_H, SIDEBAR_W - 17.0, WHO_H);
+            .rect(Rect::new(8.0, h - WHO_H - 1.0, w - 17.0, 1.0), LINE);
+        let line = Rect::new(8.0, h - WHO_H, w - 17.0, WHO_H);
         let (hover, _, clicked) = ui.interact_key(footer_id(), line);
         if hover {
             ui.p().rounded(line.inset(2.0), 4.0, HOVER_LAYER);
         }
         let (name, what) = self.footer;
+        if self.compact {
+            // (the driver's icon only, the name and what it is in its tooltip)
+            ui.icon(
+                "o-user",
+                line.center(),
+                16.0,
+                if self.footer_ask { accent() } else { MUTED },
+            );
+            ui.tooltip(
+                line,
+                &format!("{} · {}", omsi_ui::tr(name), omsi_ui::tr(what)),
+            );
+            if clicked {
+                nav = Some(Nav::Footer);
+            }
+            return nav;
+        }
         let what_w = ui.width(what, 12.0, Weight::Regular);
         let cy = line.center().y;
-        // (the driver's icon, then the name, then what it is - or what to do - at the right)
+        // (the driver's icon, then the name - cut to the room left of what it is, as it is
+        // drawn: translated - then what it is, or what to do, at the right; the whole line
+        // in the tooltip)
         ui.icon("o-user", Vec2::new(line.x + 20.0, cy), 16.0, MUTED);
-        let name = kit::fit_text_as_is(
-            ui,
-            name,
-            12.5,
-            Weight::Bold,
-            (line.w - 40.0 - what_w - 12.0).max(0.0),
-        );
         ui.text_in(
-            &name,
-            Rect::new(line.x + 36.0, cy - 12.0, line.w, 24.0),
+            name,
+            Rect::new(
+                line.x + 36.0,
+                cy - 12.0,
+                (line.w - 40.0 - what_w - 12.0).max(0.0),
+                24.0,
+            ),
             12.5,
             Weight::Bold,
             FG,
             Align::Left,
+        );
+        ui.tooltip(
+            line,
+            &format!("{} · {}", omsi_ui::tr(name), omsi_ui::tr(what)),
         );
         let what_c = if self.footer_ask {
             if hover {
@@ -441,6 +477,16 @@ impl Sidebar<'_> {
             ui.p().rounded(r, CONTROL_RADIUS, HOVER_LAYER);
         }
         let ic = if on { accent() } else { NAV_TEXT };
+        if self.compact {
+            // (the icon in the middle, a count as a dot, the name in a tooltip)
+            ui.icon(page.icon(), r.center(), 20.0, ic);
+            if let Some((_, _, color)) = self.badges.iter().find(|b| b.0 == page) {
+                ui.p()
+                    .circle(Vec2::new(r.right() - 7.0, r.y + 9.0), 3.5, *color);
+            }
+            ui.tooltip(r, page.title());
+            return clicked;
+        }
         ui.icon(page.icon(), Vec2::new(r.x + 22.0, r.center().y), 20.0, ic);
         ui.text_in(
             page.title(),
