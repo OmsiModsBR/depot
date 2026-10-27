@@ -5,7 +5,7 @@
 //! back with another API).
 
 /// How an option shows under the API.
-pub(crate) enum Limit {
+pub enum Limit {
     /// Not offered at all.
     Hidden,
     /// Offered as a fixed line: this value, and why.
@@ -14,7 +14,7 @@ pub(crate) enum Limit {
     Choices(&'static [&'static str]),
 }
 
-pub(crate) struct ApiLimit {
+pub struct ApiLimit {
     /// The setting's key in the settings file.
     pub key: &'static str,
     pub limit: Limit,
@@ -80,7 +80,7 @@ const NOT_DRAWN: &str = "not drawn by DirectX9 yet";
 
 /// "DirectX9 (D3D9Ex)". `preset` is the launcher's and the menu's quality preset, not a key of
 /// the file.
-pub(crate) const D3D9: &[ApiLimit] = &[
+pub const D3D9: &[ApiLimit] = &[
     ApiLimit {
         key: "preset",
         limit: Limit::Hidden,

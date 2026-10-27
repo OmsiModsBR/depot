@@ -82,12 +82,12 @@ impl Hud {
 /// Outline radius around the glyphs, in texture pixels (the overlay is drawn at 0.45, so
 /// the one-pixel edge it had came out under half a pixel wide and white text vanished in a
 /// bright sky), and the opacity of the plate behind each row.
-const OUTLINE: i32 = 3;
+pub const OUTLINE: i32 = 3;
 const PLATE_ALPHA: f32 = 0.4;
 
 /// One rendered text row (straight-alpha RGBA, `width` x `lh`) into the overlay at row
 /// `y0`: a translucent dark plate as wide as the text, a dark outline and the glyphs on top.
-fn compose_row(img: &mut [u8], row: &[u8], width: u32, lh: u32, y0: u32) {
+pub fn compose_row(img: &mut [u8], row: &[u8], width: u32, lh: u32, y0: u32) {
     let (w, hh) = (width as i32, lh as i32);
     // the text moves right by the outline's width, so that its left edge has one too
     let mut shifted = vec![0u8; row.len()];
@@ -146,7 +146,7 @@ fn compose_row(img: &mut [u8], row: &[u8], width: u32, lh: u32, y0: u32) {
 
 /// `line` with the few characters the HUD font has no glyph for (DIN Narrow: `&` in line
 /// names like "5 & 5N", `_` in chrono folder names) written with ones it has.
-fn legible(font: &FontAtlas, line: &str) -> String {
+pub fn legible(font: &FontAtlas, line: &str) -> String {
     let has = |c: char| font.font.has_glyph(c);
     line.chars()
         .map(|c| match c {
@@ -159,7 +159,7 @@ fn legible(font: &FontAtlas, line: &str) -> String {
 
 /// `line` in rows no wider than `width` pixels, broken at spaces (a single word wider than
 /// that keeps its own row).
-fn wrap(font: &FontAtlas, line: &str, width: i32) -> Vec<String> {
+pub fn wrap(font: &FontAtlas, line: &str, width: i32) -> Vec<String> {
     if font.text_width(line) <= width {
         return vec![line.to_string()];
     }
@@ -183,79 +183,4 @@ fn wrap(font: &FontAtlas, line: &str, width: i32) -> Vec<String> {
         rows.push(row.trim_end().to_string());
     }
     rows
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Every glyph 10 px wide with no gap.
-    fn font() -> FontAtlas {
-        let chars = "abcdefghijklmnopqrstuvwxyz:"
-            .chars()
-            .map(|ch| omsi_content::font::FontChar {
-                ch,
-                x0: 0,
-                x1: 10,
-                y: 0,
-            })
-            .collect();
-        FontAtlas::new(
-            omsi_content::font::Font {
-                height: 12,
-                gap: 0,
-                chars,
-                ..Default::default()
-            },
-            1,
-            1,
-            vec![0; 4],
-            vec![0; 4],
-        )
-    }
-
-    #[test]
-    fn long_lines_break_between_words() {
-        let f = font();
-        assert_eq!(wrap(&f, "short line", 200), vec!["short line"]);
-        // a space without a glyph counts as the gap (1 px)
-        assert_eq!(
-            wrap(&f, "no duty:   line five does not run", 100),
-            vec!["no duty:", "line five", "does not", "run"]
-        );
-        assert_eq!(
-            wrap(&f, "unbreakablewordhere ok", 100),
-            vec!["unbreakablewordhere", "ok"]
-        );
-        for row in wrap(
-            &f,
-            "no duty: line five does not run on that date at all",
-            250,
-        ) {
-            assert!(f.text_width(&row) <= 250, "{row}");
-        }
-        assert_eq!(
-            legible(&f, "line 5 & 5N: 1000_FPW"),
-            "line 5 + 5N: 1000 FPW"
-        );
-    }
-
-    /// A glyph pixel stays white and opaque, is ringed by a dark outline several pixels
-    /// wide, and a plate runs behind the row as far as the text goes.
-    #[test]
-    fn rows_get_an_outline_and_a_plate() {
-        let (w, lh) = (40u32, 12u32);
-        let mut row = vec![0u8; (w * lh * 4) as usize];
-        let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
-        row[at(10, 6)..at(10, 6) + 4].copy_from_slice(&[255, 255, 255, 255]);
-        let mut img = vec![0u8; (w * lh * 4) as usize];
-        compose_row(&mut img, &row, w, lh, 0);
-        let x = 10 + OUTLINE as u32;
-        assert_eq!(&img[at(x, 6)..at(x, 6) + 4], &[255, 255, 255, 255]);
-        let ring = &img[at(x + 2, 6)..at(x + 2, 6) + 4];
-        assert!(ring[0] == 0 && ring[3] > 200, "{ring:?}");
-        let plate = &img[at(x + 8, 1)..at(x + 8, 1) + 4];
-        assert!(plate[0] == 0 && (90..120).contains(&plate[3]), "{plate:?}");
-        assert_eq!(img[at(30, 6) + 3], 0);
-    }
 }
