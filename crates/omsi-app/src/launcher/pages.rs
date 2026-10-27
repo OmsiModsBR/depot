@@ -1195,6 +1195,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                         16.0,
                         if hp { accent() } else { TEXT_FAINT },
                     );
+                    ui.tooltip(pr, "Add another key");
                     if cp {
                         more = Some(*i);
                     }
@@ -1241,6 +1242,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                         16.0,
                         if hx { DANGER } else { TEXT_FAINT },
                     );
+                    ui.tooltip(xr, "Remove this key");
                     if cx {
                         clicked = Some((*i, true));
                     }
