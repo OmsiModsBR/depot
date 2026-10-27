@@ -540,7 +540,7 @@ fn map_title(m: &MapInfo) -> String {
 fn columns(body: Rect) -> (Rect, Rect, Rect, Rect) {
     let top = body.y + BODY_TOP;
     let rows_h = (body.h - BODY_TOP - 24.0).max(300.0);
-    let lib = Rect::new(body.x, top, kit::fit(290.0, body.w), rows_h);
+    let lib = Rect::new(body.x, top, kit::fit(330.0, body.w), rows_h);
     let start_w = kit::fit(320.0, body.w);
     let start = Rect::new(body.right() - start_w, top, start_w, rows_h);
     let mid_x = lib.right() + 14.0;

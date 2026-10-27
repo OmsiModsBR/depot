@@ -332,6 +332,8 @@ impl Launcher {
         };
         // (every button of the launcher names itself after the mouse rests on it a second)
         app.ui.auto_tips = true;
+        // (and no text of it smaller than Windows 11's caption, 12 pixels, in a small window)
+        app.ui.text_floor = 12.0;
         omsi_ui::theme::set_motion(windows_motion());
         // no original installation found anywhere: the launcher still opens, on Setup, and says
         // what it needs (only starting a session needs the game)
@@ -2173,8 +2175,18 @@ impl Launcher {
         if self.top_nav() {
             0.0
         } else {
-            RAIL_W
+            omsi_launcher_ui::shell::sidebar_w(self.sidebar_compact())
         }
+    }
+
+    /// Whether the sidebar shows only its icons: in a window narrower than 1300 points, as
+    /// Windows 11's navigation view folds in a narrow window (the pages get its room; the
+    /// smallest window is 1080 points wide).
+    fn sidebar_compact(&self) -> bool {
+        self.window.as_ref().is_some_and(|w| {
+            let points = w.inner_size().width as f32 / w.scale_factor() as f32;
+            points < 1300.0
+        })
     }
 
     /// The sidebar over the page's left side (a scrolled page passes under it), or the top
@@ -2218,6 +2230,7 @@ impl Launcher {
                 badges: &badges,
                 footer: (&name, &level),
                 footer_ask: ask,
+                compact: self.sidebar_compact(),
             }
             .draw(&mut self.ui, size.y)
         };

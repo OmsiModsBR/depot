@@ -222,6 +222,9 @@ pub struct Ui {
     /// The launcher's tooltips: every button names itself in one, and each shows after the
     /// mouse has rested a whole second (the game's own menus stay as they are).
     pub auto_tips: bool,
+    /// No text smaller than this many physical pixels (Fluent's caption, 12, in the
+    /// launcher; 0: as asked), whatever the window's scale.
+    pub text_floor: f32,
     pub hot: Option<Id>,
     pub active: Option<Id>,
     pub focus: Option<Id>,
@@ -269,6 +272,7 @@ impl Ui {
             fade_stack: Vec::new(),
             moving: false,
             auto_tips: false,
+            text_floor: 0.0,
             hot: None,
             active: None,
             focus: None,
@@ -296,6 +300,11 @@ impl Ui {
     pub fn begin(&mut self, size: Vec2, scale: f32, dt: f32) {
         self.size = size;
         self.scale = scale;
+        self.fonts.floor = if self.text_floor > 0.0 && scale > 0.0 {
+            self.text_floor / scale
+        } else {
+            0.0
+        };
         self.dt = dt.clamp(0.0, 0.1);
         self.time += self.dt;
         self.atlas.begin_frame();
@@ -958,8 +967,8 @@ impl Ui {
         c: Color,
     ) -> f32 {
         let text = &*crate::tr(text);
-        let lh = px * 1.38;
-        let mut y = at.y + px;
+        let lh = self.fonts.size(px) * 1.38;
+        let mut y = at.y + self.fonts.size(px);
         let mut n = 0;
         for para in text.split('\n') {
             let mut line = String::new();
@@ -997,10 +1006,10 @@ impl Ui {
         weight: Weight,
         c: Color,
     ) -> f32 {
-        let lh = px * 1.38;
+        let lh = self.fonts.size(px) * 1.38;
         let lines = self.wrap_as_is(text, width, px, weight);
         for (n, line) in lines.iter().enumerate() {
-            let y = at.y + px + n as f32 * lh;
+            let y = at.y + self.fonts.size(px) + n as f32 * lh;
             self.text_as_is(line, Vec2::new(at.x, y), px, weight, c, Align::Left);
         }
         lines.len() as f32 * lh
@@ -1009,7 +1018,7 @@ impl Ui {
     /// Height `paragraph` would take.
     pub fn paragraph_height(&self, text: &str, width: f32, px: f32, weight: Weight) -> f32 {
         let text = &*crate::tr(text);
-        let lh = px * 1.38;
+        let lh = self.fonts.size(px) * 1.38;
         let mut n = 0;
         for para in text.split('\n') {
             let mut line = String::new();
@@ -2071,7 +2080,7 @@ impl Ui {
             let w = (shown(self, &t) + 20.0).min(360.0);
             let lines = raw.then(|| self.wrap_as_is(&t, w - 20.0, 12.5, Weight::Medium));
             let h = match &lines {
-                Some(l) => l.len() as f32 * 12.5 * 1.38,
+                Some(l) => l.len() as f32 * self.fonts.size(12.5) * 1.38,
                 None => self.paragraph_height(&t, w - 20.0, 12.5, Weight::Medium),
             } + 12.0;
             let mut r = Rect::new(at.x + 14.0, at.y + 18.0, w, h);
@@ -2090,10 +2099,11 @@ impl Ui {
                 .rounded_border(r, 7.0, 1.0, Color::WHITE.alpha(0.1));
             match lines {
                 Some(lines) => {
+                    let sz = self.fonts.size(12.5);
                     for (k, l) in lines.iter().enumerate() {
                         self.text_as_is(
                             l,
-                            Vec2::new(r.x + 10.0, r.y + 4.0 + 12.5 + k as f32 * 12.5 * 1.38),
+                            Vec2::new(r.x + 10.0, r.y + 4.0 + sz + k as f32 * sz * 1.38),
                             12.5,
                             Weight::Medium,
                             TEXT_SOFT,
@@ -2983,5 +2993,26 @@ mod tests {
             Some("Save the folders")
         );
         assert_eq!(rest(false, None, 1.2), None);
+    }
+
+    /// With a text floor (the launcher's), text is measured - and so laid out - no smaller
+    /// than that many physical pixels at the frame's scale; larger text and a Ui without one
+    /// are as asked.
+    #[test]
+    fn a_text_floor_keeps_small_text_readable_in_a_small_window() {
+        let mut ui = Ui::new();
+        let at = |ui: &Ui, px: f32| ui.width("Explore map", px, Weight::Regular);
+        ui.begin(Vec2::new(400.0, 300.0), 0.8, 0.05);
+        let (small, large) = (at(&ui, 10.0), at(&ui, 15.0));
+        assert!(small < large);
+        ui.text_floor = 12.0;
+        ui.begin(Vec2::new(400.0, 300.0), 0.8, 0.05);
+        assert_eq!(at(&ui, 10.0), large);
+        assert_eq!(
+            at(&ui, 18.0),
+            ui.fonts.width("Explore map", 18.0, Weight::Regular)
+        );
+        ui.begin(Vec2::new(400.0, 300.0), 2.0, 0.05);
+        assert_eq!(at(&ui, 10.0), small);
     }
 }

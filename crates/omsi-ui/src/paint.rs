@@ -443,6 +443,7 @@ impl Painter {
         if text.is_empty() {
             return 0.0;
         }
+        let px = fonts.size(px);
         let k = self.scale;
         let s = atlas.text(fonts, text, px * k, weight);
         let pad = crate::text::PAD as f32 / k;

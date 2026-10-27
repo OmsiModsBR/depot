@@ -30,6 +30,8 @@ pub const OK: Color = omsi_ui::theme::OK;
 pub const WARN: Color = omsi_ui::theme::WARN;
 
 pub const SIDEBAR_W: f32 = 248.0;
+/// The sidebar with only its icons (a narrow window).
+pub const SIDEBAR_COMPACT_W: f32 = 56.0;
 /// A sidebar entry's height and the space under it (Windows 11's navigation view).
 pub const NAV_ROW: f32 = 42.0;
 pub const NAV_ITEM_H: f32 = 40.0;
