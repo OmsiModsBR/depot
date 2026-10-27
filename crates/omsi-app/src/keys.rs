@@ -252,17 +252,6 @@ pub fn scan_name(scan: i32) -> Option<String> {
     })
 }
 
-#[cfg(test)]
-mod scan_name_tests {
-    #[test]
-    fn names() {
-        assert_eq!(super::scan_name(17).as_deref(), Some("W"));
-        assert_eq!(super::scan_name(72).as_deref(), Some("Num8"));
-        assert_eq!(super::scan_name(200).as_deref(), Some("Up"));
-        assert_eq!(super::scan_name(52).as_deref(), Some("."));
-    }
-}
-
 /// A key and its modifiers as the player reads them ("Ctrl+D"); `(unbound)` for scan 0.
 pub(crate) fn key_name(scan: i64, modifier: i64) -> String {
     if scan == 0 {

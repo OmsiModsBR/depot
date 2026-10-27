@@ -17,7 +17,7 @@ use omsi_audio::{AudioEngine, VoiceId, VoiceParams};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-const DEFAULT_STATIONS: &[(&str, &str)] = &[
+pub const DEFAULT_STATIONS: &[(&str, &str)] = &[
     (
         "radioeins",
         "https://dispatcher.rndfnk.com/rbb/radioeins/live/mp3/mid",
@@ -51,7 +51,7 @@ const DEFAULT_STATIONS: &[(&str, &str)] = &[
 ];
 
 /// `radio.cfg` as it is written the first time: what it is for, the volume, the default list.
-fn default_text() -> String {
+pub fn default_text() -> String {
     let mut text = String::from(
         "# Internet radio for the buses' radios: one station per line, `name = address`\n\
          # (an MP3, AAC or Ogg stream, or an .m3u/.pls playlist). A radio's station\n\
@@ -67,7 +67,7 @@ fn default_text() -> String {
 
 /// The station lines of a radio.cfg as they stand: (name, all behind the `=` - the address
 /// and any frequencies after it).
-fn station_lines(text: &str) -> Vec<(String, String)> {
+pub fn station_lines(text: &str) -> Vec<(String, String)> {
     text.lines()
         .map(|l| l.trim().trim_start_matches('\u{feff}'))
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
@@ -84,7 +84,7 @@ fn station_lines(text: &str) -> Vec<(String, String)> {
 /// are, the stations stand where its first one stood (after the rest when it had none). A
 /// station without an address is left out, and a name loses what would end it or make the
 /// line a comment (`=`, a line break, a leading `#`).
-fn with_stations(text: &str, list: &[(String, String)]) -> String {
+pub fn with_stations(text: &str, list: &[(String, String)]) -> String {
     let mut out = String::new();
     let mut placed = false;
     let put = |out: &mut String| {
@@ -213,9 +213,9 @@ fn plugin_stations(dir: &std::path::Path) -> Vec<(String, String)> {
 /// bus's position - near which that frequency is the one on air. Without a place it is
 /// the station's frequency everywhere.
 #[derive(Clone, Debug, PartialEq)]
-struct Frequency {
-    mhz: String,
-    at: Option<(f64, f64)>,
+pub struct Frequency {
+    pub mhz: String,
+    pub at: Option<(f64, f64)>,
 }
 
 /// `94.6`, `94.6 MHz` or `94.6 @ 25400, 990`.
@@ -250,7 +250,7 @@ type Frequencies = std::collections::HashMap<String, Vec<Frequency>>;
 
 /// Which of a station's frequencies is on air at (x, y): that of the nearest place, and
 /// the one without a place where no place is given.
-fn frequency_at(on: &[Frequency], x: f64, y: f64) -> Option<&str> {
+pub fn frequency_at(on: &[Frequency], x: f64, y: f64) -> Option<&str> {
     let near = on
         .iter()
         .filter_map(|f| {
@@ -266,7 +266,7 @@ fn frequency_at(on: &[Frequency], x: f64, y: f64) -> Option<&str> {
 /// of the stations that name any (by address, lower case). A line is `name = address`,
 /// and behind the address `| frequency` or `| frequency @ x, y` as often as the station
 /// has frequencies along the map.
-fn parse_stations(text: &str) -> (Vec<(String, String)>, Option<f32>, Frequencies) {
+pub fn parse_stations(text: &str) -> (Vec<(String, String)>, Option<f32>, Frequencies) {
     let (mut stations, mut volume, mut frequencies) = (Vec::new(), None, Frequencies::new());
     for line in text.lines() {
         let line = line.trim().trim_start_matches('\u{feff}');
@@ -315,22 +315,22 @@ fn map_stations(map_cfg: &std::path::Path) -> (Vec<(String, String)>, Frequencie
 
 pub struct Radio {
     /// What the buttons play: the map's stations, then the player's.
-    stations: Vec<(String, String)>,
+    pub stations: Vec<(String, String)>,
     /// The player's own (radio.cfg and the radio plugins' lists).
-    own: Vec<(String, String)>,
+    pub own: Vec<(String, String)>,
     /// The frequencies the stations are on: the player's file's, and the map's over them.
-    frequencies: Frequencies,
-    own_frequencies: Frequencies,
+    pub frequencies: Frequencies,
+    pub own_frequencies: Frequencies,
     /// The map the list was made for, and whether the list changed while a station played.
-    map: String,
-    relisted: bool,
-    volume: f32,
+    pub map: String,
+    pub relisted: bool,
+    pub volume: f32,
     /// Shift+R: how far the list is turned from the bus's own station numbers.
-    offset: usize,
-    playing: Option<Playing>,
+    pub offset: usize,
+    pub playing: Option<Playing>,
 }
 
-struct Playing {
+pub struct Playing {
     station: usize,
     buf: Arc<StreamBuf>,
     voice: VoiceId,
@@ -346,7 +346,7 @@ const DISPLAY_WIDTH: usize = 10;
 
 /// A station's name and its song as one line a simple text display can show: plain Latin
 /// letters (its fonts have little else), no `@` (the display's line break).
-fn display_line(name: &str, status: &str) -> String {
+pub fn display_line(name: &str, status: &str) -> String {
     let waiting = status.is_empty() || status.ends_with('…') || status.eq_ignore_ascii_case(name);
     let text = if waiting {
         name.to_string()
@@ -403,7 +403,7 @@ fn display_line(name: &str, status: &str) -> String {
 /// `width` characters of `text` at `seconds` after it came up: all of a text that fits,
 /// else the text running through from right to left, four characters a second after a
 /// moment at its beginning, with a gap before it comes round again.
-fn marquee(text: &str, width: usize, seconds: f32) -> String {
+pub fn marquee(text: &str, width: usize, seconds: f32) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() <= width {
         return format!("{text:<width$}");
@@ -638,165 +638,5 @@ impl Radio {
             p.buf.close();
             audio.stop(p.voice);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_station_list_edited_keeps_the_files_comments_volume_and_frequencies() {
-        let text = "# my stations\nvolume = 0.4\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\n# a note\nTwo = https://b.example/two\n";
-        let list = station_lines(text);
-        assert_eq!(
-            list,
-            vec![
-                (
-                    "One".to_string(),
-                    "https://a.example/one.mp3 | 94.6 @ 100, 200".to_string()
-                ),
-                ("Two".to_string(), "https://b.example/two".to_string())
-            ]
-        );
-        // the second removed, two added (one of them still without an address)
-        let edited = vec![
-            list[0].clone(),
-            (
-                "#Jazz = FM".to_string(),
-                "https://c.example/jazz.m3u".to_string(),
-            ),
-            ("Later".to_string(), String::new()),
-        ];
-        let out = with_stations(text, &edited);
-        assert_eq!(out, "# my stations\nvolume = 0.4\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\nJazz   FM = https://c.example/jazz.m3u\n# a note\n");
-        let (stations, volume, frequencies) = parse_stations(&out);
-        assert_eq!(
-            stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
-            ["One", "Jazz   FM"]
-        );
-        assert_eq!(volume, Some(0.4));
-        assert_eq!(frequencies.len(), 1);
-        // a file without stations gets them after what it has
-        assert_eq!(
-            with_stations("volume = 1\n", &edited[..1]),
-            "volume = 1\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\n"
-        );
-        assert_eq!(station_lines(&default_text()).len(), DEFAULT_STATIONS.len());
-    }
-
-    #[test]
-    fn a_text_display_gets_plain_letters_and_no_line_break() {
-        assert_eq!(display_line("Evropa 2", ""), "Evropa 2");
-        assert_eq!(display_line("Evropa 2", "buffering …"), "Evropa 2");
-        assert_eq!(display_line("Evropa 2", "evropa 2"), "Evropa 2");
-        assert_eq!(
-            display_line("Český rozhlas", "Dvořák – Žalm č. 23"),
-            "Cesky rozhlas - Dvorak - Zalm c. 23"
-        );
-        assert_eq!(display_line("me@radio", "Наше Радио"), "me radio -");
-    }
-
-    #[test]
-    fn a_maps_stations_come_first_and_its_volume_counts_for_nothing() {
-        let dir = std::env::temp_dir().join(format!("omsi_map_radio_{}", std::process::id()));
-        let map = dir.join("maps").join("Mesto");
-        std::fs::create_dir_all(&map).unwrap();
-        std::fs::write(map.join("radio.cfg"), "# the town's stations\nvolume = 0.1\nMestske radio = http://example.org/mesto.mp3\nSecond = http://example.org/own.mp3\n").unwrap();
-        let own = vec![
-            (
-                "Mine".to_string(),
-                "http://example.org/mine.mp3".to_string(),
-            ),
-            ("Own".to_string(), "http://EXAMPLE.org/own.mp3".to_string()),
-        ];
-        let mut r = Radio {
-            stations: own.clone(),
-            own,
-            frequencies: Default::default(),
-            own_frequencies: Default::default(),
-            map: String::new(),
-            relisted: false,
-            volume: 0.7,
-            offset: 2,
-            playing: None,
-        };
-        r.set_map(&dir, "maps/Mesto/global.cfg");
-        let names: Vec<&str> = r.stations.iter().map(|s| s.0.as_str()).collect();
-        assert_eq!(names, ["Mestske radio", "Second", "Mine"]);
-        assert_eq!((r.volume, r.offset, r.relisted), (0.7, 0, true));
-        // a map without a radio.cfg: the player's own again
-        r.set_map(&dir, "maps/Jinde/global.cfg");
-        assert_eq!(
-            r.stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
-            ["Mine", "Own"]
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn a_stations_frequencies_and_their_places() {
-        let (stations, volume, on) = parse_stations(
-            "volume = 0.5\nZurnal = http://example.org/Z.mp3 | 94.6 @ 25400, 990 | 90.9 MHz @ 2300,-720\nKiss = http://example.org/k.mp3 | 98,1\nPlain = http://example.org/p.mp3\nBad = http://example.org/b.mp3 | here @ 1,2 | 0\n",
-        );
-        assert_eq!(
-            stations.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
-            [
-                "http://example.org/Z.mp3",
-                "http://example.org/k.mp3",
-                "http://example.org/p.mp3",
-                "http://example.org/b.mp3"
-            ]
-        );
-        assert_eq!(volume, Some(0.5));
-        assert_eq!(
-            on["http://example.org/z.mp3"],
-            [
-                Frequency {
-                    mhz: "94.6".into(),
-                    at: Some((25400.0, 990.0))
-                },
-                Frequency {
-                    mhz: "90.9".into(),
-                    at: Some((2300.0, -720.0))
-                }
-            ]
-        );
-        assert_eq!(
-            on["http://example.org/k.mp3"],
-            [Frequency {
-                mhz: "98.1".into(),
-                at: None
-            }]
-        );
-        assert!(
-            !on.contains_key("http://example.org/p.mp3")
-                && !on.contains_key("http://example.org/b.mp3")
-        );
-        // the nearest place counts
-        assert_eq!(
-            frequency_at(&on["http://example.org/z.mp3"], 24000.0, 0.0),
-            Some("94.6")
-        );
-        assert_eq!(
-            frequency_at(&on["http://example.org/z.mp3"], 5000.0, 0.0),
-            Some("90.9")
-        );
-        assert_eq!(
-            frequency_at(&on["http://example.org/k.mp3"], 5000.0, 0.0),
-            Some("98.1")
-        );
-    }
-
-    #[test]
-    fn a_long_line_runs_through_ten_characters() {
-        assert_eq!(marquee("KISS", 10, 5.0), "KISS      ");
-        let line = "Evropa 2 - Song";
-        assert_eq!(marquee(line, 10, 0.0), "Evropa 2 -");
-        assert_eq!(marquee(line, 10, 1.5), "Evropa 2 -");
-        assert_eq!(marquee(line, 10, 2.0), "ropa 2 - S");
-        // round again after the text and its gap: 18 characters, four a second
-        assert_eq!(marquee(line, 10, 1.5 + 14.0 / 4.0), "g   Evropa");
-        assert_eq!(marquee(line, 10, 1.5 + 18.0 / 4.0), "Evropa 2 -");
     }
 }

@@ -26,10 +26,10 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 /// as the data format below says.
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct RawState {
-    axes: [i32; 8],
-    pov: [u32; 4],
-    buttons: [u8; 128],
+pub struct RawState {
+    pub axes: [i32; 8],
+    pub pov: [u32; 4],
+    pub buttons: [u8; 128],
 }
 
 impl Default for RawState {
@@ -42,7 +42,7 @@ impl Default for RawState {
     }
 }
 
-const RANGE: i32 = 10_000;
+pub const RANGE: i32 = 10_000;
 const VJOY_HARDWARE_ID: (u16, u16) = (0x1234, 0xBEAD);
 /// A failed read after reacquiring can be transient, but several in a row mean the
 /// DirectInput object itself is stale. Reopen it instead of keeping its last state forever.
@@ -115,7 +115,7 @@ fn pov_dirs(pov: u32) -> [bool; 4] {
 /// Releases for everything DirectInput last reported as held. A disappearing device does
 /// not send button-up events, otherwise a shifter, door button or parking brake can stay
 /// pressed in the vehicle script after the hardware is gone.
-fn state_release_events(name: &str, state: &RawState) -> Vec<(String, usize, bool)> {
+pub fn state_release_events(name: &str, state: &RawState) -> Vec<(String, usize, bool)> {
     let mut out = Vec::new();
     for (b, value) in state.buttons.iter().enumerate() {
         if value & 0x80 != 0 {
@@ -138,11 +138,11 @@ fn state_release_events(name: &str, state: &RawState) -> Vec<(String, usize, boo
 
 /// State snapshots have no chronological ordering between buttons. Release old gears
 /// before selecting new ones, even when the new gear has the lower button number.
-fn order_button_events(events: &mut [(String, usize, bool)]) {
+pub fn order_button_events(events: &mut [(String, usize, bool)]) {
     events.sort_by_key(|(_, _, down)| *down);
 }
 
-fn invalidate_state(
+pub fn invalidate_state(
     name: &str,
     state: &mut RawState,
     valid: &mut bool,
@@ -153,7 +153,7 @@ fn invalidate_state(
     *valid = false;
 }
 
-fn state_axes(state: &RawState, valid: bool, has_axis: &[bool; 8]) -> Vec<(usize, f32)> {
+pub fn state_axes(state: &RawState, valid: bool, has_axis: &[bool; 8]) -> Vec<(usize, f32)> {
     if !valid {
         return Vec::new();
     }
@@ -191,7 +191,7 @@ impl Device {
 }
 
 /// The devices, and the thread that finds them.
-pub(crate) struct DirectInput {
+pub struct DirectInput {
     di: IDirectInput8W,
     hwnd: HWND,
     /// The game wants force feedback (the window is the game's, not the launcher's).
@@ -208,7 +208,7 @@ pub(crate) struct DirectInput {
     last_force: Instant,
 }
 
-fn is_controller_device(dev_type: u32, usage_page: u16, usage: u16) -> bool {
+pub fn is_controller_device(dev_type: u32, usage_page: u16, usage: u16) -> bool {
     let primary = dev_type & 0xFF;
     if matches!(
         primary,
@@ -300,7 +300,7 @@ thread_local! {
     static HID_REMOVALS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
-fn removed_path(path: Option<&str>, removed: &[String]) -> bool {
+pub fn removed_path(path: Option<&str>, removed: &[String]) -> bool {
     path.is_some_and(|p| removed.iter().any(|r| r.eq_ignore_ascii_case(p)))
 }
 
@@ -316,18 +316,18 @@ const LATE_SCAN_PERIOD: Duration = Duration::from_secs(5);
 /// Whether a lookup may still be made `since_start` after the game started. The window is
 /// one period longer than a minute, so that a last lookup is made at or after the minute
 /// and a device that appeared before then is found.
-fn late_scan_window_open(since_start: Duration) -> bool {
+pub fn late_scan_window_open(since_start: Duration) -> bool {
     since_start < LATE_SCAN_WINDOW + LATE_SCAN_PERIOD
 }
 
 /// The wait before the next attempt at a device that would not open: 1 s, doubling, at most 30 s.
-fn retry_delay(tries: u32) -> Duration {
+pub fn retry_delay(tries: u32) -> Duration {
     Duration::from_secs((1u64 << tries.min(5)).min(30))
 }
 
 /// Poll must succeed before reading state, including on the single retry after Acquire.
 /// The closures keep the lifecycle decision testable without manufacturing a COM handle.
-fn read_with_recovery<T, E>(
+pub fn read_with_recovery<T, E>(
     mut read: impl FnMut() -> Result<T, E>,
     mut acquire: impl FnMut() -> bool,
 ) -> Result<T, E> {
@@ -373,7 +373,7 @@ unsafe extern "system" fn notify_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPAR
 
 /// A message-only window of the calling thread that Windows tells when a HID device is
 /// plugged in or out (the way SDL finds new controllers).
-fn notification_window() -> Option<HWND> {
+pub fn notification_window() -> Option<HWND> {
     unsafe {
         let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
         let class = w!("Project Depot game controllers");
@@ -421,10 +421,10 @@ fn notification_window() -> Option<HWND> {
 }
 
 #[derive(Clone, Copy)]
-struct InputObject {
-    guid: GUID,
-    ty: u32,
-    flags: u32,
+pub struct InputObject {
+    pub guid: GUID,
+    pub ty: u32,
+    pub flags: u32,
 }
 
 unsafe extern "system" fn collect_object(
@@ -464,7 +464,9 @@ fn axis_slot(guid: GUID, has_axis: &[bool; 8]) -> Option<usize> {
 /// Build the DirectInput data format from the controls the device actually exposes.
 /// Some button boxes have no axes or POVs and reject a generic joystick format even when
 /// its missing entries are marked optional.
-fn format_objects(objects: &[InputObject]) -> (Vec<DIOBJECTDATAFORMAT>, [bool; 8], Option<u32>) {
+pub fn format_objects(
+    objects: &[InputObject],
+) -> (Vec<DIOBJECTDATAFORMAT>, [bool; 8], Option<u32>) {
     let mut objs = Vec::new();
     let mut has_axis = [false; 8];
     let mut ff_axis = None;
@@ -1342,212 +1344,6 @@ impl Drop for DirectInput {
                 }
                 let _ = d.dev.Unacquire();
             }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// With no controller, the periodic lookup stops after the first minute; the
-    /// notifications of Windows still find a device plugged in later.
-    #[test]
-    fn the_periodic_controller_lookup_stops_after_the_first_minute() {
-        assert!(late_scan_window_open(Duration::ZERO));
-        assert!(late_scan_window_open(Duration::from_secs(59)));
-        // one more lookup at or after the minute: a device that appeared before it is found
-        assert!(late_scan_window_open(Duration::from_secs(60)));
-        assert!(!late_scan_window_open(Duration::from_secs(65)));
-        assert!(!late_scan_window_open(Duration::from_secs(3600)));
-    }
-
-    #[test]
-    fn failed_opens_back_off_to_half_a_minute() {
-        let secs: Vec<u64> = (0..8).map(|t| retry_delay(t).as_secs()).collect();
-        assert_eq!(secs, [1, 2, 4, 8, 16, 30, 30, 30]);
-    }
-
-    #[test]
-    fn disappearing_device_releases_buttons_and_hats() {
-        let mut state = RawState::default();
-        state.buttons[7] = 0x80;
-        state.pov[1] = 9000;
-        let events = state_release_events("wheel", &state);
-        assert!(events.contains(&("wheel".to_string(), 7, false)));
-        assert!(events.contains(&(
-            "wheel".to_string(),
-            crate::controllers::HAT_BUTTONS + 5,
-            false
-        )));
-        assert_eq!(events.len(), 2);
-    }
-
-    #[test]
-    fn poll_failure_never_reads_stale_state_and_retries_after_acquire() {
-        let calls = RefCell::new(Vec::new());
-        let mut attempt = 0;
-        let result = read_with_recovery(
-            || {
-                calls.borrow_mut().push("poll");
-                attempt += 1;
-                if attempt == 1 {
-                    return Err("poll lost");
-                }
-                calls.borrow_mut().push("state");
-                Ok(42)
-            },
-            || {
-                calls.borrow_mut().push("acquire");
-                true
-            },
-        );
-        assert_eq!(result, Ok(42));
-        assert_eq!(*calls.borrow(), ["poll", "acquire", "poll", "state"]);
-    }
-
-    #[test]
-    fn state_failure_and_poll_failure_share_bounded_recovery() {
-        for stage in ["poll", "state"] {
-            let mut reads = 0;
-            let mut acquires = 0;
-            let result: Result<(), _> = read_with_recovery(
-                || {
-                    reads += 1;
-                    Err(stage)
-                },
-                || {
-                    acquires += 1;
-                    true
-                },
-            );
-            assert_eq!(result, Err(stage));
-            assert_eq!((reads, acquires), (2, 1));
-        }
-        let mut reads = 0;
-        let result: Result<(), _> = read_with_recovery(
-            || {
-                reads += 1;
-                Err("lost")
-            },
-            || false,
-        );
-        assert_eq!(result, Err("lost"));
-        assert_eq!(reads, 1);
-    }
-
-    #[test]
-    fn hotplug_targets_exact_device_path_even_with_the_same_product() {
-        let removed = vec!["hid#vid_046d&pid_c29b#first".to_string()];
-        assert!(removed_path(Some("HID#VID_046D&PID_C29B#FIRST"), &removed));
-        assert!(!removed_path(
-            Some("hid#vid_046d&pid_c29b#second"),
-            &removed
-        ));
-        assert!(!removed_path(Some("hid#keyboard"), &removed));
-        assert!(!removed_path(None, &removed));
-    }
-
-    #[test]
-    fn invalid_state_releases_shared_wheel_shifter_and_cannot_drive() {
-        let mut state = RawState::default();
-        state.axes[0] = RANGE;
-        state.axes[1] = RANGE;
-        state.buttons[0] = 0x80; // wheel rim
-        state.buttons[8] = 0x80; // G27-style shifter in the same device
-        state.buttons[127] = 0x80;
-        state.pov[3] = 18000;
-        let mut valid = true;
-        let mut events = Vec::new();
-        assert_eq!(state_axes(&state, valid, &[true; 8])[0], (0, 1.0));
-        invalidate_state("G27", &mut state, &mut valid, &mut events);
-        assert!(!valid);
-        assert!(state_axes(&state, valid, &[true; 8]).is_empty());
-        assert_eq!(events.len(), 4);
-        for button in [0, 8, 127] {
-            assert!(events.contains(&("G27".into(), button, false)));
-        }
-        invalidate_state("G27", &mut state, &mut valid, &mut events);
-        assert_eq!(events.len(), 4); // no repeated releases
-                                     // The first valid reconnect sample compares against an empty snapshot.
-        assert_eq!(state.buttons[8], 0);
-    }
-
-    #[test]
-    fn simultaneous_gate_change_releases_before_pressing_in_both_directions() {
-        for (old, new) in [(1, 2), (2, 1)] {
-            let mut events = vec![("wheel".into(), new, true), ("wheel".into(), old, false)];
-            order_button_events(&mut events);
-            assert_eq!(
-                events,
-                [("wheel".into(), old, false), ("wheel".into(), new, true)]
-            );
-        }
-    }
-
-    #[test]
-    fn button_offsets_follow_instances_not_enumeration_order() {
-        let objects = [7, 1, 7].map(|n| InputObject {
-            guid: GUID_Button,
-            ty: DIDFT_BUTTON | (n << 8),
-            flags: 0,
-        });
-        let (format, _, _) = format_objects(&objects);
-        assert_eq!(format.iter().map(|o| o.dwOfs).collect::<Vec<_>>(), [55, 49]);
-    }
-
-    /// The window that hears of devices plugged in or out opens (it is a thread's own).
-    #[test]
-    fn notification_window_opens() {
-        let w = std::thread::spawn(|| {
-            notification_window().map(|w| unsafe { DestroyWindow(w).is_ok() })
-        })
-        .join()
-        .unwrap();
-        assert_eq!(w, Some(true));
-    }
-
-    #[test]
-    fn controller_device_filter_accepts_controllers_and_rejects_mice_keyboards_and_vendor_devices()
-    {
-        assert!(is_controller_device(DI8DEVTYPE_JOYSTICK, 0, 0));
-        assert!(is_controller_device(DI8DEVTYPE_GAMEPAD, 0, 0));
-        assert!(is_controller_device(DI8DEVTYPE_DRIVING, 0, 0));
-        assert!(is_controller_device(DI8DEVTYPE_FLIGHT, 0, 0));
-        assert!(is_controller_device(DI8DEVTYPE_DEVICECTRL, 0, 0));
-
-        assert!(!is_controller_device(DI8DEVTYPE_KEYBOARD, 0, 0));
-        assert!(!is_controller_device(DI8DEVTYPE_MOUSE, 0, 0));
-        assert!(!is_controller_device(DI8DEVTYPE_SCREENPOINTER, 0, 0));
-
-        // Generic devices (DI8DEVTYPE_DEVICE) with game usages (Arduino button boxes):
-        assert!(is_controller_device(DI8DEVTYPE_DEVICE, 0x01, 0x04)); // Joystick
-        assert!(is_controller_device(DI8DEVTYPE_DEVICE, 0x01, 0x05)); // Gamepad
-        assert!(is_controller_device(DI8DEVTYPE_DEVICE, 0x01, 0x08)); // Multi-axis
-        assert!(is_controller_device(DI8DEVTYPE_DEVICE, 0x02, 0x01)); // Simulation controls
-
-        // Generic devices with consumer/vendor/power/undefined usages (Razer, Logitech mice/keyboards macro collections):
-        assert!(!is_controller_device(DI8DEVTYPE_DEVICE, 0x0C, 0x01)); // Consumer / media keys
-        assert!(!is_controller_device(DI8DEVTYPE_DEVICE, 0x01, 0x80)); // System control
-        assert!(!is_controller_device(DI8DEVTYPE_DEVICE, 0x01, 0x00)); // Undefined
-        assert!(!is_controller_device(DI8DEVTYPE_DEVICE, 0xFF00, 0x01)); // Vendor specific
-    }
-
-    #[test]
-    fn button_box_without_axes_formats_successfully() {
-        let objects: Vec<InputObject> = (0..16)
-            .map(|n| InputObject {
-                guid: GUID_Button,
-                ty: DIDFT_BUTTON | (n << 8),
-                flags: 0,
-            })
-            .collect();
-        let (objs, has_axis, ff_axis) = format_objects(&objects);
-        assert_eq!(objs.len(), 16);
-        assert_eq!(has_axis, [false; 8]);
-        assert_eq!(ff_axis, None);
-        for (i, obj) in objs.iter().enumerate() {
-            assert_eq!(obj.dwOfs, (48 + i) as u32);
         }
     }
 }

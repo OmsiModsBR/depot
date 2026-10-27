@@ -12,7 +12,7 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 
 /// Printable fallback for a route number when the window backend supplies no text event.
 /// Normal typing uses the actual text event so Shift/layout-specific symbols are kept.
-pub(crate) fn route_char(code: KeyCode) -> Option<char> {
+pub fn route_char(code: KeyCode) -> Option<char> {
     let symbol = match code {
         KeyCode::Minus | KeyCode::NumpadSubtract => Some('-'),
         KeyCode::Equal | KeyCode::NumpadAdd => Some('+'),
@@ -65,7 +65,7 @@ pub(crate) fn flies_free_camera(code: KeyCode) -> bool {
 }
 
 /// `App::key_left_free` for a key's scan code.
-pub(crate) fn key_left_free(
+pub fn key_left_free(
     scan: Option<i32>,
     action: &str,
     own: &std::collections::HashSet<i32>,
