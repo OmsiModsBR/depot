@@ -59,7 +59,9 @@ pub fn allowed(file: &str) -> bool {
         return false;
     };
     let name = name.to_string_lossy().to_ascii_lowercase();
-    name == "ailists.cfg" || (name.starts_with("parklist_p") && name.ends_with(".txt"))
+    // (no `:`: on NTFS `ailists.cfg:x` is a hidden stream of the file, not the file)
+    !name.contains(':')
+        && (name == "ailists.cfg" || (name.starts_with("parklist_p") && name.ends_with(".txt")))
 }
 
 fn check(files: &[&str]) -> io::Result<()> {
@@ -142,20 +144,26 @@ pub fn write_with_backup(
     let backup = take(map_dir, store, stamp, &names)?;
     for (i, (f, bytes)) in files.iter().enumerate() {
         if let Err(e) = omsi_cfg::write_atomic(map_dir.join(f), bytes) {
-            if let Err(back) = put_back(map_dir, &backup, &backup.files[..i]) {
-                return Err(io::Error::new(
-                    e.kind(),
-                    format!(
-                        "{e}; the files written before it could not be put back either ({back}): \
-                         the backup {} holds them",
-                        backup.dir.display()
-                    ),
-                ));
-            }
-            return Err(e);
+            return Err(undone(map_dir, &backup, i, e));
         }
     }
     Ok(backup)
+}
+
+/// The error `e` of the `i`th file, after the files before it are put back as `backup`
+/// holds them; when that fails too, the error says which backup holds them.
+fn undone(map_dir: &Path, backup: &Backup, i: usize, e: io::Error) -> io::Error {
+    match put_back(map_dir, backup, &backup.files[..i]) {
+        Ok(()) => e,
+        Err(back) => io::Error::new(
+            e.kind(),
+            format!(
+                "{e}; the files written before it could not be put back either ({back}): \
+                 the backup {} holds them",
+                backup.dir.display()
+            ),
+        ),
+    }
 }
 
 fn put_back(map_dir: &Path, backup: &Backup, files: &[BackedUp]) -> io::Result<()> {
@@ -219,7 +227,26 @@ pub fn restore(map_dir: &Path, store: &Path, stamp: &str, backup: &Backup) -> io
     let names: Vec<&str> = backup.files.iter().map(|f| f.file.as_str()).collect();
     // (`take` refuses a file that is not an AI or parking list of the map folder)
     let now = take(map_dir, store, stamp, &names)?;
-    put_back(map_dir, backup, &backup.files)?;
+    // (every copy is read first: a backup that lost one changes nothing)
+    let mut copies = Vec::new();
+    for f in &backup.files {
+        copies.push(match f.existed {
+            true => Some(std::fs::read(backup.dir.join(&f.file))?),
+            false => None,
+        });
+    }
+    // (when a file cannot be put back, the ones before it go back to what they were now)
+    for (i, (f, bytes)) in backup.files.iter().zip(copies).enumerate() {
+        let dst = map_dir.join(&f.file);
+        let done = match bytes {
+            Some(bytes) => omsi_cfg::write_atomic(&dst, bytes),
+            None if dst.is_file() => std::fs::remove_file(&dst),
+            None => Ok(()),
+        };
+        if let Err(e) = done {
+            return Err(undone(map_dir, &now, i, e));
+        }
+    }
     Ok(now)
 }
 
@@ -333,6 +360,35 @@ mod tests {
     }
 
     #[test]
+    fn a_restore_that_cannot_finish_leaves_the_map_as_it_was() {
+        let base = temp("restore-fail");
+        let map = base.join("M");
+        let store = base.join("store");
+        std::fs::create_dir_all(&map).unwrap();
+        std::fs::write(map.join("ailists.cfg"), b"old").unwrap();
+        std::fs::write(map.join("parklist_p.txt"), b"a.sco").unwrap();
+        let files = vec![
+            ("ailists.cfg".to_string(), b"new".to_vec()),
+            ("parklist_p.txt".to_string(), b"b.sco".to_vec()),
+        ];
+        let saved = write_with_backup(&map, &store, "s", &files).unwrap();
+
+        // a copy the backup lost: nothing is put back
+        std::fs::remove_file(saved.dir.join("parklist_p.txt")).unwrap();
+        assert!(restore(&map, &store, "r", &saved).is_err());
+        assert_eq!(std::fs::read(map.join("ailists.cfg")).unwrap(), b"new");
+        assert_eq!(std::fs::read(map.join("parklist_p.txt")).unwrap(), b"b.sco");
+
+        // the second file cannot be written: the first goes back to what it was
+        std::fs::write(saved.dir.join("parklist_p.txt"), b"a.sco").unwrap();
+        std::fs::remove_file(map.join("parklist_p.txt")).unwrap();
+        std::fs::create_dir(map.join("parklist_p.txt")).unwrap();
+        assert!(restore(&map, &store, "r", &saved).is_err());
+        assert_eq!(std::fs::read(map.join("ailists.cfg")).unwrap(), b"new");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn nothing_outside_the_map_folder_is_written_or_taken_out() {
         let base = temp("outside");
         let map = base.join("maps").join("M");
@@ -345,6 +401,7 @@ mod tests {
         for name in [
             "../../victim.txt".to_string(),
             "../ailists.cfg".to_string(),
+            "ailists.cfg:hidden".to_string(),
             victim.display().to_string(),
             "sub/ailists.cfg".to_string(),
             "global.cfg".to_string(),
