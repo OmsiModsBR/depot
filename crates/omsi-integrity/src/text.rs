@@ -85,9 +85,29 @@ fn wrapped(out: &mut String, first: &str, text: &str) {
     out.push_str(NL);
 }
 
+/// `text` with the home folder `home` (as `\\` or `/` is written) as `%USERPROFILE%`.
+fn without_home(text: String, home: Option<&std::path::Path>) -> String {
+    let Some(home) = home.map(|h| h.display().to_string()) else {
+        return text;
+    };
+    let home = home.trim_end_matches(['/', '\\']);
+    // (a home of "/" or "C:" names no one)
+    if home.len() < 3 {
+        return text;
+    }
+    [home.replace('/', "\\"), home.replace('\\', "/")]
+        .iter()
+        .fold(text, |t, h| t.replace(h.as_str(), "%USERPROFILE%"))
+}
+
 impl Report {
-    /// The report as text (see [`TextOptions`]).
+    /// The report as text (see [`TextOptions`]). The user's home folder, where a path still
+    /// names it, is written `%USERPROFILE%`: the text is made to be sent along.
     pub fn to_text(&self, o: &TextOptions) -> String {
+        without_home(self.text(o), omsi_cfg::paths::home().as_deref())
+    }
+
+    fn text(&self, o: &TextOptions) -> String {
         let listed: Vec<&Finding> = self
             .findings
             .iter()
@@ -126,7 +146,14 @@ impl Report {
             n(Severity::Warning),
             n(Severity::NotOptimized)
         ));
-        let left_known = self.findings.iter().filter(|f| f.known && !o.known).count();
+        // (the known findings the other options would have listed)
+        let left_known = self
+            .findings
+            .iter()
+            .filter(|f| f.known && !o.known)
+            .filter(|f| o.severities[severity_index(f.severity)])
+            .filter(|f| o.only.is_none_or(|c| f.category() == c))
+            .count();
         if left_known > 0 {
             out.push_str(&format!(
                 "Left out: {left_known} the compared one has too.{NL}"
@@ -346,5 +373,19 @@ mod tests {
         assert_eq!(Category::of("map-unreadable"), Category::Map);
         assert_eq!(Category::of("ai-vehicle-missing"), Category::AiLists);
         assert_eq!(Category::of("tour-group-unknown"), Category::Timetable);
+    }
+
+    #[test]
+    fn the_home_folder_is_not_in_the_text() {
+        let home = std::path::Path::new("C:\\Users\\leo");
+        let t = "[error] C:\\Users\\leo\\Depot\\a.sco and C:/Users/leo/x.dds".to_string();
+        assert_eq!(
+            without_home(t, Some(home)),
+            "[error] %USERPROFILE%\\Depot\\a.sco and %USERPROFILE%/x.dds"
+        );
+        assert_eq!(
+            without_home("/a/b".into(), Some(std::path::Path::new("/"))),
+            "/a/b"
+        );
     }
 }
