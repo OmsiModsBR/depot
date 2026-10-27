@@ -63,6 +63,32 @@ impl TexFormat {
     }
 }
 
+/// Whether a DXT1 block has a transparent texel: three-colour mode with index 3 in use.
+fn bc1_block_is_clear(block: &[u8]) -> bool {
+    let c0 = u16::from_le_bytes([block[0], block[1]]);
+    let c1 = u16::from_le_bytes([block[2], block[3]]);
+    let bits = u32::from_le_bytes([block[4], block[5], block[6], block[7]]);
+    c0 <= c1 && (0..16).any(|i| (bits >> (2 * i)) & 3 == 3)
+}
+
+/// Whether a DXT5 block has a texel whose interpolated alpha is below 255.
+fn bc3_block_is_clear(block: &[u8]) -> bool {
+    let (a0, a1) = (u32::from(block[0]), u32::from(block[1]));
+    let bits = block[2..8]
+        .iter()
+        .enumerate()
+        .fold(0u64, |bits, (i, &b)| bits | u64::from(b) << (8 * i));
+    let value = |i: u32| match (i, a0 > a1) {
+        (0, _) => a0,
+        (1, _) => a1,
+        (i, true) => ((8 - i) * a0 + (i - 1) * a1) / 7,
+        (6, false) => 0,
+        (7, false) => 255,
+        (i, false) => ((6 - i) * a0 + (i - 1) * a1) / 5,
+    };
+    (0..16).any(|t| value(((bits >> (3 * t)) & 7) as u32) < 255)
+}
+
 /// The size of level `level` of a `w` x `h` texture.
 pub fn level_size(w: u32, h: u32, level: usize) -> (u32, u32) {
     ((w >> level).max(1), (h >> level).max(1))
@@ -84,7 +110,26 @@ pub struct SceneTexture<'a> {
     pub make_mips: bool,
 }
 
+/// The surface code (the second instance vector's w) of a vehicle's shadow blob.
+pub const BLOB_SURFACE_CODE: f32 = 2.0;
+
 impl SceneTexture<'_> {
+    /// Whether the finest level has a texel that is less than fully opaque. A shadow blob
+    /// whose texture has none is a solid quad: it is drawn black all over the road.
+    pub fn alpha_in_use(&self) -> bool {
+        let Some(top) = self.levels.first() else {
+            return false;
+        };
+        match self.format {
+            TexFormat::Rgba8 => top.chunks_exact(4).any(|p| p[3] < 255),
+            TexFormat::Bc1 => top.chunks_exact(8).any(bc1_block_is_clear),
+            TexFormat::Bc2 => top
+                .chunks_exact(16)
+                .any(|b| b[..8].iter().any(|&a| a != 0xff)),
+            TexFormat::Bc3 => top.chunks_exact(16).any(bc3_block_is_clear),
+        }
+    }
+
     /// The checks before creating the texture: every level has the size its format and
     /// dimensions give, and the texture fits the device.
     pub fn validate(&self, max_size: u32, non_pow2: bool) -> Result<()> {
@@ -677,6 +722,42 @@ mod tests {
             k,
             [(p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff].map(|c| c as f32 / 255.0)
         );
+    }
+
+    #[test]
+    fn a_texture_has_alpha_when_a_texel_is_not_opaque() {
+        let tex = |format, level: Vec<u8>| {
+            let levels = [level];
+            SceneTexture {
+                width: 4,
+                height: 4,
+                format,
+                levels: &levels,
+                make_mips: false,
+            }
+            .alpha_in_use()
+        };
+        let px = |a: u8| [[0, 0, 0, 255].repeat(15), vec![0, 0, 0, a]].concat();
+        assert!(!tex(TexFormat::Rgba8, px(255)));
+        assert!(tex(TexFormat::Rgba8, px(254)));
+        // DXT1: black all over, opaque; the same with one texel on the transparent index 3
+        let solid = [0u8, 0, 0, 0, 0, 0, 0, 0];
+        assert!(!tex(TexFormat::Bc1, solid.to_vec()));
+        assert!(tex(TexFormat::Bc1, vec![0, 0, 0, 0, 0, 0, 0, 0xC0]));
+        // (index 3 in four-colour mode is a colour)
+        assert!(!tex(TexFormat::Bc1, vec![1, 0, 0, 0, 0, 0, 0, 0xC0]));
+        assert!(!tex(TexFormat::Bc2, [vec![0xFF; 8], vec![0; 8]].concat()));
+        assert!(tex(TexFormat::Bc2, [vec![0xFE; 8], vec![0; 8]].concat()));
+        // DXT5: both end alphas 255, every index in use giving 255 (index 7 of the six-step
+        // mode is 255 as well); one end below 255 and index 0 or 1 used is clear
+        assert!(!tex(
+            TexFormat::Bc3,
+            [vec![255, 255, 0, 0, 0, 0, 0, 0], vec![0; 8]].concat()
+        ));
+        assert!(tex(
+            TexFormat::Bc3,
+            [vec![0, 255, 0, 0, 0, 0, 0, 0], vec![0; 8]].concat()
+        ));
     }
 
     #[test]

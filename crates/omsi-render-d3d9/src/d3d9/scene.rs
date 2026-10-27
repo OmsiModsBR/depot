@@ -7,8 +7,8 @@ use windows::Win32::Graphics::Direct3D9::*;
 use super::{make_mesh, map_err, rgba_to_argb, shader, some, write_buffer, D3d9Device, Mesh};
 use crate::scene::{
     mip_chain, surface_depth_bias, validate_mesh, DrawKind, SceneBatch, SceneFrame, SceneLamps,
-    SceneMaterial, SceneTexture, TexAddress, TexFormat, ALPHA_CUT, INSTANCE_FLOATS,
-    MATERIAL_VECTORS,
+    SceneMaterial, SceneTexture, TexAddress, TexFormat, ALPHA_CUT, BLOB_SURFACE_CODE,
+    INSTANCE_FLOATS, MATERIAL_VECTORS,
 };
 use crate::{BackendError, Result};
 
@@ -300,12 +300,15 @@ struct TextureCopy {
     /// The levels as given (a texture whose mips are made here keeps its first one only).
     levels: Vec<Vec<u8>>,
     make_mips: bool,
+    /// [`SceneTexture::alpha_in_use`]
+    translucent: bool,
 }
 
 impl TextureCopy {
     fn of(t: &SceneTexture) -> Self {
         let kept = if t.wants_mips() { 1 } else { t.levels.len() };
         Self {
+            translucent: t.alpha_in_use(),
             width: t.width,
             height: t.height,
             format: t.format,
@@ -1302,27 +1305,33 @@ impl D3d9Device {
                     self.bind_material(&m)?;
                     current.3 = Some(b.material);
                 }
-                let n = b.instances.end - b.instances.start;
                 d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
-                d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
-                    .map_err(map_err)?;
-                if let Some((vb, _)) = &self.scene.instances {
-                    // (no overflow: the run lies in the list, whose bytes were checked above)
-                    d.SetStreamSource(1, vb, b.instances.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
-                        .map_err(map_err)?;
-                }
                 d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
                     .map_err(map_err)?;
                 d.SetIndices(&mesh.ib).map_err(map_err)?;
-                d.DrawIndexedPrimitive(
-                    D3DPT_TRIANGLELIST,
-                    0,
-                    0,
-                    mesh.vertices,
-                    b.first,
-                    b.count / 3,
-                )
-                .map_err(map_err)?;
+                // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
+                // black box on the road: it is left out, the runs between are drawn)
+                let hide_blobs = b.kind.blends() && !self.covers(&m);
+                for run in blob_free_runs(frame, b.instances.clone(), hide_blobs) {
+                    let n = run.end - run.start;
+                    d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
+                        .map_err(map_err)?;
+                    if let Some((vb, _)) = &self.scene.instances {
+                        // (no overflow: the run lies in the list, whose bytes were checked
+                        // above)
+                        d.SetStreamSource(1, vb, run.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
+                            .map_err(map_err)?;
+                    }
+                    d.DrawIndexedPrimitive(
+                        D3DPT_TRIANGLELIST,
+                        0,
+                        0,
+                        mesh.vertices,
+                        b.first,
+                        b.count / 3,
+                    )
+                    .map_err(map_err)?;
+                }
             }
         }
         if skipped > 0 {
@@ -1332,7 +1341,71 @@ impl D3d9Device {
     }
 }
 
+/// The runs of `instances` (entries of the frame's list) to draw: all of them as one, or with
+/// `hide_blobs` the stretches between the vehicles' shadow blobs.
+fn blob_free_runs(
+    frame: &SceneFrame<'_>,
+    instances: std::ops::Range<u32>,
+    hide_blobs: bool,
+) -> Vec<std::ops::Range<u32>> {
+    if !hide_blobs {
+        return vec![instances];
+    }
+    let is_blob = |i: u32| {
+        frame
+            .list
+            .get(i as usize)
+            .and_then(|&e| frame.params.get(e as usize * 2 + 1))
+            .is_some_and(|p| p[3] > BLOB_SURFACE_CODE - 0.5)
+    };
+    let mut runs = Vec::new();
+    let mut start = None;
+    for i in instances.clone() {
+        match (is_blob(i), start) {
+            (false, None) => start = Some(i),
+            (true, Some(s)) => {
+                runs.push(s..i);
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        runs.push(s..instances.end);
+    }
+    runs
+}
+
 impl D3d9Device {
+    /// Whether the material can show less than a solid face when it blends: it blends by the
+    /// alpha of a picture that has some.
+    fn covers(&self, m: &SceneMaterial) -> bool {
+        let params = m.uniform[1];
+        let picture = if params[2] > 0.5 {
+            // (a transmap without an alpha channel is opaque)
+            if params[3] > 0.5 {
+                m.transmap
+            } else {
+                None
+            }
+        } else {
+            m.texture
+        };
+        // alpha mode 0 draws the face solid whatever the picture says
+        params[0] > 0.5
+            && picture.is_some_and(|i| match self.scene.textures.get(i) {
+                Some(Some(_)) => self
+                    .scene
+                    .copies
+                    .textures
+                    .get(i)
+                    .and_then(Option::as_ref)
+                    // (a picture the device draws itself keeps no copy: it has alpha)
+                    .is_none_or(|c| c.translucent),
+                _ => false,
+            })
+    }
+
     /// The material's uniform, maps, addressing and the constants worked out from them.
     fn bind_material(&self, m: &SceneMaterial) -> Result<()> {
         let d = &self.device;

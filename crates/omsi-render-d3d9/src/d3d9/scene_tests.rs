@@ -4,7 +4,7 @@ use super::tests::device;
 use super::*;
 use crate::scene::{
     env_factor, DrawKind, SceneBatch, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
-    SceneTexture, TexAddress, TexFormat, MATERIAL_VECTORS,
+    SceneTexture, TexAddress, TexFormat, BLOB_SURFACE_CODE, MATERIAL_VECTORS,
 };
 
 const W: u32 = 8;
@@ -1095,4 +1095,91 @@ fn a_scene_target_of_no_size_is_refused() {
     let frame = quad_frame(&[], &[], &[], &[]);
     let r = dev.draw_scene_into(0, (0, 4), [0.0; 4], &frame, |_| None);
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
+}
+
+/// Draws a white quad and a black one over it with texture 1 (`format`, `level`) on a blending
+/// material, the black one with surface code `code`; returns the first pixel.
+fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, code: f32) -> [u8; 4] {
+    let levels = vec![level];
+    dev.set_scene_texture(
+        1,
+        &SceneTexture {
+            width: 4,
+            height: 4,
+            format,
+            levels: &levels,
+            make_mips: false,
+        },
+    )
+    .unwrap();
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let u = [uniform(0.0), uniform(2.0)];
+    let mut over = batch(DrawKind::BlendNoWrite, 1, 1, 1..2);
+    over.surface = true;
+    let batches = [batch(DrawKind::Opaque, 0, 0, 0..1), over];
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: light([0.0; 4]),
+        list: &[0, 1],
+        models: &[IDENTITY, IDENTITY],
+        params: &[VISIBLE, SECOND, VISIBLE, [0.0, 0.0, 0.0, code]],
+        main: &batches,
+        cab: &[],
+        surface_bias: -24,
+        lamps: Default::default(),
+    };
+    dev.draw_scene(&frame, |m| {
+        u.get(m).map(|uniform| SceneMaterial {
+            texture: Some(m),
+            uniform,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    dev.end_frame().unwrap()[..4].try_into().unwrap()
+}
+
+#[test]
+fn a_shadow_blob_shows_by_its_texture_alpha_and_not_as_a_solid_box() {
+    let Some(mut dev) = device() else { return };
+    let (far_v, i) = quad(0.2);
+    let (near_v, _) = quad(0.8);
+    dev.set_scene_mesh(0, &far_v, &i).unwrap();
+    dev.set_scene_mesh(1, &near_v, &i).unwrap();
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let white = [255, 255, 255, 255];
+    let black = [0, 0, 0, 255];
+    // clear black texels in each format the pictures come in: the road shows through (DXT1's
+    // transparent texel is index 3 with the end colours in order)
+    let bc1_clear = vec![0u8, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF];
+    let clear = [
+        (TexFormat::Rgba8, [0u8, 0, 0, 0].repeat(16)),
+        (TexFormat::Bc1, bc1_clear),
+        (TexFormat::Bc2, vec![0u8; 16]),
+        (TexFormat::Bc3, vec![0u8; 16]),
+    ];
+    for (format, level) in clear {
+        let px = black_over_white(&mut dev, format, level, BLOB_SURFACE_CODE);
+        assert!(all(&px, white, 3), "{format:?}: {px:?}");
+    }
+    // a picture without alpha is a solid black box: left out for a blob, drawn for anything else
+    let bc2_solid = [vec![0xFFu8; 8], vec![0u8; 8]].concat();
+    let bc3_solid = [vec![0xFFu8, 0xFF, 0, 0, 0, 0, 0, 0], vec![0u8; 8]].concat();
+    let solid = [
+        (TexFormat::Rgba8, [0u8, 0, 0, 255].repeat(16)),
+        (TexFormat::Bc1, vec![0u8; 8]),
+        (TexFormat::Bc2, bc2_solid),
+        (TexFormat::Bc3, bc3_solid),
+    ];
+    for (format, level) in solid {
+        let px = black_over_white(&mut dev, format, level.clone(), BLOB_SURFACE_CODE);
+        assert!(all(&px, white, 3), "{format:?} blob: {px:?}");
+        let px = black_over_white(&mut dev, format, level, 1.0);
+        assert!(all(&px, black, 3), "{format:?} surface: {px:?}");
+    }
 }
