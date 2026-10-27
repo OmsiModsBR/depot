@@ -298,6 +298,27 @@ pub struct Sidebar<'a> {
     pub footer_ask: bool,
 }
 
+/// Where the chosen entry's accent mark stands: at `page`'s entry, or on its way there from
+/// the entry chosen before, through the ones between (`marks`: the entries in the order they
+/// are laid out). None when `page` has no entry.
+fn sliding(ui: &mut Ui, name: &str, marks: &[(Page, Rect)], page: Page) -> Option<Rect> {
+    let at = marks.iter().position(|(p, _)| *p == page)?;
+    let last = marks.len() - 1;
+    let k = ui
+        .tween(id_of(name), at as f32, omsi_ui::theme::MOTION_SLOW)
+        .clamp(0.0, last as f32);
+    let i = (k.floor() as usize).min(last);
+    let f = k - i as f32;
+    let (a, b) = (marks[i].1, marks[(i + 1).min(last)].1);
+    let mix = |a: f32, b: f32| a + (b - a) * f;
+    Some(Rect::new(
+        mix(a.x, b.x),
+        mix(a.y, b.y),
+        mix(a.w, b.w),
+        mix(a.h, b.h),
+    ))
+}
+
 /// The id the foot line is clickable under.
 pub fn footer_id() -> u64 {
     id_of("nav:footer")
@@ -317,23 +338,31 @@ impl Sidebar<'_> {
             ui.image(Rect::new(18.0, 26.0, lw, lw * aspect), tex, 0.0);
         }
         let mut nav = None;
+        let mut marks = Vec::new();
         let row = nav_row(h);
         for (i, &page) in Page::listed().iter().enumerate() {
             let top = NAV_TOP + i as f32 * row;
-            if self.entry(ui, page, Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0)) {
+            let r = Rect::new(8.0, top, SIDEBAR_W - 17.0, row - 2.0);
+            if self.entry(ui, page, r) {
                 nav = Some(Nav::Page(page));
             }
+            marks.push((page, r));
         }
         let foot = Page::foot();
         for (i, &page) in foot.iter().enumerate() {
             let top = h - WHO_H - 8.0 - (foot.len() - i) as f32 * FOOT_ROW;
-            if self.entry(
-                ui,
-                page,
-                Rect::new(8.0, top, SIDEBAR_W - 17.0, FOOT_ROW - 2.0),
-            ) {
+            let r = Rect::new(8.0, top, SIDEBAR_W - 17.0, FOOT_ROW - 2.0);
+            if self.entry(ui, page, r) {
                 nav = Some(Nav::Page(page));
             }
+            marks.push((page, r));
+        }
+        // (Windows 11's navigation view: a short accent bar at the chosen entry's left,
+        // sliding there from the entry chosen before)
+        if let Some(r) = sliding(ui, "nav:side-mark", &marks, self.page) {
+            let r = Rect::new(r.x, r.y, r.w, NAV_ITEM_H.min(r.h));
+            ui.p()
+                .rounded(Rect::new(r.x, r.center().y - 9.0, 3.0, 18.0), 1.5, accent());
         }
         ui.p()
             .rect(Rect::new(8.0, h - WHO_H - 1.0, SIDEBAR_W - 17.0, 1.0), LINE);
@@ -394,17 +423,10 @@ impl Sidebar<'_> {
         let id = nav_id(page);
         let (hover, down, clicked) = ui.interact_key(id, r);
         let r = Rect::new(r.x, r.y, r.w, NAV_ITEM_H.min(r.h));
-        let lit = ui.anim(id, if on { 1.0 } else { 0.0 }, 0.08);
-        // (Windows 11's navigation view: the chosen entry a layer lighter with a short accent
-        // bar at its left, the others lit faintly under the mouse)
+        // (Windows 11's navigation view: the chosen entry a layer lighter - its accent bar is
+        // drawn over the entries, sliding - the others lit faintly under the mouse)
         if on {
             ui.p().rounded(r, CONTROL_RADIUS, SELECTED_LAYER);
-            let bar = 18.0 * lit;
-            ui.p().rounded(
-                Rect::new(r.x, r.center().y - bar * 0.5, 3.0, bar),
-                1.5,
-                accent(),
-            );
         } else if hover || down {
             ui.p().rounded(r, CONTROL_RADIUS, HOVER_LAYER);
         }
@@ -507,20 +529,35 @@ impl TopBar<'_> {
             .iter()
             .map(|&p| (p, self.entry_w(ui, p, compact)))
             .collect();
-        let mut x = end - foot.iter().map(|(_, ew)| ew + TOP_GAP).sum::<f32>();
-        for (page, ew) in foot {
-            if self.entry(ui, page, Rect::new(x, 0.0, ew, TOPBAR_H), compact) {
-                nav = Some(Nav::Page(page));
-            }
-            x += ew + TOP_GAP;
-        }
+        let mut marks = Vec::new();
         let mut x = start;
         for &page in Page::listed() {
             let ew = self.entry_w(ui, page, compact);
-            if self.entry(ui, page, Rect::new(x, 0.0, ew, TOPBAR_H), compact) {
+            let r = Rect::new(x, 0.0, ew, TOPBAR_H);
+            if self.entry(ui, page, r, compact) {
                 nav = Some(Nav::Page(page));
             }
+            marks.push((page, r));
             x += ew + TOP_GAP;
+        }
+        let mut x = end - foot.iter().map(|(_, ew)| ew + TOP_GAP).sum::<f32>();
+        for (page, ew) in foot {
+            let r = Rect::new(x, 0.0, ew, TOPBAR_H);
+            if self.entry(ui, page, r, compact) {
+                nav = Some(Nav::Page(page));
+            }
+            marks.push((page, r));
+            x += ew + TOP_GAP;
+        }
+        // (Windows 11's top navigation: the chosen entry marked by an accent bar along the
+        // bar's edge, sliding there from the entry chosen before)
+        if let Some(r) = sliding(ui, "nav:top-mark", &marks, self.page) {
+            let bar = r.w - 24.0;
+            ui.p().rounded(
+                Rect::new(r.center().x - bar * 0.5, TOPBAR_H - 3.0, bar, 3.0),
+                1.5,
+                accent(),
+            );
         }
         nav
     }
@@ -545,25 +582,11 @@ impl TopBar<'_> {
             1.0
         };
         let tile = Rect::new(r.x, 8.0, r.w, TOPBAR_H - 16.0);
-        // (Windows 11's top navigation: the chosen entry marked only by the accent bar under
-        // it, along the bar's edge - a lighter tile as well marked it twice; the tile is the
-        // mouse's, as on the other entries)
-        if on {
-            if hover || down {
-                ui.p().rounded(tile, CONTROL_RADIUS, HOVER_LAYER);
-            }
-            let lit = ui.anim(id, 1.0, 0.08);
-            let bar = (r.w - 24.0) * lit;
-            ui.p().rounded(
-                Rect::new(r.center().x - bar * 0.5, TOPBAR_H - 3.0, bar, 3.0),
-                1.5,
-                accent(),
-            );
-        } else {
-            let _ = ui.anim(id, 0.0, 0.08);
-            if hover || down {
-                ui.p().rounded(tile, CONTROL_RADIUS, HOVER_LAYER);
-            }
+        // (the chosen entry is marked only by the accent bar under it, drawn over the
+        // entries - a lighter tile as well marked it twice; the tile is the mouse's, as on
+        // the other entries)
+        if hover || down {
+            ui.p().rounded(tile, CONTROL_RADIUS, HOVER_LAYER);
         }
         let ic = if on { accent() } else { NAV_TEXT };
         let cy = r.center().y;
