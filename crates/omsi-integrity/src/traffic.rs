@@ -467,12 +467,76 @@ fn natural_key(s: &str) -> (bool, u64, String) {
 }
 
 /// `HH:MM` of minutes after midnight.
+/// A vehicle that can be put into an AI group: a `.ovh` or `.bus` of a folder of `Vehicles`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VehicleFile {
+    /// As a list names it (`Vehicles\\<folder>\\<file>`).
+    pub file: String,
+    /// Its `[friendlyname]`, empty when it has none.
+    pub name: String,
+    /// A bus (`.bus`), else a car or truck (`.ovh`).
+    pub bus: bool,
+}
+
+/// The vehicles of the installation and the installed mods (each folder of `Vehicles` in
+/// every content root, the first root's file of a name winning), by folder and file name.
+pub fn vehicle_files(root: &Path) -> Vec<VehicleFile> {
+    // every root's vehicle folders, the first root's first: a folder a mod and the
+    // installation both have gives the files of both (one file of a name, the first root's)
+    let mut roots = omsi_cfg::content_roots();
+    if !roots.iter().any(|r| r == root) {
+        roots.push(root.to_path_buf());
+    }
+    vehicle_files_in(&roots)
+}
+
+/// [`vehicle_files`] of the roots `roots`, the first one's file of a name winning.
+pub fn vehicle_files_in(roots: &[PathBuf]) -> Vec<VehicleFile> {
+    let dirs: Vec<PathBuf> = roots
+        .iter()
+        .flat_map(|r| {
+            let base = resolve_path(r, "Vehicles");
+            vfs::list_dir(&base)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|(_, d)| *d)
+                .map(move |(n, _)| base.join(n))
+        })
+        .collect();
+    let mut names = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for d in dirs.iter().filter(|d| vfs::is_dir(d)) {
+        let Some(folder) = d.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+            continue;
+        };
+        for (n, is_dir) in vfs::list_dir(d).unwrap_or_default() {
+            let n = n.to_string_lossy().into_owned();
+            let lower = n.to_ascii_lowercase();
+            let bus = lower.ends_with(".bus");
+            if is_dir || !(bus || lower.ends_with(".ovh")) {
+                continue;
+            }
+            let file = format!("Vehicles\\{folder}\\{n}");
+            if !seen.insert(file.to_ascii_lowercase()) {
+                continue;
+            }
+            out.push(VehicleFile {
+                name: friendly(&d.join(&n), &mut names),
+                file,
+                bus,
+            });
+        }
+    }
+    out.sort_by_key(|v| natural_key(&v.file));
+    out
+}
+
 pub fn clock(minutes: f32) -> String {
     let m = minutes.round().max(0.0) as i64;
     format!("{:02}:{:02}", (m / 60) % 24, m % 60)
 }
 
-/// `YYYY-MM-DD` of a YYYYMMDD day.
 /// The tour mask bits `date` (YYYYMMDD) selects: (its weekday's, bits 0-6 from Monday, or
 /// public holiday's, bit 7; its school holidays', bit 8, or school days', bit 9).
 fn day_bits(calendar: &omsi_map::Calendar, date: i32) -> (i32, i32) {
@@ -505,6 +569,7 @@ fn weekday(date: i32) -> i32 {
     (days - ref_days + 2).rem_euclid(7)
 }
 
+/// `YYYY-MM-DD` of a YYYYMMDD day.
 pub fn day(date: i32) -> String {
     format!(
         "{:04}-{:02}-{:02}",

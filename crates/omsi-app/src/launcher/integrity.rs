@@ -57,7 +57,7 @@ impl Default for DiagView {
 impl DiagView {
     /// A window lies over the page (the page sees no mouse meanwhile).
     pub fn dialog_open(&self) -> bool {
-        self.tab == 1 && self.export.is_some()
+        (self.tab == 1 && self.export.is_some()) || (self.tab == 2 && self.ai.dialog_open())
     }
 
     /// The AI traffic tab shows one of its vehicles in the preview.
@@ -1022,6 +1022,10 @@ fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
 
 /// The export window over the page: what goes into the report, a preview, and where it goes.
 pub fn dialog(l: &mut Launcher) {
+    if l.pages.diag.tab == 2 {
+        super::ai_edit::dialog(l);
+        return;
+    }
     let Some(mut e) = l.pages.diag.export.take() else {
         return;
     };

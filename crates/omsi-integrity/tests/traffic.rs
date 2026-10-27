@@ -203,3 +203,30 @@ fn a_chrono_scenario_in_force_adds_to_its_groups() {
     assert_eq!(added.listed_in, "Maps/Test/Chrono/2010/ailists_#upd.cfg");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_vehicle_folder_of_two_roots_gives_the_files_of_both() {
+    let a = temp_root("roots-a");
+    let b = temp_root("roots-b");
+    write(&a, "Vehicles/Car/new.ovh", "[friendlyname]\nMod\nNew\n\n");
+    write(&a, "Vehicles/Car/old.ovh", "[friendlyname]\nMod\nOld\n\n");
+    write(&b, "Vehicles/Car/old.ovh", "[friendlyname]\nStock\nOld\n\n");
+    write(&b, "Vehicles/Car/van.ovh", "[friendlyname]\nStock\nVan\n\n");
+    write(&b, "Vehicles/Bus/bus.bus", "[friendlyname]\nStock\nBus\n\n");
+    let v = omsi_integrity::traffic::vehicle_files_in(&[a.clone(), b.clone()]);
+    let files: Vec<(&str, &str, bool)> = v
+        .iter()
+        .map(|x| (x.file.as_str(), x.name.as_str(), x.bus))
+        .collect();
+    assert_eq!(
+        files,
+        [
+            ("Vehicles\\Bus\\bus.bus", "Stock Bus", true),
+            ("Vehicles\\Car\\new.ovh", "Mod New", false),
+            ("Vehicles\\Car\\old.ovh", "Mod Old", false),
+            ("Vehicles\\Car\\van.ovh", "Stock Van", false),
+        ]
+    );
+    let _ = fs::remove_dir_all(&a);
+    let _ = fs::remove_dir_all(&b);
+}
