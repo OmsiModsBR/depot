@@ -254,6 +254,13 @@ fn windows_name_ok(n: &str) -> bool {
         || numbered("LPT"))
 }
 
+/// A path as a package's zip entry spells it. The zip format uses `/`, but a package built
+/// on Windows may carry `\`; both mean the same folder step, and the result goes through the
+/// same `safe_rel` checks (no `..`, no drive, no absolute path).
+fn entry_rel(name: &str) -> Option<String> {
+    safe_rel(&name.replace('\\', "/"))
+}
+
 pub(super) fn key(p: &str) -> String {
     p.to_ascii_lowercase()
 }
@@ -374,7 +381,7 @@ pub fn plan_install(root: &Path, data: &Path, zip: &[u8]) -> Result<InstallPlan>
         {
             bail!("the package holds a link ({})", f.name());
         }
-        let path = safe_rel(f.name())
+        let path = entry_rel(f.name())
             .ok_or_else(|| anyhow!("the package holds an unsafe path ({})", f.name()))?;
         if !seen.insert(key(&path)) {
             bail!("the package lists {path} twice");
@@ -488,7 +495,7 @@ pub fn install(
             if f.is_dir() {
                 continue;
             }
-            let path = safe_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
+            let path = entry_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
             let dst = staged.join(&path);
             std::fs::create_dir_all(dst.parent().unwrap())?;
             let mut out = std::fs::File::create(&dst)?;
@@ -875,6 +882,48 @@ mod tests {
         assert!(download(&bad, &rel, &mut |_, _| true).is_err());
     }
 
+    /// A server that drops the connection part way: the package never arrives.
+    struct Dropped(String);
+    impl Fetch for Dropped {
+        fn get(
+            &self,
+            url: &str,
+            _max: u64,
+            _p: &mut dyn FnMut(u64, Option<u64>) -> bool,
+        ) -> Result<Vec<u8>> {
+            if url.ends_with(".sha256") {
+                return Ok(self.0.clone().into_bytes());
+            }
+            bail!("connection reset by peer")
+        }
+    }
+
+    #[test]
+    fn an_interrupted_or_cancelled_download_installs_nothing() {
+        let rel = ReleaseInfo {
+            version: "1".into(),
+            zip_name: "OmsiLaunch-1.zip".into(),
+            zip_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip".into(),
+            sha_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip.sha256".into(),
+            page_url: String::new(),
+        };
+        let z = package(&[], false);
+        let line = format!("{}  OmsiLaunch-1.zip", sha256_hex(&z));
+        assert!(download(&Dropped(line.clone()), &rel, &mut |_, _| true).is_err());
+        assert!(download(&Fake(z.clone(), line), &rel, &mut |_, _| false).is_err());
+        // a package cut short is not a zip, and one whose hash is not the published one
+        // is refused before anything is written
+        let root = tmp("cut");
+        let data = tmp("cutd");
+        let cut = &z[..z.len() / 2];
+        assert!(install(&root, &data, cut, &sha256_hex(cut), "1").is_err());
+        assert!(install(&root, &data, cut, &sha256_hex(&z), "1").is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        assert!(!record_path(&data).exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
     #[test]
     fn plan_lists_files_and_install_then_remove_leave_the_folder_as_it_was() {
         let root = tmp("root");
@@ -950,6 +999,104 @@ mod tests {
         w.write_all(b"x").unwrap();
         let z = w.finish().unwrap().into_inner();
         assert!(plan_install(&tmp("esc"), &tmp("escd"), &z).is_err());
+    }
+
+    #[test]
+    fn backslash_entries_of_a_windows_built_package_are_read_as_folders() {
+        // the published beta 4 package spells its entries with `\`
+        assert_eq!(
+            entry_rel("plugins\\OmsiLaunch.Plugin.opl").as_deref(),
+            Some("plugins/OmsiLaunch.Plugin.opl")
+        );
+        assert_eq!(entry_rel("OmsiLaunch.exe").as_deref(), Some("OmsiLaunch.exe"));
+        for bad in ["..\\x", "a\\..\\..\\x", "\\abs", "C:\\x", "a\\..\\..", ""] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("..\\evil.dll", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("esc-bs"), &tmp("esc-bsd"), &z).is_err());
+        // device and reserved names stay refused when spelled with a backslash
+        for bad in ["plugins\\NUL", "plugins\\aux.dll", "COM1", "docs\\x.", "docs\\a<b"] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+    }
+
+    /// The published beta 4 shape: entries with backslashes, the manifest with `/`.
+    fn backslash_package() -> Vec<u8> {
+        let entries: [(&str, &str, &[u8]); 4] = [
+            ("OmsiLaunch.exe", "OmsiLaunch.exe", b"exe"),
+            ("OmsiLaunchW.exe", "OmsiLaunchW.exe", b"exew"),
+            (
+                "plugins\\OmsiLaunch.Plugin.opl",
+                "plugins/OmsiLaunch.Plugin.opl",
+                b"opl",
+            ),
+            (
+                ".omsilaunch\\docs\\README.md",
+                ".omsilaunch/docs/README.md",
+                b"doc",
+            ),
+        ];
+        let files: Vec<String> = entries
+            .iter()
+            .map(|(_, m, b)| {
+                format!(
+                    "{{\"path\":\"{m}\",\"bytes\":{},\"sha256\":\"{}\"}}",
+                    b.len(),
+                    sha256_hex(b)
+                )
+            })
+            .collect();
+        let manifest = format!(
+            "{{\"product_version\":\"0.1.0-beta4\",\"files\":[{}]}}",
+            files.join(",")
+        );
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        for (n, _, b) in &entries {
+            w.start_file(*n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.start_file("release-manifest.json", o).unwrap();
+        w.write_all(manifest.as_bytes()).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_package_with_backslash_entries_installs_and_is_removed_again() {
+        let root = tmp("bs-root");
+        let data = tmp("bs-data");
+        let z = backslash_package();
+        let plan = plan_install(&root, &data, &z).unwrap();
+        assert!(plan.ok());
+        assert!(plan.files.iter().all(|f| !f.path.contains('\\')));
+        install(&root, &data, &z, &sha256_hex(&z), "0.1.0-beta4").unwrap();
+        assert!(root.join("OmsiLaunch.exe").is_file());
+        assert!(root.join("plugins/OmsiLaunch.Plugin.opl").is_file());
+        assert!(root.join(".omsilaunch/docs/README.md").is_file());
+        // a backslash must not end up as one odd file name in the folder
+        assert!(!root
+            .read_dir()
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().contains('\\')));
+        remove(&root, &data).unwrap();
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_backslash_entry_with_a_device_name_is_refused_by_the_plan() {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("plugins\\NUL", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("dev-bs"), &tmp("dev-bsd"), &z).is_err());
     }
 
     #[test]
