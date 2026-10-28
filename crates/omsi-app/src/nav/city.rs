@@ -2396,9 +2396,12 @@ impl Navigator {
         ) + 16.0 * s;
         let wd = words(f.language);
         match (&f.line, &f.terminus) {
-            (Some(l), Some(t)) => {
+            (Some(l), Some(t)) if right - tx >= 24.0 * s => {
                 let num = l.trim();
-                let bw = self.fonts.width(num, 13.0 * s, Weight::Bold) + 16.0 * s;
+                // (the badge never grows past the room the buttons leave, and is left out
+                // when there is hardly any)
+                let room = (right - tx).max(0.0);
+                let bw = (self.fonts.width(num, 13.0 * s, Weight::Bold) + 16.0 * s).min(room);
                 let badge = Rect::new(tx, head.center().y - 11.0 * s, bw, 22.0 * s);
                 ui.rounded(badge, 5.0 * s, omsi_ui::theme::accent());
                 ui.text_in(
@@ -2423,6 +2426,8 @@ impl Navigator {
                     v5::FG,
                 ) + 22.0 * s;
             }
+            // (a duty, but no room for it)
+            (Some(_), Some(_)) => {}
             _ => {
                 tx += ui.text_in(
                     &mut self.atlas,
