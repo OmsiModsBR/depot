@@ -23,16 +23,17 @@ copies or ships it; the player installs it from Setup after a confirmation.
 ## Where the code compiles
 
 The module (`omsi-launcher-core/src/original_engine`) is compiled on every desktop platform,
-so that its tests (a fake `OmsiLaunch.exe`, synthetic folders and packages) run on Linux CI
-and on a developer's machine, not only on Windows. Only what needs Windows is Windows-only:
+so that its tests (a fake `OmsiLaunch.exe`, synthetic folders and packages) run on a
+developer's machine of any system, not only on Windows. Only what needs Windows is Windows-only:
 
 * the user interface exposes the mode only when `cfg!(windows)` (and the rollout flag, or the
   development variable `DEPOT_ORIGINAL_ENGINE=1`);
 * the check for links also treats Windows reparse points (junctions) as links;
 * the HTTPS client is not built for Android (the mode does not exist there).
 
-CI: the `windows-workspace` job runs the whole workspace tests on Windows; the Linux jobs run
-the module's tests. There is no macOS or Android CI job; the module uses only the standard
+CI: only the `windows-workspace` job runs the module's tests (it runs the whole workspace
+tests); the Linux jobs check `omsi-app` and clippy, which compile the module but do not run
+its tests. There is no macOS or Android CI job; the module uses only the standard
 library, `serde_json`, `sha2`, `zip` and (outside Android) `ureq`.
 
 ## Install and removal
