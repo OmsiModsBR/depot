@@ -78,6 +78,18 @@ pub fn window_with(ui: &mut Ui, r: Rect, title: &str, note: &str, gutter: f32) -
     ui.solid(r);
     ui.p().shadow(r, WINDOW_R, 40.0, Color::rgba(0, 0, 0, 0.35));
     ui.p().shadow(r, WINDOW_R, 8.0, Color::rgba(0, 0, 0, 0.30));
+    if let Some(bar) = ui.opaque_under {
+        // (where the window covers the Alt bar the tiles would show through it: that part is opaque)
+        let c = WINDOW_R * 0.4;
+        let (x0, y0) = (bar.x.max(r.x + c), bar.y.max(r.y + c));
+        let (x1, y1) = (
+            bar.right().min(r.right() - c),
+            bar.bottom().min(r.bottom() - c),
+        );
+        if x1 > x0 && y1 > y0 {
+            ui.p().rect(Rect::new(x0, y0, x1 - x0, y1 - y0), PANEL);
+        }
+    }
     ui.p().rounded(r, WINDOW_R, PANEL.alpha(PANEL_ALPHA));
     ui.p().rounded_border(r, WINDOW_R, 1.0, EDGE);
     ui.p().rect(
@@ -1336,6 +1348,22 @@ mod tests {
 
     fn rows() -> Vec<Vec<String>> {
         vec![vec!["A".into(), "1".into()], vec!["B".into(), "2".into()]]
+    }
+
+    #[test]
+    fn a_window_over_the_alt_bar_is_opaque_where_they_overlap() {
+        let mut ui = Ui::new();
+        ui.begin(glam::Vec2::new(800.0, 600.0), 1.0, 0.05);
+        let bar = Rect::new(10.0, 10.0, 100.0, 300.0);
+        ui.opaque_under = Some(bar);
+        let before = ui.p().len();
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let over = ui.p().len();
+        ui.opaque_under = None;
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let clear = ui.p().len() - over;
+        // (more is drawn for the part over the bar)
+        assert!(over - before > clear);
     }
 
     #[test]
