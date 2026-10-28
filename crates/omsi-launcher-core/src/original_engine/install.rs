@@ -860,6 +860,48 @@ mod tests {
         assert!(download(&bad, &rel, &mut |_, _| true).is_err());
     }
 
+    /// A server that drops the connection part way: the package never arrives.
+    struct Dropped(String);
+    impl Fetch for Dropped {
+        fn get(
+            &self,
+            url: &str,
+            _max: u64,
+            _p: &mut dyn FnMut(u64, Option<u64>) -> bool,
+        ) -> Result<Vec<u8>> {
+            if url.ends_with(".sha256") {
+                return Ok(self.0.clone().into_bytes());
+            }
+            bail!("connection reset by peer")
+        }
+    }
+
+    #[test]
+    fn an_interrupted_or_cancelled_download_installs_nothing() {
+        let rel = ReleaseInfo {
+            version: "1".into(),
+            zip_name: "OmsiLaunch-1.zip".into(),
+            zip_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip".into(),
+            sha_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip.sha256".into(),
+            page_url: String::new(),
+        };
+        let z = package(&[], false);
+        let line = format!("{}  OmsiLaunch-1.zip", sha256_hex(&z));
+        assert!(download(&Dropped(line.clone()), &rel, &mut |_, _| true).is_err());
+        assert!(download(&Fake(z.clone(), line), &rel, &mut |_, _| false).is_err());
+        // a package cut short is not a zip, and one whose hash is not the published one
+        // is refused before anything is written
+        let root = tmp("cut");
+        let data = tmp("cutd");
+        let cut = &z[..z.len() / 2];
+        assert!(install(&root, &data, cut, &sha256_hex(cut), "1").is_err());
+        assert!(install(&root, &data, cut, &sha256_hex(&z), "1").is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        assert!(!record_path(&data).exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
     #[test]
     fn plan_lists_files_and_install_then_remove_leave_the_folder_as_it_was() {
         let root = tmp("root");
