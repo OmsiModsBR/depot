@@ -632,7 +632,7 @@ impl Navigator {
         }
         let start = scene.overlays.len();
         self.frame(renderer, scene, f);
-        crate::ui::shift_overlays(scene, start, origin_x);
+        crate::hud::shift_overlays(scene, start, origin_x);
         for rect in [&mut self.panel_rect, &mut self.city.rect] {
             rect[0] += origin_x;
             rect[2] += origin_x;
@@ -1791,7 +1791,7 @@ impl Navigator {
             if self.cockpit_display {
                 self.opacity
             } else {
-                crate::ui::backdrop(self.opacity).min(1.0)
+                crate::hud::backdrop(self.opacity).min(1.0)
             },
         );
         let mut layers = [flat, map_layer, backdrop];

@@ -7,8 +7,8 @@ use glam::Vec2;
 use openomsi_game::testing;
 use openomsi_game::testing::new_ui::*;
 use testing::game_lists::{row, ListKind, HEADING};
+use testing::hud::{DropdownView, MenuKind, Preview};
 use testing::new_ui_pages::{page_frame, test_column, test_frame, PageFrame};
-use testing::ui::{DropdownView, MenuKind, Preview};
 
 /// The size of the window the pages are drawn in (pixels).
 const SIZE: (u32, u32) = (1672, 941);
@@ -157,7 +157,7 @@ impl Shots {
         }
         // the page's card is where the HUD is told its rows are: dark, over the world
         // (all but one row: the keyboard's or the mouse's line is lit lighter)
-        let mut ui = testing::ui::Ui::new().unwrap();
+        let mut ui = testing::hud::Ui::new().unwrap();
         page.write_hits(&mut ui, Area::whole((w, h)));
         let rows: Vec<[u8; 3]> = ui
             .menu_rects

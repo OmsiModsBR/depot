@@ -23,7 +23,6 @@ use crate::spawn::spawn_player;
 use crate::startup::{fatal_message, window_renderer};
 use crate::tiles;
 use crate::traffic;
-use crate::ui;
 use crate::weather_setup::{initial_wetness, load_weather, setup_sky};
 use crate::world_load::{load_world, open_world, spawn_point};
 use glam::DVec3;
@@ -85,7 +84,7 @@ pub(crate) struct App {
     /// The window spans the triple screen's three monitors: fullscreen would shrink it to one.
     pub(crate) spanned: bool,
     /// Chat, mouse-over names and name tags (Roboto).
-    pub(crate) ui: Option<ui::Ui>,
+    pub(crate) ui: Option<hud::Ui>,
     pub(crate) fps: f32,
     /// The frames of the last seconds, for the "1 % low" beside the frame rate.
     pub(crate) frame_stats: crate::frame_stats::FrameStats,
@@ -361,7 +360,7 @@ pub(crate) struct App {
     /// tank or the dirt has not changed (it ends after `SERVICE_SETTLE`).
     pub(crate) pumping: Option<(&'static str, f32)>,
     /// The server's notifications on the screen (`notify`), oldest first.
-    pub(crate) notices: Vec<crate::ui::Notice>,
+    pub(crate) notices: Vec<crate::hud::Notice>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::applog::LogState,
     /// The driver's personnel file and this session's statistics.

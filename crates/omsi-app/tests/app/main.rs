@@ -87,7 +87,6 @@ mod touch;
 mod tr_fill;
 mod traffic;
 mod tutorial;
-mod ui;
 #[cfg(feature = "lan")]
 mod voice;
 mod vr_navigator;

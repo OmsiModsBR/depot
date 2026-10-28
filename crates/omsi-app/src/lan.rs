@@ -598,7 +598,7 @@ pub struct Chat {
 impl Chat {
     fn push(&mut self, line: String) {
         self.lines.push(line);
-        let over = self.lines.len().saturating_sub(crate::ui::CHAT_KEEP);
+        let over = self.lines.len().saturating_sub(crate::hud::CHAT_KEEP);
         if over > 0 {
             self.lines.drain(..over);
         }
@@ -3670,7 +3670,7 @@ pub fn tick(
     for e in lan.take_events() {
         game.chat.push(match e {
             LanEvent::Chat { name, text, .. } => {
-                format!("{name}: {}", crate::ui::filter_chat(&text))
+                format!("{name}: {}", crate::hud::filter_chat(&text))
             }
             LanEvent::Notice(n) => format!("* {n}"),
         });
@@ -4087,7 +4087,7 @@ pub fn chat_send(lan: &mut LanSession, game: &mut LanGame, text: &str) {
         }
         return;
     }
-    let text = crate::ui::filter_chat(text.trim());
+    let text = crate::hud::filter_chat(text.trim());
     match lan.say(&text) {
         Ok(()) => game.chat.error = None,
         Err(e) => {

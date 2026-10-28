@@ -172,7 +172,10 @@ pub mod hpattern {
     pub use crate::hpattern::*;
 }
 pub mod hud {
-    pub use crate::hud::*;
+    pub use crate::hud::domain::*;
+    pub use crate::hud::implementation::legacy::oft::*;
+    pub use crate::hud::implementation::legacy::*;
+    pub use crate::hud::implementation::*;
 }
 pub mod humans {
     pub use crate::humans::*;
@@ -374,9 +377,9 @@ pub mod new_ui_loading {
     pub use crate::new_ui_loading::*;
 }
 pub mod new_ui_pages {
+    use crate::hud::{Frame, MenuKind};
     use crate::new_ui::MenuFrame;
     pub use crate::new_ui_pages::*;
-    use crate::ui::{Frame, MenuKind};
 
     /// The Esc menu's column of a session with every line (tests).
     pub fn test_column(paused: bool) -> MenuFrame {
@@ -619,9 +622,6 @@ pub mod traffic {
 }
 pub mod tutorial {
     pub use crate::tutorial::*;
-}
-pub mod ui {
-    pub use crate::ui::*;
 }
 #[cfg(feature = "lan")]
 pub mod voice {
