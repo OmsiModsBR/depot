@@ -26,8 +26,8 @@ The module (`omsi-launcher-core/src/original_engine`) is compiled on every deskt
 so that its tests (a fake `OmsiLaunch.exe`, synthetic folders and packages) run on a
 developer's machine of any system, not only on Windows. Only what needs Windows is Windows-only:
 
-* the user interface exposes the mode only when `cfg!(windows)` (and the rollout flag, or the
-  development variable `DEPOT_ORIGINAL_ENGINE=1`);
+* the user interface exposes the mode only on Windows once the rollout flag is on; the
+  maintainers' development variable `DEPOT_ORIGINAL_ENGINE=1` shows it on any system;
 * the check for links also treats Windows reparse points (junctions) as links;
 * the HTTPS client is not built for Android (the mode does not exist there).
 
