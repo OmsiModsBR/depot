@@ -635,7 +635,7 @@ fn start_point(l: &mut Launcher) {
         .chain(
             entries
                 .into_iter()
-                .filter(|(_, n)| search.trim().is_empty() || super::ui::matches(n, &search)),
+                .filter(|(_, n)| entry_matches(n, &search)),
         )
         .collect();
     l.start.search = search;
@@ -837,5 +837,25 @@ fn explore(l: &mut Launcher) {
     l.map_interact_in_window(map, map);
     if l.state.choice.entry != entry {
         l.state.choice.entry = entry;
+    }
+}
+
+/// Whether a start point's name shows for the typed search (case does not matter).
+fn entry_matches(name: &str, search: &str) -> bool {
+    let q = search.trim().to_lowercase();
+    q.is_empty() || super::ui::matches(name, &q)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::entry_matches;
+
+    #[test]
+    fn start_point_search_ignores_case() {
+        assert!(entry_matches("Terminal Laranjeiras", "Laranjeiras"));
+        assert!(entry_matches("Terminal Laranjeiras", "  LARANJEIRAS "));
+        assert!(entry_matches("Laranjeiras Velha", "laranjeiras"));
+        assert!(entry_matches("Terminal Laranjeiras", ""));
+        assert!(!entry_matches("Terminal Centro", "Laranjeiras"));
     }
 }
