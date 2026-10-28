@@ -1,4 +1,4 @@
-use openomsi_game::testing::new_ui_report::*;
+use openomsi_game::testing::ui::report::*;
 
 #[test]
 fn the_report_waits_for_the_doors_at_the_last_stop() {

@@ -54,9 +54,7 @@ mod nav;
 mod new_ui;
 mod new_ui_add;
 mod new_ui_alt;
-mod new_ui_loading;
 mod new_ui_pages;
-mod new_ui_report;
 mod new_ui_windows;
 mod offscreen;
 mod on_foot;
@@ -87,6 +85,7 @@ mod touch;
 mod tr_fill;
 mod traffic;
 mod tutorial;
+mod ui;
 #[cfg(feature = "lan")]
 mod voice;
 mod vr_navigator;
