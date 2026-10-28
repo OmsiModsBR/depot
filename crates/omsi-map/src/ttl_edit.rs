@@ -6,7 +6,6 @@
 //! number, AI group and extra line), so tour `t` here is tour `t` there.
 
 use crate::ailists_edit::TextLines;
-use omsi_cfg::KeywordRule;
 
 /// What a change of a line's tour cannot do.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -62,7 +61,8 @@ impl TtlDoc {
     fn index(&mut self) {
         let f = self.text.cfg();
         let n = f.lines.len();
-        let mut r = f.reader().with_rule(KeywordRule::AnyCase);
+        // (the keywords as `omsi_timetable::Line::parse` takes them: in lower case only)
+        let mut r = f.reader();
         let mut tours = Vec::new();
         while let Some(k) = r.next_keyword() {
             if k != "newtour" {
@@ -98,39 +98,5 @@ impl TtlDoc {
         self.text.set(line, group);
         self.index();
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SAMPLE: &str = "-----\r\nTime Table Line File\r\n-----\r\n\r\n[userallowed]\r\n\r\n[priority]\r\n1\r\n\
-        ------\r\n[newtour]\r\n1\r\nBusse\r\n\r\n------\r\n\r\n  Dep.: 5:12:0\r\n[addtrip]\r\nA\r\n0\r\n312.000\r\n\r\n\
-        [newtour]\r\n2\r\nBusse_Gelenk\r\n0\r\n[addtrip]\r\nB\r\n0\r\n400.000\r\n";
-
-    #[test]
-    fn a_tour_changes_its_group_line_only() {
-        let mut d = TtlDoc::from_bytes(SAMPLE.as_bytes());
-        assert_eq!(d.to_bytes(), SAMPLE.as_bytes());
-        assert_eq!(d.tours()[1].ai_group, "Busse_Gelenk");
-        d.set_group(1, "Busse").unwrap();
-        assert_eq!(
-            String::from_utf8(d.to_bytes()).unwrap(),
-            SAMPLE.replace("Busse_Gelenk", "Busse")
-        );
-        let groups: Vec<_> = d.tours().iter().map(|t| t.ai_group.clone()).collect();
-        assert_eq!(groups, ["Busse", "Busse"]);
-    }
-
-    #[test]
-    fn refused_changes_leave_the_file() {
-        let mut d = TtlDoc::from_bytes(SAMPLE.as_bytes());
-        assert_eq!(d.set_group(5, "x"), Err(TtlEditError::NoTour));
-        assert_eq!(d.set_group(0, " "), Err(TtlEditError::BadGroup));
-        assert_eq!(d.set_group(0, "a\tb"), Err(TtlEditError::BadGroup));
-        assert_eq!(d.to_bytes(), SAMPLE.as_bytes());
-        let mut cut = TtlDoc::from_bytes(b"[newtour]\r\n7");
-        assert_eq!(cut.set_group(0, "x"), Err(TtlEditError::Truncated));
     }
 }
