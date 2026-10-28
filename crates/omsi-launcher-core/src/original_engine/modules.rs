@@ -481,23 +481,30 @@ pub fn remove_module(root: &Path, data: &Path, id: &str) -> Result<ModuleRemoveP
         }
         gone.push(p);
     }
-    let _ = std::fs::remove_dir_all(&stage);
-    // only folders Depot made, and only when empty, go
+    // the record goes while the copies still exist: if it cannot be written, the files return
     let dirs = load_record(data, root, id)
         .map(|r| r.dirs)
         .unwrap_or_default();
+    // (an entry of another OMSI 2 folder stays)
+    if load_record(data, root, id).is_some() {
+        let mut all = load_records(data);
+        all.modules.remove(id);
+        if let Err(e) = save_records(data, &all) {
+            for q in &gone {
+                let _ = std::fs::copy(stage.join(q), root.join(q));
+            }
+            let _ = std::fs::remove_dir_all(&stage);
+            return Err(e);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&stage);
+    // only folders Depot made, and only when empty, go
     let mut dirs: Vec<String> = dirs.into_iter().filter(|d| safe_rel(d).is_some()).collect();
     dirs.sort_by_key(|d| std::cmp::Reverse(d.matches('/').count()));
     for d in dirs {
         if linked_part(root, &d).is_none() {
             let _ = std::fs::remove_dir(root.join(&d));
         }
-    }
-    // the entry goes only when it is this folder's (a record of another OMSI 2 folder stays)
-    if load_record(data, root, id).is_some() {
-        let mut all = load_records(data);
-        all.modules.remove(id);
-        save_records(data, &all)?;
     }
     Ok(plan)
 }
@@ -826,6 +833,35 @@ mod tests {
         assert_eq!(std::fs::read(dir.join("sub")).unwrap(), b"in the way");
         assert_eq!(std::fs::read(records_path(&data)).ok(), before);
         assert!(load_record(&data, &root, "omsi-prefetch").is_none());
+    }
+
+    #[test]
+    fn a_removal_whose_record_cannot_be_updated_keeps_the_module() {
+        let (root, data) = omsi("recfail");
+        put(&root, &package(), &data, "1").unwrap();
+        // a folder where the atomic write puts its temporary file makes the next save fail
+        let rp = records_path(&data);
+        let blocker = rp.with_file_name(format!(
+            ".{}.{}.tmp",
+            rp.file_name().unwrap().to_string_lossy(),
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&blocker).unwrap();
+        assert!(remove_module(&root, &data, "omsi-prefetch").is_err());
+        let dir = root.join("plugins/OmsiLaunch.Modules/omsi-prefetch");
+        assert_eq!(std::fs::read(dir.join("bin/prefetch.dll")).unwrap(), b"dll");
+        assert!(dir.join("module.json").is_file());
+        assert!(dir.join("docs/NOTICE.txt").is_file());
+        assert!(load_record(&data, &root, "omsi-prefetch").is_some());
+        // and once the record can be written again the removal goes through
+        std::fs::remove_dir_all(&blocker).unwrap();
+        assert_eq!(
+            remove_module(&root, &data, "omsi-prefetch")
+                .unwrap()
+                .files
+                .len(),
+            3
+        );
     }
 
     #[test]
