@@ -76934,6 +76934,7 @@ _version: 2
   tl: "Orihinal na engine ng OMSI 2"
   zh: "原版 OMSI 2 引擎"
   hi: "मूल OMSI 2 इंजन"
+  ca: "Motor original d'OMSI 2"
 
 "Also use Project Depot to open the original OMSI 2 engine":
   de: "Project Depot auch zum Öffnen der Original-OMSI-2-Engine verwenden"
@@ -76961,6 +76962,7 @@ _version: 2
   tl: "Gamitin din ang Project Depot para buksan ang orihinal na engine ng OMSI 2"
   zh: "也用 Project Depot 打开原版 OMSI 2 引擎"
   hi: "मूल OMSI 2 इंजन खोलने के लिए Project Depot का भी उपयोग करें"
+  ca: "Utilitza també Project Depot per obrir el motor original d'OMSI 2"
 
 "Adds a switch to start games with the original OMSI 2 through OmsiLaunch. Off by default; nothing in your OMSI 2 folder changes until you confirm an installation.":
   de: "Fügt einen Schalter hinzu, mit dem Spiele über OmsiLaunch mit dem Original-OMSI 2 gestartet werden. Standardmäßig aus; im OMSI-2-Ordner ändert sich nichts, bis Sie eine Installation bestätigen."
@@ -76988,6 +76990,7 @@ _version: 2
   tl: "Nagdaragdag ng switch para simulan ang mga laro gamit ang orihinal na OMSI 2 sa pamamagitan ng OmsiLaunch. Naka-off bilang default; walang magbabago sa folder ng OMSI 2 mo hangga't hindi mo kinukumpirma ang pag-install."
   zh: "添加一个开关，可通过 OmsiLaunch 以原版 OMSI 2 启动游戏。默认关闭；在您确认安装之前，OMSI 2 文件夹不会有任何改动。"
   hi: "OmsiLaunch के ज़रिए मूल OMSI 2 से गेम शुरू करने के लिए एक स्विच जोड़ता है। डिफ़ॉल्ट रूप से बंद है; जब तक आप इंस्टॉलेशन की पुष्टि नहीं करते, आपके OMSI 2 फ़ोल्डर में कुछ नहीं बदलता।"
+  ca: "Afegeix un interruptor per iniciar les partides amb l'OMSI 2 original mitjançant OmsiLaunch. Desactivat per defecte; res de la teva carpeta d'OMSI 2 canvia fins que confirmis una instal·lació."
 
 "Not found: choose the OMSI 2 folder above.":
   de: "Nicht gefunden: Wählen Sie oben den OMSI-2-Ordner."
@@ -77015,6 +77018,7 @@ _version: 2
   tl: "Hindi nahanap: piliin ang folder ng OMSI 2 sa itaas."
   zh: "未找到：请在上方选择 OMSI 2 文件夹。"
   hi: "नहीं मिला: ऊपर OMSI 2 फ़ोल्डर चुनें।"
+  ca: "No trobada: tria la carpeta d'OMSI 2 a dalt."
 
 "The folder is under Program Files: OmsiLaunch cannot be installed there. Move OMSI 2 to another folder.":
   de: "Der Ordner liegt unter Program Files: OmsiLaunch kann dort nicht installiert werden. Verschieben Sie OMSI 2 in einen anderen Ordner."
@@ -77042,6 +77046,7 @@ _version: 2
   tl: "Nasa Program Files ang folder: hindi mai-install ang OmsiLaunch doon. Ilipat ang OMSI 2 sa ibang folder."
   zh: "文件夹位于 Program Files 下：OmsiLaunch 无法安装在那里。请将 OMSI 2 移到其他文件夹。"
   hi: "फ़ोल्डर Program Files में है: OmsiLaunch वहाँ इंस्टॉल नहीं हो सकता। OMSI 2 को किसी दूसरे फ़ोल्डर में ले जाएँ।"
+  ca: "La carpeta és dins de Program Files: OmsiLaunch no s'hi pot instal·lar. Mou OMSI 2 a una altra carpeta."
 
 "The folder is read-only for this user.":
   de: "Der Ordner ist für diesen Benutzer schreibgeschützt."
@@ -77069,6 +77074,7 @@ _version: 2
   tl: "Read-only ang folder para sa user na ito."
   zh: "该文件夹对此用户是只读的。"
   hi: "यह फ़ोल्डर इस उपयोगकर्ता के लिए केवल-पढ़ने योग्य है।"
+  ca: "La carpeta és de només lectura per a aquest usuari."
 
 "Found":
   de: "Gefunden"
@@ -77096,6 +77102,7 @@ _version: 2
   tl: "Nahanap"
   zh: "已找到"
   hi: "मिल गया"
+  ca: "Trobada"
 
 ".NET 6 Desktop Runtime (x64)":
   de: ".NET 6 Desktop Runtime (x64)"
@@ -77123,6 +77130,7 @@ _version: 2
   tl: ".NET 6 Desktop Runtime (x64)"
   zh: ".NET 6 Desktop Runtime (x64)"
   hi: ".NET 6 Desktop Runtime (x64)"
+  ca: ".NET 6 Desktop Runtime (x64)"
 
 ".NET 6 Runtime (x86)":
   de: ".NET 6 Runtime (x86)"
@@ -77150,6 +77158,7 @@ _version: 2
   tl: ".NET 6 Runtime (x86)"
   zh: ".NET 6 Runtime (x86)"
   hi: ".NET 6 Runtime (x86)"
+  ca: ".NET 6 Runtime (x86)"
 
 "Not installed":
   de: "Nicht installiert"
@@ -77177,6 +77186,7 @@ _version: 2
   tl: "Hindi naka-install"
   zh: "未安装"
   hi: "इंस्टॉल नहीं है"
+  ca: "No instal·lat"
 
 "Open Microsoft download":
   de: "Microsoft-Download öffnen"
@@ -77204,6 +77214,7 @@ _version: 2
   tl: "Buksan ang download ng Microsoft"
   zh: "打开 Microsoft 下载页"
   hi: "Microsoft डाउनलोड खोलें"
+  ca: "Obre la baixada de Microsoft"
 
 "Opens Microsoft's download page for the .NET 6 runtimes in your browser.":
   de: "Öffnet die Download-Seite von Microsoft für die .NET-6-Runtimes im Browser."
@@ -77231,6 +77242,7 @@ _version: 2
   tl: "Binubuksan sa browser mo ang download page ng Microsoft para sa mga .NET 6 runtime."
   zh: "在浏览器中打开 Microsoft 的 .NET 6 运行时下载页面。"
   hi: "आपके ब्राउज़र में .NET 6 रनटाइम के लिए Microsoft का डाउनलोड पेज खोलता है।"
+  ca: "Obre al navegador la pàgina de baixada de Microsoft dels entorns d'execució de .NET 6."
 
 "Installed, but its files are damaged: install it again.":
   de: "Installiert, aber die Dateien sind beschädigt: Installieren Sie es erneut."
@@ -77258,6 +77270,7 @@ _version: 2
   tl: "Naka-install, ngunit sira ang mga file: i-install muli."
   zh: "已安装，但文件已损坏：请重新安装。"
   hi: "इंस्टॉल है, लेकिन उसकी फ़ाइलें क्षतिग्रस्त हैं: दोबारा इंस्टॉल करें।"
+  ca: "Instal·lat, però els seus fitxers estan malmesos: torna'l a instal·lar."
 
 "This version is not one Depot can drive: install a newer one.":
   de: "Diese Version kann Depot nicht steuern: Installieren Sie eine neuere."
@@ -77285,6 +77298,7 @@ _version: 2
   tl: "Hindi makokontrol ng Depot ang bersyong ito: mag-install ng mas bago."
   zh: "Depot 无法驱动此版本：请安装较新的版本。"
   hi: "Depot इस संस्करण को नहीं चला सकता: नया संस्करण इंस्टॉल करें।"
+  ca: "Depot no pot controlar aquesta versió: instal·la'n una de més nova."
 
 "Installed, version %{version}":
   de: "Installiert, Version %{version}"
@@ -77312,6 +77326,7 @@ _version: 2
   tl: "Naka-install, bersyon %{version}"
   zh: "已安装，版本 %{version}"
   hi: "इंस्टॉल है, संस्करण %{version}"
+  ca: "Instal·lat, versió %{version}"
 
 "Remove OmsiLaunch…":
   de: "OmsiLaunch entfernen…"
@@ -77339,6 +77354,7 @@ _version: 2
   tl: "Alisin ang OmsiLaunch…"
   zh: "移除 OmsiLaunch…"
   hi: "OmsiLaunch हटाएँ…"
+  ca: "Elimina OmsiLaunch…"
 
 "Removes the OmsiLaunch files from your OMSI 2 folder. Your OMSI 2 files and other plug-ins stay.":
   de: "Entfernt die OmsiLaunch-Dateien aus Ihrem OMSI-2-Ordner. Ihre OMSI-2-Dateien und andere Plug-ins bleiben erhalten."
@@ -77366,6 +77382,7 @@ _version: 2
   tl: "Inaalis ang mga file ng OmsiLaunch sa folder ng OMSI 2 mo. Mananatili ang mga file mo ng OMSI 2 at ang ibang plug-in."
   zh: "从 OMSI 2 文件夹中移除 OmsiLaunch 的文件。您的 OMSI 2 文件和其他插件会保留。"
   hi: "आपके OMSI 2 फ़ोल्डर से OmsiLaunch की फ़ाइलें हटाता है। आपकी OMSI 2 फ़ाइलें और अन्य प्लग-इन बने रहते हैं।"
+  ca: "Elimina els fitxers d'OmsiLaunch de la teva carpeta d'OMSI 2. Els teus fitxers d'OMSI 2 i els altres connectors es mantenen."
 
 "Install again":
   de: "Erneut installieren"
@@ -77393,6 +77410,7 @@ _version: 2
   tl: "I-install muli"
   zh: "重新安装"
   hi: "दोबारा इंस्टॉल करें"
+  ca: "Instal·la de nou"
 
 "Downloads the official OmsiLaunch package again, after you confirm.":
   de: "Lädt das offizielle OmsiLaunch-Paket nach Ihrer Bestätigung erneut herunter."
@@ -77420,6 +77438,7 @@ _version: 2
   tl: "Dina-download muli ang opisyal na package ng OmsiLaunch, pagkatapos mong kumpirmahin."
   zh: "经您确认后，再次下载官方 OmsiLaunch 包。"
   hi: "आपकी पुष्टि के बाद आधिकारिक OmsiLaunch पैकेज फिर से डाउनलोड करता है।"
+  ca: "Torna a baixar el paquet oficial d'OmsiLaunch, després que ho confirmis."
 
 "Install OmsiLaunch…":
   de: "OmsiLaunch installieren…"
@@ -77447,6 +77466,7 @@ _version: 2
   tl: "I-install ang OmsiLaunch…"
   zh: "安装 OmsiLaunch…"
   hi: "OmsiLaunch इंस्टॉल करें…"
+  ca: "Instal·la OmsiLaunch…"
 
 "Looks up the official OmsiLaunch release. Nothing is downloaded or changed until you confirm.":
   de: "Sucht die offizielle OmsiLaunch-Version. Bis zu Ihrer Bestätigung wird nichts heruntergeladen oder geändert."
@@ -77474,6 +77494,7 @@ _version: 2
   tl: "Hinahanap ang opisyal na release ng OmsiLaunch. Walang ida-download o babaguhin hangga't hindi ka nagkukumpirma."
   zh: "查询官方 OmsiLaunch 发布版。在您确认之前，不会下载或更改任何内容。"
   hi: "आधिकारिक OmsiLaunch रिलीज़ खोजता है। आपकी पुष्टि तक कुछ भी डाउनलोड या बदला नहीं जाता।"
+  ca: "Cerca la versió oficial d'OmsiLaunch. No es baixa ni es canvia res fins que ho confirmis."
 
 "With this on and OmsiLaunch installed, a switch under the logo starts games with the original OMSI 2 instead. The files OmsiLaunch changes for a game are restored when it ends.":
   de: "Ist dies aktiviert und OmsiLaunch installiert, startet ein Schalter unter dem Logo Spiele stattdessen mit dem Original-OMSI 2. Die Dateien, die OmsiLaunch für ein Spiel ändert, werden am Ende wiederhergestellt."
@@ -77501,6 +77522,7 @@ _version: 2
   tl: "Kapag naka-on ito at naka-install ang OmsiLaunch, sinisimulan ng switch sa ilalim ng logo ang mga laro gamit ang orihinal na OMSI 2. Ibinabalik ang mga file na binago ng OmsiLaunch para sa laro kapag natapos ito."
   zh: "开启此项并已安装 OmsiLaunch 后，徽标下方的开关会改用原版 OMSI 2 启动游戏。OmsiLaunch 为游戏更改的文件会在游戏结束时还原。"
   hi: "इसके चालू होने और OmsiLaunch के इंस्टॉल होने पर, लोगो के नीचे का स्विच गेम को मूल OMSI 2 से शुरू करता है। गेम के लिए OmsiLaunch जो फ़ाइलें बदलता है, वे गेम खत्म होने पर बहाल कर दी जाती हैं।"
+  ca: "Amb això activat i OmsiLaunch instal·lat, un interruptor sota el logotip inicia les partides amb l'OMSI 2 original. Els fitxers que OmsiLaunch canvia per a una partida es restauren quan acaba."
 
 "Closes this window; nothing is changed.":
   de: "Schließt dieses Fenster; nichts wird geändert."
@@ -77528,6 +77550,7 @@ _version: 2
   tl: "Isinasara ang window na ito; walang babaguhin."
   zh: "关闭此窗口；不会更改任何内容。"
   hi: "यह विंडो बंद करता है; कुछ नहीं बदलता।"
+  ca: "Tanca aquesta finestra; no es canvia res."
 
 "Install OmsiLaunch":
   de: "OmsiLaunch installieren"
@@ -77555,6 +77578,7 @@ _version: 2
   tl: "I-install ang OmsiLaunch"
   zh: "安装 OmsiLaunch"
   hi: "OmsiLaunch इंस्टॉल करें"
+  ca: "Instal·la OmsiLaunch"
 
 "Looking for the newest OmsiLaunch release…":
   de: "Suche nach der neuesten OmsiLaunch-Version…"
@@ -77582,6 +77606,7 @@ _version: 2
   tl: "Hinahanap ang pinakabagong release ng OmsiLaunch…"
   zh: "正在查找最新的 OmsiLaunch 发布版…"
   hi: "नवीनतम OmsiLaunch रिलीज़ खोजी जा रही है…"
+  ca: "Cercant la versió més recent d'OmsiLaunch…"
 
 "Version %{version}":
   de: "Version %{version}"
@@ -77609,6 +77634,7 @@ _version: 2
   tl: "Bersyon %{version}"
   zh: "版本 %{version}"
   hi: "संस्करण %{version}"
+  ca: "Versió %{version}"
 
 "From the official release of github.com/%{repo}.":
   de: "Aus der offiziellen Version von github.com/%{repo}."
@@ -77636,6 +77662,7 @@ _version: 2
   tl: "Mula sa opisyal na release ng github.com/%{repo}."
   zh: "来自 github.com/%{repo} 的官方发布版。"
   hi: "github.com/%{repo} की आधिकारिक रिलीज़ से।"
+  ca: "De la versió oficial de github.com/%{repo}."
 
 "License: %{license}. It is a separate program: Depot does not include or change it.":
   de: "Lizenz: %{license}. Es ist ein eigenständiges Programm: Depot enthält oder ändert es nicht."
@@ -77663,6 +77690,7 @@ _version: 2
   tl: "Lisensya: %{license}. Hiwalay na programa ito: hindi ito kasama o binabago ng Depot."
   zh: "许可证：%{license}。它是独立的程序：Depot 不包含也不修改它。"
   hi: "लाइसेंस: %{license}। यह एक अलग प्रोग्राम है: Depot इसे शामिल या बदलता नहीं है।"
+  ca: "Llicència: %{license}. És un programa independent: Depot no l'inclou ni el modifica."
 
 "SHA-256 of the package:":
   de: "SHA-256 des Pakets:"
@@ -77690,6 +77718,7 @@ _version: 2
   tl: "SHA-256 ng package:"
   zh: "包的 SHA-256："
   hi: "पैकेज का SHA-256:"
+  ca: "SHA-256 del paquet:"
 
 "OmsiLaunch is installed into your OMSI 2 folder. Nothing is downloaded until you press Download.":
   de: "OmsiLaunch wird in Ihren OMSI-2-Ordner installiert. Bis Sie auf „Herunterladen“ klicken, wird nichts heruntergeladen."
@@ -77717,6 +77746,7 @@ _version: 2
   tl: "Ini-install ang OmsiLaunch sa folder ng OMSI 2 mo. Walang ida-download hangga't hindi mo pinipindot ang I-download."
   zh: "OmsiLaunch 将安装到您的 OMSI 2 文件夹。点击“下载”之前不会下载任何内容。"
   hi: "OmsiLaunch आपके OMSI 2 फ़ोल्डर में इंस्टॉल होता है। जब तक आप डाउनलोड नहीं दबाते, कुछ भी डाउनलोड नहीं होता।"
+  ca: "OmsiLaunch s'instal·la a la teva carpeta d'OMSI 2. No es baixa res fins que premis Baixa."
 
 "Download":
   de: "Herunterladen"
@@ -77744,6 +77774,7 @@ _version: 2
   tl: "I-download"
   zh: "下载"
   hi: "डाउनलोड करें"
+  ca: "Baixa"
 
 "Downloads the package and checks it against the SHA-256 above. Nothing is installed yet.":
   de: "Lädt das Paket herunter und prüft es anhand der obigen SHA-256. Es wird noch nichts installiert."
@@ -77771,6 +77802,7 @@ _version: 2
   tl: "Dina-download ang package at sinusuri ito laban sa SHA-256 sa itaas. Wala pang naka-install."
   zh: "下载该包并用上方的 SHA-256 校验。尚未安装任何内容。"
   hi: "पैकेज डाउनलोड करता है और ऊपर के SHA-256 से जाँचता है। अभी कुछ इंस्टॉल नहीं होता।"
+  ca: "Baixa el paquet i el comprova amb el SHA-256 de dalt. Encara no s'instal·la res."
 
 "Downloading %{done} of %{total}":
   de: "%{done} von %{total} heruntergeladen"
@@ -77798,6 +77830,7 @@ _version: 2
   tl: "Dina-download ang %{done} ng %{total}"
   zh: "正在下载 %{done} / %{total}"
   hi: "%{total} में से %{done} डाउनलोड हो रहा है"
+  ca: "Baixant %{done} de %{total}"
 
 "Downloading…":
   de: "Wird heruntergeladen…"
@@ -77825,6 +77858,7 @@ _version: 2
   tl: "Dina-download…"
   zh: "正在下载…"
   hi: "डाउनलोड हो रहा है…"
+  ca: "Baixant…"
 
 "The package matches its SHA-256. These files will be added to your OMSI 2 folder:":
   de: "Das Paket stimmt mit seiner SHA-256 überein. Diese Dateien werden Ihrem OMSI-2-Ordner hinzugefügt:"
@@ -77852,6 +77886,7 @@ _version: 2
   tl: "Tugma ang package sa SHA-256 nito. Idaragdag ang mga file na ito sa folder ng OMSI 2 mo:"
   zh: "该包与其 SHA-256 相符。这些文件将添加到您的 OMSI 2 文件夹："
   hi: "पैकेज अपने SHA-256 से मेल खाता है। ये फ़ाइलें आपके OMSI 2 फ़ोल्डर में जोड़ी जाएँगी:"
+  ca: "El paquet coincideix amb el seu SHA-256. Aquests fitxers s'afegiran a la teva carpeta d'OMSI 2:"
 
 "%{name}   %{n} files, %{size}":
   de: "%{name}   %{n} Dateien, %{size}"
@@ -77879,6 +77914,7 @@ _version: 2
   tl: "%{name}   %{n} file, %{size}"
   zh: "%{name}   %{n} 个文件，%{size}"
   hi: "%{name}   %{n} फ़ाइलें, %{size}"
+  ca: "%{name}   %{n} fitxers, %{size}"
 
 "%{n} files of the OmsiLaunch already installed are replaced.":
   de: "%{n} Dateien des bereits installierten OmsiLaunch werden ersetzt."
@@ -77906,6 +77942,7 @@ _version: 2
   tl: "Papalitan ang %{n} file ng naka-install nang OmsiLaunch."
   zh: "已安装的 OmsiLaunch 的 %{n} 个文件将被替换。"
   hi: "पहले से इंस्टॉल OmsiLaunch की %{n} फ़ाइलें बदली जाएँगी।"
+  ca: "Es reemplacen %{n} fitxers d'OmsiLaunch ja instal·lats."
 
 "No other file of your OMSI 2 folder is changed or overwritten.":
   de: "Keine andere Datei Ihres OMSI-2-Ordners wird geändert oder überschrieben."
@@ -77933,6 +77970,7 @@ _version: 2
   tl: "Walang ibang file sa folder ng OMSI 2 mo ang babaguhin o papatungan."
   zh: "OMSI 2 文件夹中的其他文件不会被更改或覆盖。"
   hi: "आपके OMSI 2 फ़ोल्डर की कोई और फ़ाइल बदली या ओवरराइट नहीं की जाती।"
+  ca: "Cap altre fitxer de la teva carpeta d'OMSI 2 es canvia ni se sobreescriu."
 
 "These files already exist and are not OmsiLaunch's, so nothing is installed: %{files}":
   de: "Diese Dateien existieren bereits und gehören nicht zu OmsiLaunch, daher wird nichts installiert: %{files}"
@@ -77960,6 +77998,7 @@ _version: 2
   tl: "Umiiral na ang mga file na ito at hindi sa OmsiLaunch, kaya walang ini-install: %{files}"
   zh: "这些文件已存在且不属于 OmsiLaunch，因此不会安装任何内容：%{files}"
   hi: "ये फ़ाइलें पहले से मौजूद हैं और OmsiLaunch की नहीं हैं, इसलिए कुछ इंस्टॉल नहीं होगा: %{files}"
+  ca: "Aquests fitxers ja existeixen i no són d'OmsiLaunch, per això no s'instal·la res: %{files}"
 
 "Install":
   de: "Installieren"
@@ -77987,6 +78026,7 @@ _version: 2
   tl: "I-install"
   zh: "安装"
   hi: "इंस्टॉल करें"
+  ca: "Instal·la"
 
 "Adds these files to your OMSI 2 folder. Removing them later is one button in Setup.":
   de: "Fügt diese Dateien Ihrem OMSI-2-Ordner hinzu. Sie später zu entfernen, geht mit einer Schaltfläche in den Einstellungen."
@@ -78014,6 +78054,7 @@ _version: 2
   tl: "Idinaragdag ang mga file na ito sa folder ng OMSI 2 mo. Isang button lang sa Setup ang pag-alis ng mga ito sa susunod."
   zh: "将这些文件添加到您的 OMSI 2 文件夹。之后要移除，在设置中点一个按钮即可。"
   hi: "ये फ़ाइलें आपके OMSI 2 फ़ोल्डर में जोड़ता है। इन्हें बाद में हटाना सेटअप में एक बटन है।"
+  ca: "Afegeix aquests fitxers a la teva carpeta d'OMSI 2. Eliminar-los després és un sol botó a Configuració inicial."
 
 "Installing…":
   de: "Wird installiert…"
@@ -78041,6 +78082,7 @@ _version: 2
   tl: "Ini-install…"
   zh: "正在安装…"
   hi: "इंस्टॉल हो रहा है…"
+  ca: "Instal·lant…"
 
 "%{n} files are removed from your OMSI 2 folder. Your OMSI 2 files, session profiles and other plug-ins stay.":
   de: "%{n} Dateien werden aus Ihrem OMSI-2-Ordner entfernt. Ihre OMSI-2-Dateien, Sitzungsprofile und andere Plug-ins bleiben erhalten."
@@ -78068,6 +78110,7 @@ _version: 2
   tl: "Aalisin ang %{n} file sa folder ng OMSI 2 mo. Mananatili ang mga file mo ng OMSI 2, mga profile ng session at ang ibang plug-in."
   zh: "将从 OMSI 2 文件夹移除 %{n} 个文件。您的 OMSI 2 文件、会话配置文件和其他插件会保留。"
   hi: "आपके OMSI 2 फ़ोल्डर से %{n} फ़ाइलें हटाई जाती हैं। आपकी OMSI 2 फ़ाइलें, सत्र प्रोफ़ाइल और अन्य प्लग-इन बने रहते हैं।"
+  ca: "S'eliminen %{n} fitxers de la teva carpeta d'OMSI 2. Els teus fitxers d'OMSI 2, els perfils de sessió i els altres connectors es mantenen."
 
 "A session left OMSI 2 files changed. Restore them first: start a game from Depot, or run OmsiLaunch with /recover.":
   de: "Eine Sitzung hat OMSI-2-Dateien geändert hinterlassen. Stellen Sie sie zuerst wieder her: Starten Sie ein Spiel über Depot oder führen Sie OmsiLaunch mit /recover aus."
@@ -78095,6 +78138,7 @@ _version: 2
   tl: "Nag-iwan ang isang session ng mga binagong file ng OMSI 2. Ibalik muna ang mga ito: magsimula ng laro mula sa Depot, o patakbuhin ang OmsiLaunch gamit ang /recover."
   zh: "上一个会话留下了被更改的 OMSI 2 文件。请先还原：从 Depot 启动游戏，或以 /recover 运行 OmsiLaunch。"
   hi: "एक सत्र ने OMSI 2 की फ़ाइलें बदली हुई छोड़ दीं। पहले उन्हें बहाल करें: Depot से गेम शुरू करें, या OmsiLaunch को /recover के साथ चलाएँ।"
+  ca: "Una sessió ha deixat fitxers d'OMSI 2 canviats. Restaura'ls primer: inicia una partida des de Depot o executa OmsiLaunch amb /recover."
 
 "Remove OmsiLaunch":
   de: "OmsiLaunch entfernen"
@@ -78122,6 +78166,7 @@ _version: 2
   tl: "Alisin ang OmsiLaunch"
   zh: "移除 OmsiLaunch"
   hi: "OmsiLaunch हटाएँ"
+  ca: "Elimina OmsiLaunch"
 
 "Deletes the OmsiLaunch files listed by its own package manifest.":
   de: "Löscht die Dateien von OmsiLaunch, die in seinem eigenen Paketmanifest stehen."
@@ -78149,6 +78194,7 @@ _version: 2
   tl: "Binubura ang mga file ng OmsiLaunch na nakalista sa sarili nitong manifest ng package."
   zh: "删除 OmsiLaunch 自身包清单中列出的文件。"
   hi: "OmsiLaunch के अपने पैकेज मैनिफ़ेस्ट में सूचीबद्ध फ़ाइलें हटाता है।"
+  ca: "Suprimeix els fitxers d'OmsiLaunch llistats pel manifest del seu propi paquet."
 
 "Removing…":
   de: "Wird entfernt…"
@@ -78176,6 +78222,7 @@ _version: 2
   tl: "Inaalis…"
   zh: "正在移除…"
   hi: "हटाया जा रहा है…"
+  ca: "Eliminant…"
 
 "Check for updates":
   de: "Nach Updates suchen"
@@ -78203,6 +78250,7 @@ _version: 2
   tl: "Tingnan ang mga update"
   zh: "检查更新"
   hi: "अपडेट जाँचें"
+  ca: "Cerca actualitzacions"
 
 "The release points outside the official download hosts.":
   de: "Die Version verweist auf einen Host außerhalb der offiziellen Download-Server."
@@ -78230,6 +78278,7 @@ _version: 2
   tl: "Tumuturo ang release sa labas ng mga opisyal na download host."
   zh: "该发布版指向官方下载主机之外的地址。"
   hi: "रिलीज़ आधिकारिक डाउनलोड होस्ट से बाहर की ओर इशारा करती है।"
+  ca: "La versió apunta fora dels servidors de baixada oficials."
 
 "The checksum file is not a SHA-256.":
   de: "Die Prüfsummendatei ist keine SHA-256."
@@ -78257,6 +78306,7 @@ _version: 2
   tl: "Hindi SHA-256 ang checksum file."
   zh: "校验和文件不是 SHA-256。"
   hi: "चेकसम फ़ाइल SHA-256 नहीं है।"
+  ca: "El fitxer de suma de verificació no és un SHA-256."
 
 "The package does not match the checksum that was shown.":
   de: "Das Paket stimmt nicht mit der angezeigten Prüfsumme überein."
@@ -78284,6 +78334,7 @@ _version: 2
   tl: "Hindi tugma ang package sa ipinakitang checksum."
   zh: "该包与显示的校验和不符。"
   hi: "पैकेज दिखाए गए चेकसम से मेल नहीं खाता।"
+  ca: "El paquet no coincideix amb la suma de verificació que es va mostrar."
 
 "Start games with Project Depot's own engine.":
   de: "Spiele mit der eigenen Engine von Project Depot starten."
@@ -78311,6 +78362,7 @@ _version: 2
   tl: "Simulan ang mga laro gamit ang sariling engine ng Project Depot."
   zh: "用 Project Depot 自己的引擎启动游戏。"
   hi: "गेम Project Depot के अपने इंजन से शुरू करें।"
+  ca: "Inicia les partides amb el motor propi de Project Depot."
 
 "Start games with the original OMSI 2 through OmsiLaunch.":
   de: "Spiele über OmsiLaunch mit dem Original-OMSI 2 starten."
@@ -78338,6 +78390,7 @@ _version: 2
   tl: "Simulan ang mga laro gamit ang orihinal na OMSI 2 sa pamamagitan ng OmsiLaunch."
   zh: "通过 OmsiLaunch 用原版 OMSI 2 启动游戏。"
   hi: "गेम OmsiLaunch के ज़रिए मूल OMSI 2 से शुरू करें।"
+  ca: "Inicia les partides amb l'OMSI 2 original mitjançant OmsiLaunch."
 
 "Playing with the original OMSI 2. Click to switch to Project Depot's engine.":
   de: "Sie spielen mit dem Original-OMSI 2. Klicken, um zur Engine von Project Depot zu wechseln."
@@ -78365,6 +78418,7 @@ _version: 2
   tl: "Naglalaro gamit ang orihinal na OMSI 2. I-click para lumipat sa engine ng Project Depot."
   zh: "正在使用原版 OMSI 2 游玩。点击可切换到 Project Depot 的引擎。"
   hi: "मूल OMSI 2 से खेल रहे हैं। Project Depot के इंजन पर जाने के लिए क्लिक करें।"
+  ca: "Jugant amb l'OMSI 2 original. Fes clic per canviar al motor de Project Depot."
 
 "Playing with Project Depot's engine. Click to switch to the original OMSI 2.":
   de: "Sie spielen mit der Engine von Project Depot. Klicken, um zum Original-OMSI 2 zu wechseln."
@@ -78392,6 +78446,7 @@ _version: 2
   tl: "Naglalaro gamit ang engine ng Project Depot. I-click para lumipat sa orihinal na OMSI 2."
   zh: "正在使用 Project Depot 的引擎游玩。点击可切换到原版 OMSI 2。"
   hi: "Project Depot के इंजन से खेल रहे हैं। मूल OMSI 2 पर जाने के लिए क्लिक करें।"
+  ca: "Jugant amb el motor de Project Depot. Fes clic per canviar a l'OMSI 2 original."
 
 "Another OMSI 2 session started through OmsiLaunch is still running. Close it and try again.":
   de: "Eine andere über OmsiLaunch gestartete OMSI-2-Sitzung läuft noch. Beenden Sie sie und versuchen Sie es erneut."
@@ -78419,6 +78474,7 @@ _version: 2
   tl: "May isa pang session ng OMSI 2 na sinimulan sa pamamagitan ng OmsiLaunch na tumatakbo pa. Isara ito at subukan muli."
   zh: "另一个通过 OmsiLaunch 启动的 OMSI 2 会话仍在运行。请关闭后重试。"
   hi: "OmsiLaunch से शुरू किया गया एक और OMSI 2 सत्र अभी चल रहा है। उसे बंद करके फिर कोशिश करें।"
+  ca: "Una altra sessió d'OMSI 2 iniciada amb OmsiLaunch encara s'està executant. Tanca-la i torna-ho a provar."
 
 "The OMSI 2 folder cannot be written to by this user. Move OMSI 2 out of Program Files or allow write access to the folder.":
   de: "In den OMSI-2-Ordner kann dieser Benutzer nicht schreiben. Verschieben Sie OMSI 2 aus Program Files heraus oder erlauben Sie Schreibzugriff auf den Ordner."
@@ -78446,6 +78502,7 @@ _version: 2
   tl: "Hindi makapagsulat ang user na ito sa folder ng OMSI 2. Ilipat ang OMSI 2 palabas ng Program Files o payagan ang pagsulat sa folder."
   zh: "此用户无法写入 OMSI 2 文件夹。请将 OMSI 2 移出 Program Files，或允许对该文件夹的写入权限。"
   hi: "यह उपयोगकर्ता OMSI 2 फ़ोल्डर में नहीं लिख सकता। OMSI 2 को Program Files से बाहर ले जाएँ या फ़ोल्डर में लिखने की अनुमति दें।"
+  ca: "Aquest usuari no pot escriure a la carpeta d'OMSI 2. Mou OMSI 2 fora de Program Files o permet l'escriptura a la carpeta."
 
 "The OMSI 2 folder was not found. Choose it under Setup.":
   de: "Der OMSI-2-Ordner wurde nicht gefunden. Wählen Sie ihn unter Einrichtung."
@@ -78473,6 +78530,7 @@ _version: 2
   tl: "Hindi nahanap ang folder ng OMSI 2. Piliin ito sa Setup."
   zh: "未找到 OMSI 2 文件夹。请在设置中选择。"
   hi: "OMSI 2 फ़ोल्डर नहीं मिला। उसे सेटअप में चुनें।"
+  ca: "No s'ha trobat la carpeta d'OMSI 2. Tria-la a Configuració inicial."
 
 "This OMSI 2 program file is not one OmsiLaunch can start.":
   de: "Diese OMSI-2-Programmdatei kann OmsiLaunch nicht starten."
@@ -78500,6 +78558,7 @@ _version: 2
   tl: "Hindi ito program file ng OMSI 2 na kayang simulan ng OmsiLaunch."
   zh: "OmsiLaunch 无法启动这个 OMSI 2 程序文件。"
   hi: "यह OMSI 2 प्रोग्राम फ़ाइल OmsiLaunch शुरू नहीं कर सकता।"
+  ca: "Aquest fitxer de programa d'OMSI 2 no és un que OmsiLaunch pugui iniciar."
 
 "Starting the original OMSI 2 needs 64-bit Windows 10 or later.":
   de: "Zum Starten des Original-OMSI 2 ist 64-Bit-Windows 10 oder neuer nötig."
@@ -78527,6 +78586,7 @@ _version: 2
   tl: "Kailangan ng 64-bit na Windows 10 o mas bago para simulan ang orihinal na OMSI 2."
   zh: "启动原版 OMSI 2 需要 64 位的 Windows 10 或更高版本。"
   hi: "मूल OMSI 2 शुरू करने के लिए 64-बिट Windows 10 या उसके बाद का संस्करण चाहिए।"
+  ca: "Iniciar l'OMSI 2 original requereix Windows de 64 bits 10 o posterior."
 
 "The map was not found in the OMSI 2 folder.":
   de: "Die Karte wurde im OMSI-2-Ordner nicht gefunden."
@@ -78554,6 +78614,7 @@ _version: 2
   tl: "Hindi nahanap ang mapa sa folder ng OMSI 2."
   zh: "在 OMSI 2 文件夹中找不到该地图。"
   hi: "नक्शा OMSI 2 फ़ोल्डर में नहीं मिला।"
+  ca: "No s'ha trobat el mapa a la carpeta d'OMSI 2."
 
 "The saved situation could not be found or loaded.":
   de: "Die gespeicherte Situation wurde nicht gefunden oder konnte nicht geladen werden."
@@ -78581,6 +78642,7 @@ _version: 2
   tl: "Hindi mahanap o mai-load ang naka-save na sitwasyon."
   zh: "找不到或无法加载已保存的情景。"
   hi: "सहेजी गई स्थिति नहीं मिली या लोड नहीं हो सकी।"
+  ca: "No s'ha pogut trobar o carregar la situació desada."
 
 "The start point is not available for this map. Choose another one.":
   de: "Der Startpunkt ist für diese Karte nicht verfügbar. Wählen Sie einen anderen."
@@ -78608,6 +78670,7 @@ _version: 2
   tl: "Hindi available ang panimulang punto para sa mapang ito. Pumili ng iba."
   zh: "该起点在此地图上不可用。请选择其他起点。"
   hi: "इस नक्शे के लिए आरंभ बिंदु उपलब्ध नहीं है। कोई दूसरा चुनें।"
+  ca: "El punt d'inici no està disponible per a aquest mapa. Tria'n un altre."
 
 "The OmsiLaunch files in the OMSI 2 folder are damaged or do not belong together. Install OmsiLaunch again.":
   de: "Die OmsiLaunch-Dateien im OMSI-2-Ordner sind beschädigt oder passen nicht zusammen. Installieren Sie OmsiLaunch erneut."
@@ -78635,6 +78698,7 @@ _version: 2
   tl: "Sira o hindi magkatugma ang mga file ng OmsiLaunch sa folder ng OMSI 2. I-install muli ang OmsiLaunch."
   zh: "OMSI 2 文件夹中的 OmsiLaunch 文件已损坏或彼此不匹配。请重新安装 OmsiLaunch。"
   hi: "OMSI 2 फ़ोल्डर में OmsiLaunch की फ़ाइलें क्षतिग्रस्त हैं या आपस में मेल नहीं खातीं। OmsiLaunch दोबारा इंस्टॉल करें।"
+  ca: "Els fitxers d'OmsiLaunch a la carpeta d'OMSI 2 estan malmesos o no van junts. Instal·la OmsiLaunch de nou."
 
 "OMSI 2 did not finish starting. Check that the .NET 6 runtimes (x64 and x86) are installed.":
   de: "OMSI 2 wurde nicht fertig gestartet. Prüfen Sie, ob die .NET-6-Runtimes (x64 und x86) installiert sind."
@@ -78662,6 +78726,7 @@ _version: 2
   tl: "Hindi natapos ang pagsisimula ng OMSI 2. Tiyaking naka-install ang mga .NET 6 runtime (x64 at x86)."
   zh: "OMSI 2 未能完成启动。请确认已安装 .NET 6 运行时（x64 和 x86）。"
   hi: "OMSI 2 शुरू होना पूरा नहीं हुआ। जाँचें कि .NET 6 रनटाइम (x64 और x86) इंस्टॉल हैं।"
+  ca: "OMSI 2 no ha acabat d'iniciar-se. Comprova que els entorns d'execució de .NET 6 (x64 i x86) estiguin instal·lats."
 
 "The OmsiLaunch files in the OMSI 2 folder are from different versions. Install OmsiLaunch again.":
   de: "Die OmsiLaunch-Dateien im OMSI-2-Ordner stammen aus verschiedenen Versionen. Installieren Sie OmsiLaunch erneut."
@@ -78689,6 +78754,7 @@ _version: 2
   tl: "Magkakaibang bersyon ang mga file ng OmsiLaunch sa folder ng OMSI 2. I-install muli ang OmsiLaunch."
   zh: "OMSI 2 文件夹中的 OmsiLaunch 文件来自不同版本。请重新安装 OmsiLaunch。"
   hi: "OMSI 2 फ़ोल्डर में OmsiLaunch की फ़ाइलें अलग-अलग संस्करणों की हैं। OmsiLaunch दोबारा इंस्टॉल करें।"
+  ca: "Els fitxers d'OmsiLaunch a la carpeta d'OMSI 2 són de versions diferents. Instal·la OmsiLaunch de nou."
 
 "A saved OMSI 2 setting is not accepted. Open Settings and check the values.":
   de: "Eine gespeicherte OMSI-2-Einstellung wird nicht akzeptiert. Öffnen Sie die Einstellungen und prüfen Sie die Werte."
@@ -78716,6 +78782,7 @@ _version: 2
   tl: "Hindi tinatanggap ang isang naka-save na setting ng OMSI 2. Buksan ang mga setting at suriin ang mga halaga."
   zh: "已保存的 OMSI 2 设置不被接受。请打开设置并检查数值。"
   hi: "सहेजी गई एक OMSI 2 सेटिंग स्वीकार नहीं की जाती। सेटिंग खोलें और मान जाँचें।"
+  ca: "Un ajust desat d'OMSI 2 no s'accepta. Obre Configuració i comprova els valors."
 
 "This start option is not available in OMSI 2 mode.":
   de: "Diese Startoption ist im OMSI-2-Modus nicht verfügbar."
@@ -78743,6 +78810,7 @@ _version: 2
   tl: "Hindi available ang opsyong ito sa pagsisimula sa mode na OMSI 2."
   zh: "此启动选项在 OMSI 2 模式下不可用。"
   hi: "यह आरंभ विकल्प OMSI 2 मोड में उपलब्ध नहीं है।"
+  ca: "Aquesta opció d'inici no està disponible al mode OMSI 2."
 
 "OMSI 2 could not be started or closed before the map loaded.":
   de: "OMSI 2 konnte nicht gestartet werden oder wurde vor dem Laden der Karte beendet."
@@ -78770,6 +78838,7 @@ _version: 2
   tl: "Hindi masimulan ang OMSI 2 o nagsara ito bago na-load ang mapa."
   zh: "OMSI 2 无法启动，或在地图加载前就已关闭。"
   hi: "OMSI 2 शुरू नहीं हो सका या नक्शा लोड होने से पहले बंद हो गया।"
+  ca: "No s'ha pogut iniciar o tancar OMSI 2 abans que es carregués el mapa."
 
 "OMSI 2 files changed for the session could not be restored. See the OmsiLaunch log.":
   de: "Für die Sitzung geänderte OMSI-2-Dateien konnten nicht wiederhergestellt werden. Siehe das OmsiLaunch-Protokoll."
@@ -78797,6 +78866,7 @@ _version: 2
   tl: "Hindi naibalik ang mga file ng OMSI 2 na binago para sa session. Tingnan ang log ng OmsiLaunch."
   zh: "为会话更改的 OMSI 2 文件无法还原。请查看 OmsiLaunch 日志。"
   hi: "सत्र के लिए बदली गई OMSI 2 फ़ाइलें बहाल नहीं हो सकीं। OmsiLaunch का लॉग देखें।"
+  ca: "No s'han pogut restaurar els fitxers d'OMSI 2 canviats per a la sessió. Consulta el registre d'OmsiLaunch."
 
 "A module conflicts with another plug-in in the OMSI 2 folder.":
   de: "Ein Modul steht im Konflikt mit einem anderen Plug-in im OMSI-2-Ordner."
@@ -78824,6 +78894,7 @@ _version: 2
   tl: "May module na sumasalungat sa ibang plug-in sa folder ng OMSI 2."
   zh: "有模块与 OMSI 2 文件夹中的其他插件冲突。"
   hi: "एक मॉड्यूल OMSI 2 फ़ोल्डर के किसी दूसरे प्लग-इन से टकराता है।"
+  ca: "Un mòdul entra en conflicte amb un altre connector de la carpeta d'OMSI 2."
 
 "A module could not be loaded. Install it again or switch it off.":
   de: "Ein Modul konnte nicht geladen werden. Installieren Sie es erneut oder schalten Sie es aus."
@@ -78851,6 +78922,7 @@ _version: 2
   tl: "Hindi ma-load ang isang module. I-install muli o i-off ito."
   zh: "无法加载模块。请重新安装或将其关闭。"
   hi: "एक मॉड्यूल लोड नहीं हो सका। उसे दोबारा इंस्टॉल करें या बंद करें।"
+  ca: "No s'ha pogut carregar un mòdul. Instal·la'l de nou o desactiva'l."
 
 "A module setting is not accepted. Open Settings > Modules and check the values.":
   de: "Eine Moduleinstellung wird nicht akzeptiert. Öffnen Sie Einstellungen > Module und prüfen Sie die Werte."
@@ -78878,6 +78950,7 @@ _version: 2
   tl: "Hindi tinatanggap ang setting ng module. Buksan ang Mga Setting > Mga Module at suriin ang mga halaga."
   zh: "模块设置不被接受。请打开“设置”>“模块”并检查数值。"
   hi: "एक मॉड्यूल सेटिंग स्वीकार नहीं की जाती। सेटिंग > मॉड्यूल खोलें और मान जाँचें।"
+  ca: "Un ajust d'un mòdul no s'accepta. Obre Configuració > Mòduls i comprova els valors."
 
 "OmsiLaunch cannot start this session.":
   de: "OmsiLaunch kann diese Sitzung nicht starten."
@@ -78905,6 +78978,7 @@ _version: 2
   tl: "Hindi masimulan ng OmsiLaunch ang session na ito."
   zh: "OmsiLaunch 无法启动此会话。"
   hi: "OmsiLaunch यह सत्र शुरू नहीं कर सकता।"
+  ca: "OmsiLaunch no pot iniciar aquesta sessió."
 
 "OmsiLaunch reported a problem. See its log for details.":
   de: "OmsiLaunch hat ein Problem gemeldet. Details stehen in seinem Protokoll."
@@ -78932,6 +79006,7 @@ _version: 2
   tl: "May iniulat na problema ang OmsiLaunch. Tingnan ang log nito para sa mga detalye."
   zh: "OmsiLaunch 报告了问题。详情请见其日志。"
   hi: "OmsiLaunch ने समस्या बताई। ब्योरे के लिए उसका लॉग देखें।"
+  ca: "OmsiLaunch ha informat d'un problema. Consulta el seu registre per als detalls."
 
 "OmsiLaunch could not start: the .NET 6 desktop runtime (x64) is missing or the OmsiLaunch files are incomplete.":
   de: "OmsiLaunch konnte nicht starten: Die .NET-6-Desktop-Runtime (x64) fehlt oder die OmsiLaunch-Dateien sind unvollständig."
@@ -78959,3 +79034,4 @@ _version: 2
   tl: "Hindi masimulan ang OmsiLaunch: kulang ang .NET 6 desktop runtime (x64) o hindi kumpleto ang mga file ng OmsiLaunch."
   zh: "OmsiLaunch 无法启动：缺少 .NET 6 桌面运行时 (x64)，或 OmsiLaunch 文件不完整。"
   hi: "OmsiLaunch शुरू नहीं हो सका: .NET 6 डेस्कटॉप रनटाइम (x64) नहीं है या OmsiLaunch की फ़ाइलें अधूरी हैं।"
+  ca: "OmsiLaunch no s'ha pogut iniciar: falta l'entorn d'execució d'escriptori de .NET 6 (x64) o els fitxers d'OmsiLaunch estan incomplets."
