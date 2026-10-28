@@ -131,28 +131,12 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     if let Some((tex, aspect)) = view.logo {
         ui.image(Rect::new(22.0, 22.0, 220.0, 220.0 * aspect), tex, 0.0);
     }
-    text(
-        ui,
-        &crate::tr("Game menu"),
-        22.0,
-        109.0,
-        17.0,
-        Weight::Bold,
-        FG,
-    );
+    text(ui, "Game menu", 22.0, 109.0, 17.0, Weight::Bold, FG);
     let step = row_height(view, h);
     let mut head = 142.0;
     let mut clicked = None;
     for section in view.sections {
-        text(
-            ui,
-            &crate::tr(section.title),
-            22.0,
-            head,
-            11.0,
-            Weight::Medium,
-            MUTED,
-        );
+        text(ui, section.title, 22.0, head, 11.0, Weight::Medium, MUTED);
         let mut top = head + 13.0;
         for item in &section.items {
             let r = Rect::new(10.0, top, COLUMN_W - 21.0, step);
@@ -162,7 +146,7 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
             match item.kind {
                 Kind::Primary => ui.p().rounded(r, ROW_R, accent()),
                 Kind::Current => {
-                    ui.p().rounded(r, ROW_R, Color::WHITE.alpha(0.06));
+                    ui.p().rounded(r, ROW_R, accent().alpha(0.07));
                     // (the pill of the page open, as Windows 11's navigation marks it)
                     ui.p().rounded(
                         Rect::new(r.x, r.y + r.h * 0.5 - 8.0, 3.0, 16.0),
@@ -195,10 +179,11 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
             };
             text(ui, item.label, 69.0, cy, 15.0, weight, label_c.alpha(dim));
             if !item.key.is_empty() {
-                let key_c = if item.kind == Kind::Primary {
-                    on_accent()
-                } else {
-                    MUTED
+                let key_c = match item.kind {
+                    Kind::Primary => on_accent(),
+                    // (on the light row of the page open, the plain text colour reads better)
+                    Kind::Current => FG,
+                    _ => MUTED,
                 };
                 // (the key as a small keycap)
                 let kw = ui.width(item.key, 11.0 * TS, Weight::Medium) + 14.0;
@@ -263,29 +248,53 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
         Weight::Regular,
         MUTED,
     );
-    // the state as a pill with the pause mark
+    // the state as a pill; only a paused game gets the accent and the pause mark
+    let paused = is_paused(view.state);
     let state = crate::tr(view.state).to_uppercase();
     let sw = ui.width(&state, 13.0 * TS, Weight::Medium);
-    let pill = Rect::new(w - 20.0 - sw - 40.0, BAR_H * 0.5 - 12.0, sw + 40.0, 24.0);
-    ui.p().rounded(pill, 12.0, accent().alpha(0.16));
-    ui.icon(
-        "pause",
-        glam::Vec2::new(pill.x + 15.0, pill.center().y),
-        14.0,
-        accent(),
+    let lead = if paused { 40.0 } else { 24.0 };
+    let pill = Rect::new(w - 20.0 - sw - lead, BAR_H * 0.5 - 12.0, sw + lead, 24.0);
+    let ink = if paused { accent() } else { MUTED };
+    ui.p().rounded(
+        pill,
+        12.0,
+        if paused {
+            accent().alpha(0.16)
+        } else {
+            Color::WHITE.alpha(0.07)
+        },
     );
+    if paused {
+        ui.icon(
+            "pause",
+            glam::Vec2::new(pill.x + 15.0, pill.center().y),
+            14.0,
+            ink,
+        );
+    }
     ui.text_in(
         &state,
-        Rect::new(pill.x + 26.0, pill.y, sw + 10.0, pill.h),
+        Rect::new(
+            pill.x + if paused { 26.0 } else { 12.0 },
+            pill.y,
+            sw + 10.0,
+            pill.h,
+        ),
         13.0 * TS,
         Weight::Medium,
-        accent(),
+        ink,
         Align::Left,
     );
     Output {
         clicked,
         map: Rect::new(COLUMN_W, BAR_H, w - COLUMN_W, h - BAR_H),
     }
+}
+
+/// Whether the state the bar shows is the game being paused (`menu open` is not: the game
+/// may run behind the menu, as in a LAN session or after P).
+fn is_paused(state: &str) -> bool {
+    state == "paused"
 }
 
 #[cfg(test)]
@@ -413,5 +422,29 @@ mod tests {
         };
         assert!(row_height(&view, 941.0) <= 37.0);
         assert!(row_height(&view, 300.0) >= 26.0);
+    }
+
+    #[test]
+    fn only_a_paused_game_gets_the_pause_mark() {
+        assert!(is_paused("paused"));
+        assert!(!is_paused("menu open"));
+        let len = |state: &'static str| {
+            let secs = sections();
+            let view = View {
+                logo: None,
+                sections: &secs,
+                title: "City map",
+                subtitle: "Line 50",
+                clock: "08:42",
+                state,
+                selected: None,
+            };
+            let mut ui = Ui::new();
+            ui.begin(Vec2::new(1672.0, 941.0), 1.0, 0.016);
+            draw(&mut ui, &view);
+            ui.p().len()
+        };
+        // ("PAUSED" is not the paused state but reads the same: it has no mark)
+        assert!(len("paused") > len("PAUSED"));
     }
 }
