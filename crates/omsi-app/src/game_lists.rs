@@ -2269,6 +2269,23 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
     })
 }
 
+/// Whether the route arrows over the road are on now.
+pub(crate) fn route_arrows_on(app: &App) -> bool {
+    toggle_now(app, "nav_arrows").unwrap_or(false)
+}
+
+/// The route arrows over the road (the Alt bar's help marker button, as the Esc menu's switch):
+/// flips them, keeps the choice for the next game and tells the world. The new state.
+pub(crate) fn toggle_route_arrows(app: &mut App) -> bool {
+    let on = !toggle_now(app, "nav_arrows").unwrap_or(false);
+    if let Some((k, v)) = toggle_set(app, "nav_arrows", on) {
+        remember_setting(k, &v);
+    }
+    sync_live(app);
+    LIST_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);
+    on
+}
+
 /// Switch `id` on or off; the key and value to keep for the next game.
 fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
     let bit = (on as u8).to_string();
