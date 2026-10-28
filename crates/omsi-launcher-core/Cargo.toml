@@ -44,3 +44,4 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Syst
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd.workspace = true
+ureq.workspace = true

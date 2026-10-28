@@ -7,6 +7,9 @@
 
 pub mod config;
 pub mod detect;
+#[cfg(not(target_os = "android"))]
+pub mod http;
+pub mod install;
 pub mod runner;
 
 pub use config::{Engine, OriginalEngineConfig};
