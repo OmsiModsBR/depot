@@ -973,11 +973,11 @@ pub(crate) fn menu_extras(
     schedule: Option<&crate::schedule::Schedule>,
     now: f64,
 ) -> (
-    crate::ui::MenuKind,
+    crate::hud::MenuKind,
     Option<(String, String)>,
-    Option<crate::ui::Preview>,
+    Option<crate::hud::Preview>,
 ) {
-    use crate::ui::{MenuKind, Preview};
+    use crate::hud::{MenuKind, Preview};
     let Some(sel) = sel else {
         return (MenuKind::Game, None, None);
     };

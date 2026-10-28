@@ -1665,8 +1665,8 @@ impl Navigator {
             (true, Some(sf)) => sf
                 .palette(self.light)
                 .land
-                .alpha(crate::ui::backdrop(self.opacity).min(1.0)),
-            _ => v5::BAR.alpha(crate::ui::backdrop(self.opacity).min(1.0)),
+                .alpha(crate::hud::backdrop(self.opacity).min(1.0)),
+            _ => v5::BAR.alpha(crate::hud::backdrop(self.opacity).min(1.0)),
         };
         bg.rounded(win, RADIUS * s, ground);
         let n_bg = bg.len();
