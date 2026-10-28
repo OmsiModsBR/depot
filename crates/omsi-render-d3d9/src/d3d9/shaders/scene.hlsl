@@ -188,7 +188,8 @@ float4 sun_color : register(c13);
 float4 ambient : register(c14);
 float4 fog : register(c15);
 float4 sky_color : register(c16);
-// x the alpha cut, y 1 when this draw cuts, z 1 for the depth-only parts that are fully opaque
+// x the alpha cut, y 1 when this draw cuts, z 1 for the depth-only parts that are fully opaque,
+// w 1 when the cut hands its edge to alpha-to-coverage
 float4 draw_flags : register(c17);
 // xy one texel of the bump map
 float4 bump_texel : register(c18);
@@ -391,6 +392,14 @@ float4 ps_main(VsOut i) : COLOR0 {
     float mode = m_params.x;
     if (draw_flags.y > 0.5 && mode > 0.5 && mode < 1.5) {
         clip(tex.a - draw_flags.x);
+        if (draw_flags.w > 0.5) {
+            // alpha-to-coverage: the filtered alpha is the fraction of the pixel the cutout
+            // covers, so the ramp is tightened around the cut before the multisampling turns
+            // it into sample coverage (as the default renderer does); the raw ramp would
+            // leave a wide, dithered half-transparent halo round every letter
+            float aa = max(fwidth(tex.a) * 0.5, 1.0 / 255.0);
+            tex.a = smoothstep(draw_flags.x - aa, draw_flags.x + aa, tex.a);
+        }
     }
     float3 n = safe_normal(i.normal);
     float ndl = max(dot(n, sun_dir.xyz), 0.0);
