@@ -199,6 +199,13 @@ pub fn safe_rel(p: &str) -> Option<String> {
     ok.then(|| p.to_string())
 }
 
+/// A path as a package's zip entry spells it. The zip format uses `/`, but a package built
+/// on Windows may carry `\`; both mean the same folder step, and the result goes through the
+/// same `safe_rel` checks (no `..`, no drive, no absolute path).
+fn entry_rel(name: &str) -> Option<String> {
+    safe_rel(&name.replace('\\', "/"))
+}
+
 fn key(p: &str) -> String {
     p.to_ascii_lowercase()
 }
@@ -293,7 +300,7 @@ pub fn plan_install(root: &Path, zip: &[u8]) -> Result<InstallPlan> {
         {
             bail!("the package holds a link ({})", f.name());
         }
-        let path = safe_rel(f.name())
+        let path = entry_rel(f.name())
             .ok_or_else(|| anyhow!("the package holds an unsafe path ({})", f.name()))?;
         total = total.saturating_add(f.size());
         if total > MAX_UNPACKED {
@@ -385,7 +392,7 @@ pub fn install(
             if f.is_dir() {
                 continue;
             }
-            let path = safe_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
+            let path = entry_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
             let dst = staged.join(&path);
             std::fs::create_dir_all(dst.parent().unwrap())?;
             let mut out = std::fs::File::create(&dst)?;
@@ -793,6 +800,25 @@ mod tests {
         w.write_all(b"x").unwrap();
         let z = w.finish().unwrap().into_inner();
         assert!(plan_install(&tmp("esc"), &z).is_err());
+    }
+
+    #[test]
+    fn backslash_entries_of_a_windows_built_package_are_read_as_folders() {
+        // the published beta 4 package spells its entries with `\`
+        assert_eq!(
+            entry_rel("plugins\\OmsiLaunch.Plugin.opl").as_deref(),
+            Some("plugins/OmsiLaunch.Plugin.opl")
+        );
+        assert_eq!(entry_rel("OmsiLaunch.exe").as_deref(), Some("OmsiLaunch.exe"));
+        for bad in ["..\\x", "a\\..\\..\\x", "\\abs", "C:\\x", "a\\..\\..", ""] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("..\\evil.dll", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("esc-bs"), &z).is_err());
     }
 
     #[test]
