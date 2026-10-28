@@ -953,7 +953,86 @@ mod tests {
             .unwrap();
         w.write_all(b"x").unwrap();
         let z = w.finish().unwrap().into_inner();
-        assert!(plan_install(&tmp("esc-bs"), &z).is_err());
+        assert!(plan_install(&tmp("esc-bs"), &tmp("esc-bsd"), &z).is_err());
+        // device and reserved names stay refused when spelled with a backslash
+        for bad in ["plugins\\NUL", "plugins\\aux.dll", "COM1", "docs\\x.", "docs\\a<b"] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+    }
+
+    /// The published beta 4 shape: entries with backslashes, the manifest with `/`.
+    fn backslash_package() -> Vec<u8> {
+        let entries: [(&str, &str, &[u8]); 4] = [
+            ("OmsiLaunch.exe", "OmsiLaunch.exe", b"exe"),
+            ("OmsiLaunchW.exe", "OmsiLaunchW.exe", b"exew"),
+            (
+                "plugins\\OmsiLaunch.Plugin.opl",
+                "plugins/OmsiLaunch.Plugin.opl",
+                b"opl",
+            ),
+            (
+                ".omsilaunch\\docs\\README.md",
+                ".omsilaunch/docs/README.md",
+                b"doc",
+            ),
+        ];
+        let files: Vec<String> = entries
+            .iter()
+            .map(|(_, m, b)| {
+                format!(
+                    "{{\"path\":\"{m}\",\"bytes\":{},\"sha256\":\"{}\"}}",
+                    b.len(),
+                    sha256_hex(b)
+                )
+            })
+            .collect();
+        let manifest = format!(
+            "{{\"product_version\":\"0.1.0-beta4\",\"files\":[{}]}}",
+            files.join(",")
+        );
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        for (n, _, b) in &entries {
+            w.start_file(*n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.start_file("release-manifest.json", o).unwrap();
+        w.write_all(manifest.as_bytes()).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_package_with_backslash_entries_installs_and_is_removed_again() {
+        let root = tmp("bs-root");
+        let data = tmp("bs-data");
+        let z = backslash_package();
+        let plan = plan_install(&root, &data, &z).unwrap();
+        assert!(plan.ok());
+        assert!(plan.files.iter().all(|f| !f.path.contains('\\')));
+        install(&root, &data, &z, &sha256_hex(&z), "0.1.0-beta4").unwrap();
+        assert!(root.join("OmsiLaunch.exe").is_file());
+        assert!(root.join("plugins/OmsiLaunch.Plugin.opl").is_file());
+        assert!(root.join(".omsilaunch/docs/README.md").is_file());
+        // a backslash must not end up as one odd file name in the folder
+        assert!(!root
+            .read_dir()
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().contains('\\')));
+        remove(&root, &data).unwrap();
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_backslash_entry_with_a_device_name_is_refused_by_the_plan() {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("plugins\\NUL", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("dev-bs"), &tmp("dev-bsd"), &z).is_err());
     }
 
     #[test]
