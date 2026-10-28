@@ -7,7 +7,7 @@
 //! them (for example the end-of-trip report's note) is the caller's business.
 
 use crate::paint::Align;
-use crate::theme::{accent, accent_soft, on_accent};
+use crate::theme::{accent, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -146,11 +146,10 @@ pub fn table(
         );
         let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
         if selected == Some(i) {
-            ui.p().rect(r, accent_soft());
-            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
+            chosen_row(ui, r, 1.0);
         } else {
             if hover {
-                ui.p().rect(r, Color::WHITE.alpha(0.04));
+                ui.p().rect(r, Color::WHITE.alpha(0.05));
             }
             ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
         }
@@ -357,15 +356,43 @@ fn foot_with(
     let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
+    let mut hint_x = r.x + 20.0;
+    let mut room = room;
+    if !hint.is_empty() {
+        // (a mark of information before the hint)
+        ui.icon(
+            "info",
+            Vec2::new(hint_x + 8.0, r.bottom() - FOOT_H * 0.5),
+            16.0,
+            MUTED,
+        );
+        hint_x += 24.0;
+        room = (room - 24.0).max(0.0);
+    }
     ui.text_in(
         hint,
-        Rect::new(r.x + 20.0, r.bottom() - FOOT_H, room, FOOT_H),
+        Rect::new(hint_x, r.bottom() - FOOT_H, room, FOOT_H),
         12.0 * TS,
         Weight::Regular,
         MUTED,
         Align::Left,
     );
     clicked
+}
+
+/// The row chosen in a table or a list: a light face and a small accent pill at its left,
+/// as Windows 11 marks the chosen item (`alpha` dims it with a list that cannot be used).
+fn chosen_row(ui: &mut Ui, r: Rect, alpha: f32) {
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.y + 2.0, r.w - 8.0, r.h - 4.0),
+        BUTTON_R,
+        Color::WHITE.alpha(0.08 * alpha),
+    );
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.center().y - 8.0, 3.0, 16.0),
+        1.5,
+        accent().alpha(alpha),
+    );
 }
 
 /// A small heading over a part of a window (muted, as a table's column heads are), its
@@ -398,23 +425,39 @@ pub fn check_row(
     if hover && enabled {
         ui.p().rect(r, Color::WHITE.alpha(0.04));
     }
-    let b = Rect::new(r.x + 16.0, (r.center().y - 9.0).round(), 18.0, 18.0);
-    let a = if enabled { 1.0 } else { 0.35 };
-    if on {
-        ui.p().rect(b, accent().alpha(a));
-        ui.icon("check", b.center(), 16.0, on_accent());
-    } else {
-        ui.p().rect(b, FIELD);
-        let edge = if hover && enabled { MUTED } else { LINE };
-        ui.p().rounded_border(b, 0.0, 1.0, edge);
+    // (a switch at the right, as Windows 11 has a setting that applies at once; one that
+    // is only ticked in a list of actions has no switch and is drawn as a plain row)
+    let a = if enabled { 1.0 } else { 0.4 };
+    let track = Rect::new(
+        r.right() - 16.0 - 40.0,
+        (r.center().y - 10.0).round(),
+        40.0,
+        20.0,
+    );
+    let t = ui.anim(id_of(id) ^ 0x5a17, if on { 1.0 } else { 0.0 }, 0.07);
+    ui.p().rounded(track, 10.0, accent().alpha(t * a));
+    if t < 1.0 {
+        let edge = if hover && enabled {
+            MUTED
+        } else {
+            MUTED.alpha(0.7)
+        };
+        ui.p()
+            .rounded_border(track, 10.0, 1.0, edge.alpha((1.0 - t) * a));
     }
-    let lx = b.right() + 12.0;
+    let kx = track.x + 10.0 + 20.0 * t;
+    ui.p().rounded(
+        Rect::new(kx - 5.0, track.center().y - 5.0, 10.0, 10.0),
+        5.0,
+        MUTED.mix(on_accent(), t).alpha(a),
+    );
+    let lx = r.x + 16.0;
     let reason_w = disabled
         .map(|d| (ui.width(d, 12.0 * TS, Weight::Regular) + 16.0).min(r.w * 0.55))
         .unwrap_or(0.0);
     ui.text_in(
         label,
-        Rect::new(lx, r.y, (r.right() - 16.0 - reason_w - lx).max(0.0), r.h),
+        Rect::new(lx, r.y, (track.x - 12.0 - reason_w - lx).max(0.0), r.h),
         14.0 * TS,
         Weight::Regular,
         if enabled { FG } else { FG.alpha(0.4) },
@@ -423,7 +466,7 @@ pub fn check_row(
     if let Some(why) = disabled {
         ui.text_in(
             why,
-            Rect::new(r.right() - 16.0 - reason_w, r.y, reason_w, r.h),
+            Rect::new(track.x - 12.0 - reason_w, r.y, reason_w, r.h),
             12.0 * TS,
             Weight::Regular,
             MUTED,
@@ -621,12 +664,10 @@ pub fn list_rows(
             let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
             let chosen = selected == Some(i);
             if chosen {
-                ui.p().rect(r, accent_soft().alpha(alpha));
-                ui.p()
-                    .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(alpha));
+                chosen_row(ui, r, alpha);
             } else {
                 if hover && look.enabled {
-                    ui.p().rect(r, Color::WHITE.alpha(0.04));
+                    ui.p().rect(r, Color::WHITE.alpha(0.05));
                 }
                 ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
             }
@@ -1286,25 +1327,37 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         FG,
     );
     let foot_h = FOOT_H;
-    let totals_h = v.totals.len() as f32 * ROW_H;
-    let head_y = body.y + 44.0;
+    // the totals as tiles under the trip's title, before the stops
+    let tiles_y = body.y + 40.0;
+    let tiles_h = if v.totals.is_empty() { 0.0 } else { 64.0 };
+    if !v.totals.is_empty() {
+        let n = v.totals.len() as f32;
+        let gap = 12.0;
+        let w = ((body.w - 32.0 - gap * (n - 1.0)) / n).floor();
+        for (i, (k, val)) in v.totals.iter().enumerate() {
+            let t = Rect::new(body.x + 16.0 + i as f32 * (w + gap), tiles_y, w, tiles_h);
+            ui.p().rounded(t, BUTTON_R, Color::WHITE.alpha(0.05));
+            ui.p().rounded_border(t, BUTTON_R, 1.0, EDGE);
+            text(ui, k, t.x + 14.0, t.y + 16.0, 12.0, Weight::Regular, MUTED);
+            ui.text_in(
+                val,
+                Rect::new(t.x + 14.0, t.y + 26.0, (t.w - 28.0).max(0.0), 32.0),
+                20.0 * TS,
+                Weight::Bold,
+                FG,
+                Align::Left,
+            );
+        }
+    }
+    let head_y = tiles_y + tiles_h + if tiles_h > 0.0 { 8.0 } else { 4.0 };
     let area = Rect::new(
         body.x,
         head_y,
         body.w,
-        (r.bottom() - foot_h - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+        (r.bottom() - foot_h - 8.0 - head_y).max(ROW_H + 34.0),
     );
     // (each trip's report starts at its first stop: the id is the trip's)
-    let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
-    let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
-    ui.p()
-        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
-    let rows: Vec<(&str, String, Option<Color>)> = v
-        .totals
-        .iter()
-        .map(|(k, val)| (*k, val.clone(), None))
-        .collect();
-    key_values(ui, totals, &rows);
+    stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
     foot(
         ui,
         "report",
