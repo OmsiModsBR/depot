@@ -247,6 +247,9 @@ pub struct Ui {
     pub clipboard_in: Option<String>,
     /// Rects the mouse is over UI in (the rest of the window is the 3D showroom).
     pub over_ui: bool,
+    /// The panel of the Alt bar this frame, if it was drawn: a translucent window over it
+    /// paints that part opaque, so the tiles do not show through.
+    pub opaque_under: Option<Rect>,
     tooltip: Option<(String, Vec2)>,
     /// The tooltip is a name shown as it is (not translated), broken anywhere it must be.
     tooltip_raw: bool,
@@ -289,6 +292,7 @@ impl Ui {
             clipboard_out: None,
             clipboard_in: None,
             over_ui: false,
+            opaque_under: None,
             tooltip: None,
             tooltip_raw: false,
             #[cfg(any(test, feature = "testing"))]
@@ -317,6 +321,7 @@ impl Ui {
         self.wheel_taken = false;
         self.cursor = winit::window::CursorIcon::Default;
         self.over_ui = false;
+        self.opaque_under = None;
         self.tooltip = None;
         self.tooltip_raw = false;
         #[cfg(any(test, feature = "testing"))]
@@ -725,24 +730,14 @@ impl Ui {
         (h, held, clicked)
     }
 
+    /// A tooltip for `r`, once the mouse has rested on it a whole second (the game's and the
+    /// launcher's alike).
     pub fn tooltip(&mut self, r: Rect, text: &str) {
-        // (the launcher's: after the mouse has rested on `r` a whole second - the eased value
-        // below never went back down, so a tooltip seen once came at once ever after)
-        if self.auto_tips {
-            let id = id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55;
-            let rest = self.hover(r) && !self.input.down;
-            if self.hovered_for(id, rest) >= 1.0 {
-                self.tooltip = Some((text.to_string(), self.input.mouse));
-                self.tooltip_raw = false;
-            }
-            return;
-        }
-        if self.hover(r) && !self.input.down {
-            let t = self.anim(id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55, 1.0, 0.4);
-            if t > 0.9 {
-                self.tooltip = Some((text.to_string(), self.input.mouse));
-                self.tooltip_raw = false;
-            }
+        let id = id_of(&format!("tip{}{}", r.x, r.y)) ^ 0x55;
+        let rest = self.hover(r) && !self.input.down;
+        if self.hovered_for(id, rest) >= 1.0 {
+            self.tooltip = Some((text.to_string(), self.input.mouse));
+            self.tooltip_raw = false;
         }
     }
 
@@ -3008,6 +3003,27 @@ mod tests {
             Some("Save the folders")
         );
         assert_eq!(rest(false, None, 1.2), None);
+    }
+
+    /// A tooltip a caller gives waits the same second in the game, where buttons do not name
+    /// themselves.
+    #[test]
+    fn a_tooltip_waits_a_second_in_the_game_too() {
+        let r = Rect::new(10.0, 10.0, 36.0, 36.0);
+        let rest = |secs: f32| {
+            let mut ui = Ui::new();
+            let mut tip = None;
+            for _ in 0..(secs / 0.05) as usize {
+                ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.05);
+                ui.input.mouse = Vec2::new(20.0, 20.0);
+                ui.tooltip(r, "Close");
+                tip = ui.tooltip.clone().map(|t| t.0);
+            }
+            tip
+        };
+        assert_eq!(rest(0.1), None);
+        assert_eq!(rest(0.5), None);
+        assert_eq!(rest(1.2).as_deref(), Some("Close"));
     }
 
     /// With a text floor (the launcher's), text is measured - and so laid out - no smaller

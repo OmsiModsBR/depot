@@ -23,13 +23,12 @@ const ROW_LINE: Color = Color::hex(0x20242b);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const FIELD: Color = Color::hex(0x1b1d22);
-const PANEL_ALPHA: f32 = 0.97;
 /// The window's and a button's corners.
 const WINDOW_R: f32 = 8.0;
 const BUTTON_R: f32 = 4.0;
 const TS: f32 = 1.16;
 
-pub const TITLE_H: f32 = 40.0;
+pub const TITLE_H: f32 = 48.0;
 pub const ROW_H: f32 = 34.0;
 
 pub(crate) fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
@@ -58,29 +57,86 @@ pub(crate) fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight:
     );
 }
 
-/// A window, as the Windows 11 concept draws it: the panel with rounded corners and a
-/// shadow, its title at the left and a note at the right. Returns the area under the title.
+/// How much of a window's own colour covers the scene behind it: the picture shows through
+/// a little, as it does through the concept's glass (no blur: it costs a pass of its own, and
+/// the DirectX 9 output has none).
+const PANEL_ALPHA: f32 = 0.88;
+
+/// A window, as the Windows 11 concept draws it: the panel with rounded corners, a soft
+/// shadow and a light stroke along its top edge, its title at the left and a note at the right
+/// in a small pill. Returns the area under the title.
 pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
+    window_with(ui, r, title, note, 0.0)
+}
+
+/// Room kept free at the right of the title for the close button (see [`window_close`]).
+pub const CLOSE_GUTTER: f32 = 44.0;
+
+/// [`window`] with `gutter` pixels kept free at the right of the title, so the note's pill
+/// does not sit under the close button.
+pub fn window_with(ui: &mut Ui, r: Rect, title: &str, note: &str, gutter: f32) -> Rect {
     ui.solid(r);
-    ui.p().shadow(r, WINDOW_R, 24.0, Color::rgba(0, 0, 0, 0.5));
+    ui.p().shadow(r, WINDOW_R, 40.0, Color::rgba(0, 0, 0, 0.35));
+    ui.p().shadow(r, WINDOW_R, 8.0, Color::rgba(0, 0, 0, 0.30));
+    if let Some(bar) = ui.opaque_under {
+        // (where the window covers the Alt bar the tiles would show through it: that part is opaque)
+        let c = WINDOW_R * 0.4;
+        let (x0, y0) = (bar.x.max(r.x + c), bar.y.max(r.y + c));
+        let (x1, y1) = (
+            bar.right().min(r.right() - c),
+            bar.bottom().min(r.bottom() - c),
+        );
+        if x1 > x0 && y1 > y0 {
+            ui.p().rect(Rect::new(x0, y0, x1 - x0, y1 - y0), PANEL);
+        }
+    }
     ui.p().rounded(r, WINDOW_R, PANEL.alpha(PANEL_ALPHA));
     ui.p().rounded_border(r, WINDOW_R, 1.0, EDGE);
-    text(ui, title, r.x + 16.0, r.y + 24.0, 15.5, Weight::Bold, FG);
-    text_right(
-        ui,
-        note,
-        r.right() - 20.0,
-        r.y + 24.0,
-        12.0,
-        Weight::Regular,
-        MUTED,
+    ui.p().rect(
+        Rect::new(r.x + WINDOW_R, r.y, r.w - 2.0 * WINDOW_R, 1.0),
+        Color::WHITE.alpha(0.14),
     );
+    text(
+        ui,
+        title,
+        r.x + 20.0,
+        r.y + TITLE_H * 0.5,
+        17.0,
+        Weight::Bold,
+        FG,
+    );
+    if !note.is_empty() {
+        let px = 12.0 * TS;
+        let w = ui.width(note, px, Weight::Regular) + 20.0;
+        let pill = Rect::new(
+            r.right() - 20.0 - gutter - w,
+            r.y + TITLE_H * 0.5 - 12.0,
+            w,
+            24.0,
+        );
+        ui.p().rounded(pill, 12.0, Color::WHITE.alpha(0.07));
+        ui.text_in(note, pill, px, Weight::Regular, MUTED, Align::Center);
+    }
     Rect::new(
         r.x,
         r.y + TITLE_H + 1.0,
         r.w,
         (r.h - TITLE_H - 1.0).max(0.0),
     )
+}
+
+/// The close button at the right of a window's title (`r` is the window): a square with a
+/// cross, named `name`. Returns whether it was clicked. It does what the window's Cancel or
+/// Close does.
+pub fn window_close(ui: &mut Ui, name: &str, r: Rect) -> bool {
+    let b = Rect::new(r.right() - 44.0, r.y + (TITLE_H - 36.0) * 0.5, 36.0, 36.0);
+    let (hover, _, click) = ui.interact(id_of(name), b);
+    if hover {
+        ui.p().rounded(b, BUTTON_R, Color::WHITE.alpha(0.10));
+    }
+    ui.icon("close", b.center(), 18.0, if hover { FG } else { MUTED });
+    ui.tooltip(b, "Close");
+    click
 }
 
 /// A table: column heads, rows of cells, the chosen row marked. `columns` are the x offsets
@@ -182,11 +238,11 @@ pub enum ButtonKind {
 }
 
 /// The height of a window's button.
-pub const BUTTON_H: f32 = 39.0;
+pub const BUTTON_H: f32 = 36.0;
 
 /// The width a button with `label` takes in a row of [`buttons`].
 pub fn button_width(ui: &Ui, label: &str) -> f32 {
-    ui.width(label, 14.0 * TS, Weight::Medium) + 44.0
+    (ui.width(label, 14.0 * TS, Weight::Medium) + 44.0).max(88.0)
 }
 
 /// One button in `r`; a dim one (`enabled` false) is drawn but cannot be clicked. Returns
@@ -199,7 +255,7 @@ pub fn button(
     kind: ButtonKind,
     enabled: bool,
 ) -> bool {
-    let (hover, _, click) = ui.interact(id_of(id), r);
+    let (hover, held, click) = ui.interact(id_of(id), r);
     let primary = kind == ButtonKind::Primary;
     let fill = match (primary, enabled) {
         (true, true) => accent(),
@@ -209,7 +265,9 @@ pub fn button(
     ui.p().rounded(
         r,
         BUTTON_R,
-        if hover && enabled {
+        if held && hover && enabled {
+            fill.mix(Color::BLACK, 0.12)
+        } else if hover && enabled {
             fill.lighten(0.08)
         } else {
             fill
@@ -321,7 +379,7 @@ fn foot_with(
         .map(|(l, _)| button_width(ui, l) + 8.0)
         .sum::<f32>()
         - 8.0;
-    let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 12.0);
+    let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 14.0);
     let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
@@ -1290,6 +1348,22 @@ mod tests {
 
     fn rows() -> Vec<Vec<String>> {
         vec![vec!["A".into(), "1".into()], vec!["B".into(), "2".into()]]
+    }
+
+    #[test]
+    fn a_window_over_the_alt_bar_is_opaque_where_they_overlap() {
+        let mut ui = Ui::new();
+        ui.begin(glam::Vec2::new(800.0, 600.0), 1.0, 0.05);
+        let bar = Rect::new(10.0, 10.0, 100.0, 300.0);
+        ui.opaque_under = Some(bar);
+        let before = ui.p().len();
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let over = ui.p().len();
+        ui.opaque_under = None;
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let clear = ui.p().len() - over;
+        // (more is drawn for the part over the bar)
+        assert!(over - before > clear);
     }
 
     #[test]

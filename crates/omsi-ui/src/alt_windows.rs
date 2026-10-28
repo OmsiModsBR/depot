@@ -22,6 +22,14 @@ const MUTED: Color = Color::hex(0x9aa0aa);
 const FG: Color = Color::hex(0xe9eaec);
 const TS: f32 = 1.16;
 
+/// A window's frame with its close button: the body's area, and whether the cross was
+/// clicked (which asks for what Cancel or Close does).
+fn frame(ui: &mut Ui, r: Rect, title: &str, note: &str) -> (Rect, bool) {
+    let body = ingame::window_with(ui, r, title, note, ingame::CLOSE_GUTTER);
+    let closed = ingame::window_close(ui, &format!("alt:window:x:{title}"), r);
+    (body, closed)
+}
+
 /// What a click in a window asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Event {
@@ -303,7 +311,10 @@ fn lists_bottom(r: Rect) -> f32 {
 }
 
 fn pick(ui: &mut Ui, r: Rect, v: &Pick, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, "");
+    let (body, closed) = frame(ui, r, &v.title, "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     head(ui, &v.head, body.x + 16.0, body.y + 17.0);
     let area = Rect::new(
@@ -332,7 +343,10 @@ fn pick(ui: &mut Ui, r: Rect, v: &Pick, key: u32) -> Option<Event> {
 }
 
 fn time(ui: &mut Ui, r: Rect, v: &Time) -> Option<Event> {
-    let body = ingame::window(ui, r, "Date and time", "");
+    let (body, closed) = frame(ui, r, "Date and time", "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     let x0 = body.x + 16.0;
     // the two numbers of the time need less room than the three parts of the date
@@ -445,7 +459,10 @@ fn time(ui: &mut Ui, r: Rect, v: &Time) -> Option<Event> {
 }
 
 fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Weather", "");
+    let (body, closed) = frame(ui, r, "Weather", "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     let row = Rect::new(body.x, body.y + 4.0, body.w, CHECK_H);
     if check_row(ui, "tool:weather:real", row, &v.real_label, v.real, None) {
@@ -497,7 +514,10 @@ fn weather(ui: &mut Ui, r: Rect, v: &Weather, key: u32) -> Option<Event> {
 }
 
 fn menu(ui: &mut Ui, r: Rect, v: &Menu) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, "");
+    let (body, closed) = frame(ui, r, &v.title, "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     for (i, e) in v.entries.iter().enumerate() {
         let row = Rect::new(body.x, body.y + 8.0 + i as f32 * CHECK_H, body.w, CHECK_H);
@@ -569,7 +589,10 @@ fn opens_row(ui: &mut Ui, id: &str, r: Rect, label: &str, disabled: Option<&str>
 }
 
 fn tour(ui: &mut Ui, r: Rect, v: &Tour, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Line and tour", "");
+    let (body, closed) = frame(ui, r, "Line and tour", "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     let w0 = (body.w * 0.22).floor();
     let w1 = (body.w * 0.34).floor();
@@ -652,7 +675,10 @@ fn tour(ui: &mut Ui, r: Rect, v: &Tour, key: u32) -> Option<Event> {
 }
 
 fn confirm(ui: &mut Ui, r: Rect, v: &Confirm) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, "");
+    let (body, closed) = frame(ui, r, &v.title, "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     ui.paragraph(
         &v.text,
         Vec2::new(body.x + 16.0, body.y + 20.0),
@@ -669,7 +695,10 @@ fn confirm(ui: &mut Ui, r: Rect, v: &Confirm) -> Option<Event> {
 }
 
 fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Line and destination", "");
+    let (body, closed) = frame(ui, r, "Line and destination", "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     head(ui, "Route number", body.x + 16.0, body.y + 20.0);
     let f = Rect::new(body.x + 16.0, body.y + 36.0, body.w - 32.0, FIELD_H);
@@ -708,7 +737,10 @@ fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event>
 }
 
 fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
-    let body = ingame::window(ui, r, "Timetable evaluation", "");
+    let (body, closed) = frame(ui, r, "Timetable evaluation", "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     let sw = 190.0f32.min(body.w * 0.4);
     let title_w = body.w - 48.0 - sw;
@@ -767,7 +799,10 @@ fn evaluation(ui: &mut Ui, r: Rect, v: &Evaluation, key: u32) -> Option<Event> {
 
 /// A driver's personnel file: the figures it holds. It only shows: its one button closes it.
 fn profile(ui: &mut Ui, r: Rect, v: &Profile) -> Option<Event> {
-    let body = ingame::window(ui, r, &v.title, "");
+    let (body, closed) = frame(ui, r, &v.title, "");
+    if closed {
+        return Some(Event::Cancel);
+    }
     let rows: Vec<(&str, String, Option<Color>)> = v
         .rows
         .iter()
@@ -786,7 +821,10 @@ const DANGER: Color = Color::hex(0xe8523f);
 /// The stops of the trip being driven, from two behind the next on, as many as fit. Skipping
 /// one is `Event::Row(0, stop)`, "Cancel the timetable" `Event::Check(0)`, Close `Cancel`.
 fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
-    let body = ingame::window(ui, r, "Timetable running", &v.sub);
+    let (body, closed) = frame(ui, r, "Timetable running", &v.sub);
+    if closed {
+        return Some(Event::Cancel);
+    }
     let mut event = None;
     let hint_h = 40.0;
     let list = Rect::new(
@@ -879,7 +917,7 @@ fn running(ui: &mut Ui, r: Rect, v: &Running) -> Option<Event> {
         Rect::new(r.x + 1.0, r.bottom() - FOOT_H, r.w - 2.0, 1.0),
         LINE,
     );
-    let y = r.bottom() - FOOT_H + 12.0;
+    let y = r.bottom() - FOOT_H + 14.0;
     let end = "Cancel the timetable";
     let ew = ingame::button_width(ui, end);
     let er = Rect::new(r.x + 20.0, y, ew, BUTTON_H);
@@ -1061,6 +1099,9 @@ mod tests {
         assert_eq!(run(&mut ui, &view, Some(driver)), Some(Event::Check(2)));
         let close = at(&ui, "tool:btn:0");
         assert_eq!(run(&mut ui, &view, Some(close)), Some(Event::Cancel));
+        // (the cross at the right of the title does the same)
+        let cross = at(&ui, "alt:window:x:Controls");
+        assert_eq!(run(&mut ui, &view, Some(cross)), Some(Event::Cancel));
     }
 
     #[test]
