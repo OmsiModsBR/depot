@@ -38,15 +38,15 @@ On every test, `ray_mesh` (`crates/omsi-geometry/src/lib.rs`) recomputes and inv
 
 ### Plan
 
-1. **Measure the parts** (in the same PR as step 2): sub-stages `player.hover.pick`, `.blocker`, `.trailer`, `.body` and a count of triangles tested, in the stutter log. Plus a performance test with a synthetic cab mesh.
-2. **One query per frame** (`fix/cursor-uma-consulta`): the event only marks that the cursor moved, and the frame runs the query. Touch input and `OMSI_INPUT` scripts, which read `hover` right after the event, keep querying immediately. Compute each mesh's matrix and inverse once per query, and reuse step 2's central ray in step 4.
-3. **Bounding-volume tree per mesh** (`fix/cursor-arvore-malha`): a BVH in mesh space in `omsi-geometry`, built once per vehicle type (on the first query, so it does not add to loading) and shared by its copies. `ray_mesh`, `ray_mesh_hit`, `cone_triangles` and `ray_triangles` use it. The test drops from every triangle to a few dozen. Skinned meshes (bellows, curtain, sun blind) deform: they keep the full test.
+1. **Measure the parts** (in the same PR as step 2): sub-stages `player.hover.pick`, `.blocker`, `.trailer`, `.body` and a count of triangles tested, in the stutter log. Plus a micro-benchmark in `omsi-geometry` with a synthetic cab (about 300 meshes, 200k triangles, 40 `[mouseevent]` meshes, the eye inside the bounding spheres), and an end-to-end `OMSI_PROFILE=1` run in the driver camera with the cursor sweeping a fixed path through an `OMSI_INPUT` script, reporting p50 and p99 of `player.hover`.
+2. **One query per frame** (`fix/cursor-uma-consulta`): the event only marks that the cursor moved, and the frame runs the query. Touch input and `OMSI_INPUT` scripts, which read `hover` right after the event, keep querying immediately. Compute each mesh's matrix and inverse once per query (today the inverse is computed once per mesh per ray), reuse step 2's central ray in step 4, and reuse the `rings` and `candidates` buffers. Skip `hovered_body_part` when nothing reads `hover_part`: today its only reader is the `log` command of `OMSI_INPUT` scripts. `click()` casts its own ray, so clicks are unaffected; what reads `hover` at press time (touch, `OMSI_INPUT`, the VR pointer) is checked, and the cursor icon (the hand) may lag one frame behind.
+3. **Bounding-volume tree per mesh** (`fix/cursor-arvore-malha`): a BVH in mesh space in `omsi-geometry`, built once per vehicle type and shared by its copies. It is built at vehicle load on the background pool, and the full test is used until it is ready (building it on the first query would itself be a hitch). `ray_mesh`, `ray_mesh_hit`, `cone_triangles` and `ray_triangles` use it. The tree only culls nodes (a conservative slab test with an epsilon) and the surviving triangles go through the same `ray_triangle` in mesh space, so every `t` stays bit-identical and the tie-break (first lowest `t`) is kept. For `cone_triangles`, which is a cone filter and not a ray test, the tree returns a superset (conservative cone against box); that is safe because the rays are tested again afterwards. The test drops from every triangle to a few dozen. Skinned meshes (bellows, curtain, sun blind) deform: they keep the full test.
 
 Expected result (an estimate, to be confirmed by measurement): peaks of 40–82 ms below 2 ms, with the same part picked. The same gain applies to the click, the mouse wheel and the VR pointer, which use the same functions.
 
 ### Risks
 
-- The switch picked must not change (Aachen ibox, VDV panels). The existing `best_mouseevent_hit` tests stay, and a test is added that compares the BVH with the full test on real meshes.
+- The switch picked must not change (Aachen ibox, VDV panels). It depends on the 3 cm depth band of `best_mouseevent_hit`, the 5 mm `MOUSEEVENT_BLOCK_MARGIN` and the `t > 0.02` cut of `nearest_blocker`, which stay as they are. Before any code changes, a golden set is recorded from real vehicles (the Aachen ibox, a VDV panel, an articulated bus): a grid of cursor rays with the picked mesh index, the hover name and `hover_hand`. Both PRs assert the same output as before, and PR 2 adds a randomized comparison of BVH against full scan per mesh. The existing `best_mouseevent_hit` tests stay.
 - BVH memory: about twice the triangle index, only for the types that get queried (the player's bus).
 
 ## Traffic spawn spikes
@@ -68,12 +68,13 @@ The cause of the 25/10 session is not measured yet: the same stretch still has t
 
 ### Plan
 
-1. **Measure the parts** (`feat/profile-povoacao`, small): sub-stages `traffic.populate.despawn`, `.wake`, `.parked`, `.spawn`, plus the count of cars created and removed per call, in the stutter log. One run on the same stretch shows where the time goes.
+1. **Measure the parts** (`feat/profile-povoacao`, small): sub-stages `traffic.populate.despawn`, `.wake`, `.parked`, `.spawn`, plus the count of cars created and removed per call and the time per car, split between loading the vehicle type (model, textures) and instantiating it, in the stutter log. One run on the same stretch shows where the time goes.
 2. **Budget per call** (`fix/transito-orcamento-povoacao`): create at most a few cars per call (by time, for example 3 ms, or by count) in `populate_kind` and `wake_dormant`, and come back in 0.1 s while cars are missing, as the code already does for timetable departures. The target is reached within a second or two without stalling a frame.
 3. **First population on the loading screen**: a complement to item 2 for the start only. Run the first call before the first frame, where its cost is not seen.
 
 ### Risks
 
+- If loading the vehicle type dominates, a per-call budget only spreads the cost: the types are then pre-warmed at load as well.
 - The budget changes when each car appears, not where or which one. Cars still only spawn out of sight, so nothing pops into view.
 - Traffic tests that count cars right after `populate` need to call it until the target is reached.
 
@@ -83,9 +84,9 @@ One PR at a time, each with a before and after measurement in the same saved sit
 
 | order | branch | what changes | how to prove it |
 | --- | --- | --- | --- |
-| 1 | `fix/cursor-uma-consulta` | one query per frame, reused matrices, cursor sub-stages | test that touch input and `OMSI_INPUT` still read `hover` immediately; log with the sub-stages |
-| 2 | `fix/cursor-arvore-malha` | per-mesh BVH in `omsi-geometry` | test BVH = full test on real meshes; performance test; `player.hover` in the log |
-| 3 | `feat/profile-povoacao` | population sub-stages | one run on the dense stretch of 25/10 |
+| 1 | `fix/cursor-uma-consulta` | one query per frame, reused matrices, body part only when read, cursor sub-stages | golden set unchanged; test that touch input and `OMSI_INPUT` still read `hover` immediately; log with the sub-stages |
+| 2 | `fix/cursor-arvore-malha` | per-mesh BVH in `omsi-geometry`, built at load in the background | golden set unchanged; randomized BVH = full scan; micro-benchmark; p50/p99 of `player.hover` |
+| 3 | `feat/profile-povoacao` | population sub-stages, cars per call, type load vs instantiation | one run on the dense stretch of 25/10 |
 | 4 | `fix/transito-orcamento-povoacao` | per-call budget and first population during loading | traffic tests; no frame over 50 ms with `traffic.populate` |
 
 Done when: no frame over 50 ms caused by `player.hover` or `traffic.populate` in a 5-minute session of driving, operating switches and passing through an area with many lanes.
