@@ -9,8 +9,8 @@
 //! behind them.
 
 use crate::ingame::{
-    self, button, check_row, foot, foot_close, head, list_rows, stepper, text_field, ButtonKind,
-    ListLook, ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, PANEL, ROW_H, TITLE_H,
+    self, button, check_row, foot, foot_close, head, list_rows, stepper, switch_row, text_field,
+    ButtonKind, ListLook, ReportRow, BUTTON_H, CHECK_H, FIELD_H, FOOT_H, PANEL, ROW_H, TITLE_H,
 };
 use crate::theme::accent;
 use crate::widgets::Ui;
@@ -527,7 +527,7 @@ fn menu(ui: &mut Ui, r: Rect, v: &Menu) -> Option<Event> {
         }
         let id = format!("tool:menu:{i}");
         let clicked = match e.checked {
-            Some(on) => check_row(ui, &id, row, &e.label, on, e.disabled.as_deref()),
+            Some(on) => switch_row(ui, &id, row, &e.label, on, e.disabled.as_deref()),
             None => opens_row(ui, &id, row, &e.label, e.disabled.as_deref()),
         };
         if clicked {

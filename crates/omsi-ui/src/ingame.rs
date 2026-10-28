@@ -435,10 +435,11 @@ pub fn note(ui: &mut Ui, s: &str, r: Rect) {
 /// The height of a row with a check box ([`check_row`]).
 pub const CHECK_H: f32 = 40.0;
 
-/// A row with a check box: `label` at the right of the box, ticked when `on`. A dim one
-/// (`disabled`: the reason, shown at the right) cannot be clicked. Returns whether it was
-/// clicked.
-pub fn check_row(
+/// A row with a switch at its right, for an option that applies at once: `label` at the
+/// left, on when `on`. A dim one (`disabled`: the reason, shown before the switch) cannot be
+/// clicked. Returns whether it was clicked. (An option a window applies only on its OK has
+/// the box of [`check_row`].)
+pub fn switch_row(
     ui: &mut Ui,
     id: &str,
     r: Rect,
@@ -451,8 +452,7 @@ pub fn check_row(
     if hover && enabled {
         ui.p().rect(r, Color::WHITE.alpha(0.04));
     }
-    // (a switch at the right, as Windows 11 has a setting that applies at once; one that
-    // is only ticked in a list of actions has no switch and is drawn as a plain row)
+    // (a switch at the right, as Windows 11 has a setting that applies at once)
     let a = if enabled { 1.0 } else { 0.4 };
     let track = Rect::new(
         r.right() - 16.0 - 40.0,
@@ -460,7 +460,7 @@ pub fn check_row(
         40.0,
         20.0,
     );
-    let t = ui.anim(id_of(id) ^ 0x5a17, if on { 1.0 } else { 0.0 }, 0.07);
+    let t = ui.tween(id_of(id) ^ 0x5a17, if on { 1.0 } else { 0.0 }, 0.12);
     ui.p().rounded(track, 10.0, accent().alpha(t * a));
     if t < 1.0 {
         let edge = if hover && enabled {
@@ -493,6 +493,57 @@ pub fn check_row(
         ui.text_in(
             why,
             Rect::new(track.x - 12.0 - reason_w, r.y, reason_w, r.h),
+            12.0 * TS,
+            Weight::Regular,
+            MUTED,
+            Align::Right,
+        );
+    }
+    click && enabled
+}
+
+/// A row with a check box: `label` at the right of the box, ticked when `on`. A dim one
+/// (`disabled`: the reason, shown at the right) cannot be clicked. Returns whether it was
+/// clicked.
+pub fn check_row(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    label: &str,
+    on: bool,
+    disabled: Option<&str>,
+) -> bool {
+    let enabled = disabled.is_none();
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    if hover && enabled {
+        ui.p().rect(r, Color::WHITE.alpha(0.04));
+    }
+    let b = Rect::new(r.x + 16.0, (r.center().y - 9.0).round(), 18.0, 18.0);
+    let a = if enabled { 1.0 } else { 0.35 };
+    if on {
+        ui.p().rect(b, accent().alpha(a));
+        ui.icon("check", b.center(), 16.0, on_accent());
+    } else {
+        ui.p().rect(b, FIELD);
+        let edge = if hover && enabled { MUTED } else { LINE };
+        ui.p().rounded_border(b, 0.0, 1.0, edge);
+    }
+    let lx = b.right() + 12.0;
+    let reason_w = disabled
+        .map(|d| (ui.width(d, 12.0 * TS, Weight::Regular) + 16.0).min(r.w * 0.55))
+        .unwrap_or(0.0);
+    ui.text_in(
+        label,
+        Rect::new(lx, r.y, (r.right() - 16.0 - reason_w - lx).max(0.0), r.h),
+        14.0 * TS,
+        Weight::Regular,
+        if enabled { FG } else { FG.alpha(0.4) },
+        Align::Left,
+    );
+    if let Some(why) = disabled {
+        ui.text_in(
+            why,
+            Rect::new(r.right() - 16.0 - reason_w, r.y, reason_w, r.h),
             12.0 * TS,
             Weight::Regular,
             MUTED,
@@ -1364,7 +1415,14 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
             let t = Rect::new(body.x + 16.0 + i as f32 * (w + gap), tiles_y, w, tiles_h);
             ui.p().rounded(t, BUTTON_R, Color::WHITE.alpha(0.05));
             ui.p().rounded_border(t, BUTTON_R, 1.0, EDGE);
-            text(ui, k, t.x + 14.0, t.y + 16.0, 12.0, Weight::Regular, MUTED);
+            ui.text_in(
+                k,
+                Rect::new(t.x + 14.0, t.y + 6.0, t.w - 28.0, 20.0),
+                12.0 * TS,
+                Weight::Regular,
+                MUTED,
+                Align::Left,
+            );
             ui.text_in(
                 val,
                 Rect::new(t.x + 14.0, t.y + 26.0, (t.w - 28.0).max(0.0), 32.0),
