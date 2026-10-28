@@ -14,6 +14,7 @@ pub mod errors;
 pub mod http;
 pub mod install;
 pub mod launch;
+pub mod modules;
 pub mod runner;
 pub mod session;
 

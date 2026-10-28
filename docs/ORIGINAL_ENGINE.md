@@ -57,6 +57,24 @@ checked against the manifest before they are run. The checksum comes from the sa
 as the package, so it detects damage and tampering in transit, not a replaced release; the
 window shows the SHA-256 and the release page so the player can compare.
 
+## Modules
+
+Optional modules (Omsi Prefetch, openHUD) are separate programs under their own license
+(GPL-3.0-only), never part of Depot. The pipeline in `original_engine/modules.rs` is the
+OmsiLaunch install above applied to one module at a time:
+
+* the release comes from the module's own official repository (a table of modules in the
+  code; a release of any other repository, OmsiLaunch's included, is refused) and the window
+  shows version, license and SHA-256 before anything is downloaded;
+* the package is a zip with `module.json` at its top (or all inside one folder named like the
+  module); it is extracted into staging, `module.json` must name this module and have a
+  version, and any component it lists with a SHA-256 must be present and match;
+* the files go only into `plugins/OmsiLaunch.Modules/<id>/` of the OMSI 2 folder; an existing
+  file that is not the module's is never overwritten, links (and a linked `plugins`) are
+  refused, and a failure half way puts everything back;
+* removal takes away the files Depot installed (its record), all or none; what the module
+  learned or the player added to its folder stays, and so does the folder then.
+
 ## The settings table
 
 OmsiLaunch applies the settings of its own catalog (`/set:<key>=<value>`). Depot keeps one
@@ -127,8 +145,9 @@ Regenerate with `cargo test -p omsi-launcher-core print_docs_table -- --ignored 
 | `~/.depot/launcher.json` | the `original_engine` block (`enabled`, `mode`, `last_mode`) |
 | `~/.depot/omsi2/settings.json`, `modules.json` | the saved settings and module choices |
 | `~/.depot/omsi2/install-record.json` | what Depot installed (files, folders it made, version, SHA-256) |
+| `~/.depot/omsi2/module-records.json` | the same for each installed module |
 | `~/.depot/omsi2/launch/<id>.json` | the launch description of one run, removed when the run ends |
 | `~/.depot/omsi2/staging/` | work area of an install or removal, emptied afterwards |
 
-Nothing is written into the OMSI 2 folder except OmsiLaunch's own files at install, and
-their removal.
+Nothing is written into the OMSI 2 folder except OmsiLaunch's own files and, for a module the
+player chose, its files under `plugins/OmsiLaunch.Modules/`, at install, and their removal.

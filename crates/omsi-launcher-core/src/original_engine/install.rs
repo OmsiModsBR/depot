@@ -18,9 +18,9 @@ use std::path::{Component, Path, PathBuf};
 pub const REPO: &str = "OmsiModsBR/OmsiLaunch";
 pub const LICENSE: &str = "LGPL-3.0-only";
 
-const MAX_PACKAGE: u64 = 300 * 1024 * 1024;
+pub(super) const MAX_PACKAGE: u64 = 300 * 1024 * 1024;
 const MAX_ENTRIES: usize = 6000;
-const MAX_UNPACKED: u64 = 1024 * 1024 * 1024;
+pub(super) const MAX_UNPACKED: u64 = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReleaseInfo {
@@ -34,6 +34,11 @@ pub struct ReleaseInfo {
 /// The newest published release of the list the API gives (drafts skipped; a beta counts,
 /// the project only has betas so far) that carries the package and its `.sha256`.
 pub fn parse_releases(json: &str) -> Option<ReleaseInfo> {
+    parse_releases_with(json, "OmsiLaunch-")
+}
+
+/// Like [`parse_releases`] for a package named `<prefix><version>.zip`.
+pub fn parse_releases_with(json: &str, prefix: &str) -> Option<ReleaseInfo> {
     let v: Value = serde_json::from_str(json).ok()?;
     let list = match &v {
         Value::Array(a) => a.clone(),
@@ -56,9 +61,7 @@ pub fn parse_releases(json: &str) -> Option<ReleaseInfo> {
                 pred(n).then(|| (n.to_string(), url.to_string()))
             })
         };
-        let zip = find(&|n| {
-            n.starts_with("OmsiLaunch-") && n.ends_with(".zip") && !n.contains("current")
-        });
+        let zip = find(&|n| n.starts_with(prefix) && n.ends_with(".zip") && !n.contains("current"));
         let Some((zip_name, zip_url)) = zip else {
             continue;
         };
@@ -67,7 +70,7 @@ pub fn parse_releases(json: &str) -> Option<ReleaseInfo> {
             continue;
         };
         let version = zip_name
-            .trim_start_matches("OmsiLaunch-")
+            .trim_start_matches(prefix)
             .trim_end_matches(".zip")
             .to_string();
         let version = if version.is_empty() {
@@ -135,11 +138,20 @@ pub fn host_allowed(url: &str) -> bool {
 /// The URL of a file attached to a release of the official repository (the hosts a redirect
 /// may pass through are checked apart, hop by hop).
 pub fn official_asset(url: &str) -> bool {
-    host_allowed(url) && url.starts_with(&format!("https://github.com/{REPO}/releases/download/"))
+    official_asset_of(REPO, url)
+}
+
+/// The same for the files of a release of `repo` (an official module's repository).
+pub fn official_asset_of(repo: &str, url: &str) -> bool {
+    host_allowed(url) && url.starts_with(&format!("https://github.com/{repo}/releases/download/"))
 }
 
 pub fn releases_url() -> String {
-    format!("https://api.github.com/repos/{REPO}/releases?per_page=10")
+    releases_url_of(REPO)
+}
+
+pub fn releases_url_of(repo: &str) -> String {
+    format!("https://api.github.com/repos/{repo}/releases?per_page=10")
 }
 
 pub fn latest_release(f: &dyn Fetch) -> Result<ReleaseInfo> {
@@ -154,7 +166,17 @@ pub fn download(
     rel: &ReleaseInfo,
     progress: &mut dyn FnMut(u64, Option<u64>) -> bool,
 ) -> Result<(Vec<u8>, String)> {
-    if !official_asset(&rel.zip_url) || !official_asset(&rel.sha_url) {
+    download_from(f, REPO, rel, progress)
+}
+
+/// Downloads a release of `repo`; both files must be assets of that repository's releases.
+pub fn download_from(
+    f: &dyn Fetch,
+    repo: &str,
+    rel: &ReleaseInfo,
+    progress: &mut dyn FnMut(u64, Option<u64>) -> bool,
+) -> Result<(Vec<u8>, String)> {
+    if !official_asset_of(repo, &rel.zip_url) || !official_asset_of(repo, &rel.sha_url) {
         bail!("the release points outside the official download hosts");
     }
     let sha_text = f.get(&rel.sha_url, 4096, &mut |_, _| true)?;
@@ -232,12 +254,12 @@ fn windows_name_ok(n: &str) -> bool {
         || numbered("LPT"))
 }
 
-fn key(p: &str) -> String {
+pub(super) fn key(p: &str) -> String {
     p.to_ascii_lowercase()
 }
 
 /// Whether `p` is a symbolic link or, on Windows, any reparse point (a junction too).
-fn is_link(p: &Path) -> bool {
+pub(super) fn is_link(p: &Path) -> bool {
     let Ok(m) = std::fs::symlink_metadata(p) else {
         return false;
     };
@@ -257,7 +279,7 @@ fn is_link(p: &Path) -> bool {
 
 /// The first existing folder (or the file itself) on the way from `root` to `rel` that is a
 /// link: a package path that looks safe would leave the OMSI 2 folder through it.
-fn linked_part(root: &Path, rel: &str) -> Option<String> {
+pub(super) fn linked_part(root: &Path, rel: &str) -> Option<String> {
     let mut cur = root.to_path_buf();
     for part in rel.split('/') {
         cur.push(part);
@@ -286,7 +308,7 @@ pub fn owned_list(root: &Path, data: &Path) -> Vec<String> {
 
 /// Whether two folder paths are the same folder as far as spelling goes: no trailing
 /// separator, and on Windows no difference of case or of `/` and `\\`.
-fn same_root(a: &Path, b: &Path) -> bool {
+pub(super) fn same_root(a: &Path, b: &Path) -> bool {
     let norm = |p: &Path| -> Vec<String> {
         p.to_string_lossy()
             .replace('\\', "/")
@@ -325,7 +347,7 @@ pub fn manifest_files(text: &str) -> Option<Vec<(String, String)>> {
     Some(out)
 }
 
-fn open_zip(zip: &[u8]) -> Result<zip::ZipArchive<std::io::Cursor<&[u8]>>> {
+pub(super) fn open_zip(zip: &[u8]) -> Result<zip::ZipArchive<std::io::Cursor<&[u8]>>> {
     let a =
         zip::ZipArchive::new(std::io::Cursor::new(zip)).context("the package is not a zip file")?;
     if a.len() > MAX_ENTRIES {
@@ -405,7 +427,7 @@ pub fn load_record(data: &Path) -> Option<InstallRecord> {
     serde_json::from_str(&std::fs::read_to_string(record_path(data)).ok()?).ok()
 }
 
-fn copy_into(src: &Path, dst: &Path) -> Result<()> {
+pub(super) fn copy_into(src: &Path, dst: &Path) -> Result<()> {
     if let Some(d) = dst.parent() {
         std::fs::create_dir_all(d)?;
     }
@@ -417,7 +439,7 @@ fn copy_into(src: &Path, dst: &Path) -> Result<()> {
 }
 
 /// The folders on the way to `rel` that do not exist yet, outermost first.
-fn missing_dirs(root: &Path, rel: &str) -> Vec<String> {
+pub(super) fn missing_dirs(root: &Path, rel: &str) -> Vec<String> {
     let parts: Vec<&str> = rel.split('/').collect();
     let mut out = Vec::new();
     for n in 1..parts.len() {
@@ -582,7 +604,7 @@ pub fn install(
     result
 }
 
-fn safe_name(s: &str) -> String {
+pub(super) fn safe_name(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
@@ -594,7 +616,7 @@ fn safe_name(s: &str) -> String {
         .collect()
 }
 
-fn file_hash(p: &Path) -> Option<String> {
+pub(super) fn file_hash(p: &Path) -> Option<String> {
     let mut f = std::fs::File::open(p).ok()?;
     let mut h = Sha256::new();
     std::io::copy(&mut f, &mut h).ok()?;
