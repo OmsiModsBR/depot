@@ -3347,6 +3347,7 @@ fn sync_live(app: &mut App) {
     omsi_audio::MUFFLE_OUTSIDE.store(s.muffle_outside, std::sync::atomic::Ordering::Relaxed);
     if let Some(n) = app.navigator.as_mut() {
         n.arrows = s.nav_arrows;
+        n.view_top = s.nav_view == "top";
     }
     if let Some(h) = app.humans.as_mut() {
         h.exact_fare = s.exact_fare;
