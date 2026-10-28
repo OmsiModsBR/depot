@@ -695,6 +695,21 @@ fn people_keep_the_floor_height_on_sloped_ground() {
     assert!((follow_surface(0.0, 0.2, 1.4, 0.5) - 0.2).abs() < 1e-9);
 }
 
+/// Alighting at a high platform (BRT): the floor of a low bus is 0.35 m, the platform's
+/// path 1.0 m. The surface looked for must reach the path's height, or the people who got
+/// off take the road under the platform. Without a path (or a lower one) it stays a step.
+#[test]
+fn people_off_a_low_bus_reach_the_height_of_a_high_platforms_path() {
+    let (feet, platform) = (0.35, 1.0);
+    assert!(feet + walk_reach(feet, None) < platform);
+    assert!(feet + walk_reach(feet, Some(platform)) >= platform);
+    // on a path at their own height, or below them: a step, as before
+    assert_eq!(walk_reach(feet, Some(feet)), 0.5);
+    assert_eq!(walk_reach(1.0, Some(0.0)), 0.5);
+    // a path far over them (a roof, a bridge) is not stepped up to
+    assert!(feet + walk_reach(feet, Some(4.0)) < 4.0);
+}
+
 /// #171: a bus whose exit door opens only on a request. The passenger's request leaves
 /// the passengers' side as `PAX_Exit<i>_Req` (`DoorWants`), reaches the AI bus's script
 /// through `write_door_requests`, the script opens the door at the stop, and the open state

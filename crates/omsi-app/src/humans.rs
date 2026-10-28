@@ -72,6 +72,20 @@ pub fn follow_surface(cur: f64, target: f64, speed: f64, dt: f64) -> f64 {
     }
 }
 
+/// How far over somebody's feet a walking surface may be taken: a step (0.5 m), or - on a
+/// pedestrian path - up to the path's own height (a few cm over it), within `MAX_PATH_REACH`.
+/// A high platform's path lies over a step above a low floor's exit, and the person who got
+/// off walks on the path: looking only a step up they took the road under the platform and
+/// walked in it.
+pub fn walk_reach(feet: f64, path_z: Option<f64>) -> f64 {
+    match path_z {
+        Some(z) => (z - feet + 0.15).clamp(0.5, MAX_PATH_REACH),
+        None => 0.5,
+    }
+}
+/// The highest a path may lie over somebody's feet for them to step up to it (m).
+const MAX_PATH_REACH: f64 = 1.5;
+
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
 pub(crate) static LEFT_HAND: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -5233,6 +5247,13 @@ impl Humans {
     ) {
         let dt64 = dt as f64;
         let time = self.time;
+        // the height of the path under a walker on one: the surface they follow
+        let path_z = match (&self.people[i].state, net) {
+            (State::Strolling(walk), Some(net)) => {
+                walk.legs.get(walk.leg).map(|leg| leg.at(net, walk.s).0.z)
+            }
+            _ => None,
+        };
         let p = &mut self.people[i];
         let speed = w.vel.length();
         // somebody pressed against somebody else for seconds slips past them
@@ -5260,7 +5281,10 @@ impl Humans {
             Place::Ground => {
                 p.position.x = w.pos.x;
                 p.position.y = w.pos.y;
-                if let Some(z) = world.walk_height_near(p.position.x, p.position.y, p.position.z) {
+                let reach = walk_reach(p.position.z, path_z);
+                if let Some(z) =
+                    world.walk_height_reach(p.position.x, p.position.y, p.position.z, reach)
+                {
                     // up a kerb quickly, down it smoothly (the feet find the kerb themselves);
                     // more than a kerb below the surface is no step but a wrong height (the
                     // pavement's tile came after them): straight onto it
