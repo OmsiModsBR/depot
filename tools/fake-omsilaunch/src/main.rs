@@ -4,13 +4,25 @@
 //! the file named by `FAKE_OL_LOG` so a test can check the exact arguments Depot passed.
 //!
 //! `FAKE_OL_SCENARIO` picks the answer: `ready` (default), `not_runnable`, `busy`,
-//! `recovery_pending`, `recovery_failed`, `crash` (a launch that ends with code 1).
+//! `recovery_pending`, `recovery_failed`, `shim_fail` and `garbled` (recovery answers that
+//! must not read as clean), `crash` (a launch that ends with code 1).
 //! `FAKE_OL_RUN_MS` is how long a launch "plays" (default 50).
 
 use std::io::Write;
 
 fn out(json: &str) {
     println!("{json}");
+}
+
+/// The documented `--json` envelope around a result (plans and statuses are printed bare).
+fn envelope(args: &[String], command: &str, result: &str) {
+    if args.iter().any(|a| a == "--json") {
+        out(&format!(
+            r#"{{"ok":true,"command":"{command}","protocol_version":"0.1","result":{result}}}"#
+        ));
+    } else {
+        out(result);
+    }
 }
 
 fn main() {
@@ -30,38 +42,53 @@ fn main() {
             .any(|a| a == p || a.starts_with(&format!("{p}:")))
     };
     let code = if has("/version") {
-        out(
-            r#"{"command":"version","product":"OmsiLaunch","version":"0.1.0-beta4","protocol_version":"0.1","supported_family":"OMSI_2_3_004_COMMON"}"#,
+        envelope(
+            &args,
+            "version",
+            r#"{"product":"OmsiLaunch","version":"0.1.0-beta4","protocol_version":"0.1","supported_family":"OMSI_2_3_004_COMMON"}"#,
         );
         0
     } else if has("/recovery-status") || has("/recover") {
         let recover = has("/recover");
         match scenario.as_str() {
+            "shim_fail" => 102,
+            "garbled" => {
+                out("not json");
+                0
+            }
             "busy" => {
                 eprintln!("OL_E_INSTALLATION_BUSY");
                 7
             }
             "recovery_pending" if !recover => {
-                println!(
-                    r#"{{"command":"recover","pending":true,"recovered":false,"diagnostics":[]}}"#
+                envelope(
+                    &args,
+                    "recover",
+                    r#"{"pending":true,"recovered":false,"diagnostics":[]}"#,
                 );
                 0
             }
             "recovery_failed" if recover => {
-                println!(
-                    r#"{{"command":"recover","pending":true,"recovered":false,"diagnostics":["OL_E_RECOVERY_BACKUP_CORRUPT"]}}"#
+                envelope(
+                    &args,
+                    "recover",
+                    r#"{"pending":true,"recovered":false,"diagnostics":["OL_E_RECOVERY_BACKUP_CORRUPT"]}"#,
                 );
                 8
             }
             "recovery_pending" => {
-                println!(
-                    r#"{{"command":"recover","pending":true,"recovered":true,"diagnostics":[]}}"#
+                envelope(
+                    &args,
+                    "recover",
+                    r#"{"pending":true,"recovered":true,"diagnostics":[]}"#,
                 );
                 0
             }
             _ => {
-                println!(
-                    r#"{{"command":"recover","pending":false,"recovered":false,"diagnostics":[]}}"#
+                envelope(
+                    &args,
+                    "recover",
+                    r#"{"pending":false,"recovered":false,"diagnostics":[]}"#,
                 );
                 0
             }
@@ -70,8 +97,10 @@ fn main() {
         .iter()
         .any(|a| a == "/list:RuntimeModules" || a.eq_ignore_ascii_case("/list:runtimemodules"))
     {
-        out(
-            r#"{"command":"runtime-modules.list","modules":[{"id":"omsi-prefetch","version":"1.0.0","activation":"opt-in","valid":true,"settings":[{"key":"enabled","type":"bool","default":false,"flag":"prefetch"}]}]}"#,
+        envelope(
+            &args,
+            "runtime-modules.list",
+            r#"{"modules":[{"id":"omsi-prefetch","version":"1.0.0","activation":"opt-in","valid":true,"settings":[{"key":"enabled","type":"bool","default":false,"flag":"prefetch"}]}]}"#,
         );
         0
     } else if has("/plan") || has("/validate") {
