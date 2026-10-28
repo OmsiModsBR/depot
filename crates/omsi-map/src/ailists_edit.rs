@@ -199,6 +199,8 @@ pub enum EditError {
     BadDate,
     #[error("a fleet number is needed")]
     NoNumber,
+    #[error("a list of numbers alone cannot keep a bus's plate, repaint and days")]
+    FleetFormat,
 }
 
 /// The kind of block a group is.
@@ -571,7 +573,10 @@ impl AiListsDoc {
             .ok_or(EditError::NoVehicle)?
             .entry
             .clone();
-        self.fleet(tg, to)?;
+        // (a list of numbers alone would lose the plate, the repaint and the days)
+        if self.fleet(g, f)?.detailed && !self.fleet(tg, to)?.detailed {
+            return Err(EditError::FleetFormat);
+        }
         let before = self.text.clone();
         self.remove_bus(g, f, b)?;
         // (a bus taken out moves no list: the lists are numbered in file order)
@@ -1026,6 +1031,10 @@ mod tests {
                 .replace("red\t\t\r\n", "red\r\n"),
             String::from_utf8(before).unwrap()
         );
+        // a plain list of numbers cannot take a bus of a detailed one
+        d.add_fleet(b, "Vehicles\\Bus\\plain.bus", false).unwrap();
+        assert_eq!(d.move_bus(b, 0, 0, b, 1), Err(EditError::FleetFormat));
+        d.remove_fleet(b, 1).unwrap();
         // cars have no fleet lists
         let cars = d.find("NormalCars").unwrap();
         assert_eq!(d.add_fleet(cars, "x.bus", true), Err(EditError::NoFleet));
