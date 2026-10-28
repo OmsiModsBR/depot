@@ -1069,15 +1069,16 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn removal_does_not_go_through_a_linked_omsilaunch_folder() {
         let root = tmp("lnkrm");
         let data = tmp("lnkrmd");
         let outside = tmp("lnkrmo");
-        std::fs::create_dir_all(outside.join("cache")).unwrap();
-        std::fs::write(outside.join("cache/keep.txt"), b"x").unwrap();
+        std::fs::create_dir_all(outside.join("assets")).unwrap();
+        std::fs::write(outside.join("assets/keep.txt"), b"x").unwrap();
         std::os::unix::fs::symlink(&outside, root.join(".omsilaunch")).unwrap();
         let _ = remove(&root, &data);
-        assert!(outside.join("cache/keep.txt").exists());
+        assert!(outside.join("assets/keep.txt").exists());
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&outside);
