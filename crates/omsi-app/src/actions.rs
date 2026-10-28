@@ -594,7 +594,7 @@ impl App {
     pub(crate) fn menu_choose(&mut self, event_loop: &ActiveEventLoop, k: usize) {
         // (a click in an open list keeps the scroll where it is: no jump to the line)
         self.menu_top = if self.chooser.is_some() {
-            self.ui.as_ref().map(|u| u.menu_start as f32)
+            self.ui.as_ref().map(|u| u.hits.menu_start as f32)
         } else {
             None
         };

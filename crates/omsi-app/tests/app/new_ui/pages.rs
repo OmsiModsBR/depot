@@ -158,8 +158,9 @@ impl Shots {
         // the page's card is where the HUD is told its rows are: dark, over the world
         // (all but one row: the keyboard's or the mouse's line is lit lighter)
         let mut ui = testing::hud::Ui::new().unwrap();
-        page.write_hits(&mut ui, Area::whole((w, h)));
+        page.write_hits(&mut ui.hits, Area::whole((w, h)));
         let rows: Vec<[u8; 3]> = ui
+            .hits
             .menu_rects
             .iter()
             .filter(|r| r[0] > 0.0)

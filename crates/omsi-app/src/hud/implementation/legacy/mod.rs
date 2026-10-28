@@ -6,7 +6,7 @@
 //! Every text is rendered once into a small texture and kept while it is shown; the
 //! overlays are rectangles in physical pixels (`Scene::overlays`).
 
-use super::super::domain::{Frame, InfoTone, MenuKind, NoticeKind};
+use super::super::domain::{Frame, Hits, InfoTone, MenuKind, NoticeKind};
 use crate::hud::interface::output::{Renderer, Scene, TextureId};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
 
@@ -377,31 +377,8 @@ pub struct Ui {
     origin_x: f32,
     pub text: TextCache,
     pub chat: ChatWidget,
-    /// Where the game menu's lines were drawn this frame (physical pixels), for the mouse.
-    pub menu_rects: Vec<[f32; 4]>,
-    /// Per line of `menu_rects`, where the arrows round its value are (a list's setting,
-    /// `game_lists::ADJUST`): `[from, to, plus]` - a click from `from` to `to` steps it
-    /// down, one right of `plus` up.
-    pub menu_arrows: Vec<Option<[f32; 3]>>,
-    pub menu_scroll_thumb: Option<[f32; 4]>,
-    pub menu_scroll_track: Option<[f32; 4]>,
-    /// Where the controls of the settings rows were drawn (a slider's track, a stepper), one
-    /// entry per line in `menu_rects`: a click there sets the value.
-    pub menu_ctl: Vec<Option<[f32; 4]>>,
-    /// The sidebar of a settings window: one box per page, the way back last.
-    pub menu_side: Vec<[f32; 4]>,
-    /// The rows of the timetable beside a line's tours (the stops to start from), the stop the
-    /// first of them is, and the button that starts the trip.
-    pub menu_pane: Vec<[f32; 4]>,
-    pub menu_pane_start: usize,
-    pub menu_pane_go: Option<[f32; 4]>,
-    /// The whole timetable pane beside the tours: the wheel over it scrolls its stops.
-    pub menu_pane_box: Option<[f32; 4]>,
-    /// Its scroll bar when it has more stops than it shows: the track, the thumb (widened
-    /// to be hit), how many stops there are and how many it shows - for the mouse to drag.
-    pub menu_pane_scroll: Option<([f32; 4], [f32; 4], usize, usize)>,
-    /// The two arrows beside the time of a tour: the trip before, the next one.
-    pub menu_time: Vec<[f32; 4]>,
+    /// Where the menu's parts and the information bar were drawn this frame, for the mouse.
+    pub hits: Hits,
     /// The colours and positions of the menu's parts that ease to their new state (a line's
     /// light, a switch's knob ...), by what they belong to.
     anim: std::collections::HashMap<u64, f32>,
@@ -412,25 +389,8 @@ pub struct Ui {
     /// The pointer texture, positioned separately for each headset eye.
     pub vr_cursor_overlay: Option<usize>,
     pub vr_tooltip_overlay: Option<usize>,
-    /// The first line of the menu shown (a long menu scrolls: `menu_rects[k]` is line
-    /// `menu_start + k`).
-    pub menu_start: usize,
-    /// How many lines the menu shows at once, and how high one is (physical pixels): a
-    /// finger's drag is turned into lines with it.
-    pub menu_rows: usize,
-    pub menu_row_h: f32,
-    /// The entries of the drop-down shown (their rects), the first of them, and how many fit.
-    pub dd_rects: Vec<[f32; 4]>,
-    pub dd_top: usize,
-    pub dd_rows: usize,
-    /// The drop-down's scroll bar when it has more entries than it shows: its track and
-    /// its thumb (widened to be hit), for the mouse to drag.
-    pub dd_scroll: Option<([f32; 4], [f32; 4])>,
     /// Pictures shown in the interface (a tutorial page's), by file.
     images: hashbrown::HashMap<std::path::PathBuf, Option<(TextureId, u32, u32)>>,
-    /// Where the information bar was drawn (within the panel, before `origin_x`), for the
-    /// navigator to keep out of its way.
-    pub info_rect: Option<[f32; 4]>,
 }
 
 /// The information bar's groups in rows no wider than `room` (`widths`: each group's), each
@@ -495,39 +455,7 @@ impl Ui {
     }
 
     pub fn shift_hitboxes(&mut self, x: f32) {
-        for rect in self
-            .menu_rects
-            .iter_mut()
-            .chain(self.menu_side.iter_mut())
-            .chain(self.menu_pane.iter_mut())
-            .chain(self.menu_time.iter_mut())
-            .chain(self.dd_rects.iter_mut())
-            .chain(self.menu_ctl.iter_mut().flatten())
-            .chain(self.menu_scroll_thumb.iter_mut())
-            .chain(self.menu_scroll_track.iter_mut())
-            .chain(self.menu_pane_go.iter_mut())
-            .chain(self.menu_pane_box.iter_mut())
-        {
-            rect[0] += x;
-            rect[2] += x;
-        }
-        for arrows in self.menu_arrows.iter_mut().flatten() {
-            for at in arrows {
-                *at += x;
-            }
-        }
-        if let Some((track, thumb)) = &mut self.dd_scroll {
-            for rect in [track, thumb] {
-                rect[0] += x;
-                rect[2] += x;
-            }
-        }
-        if let Some((track, thumb, _, _)) = &mut self.menu_pane_scroll {
-            for rect in [track, thumb] {
-                rect[0] += x;
-                rect[2] += x;
-            }
-        }
+        self.hits.shift(x);
         self.chat.rect[0] += x;
         self.chat.rect[2] += x;
     }
@@ -536,32 +464,13 @@ impl Ui {
             origin_x: 0.0,
             text: TextCache::new()?,
             chat: ChatWidget::default(),
-            menu_rects: Vec::new(),
-            menu_arrows: Vec::new(),
-            menu_scroll_thumb: None,
-            menu_scroll_track: None,
-            menu_ctl: Vec::new(),
-            dd_rects: Vec::new(),
-            dd_top: 0,
-            dd_rows: 8,
-            dd_scroll: None,
-            menu_side: Vec::new(),
-            menu_pane: Vec::new(),
-            menu_pane_start: 0,
-            menu_pane_go: None,
-            menu_pane_box: None,
-            menu_pane_scroll: None,
-            menu_time: Vec::new(),
+            hits: Hits::default(),
             anim: Default::default(),
             anim_dt: 0.0,
             menu_overlay_range: 0..0,
             vr_cursor_overlay: None,
             vr_tooltip_overlay: None,
-            menu_start: 0,
-            menu_rows: 0,
-            menu_row_h: 1.0,
             images: Default::default(),
-            info_rect: None,
         })
     }
 
@@ -898,7 +807,7 @@ impl Ui {
         }
         // --- the information bar, along the top (or the bottom) in the middle: in as many
         // rows as the room it has needs
-        self.info_rect = None;
+        self.hits.info_rect = None;
         // (nothing to say - every item switched off, a layout that has only the vehicle's items
         // and no vehicle - is no empty plate)
         if let Some(info) = f.info.as_ref().filter(|i| !i.groups.is_empty()) {
@@ -1016,7 +925,7 @@ impl Ui {
                     cx += group_gap - gap;
                 }
             }
-            self.info_rect = Some([x, y, x + w, y + h]);
+            self.hits.info_rect = Some([x, y, x + w, y + h]);
         }
         let tutorial_w = (420.0 * s).min(f.width * 0.42);
         // --- the timetable window, on the right
@@ -1963,19 +1872,19 @@ impl Ui {
     /// dimmed picture. Options are settings lines with switches and values; lines and tours
     /// are bigger lines with the timetable of the chosen one beside them.
     fn draw_menu(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame) {
-        self.menu_rects.clear();
-        self.menu_ctl.clear();
-        self.menu_side.clear();
-        self.menu_pane.clear();
-        self.menu_pane_start = 0;
-        self.menu_pane_go = None;
-        self.menu_pane_box = None;
-        self.menu_pane_scroll = None;
-        self.menu_time.clear();
-        self.menu_scroll_thumb = None;
-        self.menu_scroll_track = None;
-        self.dd_rects.clear();
-        self.dd_scroll = None;
+        self.hits.menu_rects.clear();
+        self.hits.menu_ctl.clear();
+        self.hits.menu_side.clear();
+        self.hits.menu_pane.clear();
+        self.hits.menu_pane_start = 0;
+        self.hits.menu_pane_go = None;
+        self.hits.menu_pane_box = None;
+        self.hits.menu_pane_scroll = None;
+        self.hits.menu_time.clear();
+        self.hits.menu_scroll_thumb = None;
+        self.hits.menu_scroll_track = None;
+        self.hits.dd_rects.clear();
+        self.hits.dd_scroll = None;
         let overlay_start = scene.overlays.len();
         let Some((sel, items)) = f.menu else {
             self.menu_overlay_range = overlay_start..overlay_start;
@@ -2052,9 +1961,9 @@ impl Ui {
             (true, Some(top)) => (top.max(0.0).round() as usize).min(nl - rows),
             (true, None) => sel_l.saturating_sub(rows / 2).min(nl - rows),
         };
-        self.menu_start = start;
-        self.menu_rows = rows;
-        self.menu_row_h = row_h;
+        self.hits.menu_start = start;
+        self.hits.menu_rows = rows;
+        self.hits.menu_row_h = row_h;
         let px = (((if timetable_kind { 14.0 } else { 16.0 }) * s).min(row_h * 0.45)) as u32;
         let mut h = header_h + row_h * rows as f32 + pad + foot_h;
         if let Some(fh) = fixed_h {
@@ -2105,11 +2014,11 @@ impl Ui {
                 list_r - 8.0 * s,
                 top + row_h * rows as f32 - 4.0 * s,
             ];
-            self.menu_scroll_track = Some(track);
+            self.hits.menu_scroll_track = Some(track);
             let hot = over_rect(f.cursor, [x, y, list_r, y + h]);
             let thumb = self.thumb(r, scene, track, start, rows, nl, hot, s);
             // (a wider grip than the drawn thumb: three pixels are hard to hit)
-            self.menu_scroll_thumb =
+            self.hits.menu_scroll_thumb =
                 Some([thumb[0] - 6.0 * s, thumb[1], thumb[2] + 6.0 * s, thumb[3]]);
         }
         // (the line under the mouse is the one lit; the keyboard's choice only while the
@@ -2336,7 +2245,7 @@ impl Ui {
                     self.put(r, scene, &text, px, ink, lx, cy);
                 }
             }
-            self.menu_rects.push(rect);
+            self.hits.menu_rects.push(rect);
         }
         if back_footer {
             // ("Back" pinned to the bottom of the list: the rects of the lines
@@ -2364,10 +2273,10 @@ impl Ui {
                 fr[0] + tin,
                 (fr[1] + fr[3]) * 0.5,
             );
-            while self.menu_rects.len() < bk - start {
-                self.menu_rects.push([-1.0e9; 4]);
+            while self.hits.menu_rects.len() < bk - start {
+                self.hits.menu_rects.push([-1.0e9; 4]);
             }
-            self.menu_rects.push(fr);
+            self.hits.menu_rects.push(fr);
         }
         // the timetable of the chosen line or tour, beside the list
         if let Some(p) = preview {
@@ -2456,7 +2365,7 @@ impl Ui {
                             col,
                         );
                     }
-                    self.menu_time.push(rect);
+                    self.hits.menu_time.push(rect);
                 }
                 let mid_l = left + bw + 10.0 * s;
                 let mid_r = right - bw - 10.0 * s;
@@ -2484,14 +2393,14 @@ impl Ui {
                     _ if n > fit => chosen.saturating_sub(fit / 2).min(n - fit),
                     _ => 0,
                 };
-                self.menu_pane_start = first;
-                self.menu_pane_box = Some([px0, py0, px1, py1]);
+                self.hits.menu_pane_start = first;
+                self.hits.menu_pane_box = Some([px0, py0, px1, py1]);
                 // (a long list of stops: a thin scroll bar at the pane's edge)
                 if n > fit {
                     let hot = over([px0, py0, px1, py1]);
                     let track = [px1 - 7.0 * s, top, px1 - 3.0 * s, go[1] - 10.0 * s];
                     let thumb = self.thumb(r, scene, track, first, fit, n, hot, s);
-                    self.menu_pane_scroll = Some((
+                    self.hits.menu_pane_scroll = Some((
                         track,
                         [thumb[0] - 6.0 * s, thumb[1], thumb[2] + 3.0 * s, thumb[3]],
                         n,
@@ -2540,7 +2449,7 @@ impl Ui {
                     self.put_right(r, scene, when, rpx, accent_ink(), px1 - pad, ry);
                     let what = clip_to(&self.text, what, rpx as f32, inner - time_w - 14.0 * s);
                     self.put(r, scene, &what, rpx, mix(SOFT, WHITE, a_on), px0 + pad, ry);
-                    self.menu_pane.push(rect);
+                    self.hits.menu_pane.push(rect);
                 }
                 // the button that starts the trip
                 let a_go = self.easeq(
@@ -2560,7 +2469,7 @@ impl Ui {
                 scene
                     .overlays
                     .push((l.tex, [gx, gy, gx + l.w as f32, gy + l.h as f32]));
-                self.menu_pane_go = Some(go);
+                self.hits.menu_pane_go = Some(go);
             } else {
                 let fit = ((py1 - 12.0 * s - top) / lh).floor().max(1.0) as usize;
                 // (a list too long for the pane ends in how many more there are)
@@ -2685,9 +2594,9 @@ impl Ui {
             (true, Some(top)) => (top.max(0.0).round() as usize).min(items.len() - rows),
             (true, None) => sel.saturating_sub(rows / 2).min(items.len() - rows),
         };
-        self.menu_start = start;
-        self.menu_rows = rows;
-        self.menu_row_h = row_h;
+        self.hits.menu_start = start;
+        self.hits.menu_rows = rows;
+        self.hits.menu_row_h = row_h;
         let x = ((f.width - w) * 0.5).round();
         let y = ((f.height - h) * 0.5).round();
         let radius = CARD_R * s;
@@ -2791,7 +2700,7 @@ impl Ui {
                     rect[0] + tin,
                     (rect[1] + rect[3]) * 0.5,
                 );
-                self.menu_side.push(rect);
+                self.hits.menu_side.push(rect);
             }
             let rect = [sx0 + inset, bottom - 38.0 * s, sx1 - inset, bottom];
             let a_back = self.easeq(
@@ -2813,7 +2722,7 @@ impl Ui {
                 rect[0] + tin,
                 (rect[1] + rect[3]) * 0.5,
             );
-            self.menu_side.push(rect);
+            self.hits.menu_side.push(rect);
         }
         // the scroll bar of a long page
         let scrolls = items.len() > rows;
@@ -2827,10 +2736,10 @@ impl Ui {
                 x + w - 8.0 * s,
                 top + row_h * rows as f32 - 4.0 * s,
             ];
-            self.menu_scroll_track = Some(track);
+            self.hits.menu_scroll_track = Some(track);
             let hot = over_rect(f.cursor, [x + side_w, y + header_h, x + w, y + h]);
             let thumb = self.thumb(r, scene, track, start, rows, items.len(), hot, s);
-            self.menu_scroll_thumb =
+            self.hits.menu_scroll_thumb =
                 Some([thumb[0] - 6.0 * s, thumb[1], thumb[2] + 6.0 * s, thumb[3]]);
         }
         // the rows
@@ -3031,8 +2940,8 @@ impl Ui {
                 let d = clip_to(&self.text, desc, dpx as f32, avail);
                 self.put(r, scene, &d, dpx, MUTED, nx, cy + 10.0 * s);
             }
-            self.menu_rects.push(rect);
-            self.menu_ctl.push(ctl);
+            self.hits.menu_rects.push(rect);
+            self.hits.menu_ctl.push(ctl);
         }
         // a drop-down over a row (the weather preset, the clouds): the entries under the
         // row's value as a select's in a page - over it where there is no room under
@@ -3065,8 +2974,8 @@ impl Ui {
             let px0 = px1 - pw;
             let panel = [px0, py0, px1, py0 + ph];
             let top = dd.top.min(dd.items.len() - n_vis.min(dd.items.len()));
-            self.dd_top = top;
-            self.dd_rows = n_vis;
+            self.hits.dd_top = top;
+            self.hits.dd_rows = n_vis;
             let rad = (CARD_R * s).min(10.0 * s);
             self.text
                 .shadow(r, scene, panel, rad, 18.0 * s, 6.0 * s, 150);
@@ -3127,12 +3036,12 @@ impl Ui {
                     rect[0] + tin,
                     (rect[1] + rect[3]) * 0.5,
                 );
-                self.dd_rects.push(rect);
+                self.hits.dd_rects.push(rect);
             }
             if more {
                 let track = [px1 - 8.0 * s, py0 + inner, px1 - 4.0 * s, py0 + ph - inner];
                 let thumb = self.thumb(r, scene, track, top, n_vis, dd.items.len(), over(panel), s);
-                self.dd_scroll = Some((
+                self.hits.dd_scroll = Some((
                     track,
                     [thumb[0] - 6.0 * s, thumb[1], thumb[2] + 4.0 * s, thumb[3]],
                 ));
