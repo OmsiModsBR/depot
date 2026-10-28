@@ -3174,6 +3174,7 @@ pub(crate) fn run_offscreen(
             nav.show_surface = settings.nav_surface;
             nav.light = settings.nav_light;
             nav.show_contours = settings.nav_contours;
+            nav.view_top = settings.nav_view == "top";
             nav.orient = match settings.nav_orientation.as_str() {
                 "north" => 1,
                 "heading" => 2,

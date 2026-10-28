@@ -929,6 +929,7 @@ impl App {
                     n.show_surface = self.settings.nav_surface;
                     n.light = self.settings.nav_light;
                     n.show_contours = self.settings.nav_contours;
+                    n.view_top = self.settings.nav_view == "top";
                     n.orient = match self.settings.nav_orientation.as_str() {
                         "north" => 1,
                         "heading" => 2,
