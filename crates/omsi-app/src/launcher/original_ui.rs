@@ -246,6 +246,10 @@ pub fn engine_card(l: &mut Launcher, at: Rect) -> f32 {
 
 const NOTE: &str = "With this on and OmsiLaunch installed, a switch under the logo starts games with the original OMSI 2 instead. The files OmsiLaunch changes for a game are restored when it ends.";
 
+/// Padding of the install and removal dialogs inside their panel.
+const DLG_PAD_X: f32 = 28.0;
+const DLG_PAD_Y: f32 = 24.0;
+
 impl Launcher {
     /// The install and removal dialogs, over the page.
     pub(super) fn draw_engine_dialog(&mut self) {
@@ -256,22 +260,27 @@ impl Launcher {
         let full = Rect::new(0.0, 0.0, size.x, size.y);
         self.ui.solid(full);
         self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
-        let w = (size.x - 48.0).min(600.0);
-        // the body, measured first so the panel fits it
+        let w = (size.x - 32.0).min(600.0);
+        // the lines are measured with the width they are drawn at (room for the scrollbar
+        // on the right), and long words such as the SHA-256 break instead of running out
+        let text_w = w - 2.0 * DLG_PAD_X - 14.0;
         let (title, lines, buttons) = self.engine_dialog_content();
         let mut th = 0.0;
-        for (t, px, _, _) in &lines {
-            th += self.ui.paragraph_height(t, w - 48.0, *px, Weight::Regular) + 8.0;
+        for (t, px, _, bold) in &lines {
+            let wt = if *bold { Weight::Bold } else { Weight::Regular };
+            th += self.ui.paragraph_height_as_is(t, text_w, *px, wt) + 8.0;
         }
-        let extra = if matches!(self.state.original.flow, Flow::Downloading { .. }) {
-            24.0
-        } else {
-            0.0
-        };
-        let h = (130.0 + th + extra).min(size.y - 24.0);
+        let downloading = matches!(self.state.original.flow, Flow::Downloading { .. });
+        let gap = if downloading { 34.0 } else { 12.0 };
+        let h = (DLG_PAD_Y * 2.0 + 40.0 + th + gap + 38.0).min(size.y - 24.0);
         let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
         self.ui.panel(r);
-        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
+        let inner = Rect::new(
+            r.x + DLG_PAD_X,
+            r.y + DLG_PAD_Y,
+            r.w - 2.0 * DLG_PAD_X,
+            r.h - 2.0 * DLG_PAD_Y,
+        );
         self.ui.text_in(
             &title,
             Rect::new(inner.x, inner.y, inner.w, 28.0),
@@ -280,31 +289,27 @@ impl Launcher {
             TEXT,
             Align::Left,
         );
-        let body = Rect::new(inner.x, inner.y + 40.0, inner.w, inner.h - 130.0);
+        // the clip of the scrolling body is wider than the text, so no letter touches its edge
+        let body_h = (inner.h - 40.0 - gap - 38.0).max(24.0);
+        let body = Rect::new(inner.x - 8.0, inner.y + 40.0, inner.w + 16.0, body_h);
         self.ui
             .scroll_area("engine-dialog-body", body, &mut |ui, v| {
                 let mut y = v.y;
                 for (t, px, c, bold) in &lines {
-                    let hh = ui.paragraph(
-                        t,
-                        Vec2::new(v.x, y),
-                        v.w - 10.0,
-                        *px,
-                        if *bold { Weight::Bold } else { Weight::Regular },
-                        *c,
-                    );
+                    let wt = if *bold { Weight::Bold } else { Weight::Regular };
+                    let hh = ui.paragraph_as_is(t, Vec2::new(v.x + 8.0, y), text_w, *px, wt, *c);
                     y += hh + 8.0;
                 }
                 y - v.y
             });
-        if let Flow::Downloading { .. } = self.state.original.flow {
+        if downloading {
             let (d, t) = (
                 self.state.original.done.load(Relaxed),
                 self.state.original.total.load(Relaxed),
             );
             let frac = if t > 0 { d as f32 / t as f32 } else { 0.0 };
             self.ui.progress(
-                Rect::new(inner.x, inner.bottom() - 70.0, inner.w, 8.0),
+                Rect::new(inner.x, inner.bottom() - 38.0 - 22.0, inner.w, 8.0),
                 frac,
                 t == 0,
             );

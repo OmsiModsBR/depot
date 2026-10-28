@@ -1015,6 +1015,12 @@ impl Ui {
         lines.len() as f32 * lh
     }
 
+    /// Height `paragraph_as_is` would take (text already translated; long words break).
+    pub fn paragraph_height_as_is(&self, text: &str, width: f32, px: f32, weight: Weight) -> f32 {
+        let lh = self.fonts.size(px) * 1.38;
+        self.wrap_as_is(text, width, px, weight).len() as f32 * lh
+    }
+
     /// Height `paragraph` would take.
     pub fn paragraph_height(&self, text: &str, width: f32, px: f32, weight: Weight) -> f32 {
         let text = &*crate::tr(text);
