@@ -28,14 +28,13 @@ pub(super) fn traffic_kind(
         };
         return (color, shown.or_else(|| line_of.and_then(|f| f(c.id))), icon);
     }
-    let color = if trolley {
-        TROLLEY
+    if trolley {
+        (TROLLEY, shown, Icon::Trolley)
     } else if c.bus.is_some() || shown.is_some() {
-        BUS
+        (BUS, shown, Icon::Road)
     } else {
-        return (DOT, None, Icon::Road);
-    };
-    (color, shown, Icon::Road)
+        (DOT, None, Icon::Road)
+    }
 }
 /// `v` turned anticlockwise by `a` radians.
 pub(super) fn rot(v: DVec2, a: f64) -> DVec2 {
@@ -79,9 +78,28 @@ pub(super) fn player_triangle(
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Icon {
     Road,
+    /// A trolleybus: a road vehicle with its poles up.
+    Trolley,
     Tram,
     Metro,
     Train,
+}
+
+/// The outline of a body `2 * hw` wide from `y0` (back) to `y1` (front), its front corners
+/// rounded by `rf` and its back corners by `rb` (convex, anticlockwise).
+fn rounded(hw: f32, y0: f32, y1: f32, rf: f32, rb: f32) -> Vec<(f32, f32)> {
+    let mut pts = Vec::new();
+    let mut corner = |cx: f32, cy: f32, r: f32, from: f32| {
+        for i in 0..=3 {
+            let a = (from + 90.0 * i as f32 / 3.0).to_radians();
+            pts.push((cx + r * a.cos(), cy + r * a.sin()));
+        }
+    };
+    corner(hw - rb, y0 + rb, rb, -90.0);
+    corner(hw - rf, y1 - rf, rf, 0.0);
+    corner(-hw + rf, y1 - rf, rf, 90.0);
+    corner(-hw + rb, y0 + rb, rb, 180.0);
+    pts
 }
 
 /// A bus, trolleybus, tram, metro train or train on the map as a pictogram, not a dot, turned to the way it
@@ -101,59 +119,35 @@ pub fn vehicle_icon(
     let (sn, cs) = h.sin_cos();
     // local: x to the right, y forward; turned onto the world (x east, y north)
     let turn = |v: Vec2| Vec2::new(v.x * cs + v.y * sn, -v.x * sn + v.y * cs);
-    let (body, glass): (&[(f32, f32)], &[&[(f32, f32)]]) = match icon {
-        Icon::Road => (
-            &[
-                (-0.34, -1.0),
-                (0.34, -1.0),
-                (0.34, 0.55),
-                (0.2, 1.0),
-                (-0.2, 1.0),
-                (-0.34, 0.55),
-            ],
-            &[&[(-0.24, 0.5), (0.24, 0.5), (0.15, 0.8), (-0.15, 0.8)]],
+    // (rounded outlines, so a bus reads as a bus and not as one flat hexagon)
+    let (body, glass): (Vec<(f32, f32)>, Vec<Vec<(f32, f32)>>) = match icon {
+        Icon::Road | Icon::Trolley => (
+            rounded(0.34, -1.0, 1.0, 0.30, 0.12),
+            vec![vec![(-0.25, 0.52), (0.25, 0.52), (0.19, 0.8), (-0.19, 0.8)]],
         ),
         Icon::Tram => (
-            &[
-                (-0.2, -1.6),
-                (0.2, -1.6),
-                (0.34, -1.25),
-                (0.34, 1.25),
-                (0.2, 1.6),
-                (-0.2, 1.6),
-                (-0.34, 1.25),
-                (-0.34, -1.25),
-            ],
-            &[
-                &[(-0.22, 1.1), (0.22, 1.1), (0.14, 1.4), (-0.14, 1.4)],
-                &[(-0.22, -1.1), (0.22, -1.1), (0.14, -1.4), (-0.14, -1.4)],
+            rounded(0.34, -1.6, 1.6, 0.30, 0.30),
+            vec![
+                vec![(-0.22, 1.1), (0.22, 1.1), (0.14, 1.4), (-0.14, 1.4)],
+                vec![(-0.22, -1.1), (0.22, -1.1), (0.14, -1.4), (-0.14, -1.4)],
             ],
         ),
         Icon::Metro => (
-            &[
-                (-0.26, -2.0),
-                (0.26, -2.0),
-                (0.3, -1.85),
-                (0.3, 1.85),
-                (0.26, 2.0),
-                (-0.26, 2.0),
-                (-0.3, 1.85),
-                (-0.3, -1.85),
-            ],
-            &[
-                &[(-0.22, 1.62), (0.22, 1.62), (0.22, 1.85), (-0.22, 1.85)],
-                &[(-0.22, -1.62), (0.22, -1.62), (0.22, -1.85), (-0.22, -1.85)],
+            rounded(0.30, -2.0, 2.0, 0.14, 0.14),
+            vec![
+                vec![(-0.22, 1.62), (0.22, 1.62), (0.22, 1.85), (-0.22, 1.85)],
+                vec![(-0.22, -1.62), (0.22, -1.62), (0.22, -1.85), (-0.22, -1.85)],
             ],
         ),
         Icon::Train => (
-            &[
+            vec![
                 (-0.28, -2.3),
                 (0.28, -2.3),
                 (0.28, 1.6),
                 (0.0, 2.4),
                 (-0.28, 1.6),
             ],
-            &[&[(-0.16, 1.55), (0.16, 1.55), (0.0, 2.05)]],
+            vec![vec![(-0.16, 1.55), (0.16, 1.55), (0.0, 2.05)]],
         ),
     };
     let shape = |k: f32| -> Vec<Vec2> {
@@ -164,7 +158,22 @@ pub fn vehicle_icon(
     let (m, px) = (6.0, min_px);
     p.world_shape(at, &shape(1.28), m, px * 1.28, Color::rgba(8, 8, 8, 0.92));
     p.world_shape(at, &shape(1.0), m, px, color);
-    for g in glass {
+    if icon == Icon::Trolley {
+        // the two poles up to the wires, raised from the roof and trailing behind
+        for x in [-0.12_f32, 0.12] {
+            let pole: Vec<Vec2> = [
+                (x - 0.035, 0.25),
+                (x + 0.035, 0.25),
+                (x + 0.035, -1.45),
+                (x - 0.035, -1.45),
+            ]
+            .iter()
+            .map(|&(px_, py)| turn(Vec2::new(px_, py)))
+            .collect();
+            p.world_shape(at, &pole, m, px, Color::rgba(8, 8, 8, 0.85));
+        }
+    }
+    for g in &glass {
         let g: Vec<Vec2> = g.iter().map(|&(x, y)| turn(Vec2::new(x, y))).collect();
         p.world_shape(at, &g, m, px, Color::rgba(240, 244, 248, 0.9));
     }
