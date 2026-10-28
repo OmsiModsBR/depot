@@ -48,6 +48,8 @@ pub fn script_test_vehicle(
     omsi_sim::VehicleInstance::new(ty, omsi_sim::VehicleHost::new(Default::default()))
 }
 
+pub use crate::close_app;
+
 /// The game's own text for `key` in the language `lang`, if it has one.
 pub fn translate(lang: &str, key: &str) -> Option<String> {
     crate::_rust_i18n_try_translate(lang, key).map(|t| t.into_owned())
@@ -65,6 +67,12 @@ pub mod admin {
 }
 pub mod api_limits {
     pub use crate::api_limits::*;
+}
+pub mod app {
+    pub use crate::app::*;
+}
+pub mod app_events {
+    pub use crate::app_events::*;
 }
 pub mod bus_service {
     pub use crate::bus_service::*;
@@ -438,6 +446,72 @@ pub mod services {
 }
 pub mod settings {
     pub use crate::settings::*;
+
+    /// The settings as a test writes them.
+    pub trait SettingsInternals {
+        /// The settings as the file holds them. The game only ever reads the file - the
+        /// launcher's settings page writes it - so this is here for the round-trip test that
+        /// every key read is written back.
+        fn to_text(&self) -> String;
+    }
+
+    impl SettingsInternals for Settings {
+        fn to_text(&self) -> String {
+            let mut text = format!(
+                "# Project Depot settings\nversion={}\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nshadow_blobs={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nvr={}\nvr_scale={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\npost_aa={}\nrender_scale={}\nlanguage={}\ntexture_compression={}\ntexture_memory={}\nauto_clutch={}\nmomentary_gears={}\nmin_obj_size={}\nmax_obj_dist={}\nmax_fps={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\nmirror_hud={}\nmirror_refresh={}\ndoppler={}\ndriver={}\ndriverview_smooth={}\n",
+                crate::settings::SETTINGS_VERSION, self.msaa, self.anisotropy, self.ssao as u8, self.shadows as u8, self.shadow_size, self.shadow_blobs as u8, self.navigator as u8, self.ui_opacity, self.navigator_corner, self.boarding, self.detail_textures as u8, self.exact_fare as u8, self.enhanced as u8, self.graphics, self.vr as u8, self.vr_scale, self.fullscreen as u8, self.vsync as u8, self.volume, self.drive_keys, self.post_aa, self.render_scale_text(), self.language, self.texture_compression as u8, self.texture_memory, self.auto_clutch as u8, self.momentary_gears as u8, self.min_obj_size, if self.max_obj_dist < 0.0 { "auto".to_string() } else { self.max_obj_dist.to_string() }, self.max_fps, self.chat as u8, self.tooltips as u8, self.name_tags as u8, self.show_fps as u8, self.clouds as u8, self.pax_density, self.vol_ai, self.vol_scenery, self.mirror_size, self.mirror_hud, self.mirror_refresh, self.doppler as u8, self.driver as u8, self.driverview_smooth as u8
+            );
+            text.push_str(&format!(
+                "vr_head_smoothing_ms={}\nvr_mirror_rate={}\nvr_desktop_mirror={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+                self.vr_head_smoothing_ms, self.vr_mirror_rate, self.vr_desktop_mirror as u8, self.led_glow, self.led_mips, self.night_brightness, self.ui_scale, self.ui_scale_window as u8, self.chat_size, self.notes as u8, self.ff_road_vib, self.ff_engine_vib, self.ff_fade,
+            ));
+            text.push_str(&format!(
+                "triple_hud_center={}\ntriple_fov_deg={}\nfov={}\noutside_fov={}\n",
+                self.triple_hud_center as u8, self.triple.fov_deg, self.fov, self.outside_fov
+            ));
+            text.push_str(&format!("triple_screen={}\ntriple_span={}\ntriple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\ntriple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", self.triple.enabled as u8, self.triple_span as u8, self.triple.width_mm, self.triple.distance_mm, self.triple.bezel_mm, self.triple.left_angle_deg, self.triple.right_angle_deg, self.triple.eye_height_mm));
+            text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8));
+            text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
+            text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", { let p = self.head_tracking_yaw_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_pitch_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_roll_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_x_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_y_sens; if p <= 2.0 { p / 100.0 } else { p } }, { let p = self.head_tracking_z_sens; if p <= 2.0 { p / 100.0 } else { p } }, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
+            text.push_str(&format!("auto_shift={}\n", self.auto_shift as u8));
+            text.push_str(&format!(
+                "right_stick_look={}\n",
+                self.right_stick_look as u8
+            ));
+            text.push_str(&format!("pad_steer_smooth={}\n", self.pad_steer_smooth));
+            text.push_str(&format!(
+                "pad_steer_linear={}\n",
+                self.pad_steer_linear as u8
+            ));
+            text.push_str(&format!(
+                "arrows_switch_cams={}\n",
+                self.arrows_switch_cams as u8
+            ));
+            text.push_str(&format!(
+                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
+                self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
+            ));
+            for (key, on) in INFO_ITEM_KEYS.iter().zip(self.info_items) {
+                text.push_str(&format!("{key}={}\n", on as u8));
+            }
+            text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
+            text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
+            text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
+            // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
+            text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
+            text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_follow_view={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_follow_view as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
+            text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
+            text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
+            text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
+            text.push_str(&format!("ui_accent={}\n", self.ui_accent));
+            text.push_str(&format!("ui_corners={}\n", self.ui_corners));
+            text
+        }
+    }
+
+    pub mod bus_seats {
+        pub use crate::settings::bus_seats::*;
+    }
 }
 pub mod situation {
     pub use crate::situation::*;

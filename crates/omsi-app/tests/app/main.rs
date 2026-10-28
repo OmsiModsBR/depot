@@ -5,6 +5,9 @@ mod about;
 mod actions;
 #[cfg(feature = "lan")]
 mod admin;
+mod api_limits;
+mod app;
+mod app_events;
 mod bus_service;
 mod camera_arm;
 mod camera_util;
@@ -38,6 +41,7 @@ mod lan;
 mod lan_mods;
 #[cfg(feature = "lan")]
 mod lan_world;
+mod lib;
 mod lights;
 mod line_times;
 #[cfg(target_os = "macos")]
@@ -74,6 +78,7 @@ mod screenshot_name;
 #[cfg(feature = "server")]
 mod server;
 mod services;
+mod settings;
 mod situation;
 mod startup;
 mod tiles;

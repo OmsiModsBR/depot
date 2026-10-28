@@ -6,8 +6,8 @@
 //! becomes a `fix/` change, which then takes its line out of the list. The test fails both
 //! on a new difference and on a listed one that is gone, so the list stays what is true.
 
-use super::Settings;
 use omsi_launcher_lib::{settings_from_text, settings_to_text};
+use openomsi_game::testing::settings::{Settings, SettingsInternals};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -215,7 +215,10 @@ struct Difference {
 
 /// The case's file: one key on top of the current version.
 fn file(key: &str, value: &str) -> String {
-    format!("version={}\n{key}={value}\n", super::SETTINGS_VERSION)
+    format!(
+        "version={}\n{key}={value}\n",
+        openomsi_game::testing::settings::SETTINGS_VERSION
+    )
 }
 
 /// The game's settings field by field (`triple.fov_deg`, `seat[1]`), as `Debug` shows them.
