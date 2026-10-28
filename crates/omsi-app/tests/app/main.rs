@@ -13,6 +13,7 @@ mod camera_arm;
 mod camera_util;
 mod condensation;
 mod controllers;
+mod crate_root;
 mod describe;
 mod diagnostics;
 #[cfg(windows)]
@@ -41,7 +42,7 @@ mod lan;
 mod lan_mods;
 #[cfg(feature = "lan")]
 mod lan_world;
-mod lib;
+mod launcher;
 mod lights;
 mod line_times;
 #[cfg(target_os = "macos")]
