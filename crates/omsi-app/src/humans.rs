@@ -72,18 +72,27 @@ pub fn follow_surface(cur: f64, target: f64, speed: f64, dt: f64) -> f64 {
     }
 }
 
-/// How far over somebody's feet a walking surface may be taken: a step (0.5 m), or - on a
-/// pedestrian path - up to the path's own height (a few cm over it), within `MAX_PATH_REACH`.
-/// A high platform's path lies over a step above a low floor's exit, and the person who got
-/// off walks on the path: looking only a step up they took the road under the platform and
-/// walked in it.
-pub fn walk_reach(feet: f64, path_z: Option<f64>) -> f64 {
+/// The floor of somebody on foot, given the `surface` found under them and, on a pedestrian
+/// path, the path's own `path_z` there. A high platform may have no face to find (or one
+/// above a step's reach) and the surface then found is the road under it: who got off a
+/// bus there walked in the road's height, sunk in the platform. A surface well under the
+/// path (more than `PATH_SLACK`) is not the floor of somebody on it: the path's height is,
+/// when it is within `MAX_PATH_REACH` of the feet (a path far above or below is another
+/// level's).
+pub fn walk_floor(surface: Option<f64>, feet: f64, path_z: Option<f64>) -> Option<f64> {
     match path_z {
-        Some(z) => (z - feet + 0.15).clamp(0.5, MAX_PATH_REACH),
-        None => 0.5,
+        Some(pz)
+            if (pz - feet).abs() <= MAX_PATH_REACH
+                && surface.map_or(true, |s| s < pz - PATH_SLACK) =>
+        {
+            Some(pz)
+        }
+        _ => surface,
     }
 }
-/// The highest a path may lie over somebody's feet for them to step up to it (m).
+/// How far a path may lie over the surface found under it before the path is the floor (m).
+const PATH_SLACK: f64 = 0.3;
+/// The highest or lowest a path may lie from somebody's feet to be their floor (m).
 const MAX_PATH_REACH: f64 = 1.5;
 
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
@@ -5281,10 +5290,8 @@ impl Humans {
             Place::Ground => {
                 p.position.x = w.pos.x;
                 p.position.y = w.pos.y;
-                let reach = walk_reach(p.position.z, path_z);
-                if let Some(z) =
-                    world.walk_height_reach(p.position.x, p.position.y, p.position.z, reach)
-                {
+                let found = world.walk_height_near(p.position.x, p.position.y, p.position.z);
+                if let Some(z) = walk_floor(found, p.position.z, path_z) {
                     // up a kerb quickly, down it smoothly (the feet find the kerb themselves);
                     // more than a kerb below the surface is no step but a wrong height (the
                     // pavement's tile came after them): straight onto it

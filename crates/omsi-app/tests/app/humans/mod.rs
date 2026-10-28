@@ -695,19 +695,22 @@ fn people_keep_the_floor_height_on_sloped_ground() {
     assert!((follow_surface(0.0, 0.2, 1.4, 0.5) - 0.2).abs() < 1e-9);
 }
 
-/// Alighting at a high platform (BRT): the floor of a low bus is 0.35 m, the platform's
-/// path 1.0 m. The surface looked for must reach the path's height, or the people who got
-/// off take the road under the platform. Without a path (or a lower one) it stays a step.
+/// Alighting from a high floor onto a high platform (BRT): when the surface found under the
+/// people is the road (the platform's face is missing or out of reach), they stay on the
+/// height of the platform's path. A surface at the path, a path far off or no path: as before.
 #[test]
-fn people_off_a_low_bus_reach_the_height_of_a_high_platforms_path() {
-    let (feet, platform) = (0.35, 1.0);
-    assert!(feet + walk_reach(feet, None) < platform);
-    assert!(feet + walk_reach(feet, Some(platform)) >= platform);
-    // on a path at their own height, or below them: a step, as before
-    assert_eq!(walk_reach(feet, Some(feet)), 0.5);
-    assert_eq!(walk_reach(1.0, Some(0.0)), 0.5);
-    // a path far over them (a roof, a bridge) is not stepped up to
-    assert!(feet + walk_reach(feet, Some(4.0)) < 4.0);
+fn people_off_a_high_bus_stay_on_a_high_platforms_path() {
+    let (feet, platform, road) = (1.0, 1.0, 0.0);
+    assert_eq!(walk_floor(Some(road), feet, Some(platform)), Some(platform));
+    assert_eq!(walk_floor(None, feet, Some(platform)), Some(platform));
+    // the surface found is the platform's: kept (a slope or kerb within a hand of the path)
+    assert_eq!(walk_floor(Some(0.95), feet, Some(platform)), Some(0.95));
+    assert_eq!(walk_floor(Some(1.2), feet, Some(platform)), Some(1.2));
+    // no path: the surface, as before
+    assert_eq!(walk_floor(Some(road), feet, None), Some(road));
+    // a path of another level (an overpass 4 m up, a tunnel 3 m down)
+    assert_eq!(walk_floor(Some(road), feet, Some(5.0)), Some(road));
+    assert_eq!(walk_floor(Some(road), feet, Some(-2.0)), Some(road));
 }
 
 /// #171: a bus whose exit door opens only on a request. The passenger's request leaves
