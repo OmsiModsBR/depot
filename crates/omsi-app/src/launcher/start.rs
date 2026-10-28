@@ -435,9 +435,13 @@ pub fn card(l: &mut Launcher, r: Rect) {
         }
     }
     let _ = foot;
-    if l.ui
-        .button("start-go", go, "Start driving", Some("o-play"), ButtonKind::Primary)
-    {
+    if l.ui.button(
+        "start-go",
+        go,
+        "Start driving",
+        Some("o-play"),
+        ButtonKind::Primary,
+    ) {
         start(l);
     }
 }

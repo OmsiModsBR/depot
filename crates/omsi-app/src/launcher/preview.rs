@@ -189,11 +189,7 @@ fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf {
     let small = shape == thumb_shape();
     // (the small pictures drawn ahead of time are not drawn again with every build: they
     // change with the bus and with `THUMB_REVISION`, bumped when the showroom's drawing does)
-    let build = if small {
-        THUMB_REVISION
-    } else {
-        crate::BUILD
-    };
+    let build = if small { THUMB_REVISION } else { crate::BUILD };
     let h = fnv(&[
         &look.root.to_string_lossy(),
         &look.bus,
@@ -276,7 +272,9 @@ pub fn missing_kept(looks: Vec<Look>, shape: Shape) -> Vec<Look> {
 /// The picture kept for `look`'s bus and paint at `shape`, if there is one (read off the
 /// launcher's thread: it reads a file and walks the bus's folder).
 pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
-    image::open(cache_file(look, shape)).ok().map(|i| i.to_rgba8())
+    image::open(cache_file(look, shape))
+        .ok()
+        .map(|i| i.to_rgba8())
 }
 
 /// The small picture drawn ahead of time of `bus` (`Vehicles/<folder>/<file>`) in `paint`
@@ -453,7 +451,14 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
                         }
                     }
                     if let Some(dir) = file.parent() {
-                        prune(dir, if key.1 == thumb_shape() { KEEP_SMALL } else { KEEP });
+                        prune(
+                            dir,
+                            if key.1 == thumb_shape() {
+                                KEEP_SMALL
+                            } else {
+                                KEEP
+                            },
+                        );
                     }
                 });
             }
@@ -1010,7 +1015,9 @@ impl Preview {
         // all, and the mark of the bus it was reading is the launcher's to clear)
         let mark = self.mark;
         if let Some(mut c) = self.link.as_mut().and_then(|l| l.child.take()) {
-            log::info!("launcher: the preview helper is stopped (the window is hidden, or a game runs)");
+            log::info!(
+                "launcher: the preview helper is stopped (the window is hidden, or a game runs)"
+            );
             let _ = c.kill();
             std::thread::spawn(move || {
                 let _ = c.wait();

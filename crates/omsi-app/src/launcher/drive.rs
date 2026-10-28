@@ -1053,14 +1053,7 @@ fn foot(l: &mut Launcher, f: Rect, tab: usize) {
             l.ui.width(&note, 11.5, Weight::Medium).min(tw),
             18.0,
         );
-        l.ui.text_in(
-            &note,
-            nr,
-            11.5,
-            Weight::Medium,
-            OK,
-            Align::Left,
-        );
+        l.ui.text_in(&note, nr, 11.5, Weight::Medium, OK, Align::Left);
     }
 }
 

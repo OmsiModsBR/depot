@@ -10,14 +10,14 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+mod ai_edit;
+mod ai_traffic;
 mod backdrop;
 mod chrome;
 mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
 mod integrity;
-mod ai_edit;
-mod ai_traffic;
 mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;

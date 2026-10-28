@@ -67,10 +67,9 @@ fn line(l: &mut Launcher, r: Rect, y: f32, label: &str, value: &str) {
         MUTED,
     );
     // (the value starts after the label when a translation is longer than the usual column)
-    let label_w = l
-        .ui
-        .fonts
-        .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
+    let label_w =
+        l.ui.fonts
+            .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
     let x = (r.x + 170.0).max(r.x + 19.0 + label_w + 14.0);
     clipped(
         &mut l.ui,
