@@ -7,7 +7,7 @@
 //! them (for example the end-of-trip report's note) is the caller's business.
 
 use crate::paint::Align;
-use crate::theme::{accent, accent_soft, on_accent};
+use crate::theme::{accent, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -172,11 +172,10 @@ pub fn table(
         );
         let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
         if selected == Some(i) {
-            ui.p().rect(r, accent_soft());
-            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
+            chosen_row(ui, r, 1.0);
         } else {
             if hover {
-                ui.p().rect(r, Color::WHITE.alpha(0.04));
+                ui.p().rect(r, Color::WHITE.alpha(0.05));
             }
             ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
         }
@@ -383,15 +382,43 @@ fn foot_with(
     let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
+    let mut hint_x = r.x + 20.0;
+    let mut room = room;
+    if !hint.is_empty() {
+        // (a mark of information before the hint)
+        ui.icon(
+            "info",
+            Vec2::new(hint_x + 8.0, r.bottom() - FOOT_H * 0.5),
+            16.0,
+            MUTED,
+        );
+        hint_x += 24.0;
+        room = (room - 24.0).max(0.0);
+    }
     ui.text_in(
         hint,
-        Rect::new(r.x + 20.0, r.bottom() - FOOT_H, room, FOOT_H),
+        Rect::new(hint_x, r.bottom() - FOOT_H, room, FOOT_H),
         12.0 * TS,
         Weight::Regular,
         MUTED,
         Align::Left,
     );
     clicked
+}
+
+/// The row chosen in a table or a list: a light face and a small accent pill at its left,
+/// as Windows 11 marks the chosen item (`alpha` dims it with a list that cannot be used).
+fn chosen_row(ui: &mut Ui, r: Rect, alpha: f32) {
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.y + 2.0, r.w - 8.0, r.h - 4.0),
+        BUTTON_R,
+        Color::WHITE.alpha(0.08 * alpha),
+    );
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.center().y - 8.0, 3.0, 16.0),
+        1.5,
+        accent().alpha(alpha),
+    );
 }
 
 /// A small heading over a part of a window (muted, as a table's column heads are), its
@@ -407,6 +434,73 @@ pub fn note(ui: &mut Ui, s: &str, r: Rect) {
 
 /// The height of a row with a check box ([`check_row`]).
 pub const CHECK_H: f32 = 40.0;
+
+/// A row with a switch at its right, for an option that applies at once: `label` at the
+/// left, on when `on`. A dim one (`disabled`: the reason, shown before the switch) cannot be
+/// clicked. Returns whether it was clicked. (An option a window applies only on its OK has
+/// the box of [`check_row`].)
+pub fn switch_row(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    label: &str,
+    on: bool,
+    disabled: Option<&str>,
+) -> bool {
+    let enabled = disabled.is_none();
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    if hover && enabled {
+        ui.p().rect(r, Color::WHITE.alpha(0.04));
+    }
+    // (a switch at the right, as Windows 11 has a setting that applies at once)
+    let a = if enabled { 1.0 } else { 0.4 };
+    let track = Rect::new(
+        r.right() - 16.0 - 40.0,
+        (r.center().y - 10.0).round(),
+        40.0,
+        20.0,
+    );
+    let t = ui.tween(id_of(id) ^ 0x5a17, if on { 1.0 } else { 0.0 }, 0.12);
+    ui.p().rounded(track, 10.0, accent().alpha(t * a));
+    if t < 1.0 {
+        let edge = if hover && enabled {
+            MUTED
+        } else {
+            MUTED.alpha(0.7)
+        };
+        ui.p()
+            .rounded_border(track, 10.0, 1.0, edge.alpha((1.0 - t) * a));
+    }
+    let kx = track.x + 10.0 + 20.0 * t;
+    ui.p().rounded(
+        Rect::new(kx - 5.0, track.center().y - 5.0, 10.0, 10.0),
+        5.0,
+        MUTED.mix(on_accent(), t).alpha(a),
+    );
+    let lx = r.x + 16.0;
+    let reason_w = disabled
+        .map(|d| (ui.width(d, 12.0 * TS, Weight::Regular) + 16.0).min(r.w * 0.55))
+        .unwrap_or(0.0);
+    ui.text_in(
+        label,
+        Rect::new(lx, r.y, (track.x - 12.0 - reason_w - lx).max(0.0), r.h),
+        14.0 * TS,
+        Weight::Regular,
+        if enabled { FG } else { FG.alpha(0.4) },
+        Align::Left,
+    );
+    if let Some(why) = disabled {
+        ui.text_in(
+            why,
+            Rect::new(track.x - 12.0 - reason_w, r.y, reason_w, r.h),
+            12.0 * TS,
+            Weight::Regular,
+            MUTED,
+            Align::Right,
+        );
+    }
+    click && enabled
+}
 
 /// A row with a check box: `label` at the right of the box, ticked when `on`. A dim one
 /// (`disabled`: the reason, shown at the right) cannot be clicked. Returns whether it was
@@ -647,12 +741,10 @@ pub fn list_rows(
             let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
             let chosen = selected == Some(i);
             if chosen {
-                ui.p().rect(r, accent_soft().alpha(alpha));
-                ui.p()
-                    .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(alpha));
+                chosen_row(ui, r, alpha);
             } else {
                 if hover && look.enabled {
-                    ui.p().rect(r, Color::WHITE.alpha(0.04));
+                    ui.p().rect(r, Color::WHITE.alpha(0.05));
                 }
                 ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
             }
@@ -1312,25 +1404,44 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         FG,
     );
     let foot_h = FOOT_H;
-    let totals_h = v.totals.len() as f32 * ROW_H;
-    let head_y = body.y + 44.0;
+    // the totals as tiles under the trip's title, before the stops
+    let tiles_y = body.y + 40.0;
+    let tiles_h = if v.totals.is_empty() { 0.0 } else { 64.0 };
+    if !v.totals.is_empty() {
+        let n = v.totals.len() as f32;
+        let gap = 12.0;
+        let w = ((body.w - 32.0 - gap * (n - 1.0)) / n).floor();
+        for (i, (k, val)) in v.totals.iter().enumerate() {
+            let t = Rect::new(body.x + 16.0 + i as f32 * (w + gap), tiles_y, w, tiles_h);
+            ui.p().rounded(t, BUTTON_R, Color::WHITE.alpha(0.05));
+            ui.p().rounded_border(t, BUTTON_R, 1.0, EDGE);
+            ui.text_in(
+                k,
+                Rect::new(t.x + 14.0, t.y + 6.0, t.w - 28.0, 20.0),
+                12.0 * TS,
+                Weight::Regular,
+                MUTED,
+                Align::Left,
+            );
+            ui.text_in(
+                val,
+                Rect::new(t.x + 14.0, t.y + 26.0, (t.w - 28.0).max(0.0), 32.0),
+                20.0 * TS,
+                Weight::Bold,
+                FG,
+                Align::Left,
+            );
+        }
+    }
+    let head_y = tiles_y + tiles_h + if tiles_h > 0.0 { 8.0 } else { 4.0 };
     let area = Rect::new(
         body.x,
         head_y,
         body.w,
-        (r.bottom() - foot_h - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+        (r.bottom() - foot_h - 8.0 - head_y).max(ROW_H + 34.0),
     );
     // (each trip's report starts at its first stop: the id is the trip's)
-    let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
-    let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
-    ui.p()
-        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
-    let rows: Vec<(&str, String, Option<Color>)> = v
-        .totals
-        .iter()
-        .map(|(k, val)| (*k, val.clone(), None))
-        .collect();
-    key_values(ui, totals, &rows);
+    stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
     foot(
         ui,
         "report",
