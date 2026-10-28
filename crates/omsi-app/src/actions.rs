@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 
 /// Global actions a controller button should send to the game instead of to the bus script.
-pub(crate) fn is_game_action(name: &str) -> bool {
+pub fn is_game_action(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.starts_with("view_")
         || matches!(
@@ -594,7 +594,7 @@ impl App {
     pub(crate) fn menu_choose(&mut self, event_loop: &ActiveEventLoop, k: usize) {
         // (a click in an open list keeps the scroll where it is: no jump to the line)
         self.menu_top = if self.chooser.is_some() {
-            self.ui.as_ref().map(|u| u.menu_start as f32)
+            self.ui.as_ref().map(|u| u.hits.menu_start as f32)
         } else {
             None
         };

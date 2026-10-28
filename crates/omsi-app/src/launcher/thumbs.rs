@@ -16,11 +16,11 @@ pub struct Thumbs {
     /// The textures made (None: there was no picture to make one of).
     kept: HashMap<String, Option<usize>>,
     /// Asked for and not yet made.
-    asked: HashSet<String>,
+    pub asked: HashSet<String>,
     jobs: Option<Sender<Job>>,
     done: Option<Receiver<(String, Option<image::RgbaImage>)>>,
     /// Made and still to go to the GPU.
-    pending: Vec<(String, Option<image::RgbaImage>)>,
+    pub pending: Vec<(String, Option<image::RgbaImage>)>,
 }
 
 /// `img` cut to the thumbnail's shape (its middle) and made that small.
@@ -99,31 +99,5 @@ impl Thumbs {
     /// The device went (or was given to the game): the textures with it, made again when asked.
     pub fn forget_textures(&mut self) {
         self.kept.clear();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_picture_is_cut_to_the_thumbnails_shape() {
-        let t = make(&image::RgbaImage::new(1600, 400));
-        assert_eq!(t.dimensions(), (W, H));
-        let t = make(&image::RgbaImage::new(300, 900));
-        assert_eq!(t.dimensions(), (W, H));
-    }
-
-    #[test]
-    fn a_thumbnail_is_made_once() {
-        let mut t = Thumbs::default();
-        t.want("a", || Some(image::RgbaImage::new(10, 10)));
-        t.want("a", || panic!("asked twice"));
-        let start = std::time::Instant::now();
-        while !t.update() && start.elapsed().as_secs() < 5 {
-            std::thread::yield_now();
-        }
-        assert_eq!(t.pending.len(), 1);
-        assert!(t.asked.is_empty());
     }
 }

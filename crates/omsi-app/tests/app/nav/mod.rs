@@ -379,10 +379,14 @@ fn crowded_stop_markers_and_labels_do_not_overlap() {
 fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
     let mut bus = Painter::new();
     vehicle_icon(&mut bus, Vec3::ZERO, 90.0, Color::WHITE, Icon::Road, 7.0);
-    // an edge and a body of six corners (four triangles each), a windscreen of four (two)
-    assert_eq!(bus.verts.len(), (4 + 4 + 2) * 3);
+    // an edge and a body of sixteen corners (fourteen triangles each), a windscreen of four (two)
+    assert_eq!(bus.verts.len(), (14 + 14 + 2) * 3);
+    // a trolleybus is a bus with two poles (each a dark edge and a lighter line)
+    let mut trolley = Painter::new();
+    vehicle_icon(&mut trolley, Vec3::ZERO, 90.0, Color::WHITE, Icon::Trolley, 7.0);
+    assert_eq!(trolley.verts.len(), bus.verts.len() + 4 * 2 * 3);
     // every kind is made of whole triangles, and none is empty
-    for icon in [Icon::Tram, Icon::Metro, Icon::Train] {
+    for icon in [Icon::Tram, Icon::Metro, Icon::Train, Icon::Trolley] {
         let mut p = Painter::new();
         vehicle_icon(&mut p, Vec3::ZERO, 0.0, Color::WHITE, icon, 7.0);
         assert!(!p.verts.is_empty() && p.verts.len() % 3 == 0, "{icon:?}");

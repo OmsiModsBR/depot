@@ -102,10 +102,7 @@ impl Original {
     pub fn ready(&self) -> bool {
         self.status.as_ref().is_some_and(|s| {
             s.omsilaunch.installed
-                && matches!(
-                    s.omsilaunch.integrity,
-                    Integrity::Intact | Integrity::NoManifest
-                )
+                && matches!(s.omsilaunch.integrity, Integrity::Intact)
                 && (s.omsilaunch.control_protocol.is_none()
                     || oe::install::protocol_supported(s.omsilaunch.control_protocol.as_deref()))
         })
@@ -150,6 +147,8 @@ impl State {
         self.original.asked = Some(Instant::now());
         let root = std::path::PathBuf::from(&self.config.root);
         self.spawn(move || {
+            // (a day old: an install or a game of another Depot may be running)
+            oe::config::sweep_leftovers(&core::data_dir(), std::time::Duration::from_secs(86_400));
             let have = !root.as_os_str().is_empty() && root.is_dir();
             let st =
                 oe::detect::status_for(have.then_some(root.as_path()), oe::detect::dotnet_here());
@@ -416,6 +415,7 @@ fn fetch_package(
     if !got.eq_ignore_ascii_case(sha) {
         return Err("The package does not match the checksum that was shown.".into());
     }
-    let plan = oe::install::plan_install(root, &zip).map_err(|e| format!("{e:#}"))?;
+    let plan =
+        oe::install::plan_install(root, &core::data_dir(), &zip).map_err(|e| format!("{e:#}"))?;
     Ok((Arc::new(zip), plan))
 }

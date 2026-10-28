@@ -324,7 +324,7 @@ pub struct LineInfo {
 struct Entry {
     cx: i32,
     cy: i32,
-    at: usize,
+    pub at: usize,
     len: usize,
 }
 

@@ -257,7 +257,7 @@ impl Choice {
     }
 
     /// A duty read back from the file, as a new launcher starts with it.
-    fn fresh(mut c: Choice) -> Choice {
+    pub fn fresh(mut c: Choice) -> Choice {
         // A server is joined on purpose, in the launcher's own session (Multiplayer page): a
         // join left in the file made every later start connect to it, with no sign of it on
         // the Drive page ("Leave Server" is only there for a server joined since the launch).
@@ -1979,7 +1979,7 @@ impl State {
 }
 
 /// Whether the game started from here (its process `pid`) is in a list of games.
-fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
+pub fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
     pid.is_some_and(|p| instances.iter().any(|i| i.pid == p))
 }
 
@@ -2002,7 +2002,7 @@ pub fn hhmm(seconds: f64) -> String {
 
 /// `date` (`YYYY-MM-DD`) moved into `month` (`04`, `07`, `10` or `01`, a season's), the day
 /// kept within the month: 31 March into spring is 30 April.
-fn date_in_month(date: &str, month: &str) -> String {
+pub fn date_in_month(date: &str, month: &str) -> String {
     let yy = date.get(0..4).unwrap_or("1989");
     let last = if month == "04" { 30 } else { 31 };
     let dd = date
@@ -2011,16 +2011,6 @@ fn date_in_month(date: &str, month: &str) -> String {
         .unwrap_or(15)
         .clamp(1, last);
     format!("{yy}-{month}-{dd:02}")
-}
-
-#[cfg(test)]
-mod season_date_tests {
-    #[test]
-    fn a_season_keeps_the_day_within_its_month() {
-        assert_eq!(super::date_in_month("2026-03-31", "04"), "2026-04-30");
-        assert_eq!(super::date_in_month("2026-03-31", "07"), "2026-07-31");
-        assert_eq!(super::date_in_month("2026-11-05", "01"), "2026-01-05");
-    }
 }
 
 pub fn fmt_bytes(b: u64) -> String {
@@ -2191,265 +2181,6 @@ const MACHINE_LINES: [&str; 4] = [
 /// The line between the machine and the end of the log in a crash's tail.
 pub const CRASH_TAIL_GAP: &str = "…";
 
-#[cfg(all(test, feature = "lan"))]
-mod disconnect_tests {
-    #[test]
-    fn the_servers_word_is_read_back_from_the_log_of_this_run() {
-        let dir = std::env::temp_dir().join(format!("depot-disc-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("game.log");
-        let left = crate::lan::LEFT_SERVER;
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x WARN openomsi_game::lan] {left}Expulsé : conduite dangereuse\n[x INFO a] game ends\n")).unwrap();
-        assert_eq!(
-            super::disconnect_of(&p).as_deref(),
-            Some("Expulsé : conduite dangereuse")
-        );
-        // a run that ended in any other way: nothing
-        std::fs::write(&p, format!("[x INFO a] starting the game: one\n[x WARN openomsi_game::lan] {left}old\n[x INFO a] starting the game: two\n[x INFO a] game ends\n")).unwrap();
-        assert!(super::disconnect_of(&p).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
-
-#[cfg(test)]
-mod choice_tests {
-    /// `launcher-duty.json` from before the number plate field: the missing key falls back to
-    /// the default (no plate), and a typed plate survives a round trip.
-    #[test]
-    fn a_remembered_join_is_not_resumed_at_launch() {
-        let saved: super::Choice =
-            serde_json::from_str(r#"{"lan_mode":"join","lan_addr":"main.example.org"}"#).unwrap();
-        assert_eq!(saved.lan_mode, "join");
-        assert_eq!(super::Choice::fresh(saved).lan_mode, "off");
-        let host: super::Choice = serde_json::from_str(r#"{"lan_mode":"host"}"#).unwrap();
-        assert_eq!(super::Choice::fresh(host).lan_mode, "host");
-    }
-
-    /// A choice the Drive page left (it always held a bus) is no preselection on a computer:
-    /// only a bus picked on Vehicles is.
-    #[test]
-    fn the_drive_pages_bus_is_not_a_preselection() {
-        let old: super::Choice = serde_json::from_str(r#"{"bus":"Vehicles/x.bus","paint":"Red","number":"12","plate":"AB","hof":"H","hof_manual":true,"version":2}"#).unwrap();
-        let c = super::Choice::fresh(old);
-        assert_eq!(
-            (
-                c.bus.as_str(),
-                c.paint.as_str(),
-                c.number.as_str(),
-                c.plate.as_str(),
-                c.hof_manual
-            ),
-            ("", "", "", "", false)
-        );
-        assert_eq!(c.version, 3);
-        // (one picked since stays)
-        let mut now = super::Choice::default();
-        now.bus = "Vehicles/y.bus".into();
-        assert_eq!(super::Choice::fresh(now).bus, "Vehicles/y.bus");
-    }
-
-    /// "Use for the next start" puts the card's choices in the next start, a depot file
-    /// picked by hand among them; Clear leaves nothing of it, the hand-picked depot file
-    /// included, so the duty carries the automatic one.
-    #[test]
-    fn a_used_bus_and_its_clear() {
-        let mut c = super::Choice::default();
-        c.hof = "Automatic".into();
-        c.use_bus(omsi_launcher_ui::vehicles::UseBus {
-            file: "Vehicles/A/a.bus".into(),
-            paint: "Red".into(),
-            hof: Some("Picked".into()),
-            number: Some("3201".into()),
-            plate: "B-V 1".into(),
-        });
-        assert_eq!(
-            (
-                c.bus.as_str(),
-                c.paint.as_str(),
-                c.hof.as_str(),
-                c.number.as_str(),
-                c.plate.as_str()
-            ),
-            ("Vehicles/A/a.bus", "Red", "Picked", "3201", "B-V 1")
-        );
-        assert!(c.hof_manual);
-        c.clear_bus();
-        assert_eq!(
-            (
-                c.bus.as_str(),
-                c.paint.as_str(),
-                c.number.as_str(),
-                c.plate.as_str()
-            ),
-            ("", "", "", "")
-        );
-        assert!(!c.hof_manual);
-        // (automatic depot file and no number: nothing picked by hand)
-        c.use_bus(omsi_launcher_ui::vehicles::UseBus {
-            file: "Vehicles/A/a.bus".into(),
-            paint: String::new(),
-            hof: None,
-            number: None,
-            plate: String::new(),
-        });
-        assert!(!c.hof_manual);
-        assert_eq!(c.number, "");
-    }
-
-    #[test]
-    fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
-        let old: super::Choice =
-            serde_json::from_str(r#"{"bus":"Vehicles/x.bus","map":"maps/x/global.cfg"}"#).unwrap();
-        assert_eq!(old.plate, "");
-        let mut c = super::Choice::default();
-        c.plate = "B-AB 1234".into();
-        let back: super::Choice =
-            serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
-        assert_eq!(back.plate, "B-AB 1234");
-    }
-}
-
-#[cfg(test)]
-mod launch_tests {
-    use omsi_launcher_lib::Instance;
-
-    fn game(pid: u32, running: bool) -> Instance {
-        Instance {
-            pid,
-            running,
-            ..Default::default()
-        }
-    }
-
-    /// The wait after Start ends with the first list of games that has the one started,
-    /// running or ended already - a game that died at once left the launcher blank for the
-    /// whole 15 seconds.
-    #[test]
-    fn the_wait_after_start_ends_once_the_game_is_listed() {
-        // (a list asked for before the game was started)
-        assert!(!super::game_listed(Some(7), &[game(3, true)]));
-        assert!(super::game_listed(Some(7), &[game(3, true), game(7, true)]));
-        assert!(super::game_listed(Some(7), &[game(7, false)]));
-        // (Start pressed, the game not started yet)
-        assert!(!super::game_listed(None, &[game(7, true)]));
-    }
-}
-
-#[cfg(test)]
-mod crash_tests {
-    #[test]
-    fn a_panic_is_found_and_a_clean_end_is_not() {
-        let dir = std::env::temp_dir().join("depot-crash-test");
-        let _ = std::fs::create_dir_all(&dir);
-        let p = dir.join("game.log");
-        std::fs::write(&p, "[t INFO x] loading\n[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
-        let (what, tail) = super::crash_of(&p).unwrap();
-        assert!(what.contains("index out of bounds"), "{what}");
-        assert!(tail.contains("loading"));
-        std::fs::write(
-            &p,
-            "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n",
-        )
-        .unwrap();
-        assert!(super::crash_of(&p).is_none());
-        std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
-        assert!(super::crash_of(&p).unwrap().0.contains("device was lost"));
-        // an error before the game started, or one it got over, is not the crash
-        std::fs::write(&p, "[t ERROR omsi_render] a part of the picture could not be recorded (left out)\n[t INFO x] starting the game: omsi\n[t INFO omsi_render] renderer: compiling the sky and clouds shaders\n").unwrap();
-        assert!(super::crash_of(&p).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// A device lost in the middle of a frame (#48): wgpu's panic over it is caught and only
-    /// warned of, and the report names the loss - not the panic - as what ended the game. A
-    /// card that hung when the game closed after a clean end is no crash.
-    #[test]
-    fn a_loss_caught_mid_frame_is_reported_as_the_loss() {
-        let dir = std::env::temp_dir().join(format!("depot-crash-lost-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let p = dir.join("game.log");
-        std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
-            [t ERROR omsi_render::gpu::lost] the graphics device was lost (Unknown: Parent device is lost)\n\
-            [t WARN openomsi_game] caught by the renderer: panicked at lost.rs:1:1:\n\
-            \x20   Error in Device::poll: Parent device is lost\n\
-            [t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Parent device is lost)\n\
-            [t INFO openomsi_game::app_events] game ends\n").unwrap();
-        let (what, _) = super::crash_of(&p).unwrap();
-        assert!(
-            what.contains("ending the session: the graphics device was lost"),
-            "{what}"
-        );
-        assert!(
-            !what.contains("Device::poll") && !what.contains("game ends"),
-            "{what}"
-        );
-        std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
-            [t INFO openomsi_game::app_events] game ends\n\
-            [t WARN openomsi_game] the graphics device did not close in order (the game had ended already)\n").unwrap();
-        assert!(super::crash_of(&p).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// The report says what the game ran on (the start of the log), and its title is the
-    /// error alone, not the records after it (#1187).
-    #[test]
-    fn the_report_has_the_computer_and_a_clean_title() {
-        let dir = std::env::temp_dir().join(format!("depot-crash-machine-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let p = dir.join("game.log");
-        let mut log = String::from("[t INFO openomsi_game::applog] system: windows x86_64 (10.0), 8 threads, 8192 MB memory\n[t INFO openomsi_game::applog] command line: openomsi --map maps/X/global.cfg\n[t INFO omsi_render] graphics adapter: GTX 750 (DiscreteGpu, Dx12, 2048 MB of its own), texture memory taken for it: 716 MB\n");
-        // (more than the end that goes with the report)
-        for k in 0..400 {
-            log.push_str(&format!(
-                "[t INFO openomsi_game::scene] tile loading: placed tile {k},0\n"
-            ));
-        }
-        log.push_str("[t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openomsi_game::app_events] game ends\n[t WARN openomsi_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
-        std::fs::write(&p, log).unwrap();
-        let (what, tail) = super::crash_of(&p).unwrap();
-        assert_eq!(
-            what,
-            "ending the session: the graphics device was lost (Unknown: Out of memory)"
-        );
-        let (machine, end) = tail
-            .split_once(&format!("\n{}\n", super::CRASH_TAIL_GAP))
-            .unwrap();
-        assert!(
-            machine.contains("8192 MB memory")
-                && machine.contains("GTX 750")
-                && machine.contains("maps/X/global.cfg"),
-            "{machine}"
-        );
-        assert!(end.contains("352.71 s") && !end.contains("placed tile 0,0"));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
-
 fn read_settings_file() -> Option<String> {
     std::fs::read_to_string(core::data_dir().join("settings.cfg")).ok()
-}
-
-#[cfg(test)]
-mod mods_tests {
-    /// The Mods page installs a .zip only; loose folders are copied by hand.
-    #[test]
-    fn only_a_zip_is_installed_from_the_page() {
-        let dir = std::env::temp_dir().join(format!("depot-is-zip-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("Folder.zip")).unwrap();
-        std::fs::create_dir_all(dir.join("Example bus")).unwrap();
-        for f in ["Example bus.zip", "Map.ZIP", "pack.rar"] {
-            std::fs::write(dir.join(f), b"PK").unwrap();
-        }
-        let is = |name: &str| super::is_zip(&dir.join(name).to_string_lossy());
-        let seen = (
-            is("Example bus.zip"),
-            is("Map.ZIP"),
-            is("Example bus"),
-            is("pack.rar"),
-            is("Folder.zip"),
-            is("Missing.zip"),
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(seen, (true, true, false, false, false, false));
-    }
 }

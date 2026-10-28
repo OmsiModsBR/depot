@@ -973,11 +973,11 @@ pub(crate) fn menu_extras(
     schedule: Option<&crate::schedule::Schedule>,
     now: f64,
 ) -> (
-    crate::ui::MenuKind,
+    crate::hud::MenuKind,
     Option<(String, String)>,
-    Option<crate::ui::Preview>,
+    Option<crate::hud::Preview>,
 ) {
-    use crate::ui::{MenuKind, Preview};
+    use crate::hud::{MenuKind, Preview};
     let Some(sel) = sel else {
         return (MenuKind::Game, None, None);
     };
@@ -2269,6 +2269,23 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
     })
 }
 
+/// Whether the route arrows over the road are on now.
+pub(crate) fn route_arrows_on(app: &App) -> bool {
+    toggle_now(app, "nav_arrows").unwrap_or(false)
+}
+
+/// The route arrows over the road (the Alt bar's help marker button, as the Esc menu's switch):
+/// flips them, keeps the choice for the next game and tells the world. The new state.
+pub(crate) fn toggle_route_arrows(app: &mut App) -> bool {
+    let on = !toggle_now(app, "nav_arrows").unwrap_or(false);
+    if let Some((k, v)) = toggle_set(app, "nav_arrows", on) {
+        remember_setting(k, &v);
+    }
+    sync_live(app);
+    LIST_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);
+    on
+}
+
 /// Switch `id` on or off; the key and value to keep for the next game.
 fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
     let bit = (on as u8).to_string();
@@ -3128,6 +3145,10 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("top", "Top of the screen"),
             ("bottom", "Bottom of the screen"),
         ],
+        "nav_view" => vec![
+            ("perspective", "Perspective"),
+            ("top", "Top view"),
+        ],
         "nav_orientation" => vec![
             ("map", "As the map is drawn"),
             ("north", "North up"),
@@ -3343,6 +3364,7 @@ fn sync_live(app: &mut App) {
     omsi_audio::MUFFLE_OUTSIDE.store(s.muffle_outside, std::sync::atomic::Ordering::Relaxed);
     if let Some(n) = app.navigator.as_mut() {
         n.arrows = s.nav_arrows;
+        n.view_top = s.nav_view == "top";
     }
     if let Some(h) = app.humans.as_mut() {
         h.exact_fare = s.exact_fare;
@@ -3373,6 +3395,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "nav_surface", "Map surface", "Shows the map's own surface (water, green, rivers, place names) under the roads, when the map ships one"),
         switch_row(app, "nav_arrows", "Route arrows (as in OMSI 2)", "Shows OMSI 2's route arrows over the road"),
         pick("navigator_corner", "Corner", later),
+        pick("nav_view", "Minimap view", "How the minimap looks at the map: in perspective, tilted ahead of the vehicle, or from straight above (top view)"),
         pick("nav_orientation", "City map orientation", "How the city map is turned: as the map is drawn, real north up (where the map says where it lies) or the vehicle's heading up; the compass on the map changes it for the session"),
         switch_row(app, "get_up", "Ability to get up (Ctrl+Shift+G)", "Allows you to get out of the car and explore the world"),
         switch_row(app, "coll_objects", "Collisions with objects", "Enables/disables collisions with objects such as buildings, streetlights, etc."),

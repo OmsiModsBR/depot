@@ -695,6 +695,24 @@ fn people_keep_the_floor_height_on_sloped_ground() {
     assert!((follow_surface(0.0, 0.2, 1.4, 0.5) - 0.2).abs() < 1e-9);
 }
 
+/// Alighting from a high floor onto a high platform (BRT): when the surface found under the
+/// people is the road (the platform's face is missing or out of reach), they stay on the
+/// height of the platform's path. A surface at the path, a path far off or no path: as before.
+#[test]
+fn people_off_a_high_bus_stay_on_a_high_platforms_path() {
+    let (feet, platform, road) = (1.0, 1.0, 0.0);
+    assert_eq!(walk_floor(Some(road), feet, Some(platform)), Some(platform));
+    assert_eq!(walk_floor(None, feet, Some(platform)), Some(platform));
+    // the surface found is the platform's: kept (a slope or kerb within a hand of the path)
+    assert_eq!(walk_floor(Some(0.95), feet, Some(platform)), Some(0.95));
+    assert_eq!(walk_floor(Some(1.2), feet, Some(platform)), Some(1.2));
+    // no path: the surface, as before
+    assert_eq!(walk_floor(Some(road), feet, None), Some(road));
+    // a path of another level (an overpass 4 m up, a tunnel 3 m down)
+    assert_eq!(walk_floor(Some(road), feet, Some(5.0)), Some(road));
+    assert_eq!(walk_floor(Some(road), feet, Some(-2.0)), Some(road));
+}
+
 /// #171: a bus whose exit door opens only on a request. The passenger's request leaves
 /// the passengers' side as `PAX_Exit<i>_Req` (`DoorWants`), reaches the AI bus's script
 /// through `write_door_requests`, the script opens the door at the stop, and the open state
@@ -981,6 +999,42 @@ fn with_a_door_open_nobody_waits_at_a_shut_button_door() {
         ),
         Some(6)
     );
+}
+
+/// A bus with entries on both sides at a stop on its left: while every door is still shut
+/// (none with a button) people walk to the door on their own side, not the first of the
+/// list (the right front door, across the bus). With a door open they go to that one.
+#[test]
+fn shut_doors_on_both_sides_draw_people_to_their_own_side() {
+    let dir = std::env::temp_dir().join(format!("omsi-both-sides-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("paths.cfg"),
+        "[pathpnt]\n1.0\n4\n0.5\n[pathpnt]\n0\n4\n0.5\n[pathpnt]\n-1.0\n4\n0.5\n[pathpnt]\n0\n-4\n0.5\n[pathlink]\n0\n1\n[pathlink]\n1\n2\n[pathlink]\n1\n3\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n[entry]\n2\n[exit]\n2\n").unwrap();
+    let def = omsi_vehicle::Vehicle {
+        path: dir.join("bus.bus"),
+        passenger_cabin: Some("cabin.cfg".into()),
+        paths: Some("paths.cfg".into()),
+        bounding_box: Some([2.5, 9.0, 3.0, 0.0, 0.0, 1.5]),
+        ..Default::default()
+    };
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    std::fs::remove_dir_all(&dir).ok();
+    let entries = cabin.entry_points();
+    assert_eq!(entries, [Some(0), Some(2)]);
+    let flags = cabin.entry_flags();
+    let (on_left, on_right) = (Vec3::new(-1.6, 4.0, 0.0), Vec3::new(1.6, 4.0, 0.0));
+    let nearest = |p: Vec3, open: &[bool]| {
+        cabin.omsi_nearest(p, &entries, false, false, Some(&flags), Some(open))
+    };
+    assert_eq!(nearest(on_left, &[false, false]), Some(2));
+    assert_eq!(nearest(on_right, &[false, false]), Some(0));
+    // a door open: that one, from either side
+    assert_eq!(nearest(on_left, &[true, false]), Some(0));
+    assert_eq!(nearest(on_left, &[false, true]), Some(2));
 }
 
 /// #722: a validator by each door - every `[stamper]` is kept, and a passenger stamps at
