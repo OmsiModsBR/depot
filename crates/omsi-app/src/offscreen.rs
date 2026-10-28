@@ -3164,7 +3164,7 @@ pub(crate) fn run_offscreen(
         let viewport = settings.hud_viewport((w, h));
         let overlay_start = scene.overlays.len();
         hud.update(&renderer, &mut scene, &lines);
-        crate::ui::shift_overlays(&mut scene, overlay_start, viewport[0]);
+        crate::hud::shift_overlays(&mut scene, overlay_start, viewport[0]);
         // the navigator, as the window shows it (its camera settled first)
         if settings.navigator {
             let mut nav =
@@ -3506,7 +3506,7 @@ pub(crate) fn run_offscreen(
         let viewport = settings.hud_viewport((w, h));
         let start = scene.overlays.len();
         panels.push(&mut scene, &world, viewport[2], viewport[3], (0.0, 0.0));
-        crate::ui::shift_overlays(&mut scene, start, viewport[0]);
+        crate::hud::shift_overlays(&mut scene, start, viewport[0]);
     }
     let pixels = if settings.triple.enabled && !settings.vr_requested() {
         renderer.render_triple_to_image(&mut scene, w, h, &camera, &lighting, &settings.triple)?

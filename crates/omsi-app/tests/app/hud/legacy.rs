@@ -1,6 +1,6 @@
 use ab_glyph::{Font, FontVec};
 use openomsi_game::testing;
-use openomsi_game::testing::ui::*;
+use openomsi_game::testing::hud::*;
 
 /// The information bar is broken between its groups into rows that fit the room it has,
 /// as many groups to a row as go in; a group wider than the room alone is a row of its
@@ -258,25 +258,25 @@ fn backgrounds_follow_the_opacity_setting() {
 fn the_game_menu_grows_with_the_interface_size_as_far_as_it_fits() {
     // (it ignored the setting: 1.5 drew the menu as 1.0 while the HUD grew)
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false),
+        testing::hud::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false),
         1.0
     );
-    let s = testing::ui::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
+    let s = testing::hud::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
     assert!(
         s > 1.1 && s < 1.5 && 880.0 * s + 24.0 <= 1280.0 && 600.0 * s <= 720.0 * 0.94 + 0.01,
         "{s}"
     );
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false),
+        testing::hud::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false),
         1.5
     );
     // never smaller than it always was, and the headset keeps its own size
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 800.0, 500.0, false),
+        testing::hud::menu_scale_for(1.0, 1.5, 800.0, 500.0, false),
         1.0
     );
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 1920.0, 1080.0, true),
+        testing::hud::menu_scale_for(1.0, 1.5, 1920.0, 1080.0, true),
         1.0
     );
 }
@@ -284,15 +284,15 @@ fn the_game_menu_grows_with_the_interface_size_as_far_as_it_fits() {
 #[test]
 fn destinations_split_into_code_and_name() {
     assert_eq!(
-        testing::ui::code_and_name(" 13  BETRIEBSFAHRT"),
+        testing::hud::code_and_name(" 13  BETRIEBSFAHRT"),
         Some(("13", "BETRIEBSFAHRT"))
     );
     assert_eq!(
-        testing::ui::code_and_name("1001  Blanko.tga"),
+        testing::hud::code_and_name("1001  Blanko.tga"),
         Some(("1001", "Blanko.tga"))
     );
-    assert_eq!(testing::ui::code_and_name("Route number: 5..."), None);
-    assert_eq!(testing::ui::code_and_name("Line 76  (1 tours)"), None);
+    assert_eq!(testing::hud::code_and_name("Route number: 5..."), None);
+    assert_eq!(testing::hud::code_and_name("Line 76  (1 tours)"), None);
 }
 
 #[test]

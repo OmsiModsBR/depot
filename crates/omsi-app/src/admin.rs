@@ -192,7 +192,7 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             let Some((who, rest)) = arg.trim().split_once(' ') else {
                 return;
             };
-            let Some((nid, n)) = crate::ui::Notice::parse(rest) else {
+            let Some((nid, n)) = crate::hud::Notice::parse(rest) else {
                 return;
             };
             let mut here = false;
@@ -205,7 +205,7 @@ fn host_action(app: &mut App, action: &str, by: Option<u32>) {
             }
             if here {
                 log::info!("LAN: the server's notice {nid}: {}", n.text);
-                crate::ui::push_notice(&mut app.notices, n);
+                crate::hud::push_notice(&mut app.notices, n);
             }
         }
         "kick" | "ban" => {
@@ -600,9 +600,9 @@ pub(crate) fn command(app: &mut App, from: u32, text: &str) {
         // <id>`): a game that does not know `notify` stays silent, and the host can say it in
         // the chat instead
         "notify" if from == 1 => {
-            if let Some((id, n)) = crate::ui::Notice::parse(arg) {
+            if let Some((id, n)) = crate::hud::Notice::parse(arg) {
                 log::info!("LAN: the server's notice {id}: {}", n.text);
-                crate::ui::push_notice(&mut app.notices, n);
+                crate::hud::push_notice(&mut app.notices, n);
                 if let Some(l) = app.online.lan.as_mut() {
                     l.command(1, &format!("notify-seen {id}"));
                 }
@@ -874,7 +874,7 @@ pub(crate) fn server_command(
                 // (a dedicated server has no screen: its own number is nobody's)
                 "notify" => {
                     if let Some((who, rest)) = a.trim().split_once(' ') {
-                        if crate::ui::Notice::parse(rest).is_some() {
+                        if crate::hud::Notice::parse(rest).is_some() {
                             let (ids, _) =
                                 notice_targets(who, lan.peers().map(|p| p.pose.id), lan.my_id);
                             for id in ids {

@@ -14,8 +14,8 @@
 //! `new_ui`).
 
 use crate::game_lists::ListKind;
+use crate::hud::{Frame, MenuKind};
 use crate::new_ui::{Area, MenuFrame};
-use crate::ui::{Frame, MenuKind};
 use glam::Vec2;
 use omsi_ui::menu_page::{self, Back, Control, Dropdown, Layout, Lead, Page, Pane, Row};
 use omsi_ui::pause_menu;
@@ -421,7 +421,7 @@ impl PageFrame {
     /// for its mouse code (a row, a slider's track, a page, the way back, a drop-down's entry,
     /// the timetable's stops, its arrows and its button, the scroll bars): in window pixels,
     /// the page laid out in `area` (the centre screen of a triple screen, else the window).
-    pub fn write_hits(&self, ui: &mut crate::ui::Ui, area: Area) {
+    pub fn write_hits(&self, ui: &mut crate::hud::Ui, area: Area) {
         let (s, l) = self.layout(area.size);
         let o = area.origin;
         let px = |r: Rect| px(r, s, o);

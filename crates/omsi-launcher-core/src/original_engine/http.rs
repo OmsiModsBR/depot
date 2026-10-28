@@ -5,9 +5,18 @@
 use super::install::{host_allowed, Fetch};
 use anyhow::{anyhow, bail, Result};
 use std::io::Read;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct HttpsFetch;
+
+/// A download that has not finished in this long is dropped (a slow server cannot keep it open).
+const TOTAL_TIME: Duration = Duration::from_secs(20 * 60);
+
+/// A URL as shown in a message: without the query or fragment (a signed address carries a
+/// secret there).
+fn plain(url: &str) -> &str {
+    url.split(['?', '#']).next().unwrap_or(url)
+}
 
 impl Fetch for HttpsFetch {
     fn get(
@@ -23,9 +32,10 @@ impl Fetch for HttpsFetch {
             .user_agent("Project Depot")
             .build();
         let mut url = url.to_string();
+        let started = Instant::now();
         for _ in 0..6 {
             if !host_allowed(&url) {
-                bail!("{url} is not an official download address");
+                bail!("{} is not an official download address", plain(&url));
             }
             let resp = agent
                 .get(&url)
@@ -34,7 +44,13 @@ impl Fetch for HttpsFetch {
                     "application/octet-stream, application/vnd.github+json",
                 )
                 .call()
-                .map_err(|e| anyhow!("download failed: {e}"))?;
+                .map_err(|e| {
+                    anyhow!(
+                        "download failed ({}): {}",
+                        plain(&url),
+                        plain_err(&e.to_string())
+                    )
+                })?;
             if (300..400).contains(&resp.status()) {
                 url = resp
                     .header("location")
@@ -63,9 +79,31 @@ impl Fetch for HttpsFetch {
                 if !progress(body.len() as u64, total) {
                     bail!("cancelled");
                 }
+                if started.elapsed() > TOTAL_TIME {
+                    bail!("the download took too long");
+                }
             }
             return Ok(body);
         }
         bail!("too many redirects")
+    }
+}
+
+/// An error text without the query strings of the addresses it mentions.
+fn plain_err(text: &str) -> String {
+    text.split(' ').map(plain).collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queries_never_reach_a_message() {
+        assert_eq!(plain("https://h/x.zip?sig=secret#f"), "https://h/x.zip");
+        assert_eq!(
+            plain_err("https://h/x?token=abc: status code 403"),
+            "https://h/x status code 403"
+        );
     }
 }
