@@ -23,6 +23,9 @@ pub struct TimetableView {
     loaded: Option<String>,
     data: Option<TimetableData>,
     map_dir: PathBuf,
+    /// The AI groups the map's own `ailists.cfg` has (name, a depot's group), read with the
+    /// map: the groups a tour can take its buses from.
+    ai_groups: Vec<(String, bool)>,
     line: usize,
     tour: usize,
     /// The departures being typed, one per trip of the shown tour.
@@ -430,6 +433,16 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         let mut d = TimetableData::load(&tv.map_dir);
         d.lines.sort_by_key(|x| x.name.to_lowercase());
         tv.data = Some(d);
+        tv.ai_groups =
+            omsi_map::ailists::AiLists::load(&omsi_cfg::resolve_path(&tv.map_dir, "ailists.cfg"))
+                .map(|a| {
+                    a.groups
+                        .iter()
+                        .map(|g| (g.name.trim().to_string(), g.is_depot))
+                        .filter(|(n, _)| !n.is_empty() && n != "NotInGroup")
+                        .collect()
+                })
+                .unwrap_or_default();
         tv.loaded = Some(file.clone());
         tv.line = 0;
         tv.tour = 0;
@@ -1903,14 +1916,38 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             Align::Right,
         );
     }
+    // the AI group the chosen tour takes its buses from, left of the tour's list
+    if let Some(tour) = line.tours.get_mut(tv.tour) {
+        let gw = 200.0f32.min(inner.w * 0.28);
+        let g_r = Rect::new(sel_r.x - 10.0 - gw, sel_r.y, gw, bw);
+        let cur = tour.ai_group.trim().to_string();
+        let mut names: Vec<String> = tv.ai_groups.iter().map(|g| g.0.clone()).collect();
+        // (a group the map's list lacks stays what it is, first in the list)
+        let mut at = names.iter().position(|n| n.eq_ignore_ascii_case(&cur));
+        if at.is_none() {
+            names.insert(0, cur.clone());
+            at = Some(0);
+        }
+        let mut gi = at.unwrap_or(0);
+        if ui.select_as_is("tt-ai-group", g_r, &mut gi, &names) && names[gi] != cur {
+            tour.ai_group = names[gi].clone();
+            tv.dirty.insert(line_name.clone());
+        }
+        ui.tooltip(
+            g_r,
+            "The AI group the chosen tour takes its buses from: the groups of the map's ailists.cfg. The buses of a depot's group are edited in Diagnostics > AI traffic.",
+        );
+    }
     let icon_at =
         |k: usize| glam::Vec2::new(tools.x + k as f32 * (bw + 6.0) + bw * 0.5, tools.center().y);
     let off = tv.offset.trim().parse::<f32>().ok();
     if ui.icon_button("tt-new-tour", icon_at(0), 15.0, "add", "New tour") {
+        // (the last tour's group, else the map's first depot group, else the usual name)
         let ai_group = line
             .tours
             .last()
             .map(|t| t.ai_group.clone())
+            .or_else(|| tv.ai_groups.iter().find(|g| g.1).map(|g| g.0.clone()))
             .unwrap_or_else(|| "Busses".into());
         let extra = line
             .tours
