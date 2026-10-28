@@ -1001,6 +1001,42 @@ fn with_a_door_open_nobody_waits_at_a_shut_button_door() {
     );
 }
 
+/// A bus with entries on both sides at a stop on its left: while every door is still shut
+/// (none with a button) people walk to the door on their own side, not the first of the
+/// list (the right front door, across the bus). With a door open they go to that one.
+#[test]
+fn shut_doors_on_both_sides_draw_people_to_their_own_side() {
+    let dir = std::env::temp_dir().join(format!("omsi-both-sides-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("paths.cfg"),
+        "[pathpnt]\n1.0\n4\n0.5\n[pathpnt]\n0\n4\n0.5\n[pathpnt]\n-1.0\n4\n0.5\n[pathpnt]\n0\n-4\n0.5\n[pathlink]\n0\n1\n[pathlink]\n1\n2\n[pathlink]\n1\n3\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("cabin.cfg"), "[entry]\n0\n[entry]\n2\n[exit]\n2\n").unwrap();
+    let def = omsi_vehicle::Vehicle {
+        path: dir.join("bus.bus"),
+        passenger_cabin: Some("cabin.cfg".into()),
+        paths: Some("paths.cfg".into()),
+        bounding_box: Some([2.5, 9.0, 3.0, 0.0, 0.0, 1.5]),
+        ..Default::default()
+    };
+    let cabin = Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin");
+    std::fs::remove_dir_all(&dir).ok();
+    let entries = cabin.entry_points();
+    assert_eq!(entries, [Some(0), Some(2)]);
+    let flags = cabin.entry_flags();
+    let (on_left, on_right) = (Vec3::new(-1.6, 4.0, 0.0), Vec3::new(1.6, 4.0, 0.0));
+    let nearest = |p: Vec3, open: &[bool]| {
+        cabin.omsi_nearest(p, &entries, false, false, Some(&flags), Some(open))
+    };
+    assert_eq!(nearest(on_left, &[false, false]), Some(2));
+    assert_eq!(nearest(on_right, &[false, false]), Some(0));
+    // a door open: that one, from either side
+    assert_eq!(nearest(on_left, &[true, false]), Some(0));
+    assert_eq!(nearest(on_left, &[false, true]), Some(2));
+}
+
 /// #722: a validator by each door - every `[stamper]` is kept, and a passenger stamps at
 /// the one nearest where they came in (OMSI kept the file's last one only).
 #[test]
