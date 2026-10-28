@@ -13,7 +13,6 @@ use omsi_ui::paint::Align;
 use omsi_ui::{Rect, Weight};
 use std::sync::atomic::Ordering::Relaxed;
 
-const DOTNET_URL: &str = "https://dotnet.microsoft.com/download/dotnet/6.0";
 const ROW: f32 = 34.0;
 
 /// What the install dialog lists: the package's files grouped by their first folder, with
@@ -159,7 +158,7 @@ pub fn engine_card(l: &mut Launcher, at: Rect) -> f32 {
             if l.ui
                 .button(id, b, "Open Microsoft download", None, ButtonKind::Normal)
             {
-                crate::about::open_url(DOTNET_URL);
+                crate::about::open_dotnet_download();
             }
             l.ui.tooltip(
                 b,
