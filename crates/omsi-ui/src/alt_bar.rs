@@ -171,6 +171,7 @@ pub fn draw<'a>(
     let size = panel_size(buttons.len());
     let p = Rect::new(at.x, at.y, size.x, size.y);
     ui.solid(p);
+    ui.opaque_under = Some(p);
     ui.p().shadow(p, 8.0, 24.0, Color::rgba(0, 0, 0, 0.55));
     ui.p().rounded(p, 8.0, PANEL);
     ui.p().rounded_border(p, 8.0, 1.0, EDGE);
