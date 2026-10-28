@@ -218,8 +218,12 @@ fn windows_name_ok(n: &str) -> bool {
     let stem = n.split('.').next().unwrap_or_default().trim_end();
     let up = stem.to_ascii_uppercase();
     let numbered = |p: &str| {
-        up.strip_prefix(p)
-            .is_some_and(|d| matches!(d.as_bytes(), [b'1'..=b'9']))
+        up.strip_prefix(p).is_some_and(|d| {
+            matches!(
+                d.chars().collect::<Vec<_>>()[..],
+                ['0'..='9' | '¹' | '²' | '³']
+            )
+        })
     };
     !(matches!(
         up.as_str(),
@@ -272,22 +276,32 @@ fn linked_part(root: &Path, rel: &str) -> Option<String> {
 /// program can write one), so for an install made without a record only the files that
 /// are exactly what the manifest says count.
 pub fn owned_list(root: &Path, data: &Path) -> Vec<String> {
-    if let Some(r) = load_record(data).filter(|r| Path::new(&r.root) == root) {
-        return r.files.into_iter().filter_map(|p| safe_rel(&p)).collect();
+    // Without a record nothing is owned: a manifest in the folder can be written by anyone,
+    // hashes of real files included, so it never gives the right to replace or delete.
+    match load_record(data).filter(|r| same_root(Path::new(&r.root), root)) {
+        Some(r) => r.files.into_iter().filter_map(|p| safe_rel(&p)).collect(),
+        None => Vec::new(),
     }
-    let mut out = Vec::new();
-    if let Some(m) = read_manifest(&root.join("release-manifest.json")) {
-        for (p, want) in m {
-            if safe_rel(&p).is_some() && file_hash(&root.join(&p)).as_deref() == Some(want.as_str())
-            {
-                out.push(p);
-            }
-        }
-        if !out.is_empty() {
-            out.push("release-manifest.json".to_string());
-        }
-    }
-    out
+}
+
+/// Whether two folder paths are the same folder as far as spelling goes: no trailing
+/// separator, and on Windows no difference of case or of `/` and `\\`.
+fn same_root(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| -> Vec<String> {
+        p.to_string_lossy()
+            .replace('\\', "/")
+            .split('/')
+            .filter(|c| !c.is_empty())
+            .map(|c| {
+                if cfg!(windows) {
+                    c.to_lowercase()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
+    };
+    norm(a) == norm(b)
 }
 
 fn owned_paths(root: &Path, data: &Path) -> BTreeSet<String> {
@@ -492,7 +506,7 @@ pub fn install(
             }
         }
         let prev_dirs = load_record(data)
-            .filter(|r| Path::new(&r.root) == root)
+            .filter(|r| same_root(Path::new(&r.root), root))
             .map(|r| r.dirs)
             .unwrap_or_default();
         // move in; remember what to undo
@@ -683,24 +697,26 @@ pub fn remove(root: &Path, data: &Path) -> Result<RemovePlan> {
     let _ = std::fs::remove_dir_all(&stage);
     for d in OWN_DIRS {
         let dir = root.join(".omsilaunch").join(d);
-        if !is_link(&dir) {
+        if linked_part(root, &format!(".omsilaunch/{d}")).is_none() {
             let _ = std::fs::remove_dir_all(dir);
         }
     }
     // only folders Depot made, and only when empty, go
     let dirs = load_record(data)
-        .filter(|r| Path::new(&r.root) == root)
+        .filter(|r| same_root(Path::new(&r.root), root))
         .map(|r| r.dirs)
         .unwrap_or_default();
     let mut dirs: Vec<String> = dirs.into_iter().filter(|d| safe_rel(d).is_some()).collect();
     dirs.sort_by_key(|d| std::cmp::Reverse(d.matches('/').count()));
     for d in dirs {
         let t = root.join(&d);
-        if !is_link(&t) {
+        if linked_part(root, &d).is_none() {
             let _ = std::fs::remove_dir(t);
         }
     }
-    let _ = std::fs::remove_dir(root.join(".omsilaunch"));
+    if linked_part(root, ".omsilaunch").is_none() {
+        let _ = std::fs::remove_dir(root.join(".omsilaunch"));
+    }
     let _ = std::fs::remove_file(record_path(data));
     Ok(plan)
 }
@@ -1021,6 +1037,53 @@ mod tests {
     }
 
     #[test]
+    fn a_forged_manifest_with_the_real_hash_does_not_make_files_ours() {
+        let root = tmp("forge2");
+        let data = tmp("forged2");
+        std::fs::write(root.join("OMSI.exe"), b"game").unwrap();
+        let h = sha256_hex(b"game");
+        std::fs::write(
+            root.join("release-manifest.json"),
+            format!(r#"{{"files":[{{"path":"OMSI.exe","sha256":"{h}"}}]}}"#),
+        )
+        .unwrap();
+        assert!(owned_list(&root, &data).is_empty());
+        assert!(remove(&root, &data).unwrap().files.is_empty());
+        assert_eq!(std::fs::read(root.join("OMSI.exe")).unwrap(), b"game");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn the_record_is_found_however_the_folder_is_spelled() {
+        let a = Path::new("/games/OMSI 2");
+        assert!(same_root(a, Path::new("/games/OMSI 2/")));
+        assert!(same_root(a, Path::new("/games//OMSI 2")));
+        assert!(!same_root(a, Path::new("/games/OMSI 3")));
+        if cfg!(windows) {
+            assert!(same_root(
+                Path::new(r"C:\Games\OMSI 2"),
+                Path::new("c:/games/omsi 2/")
+            ));
+        }
+    }
+
+    #[test]
+    fn removal_does_not_go_through_a_linked_omsilaunch_folder() {
+        let root = tmp("lnkrm");
+        let data = tmp("lnkrmd");
+        let outside = tmp("lnkrmo");
+        std::fs::create_dir_all(outside.join("cache")).unwrap();
+        std::fs::write(outside.join("cache/keep.txt"), b"x").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".omsilaunch")).unwrap();
+        let _ = remove(&root, &data);
+        assert!(outside.join("cache/keep.txt").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
     fn a_manifest_written_by_someone_else_does_not_make_files_ours() {
         let root = tmp("forge");
         let data = tmp("forged");
@@ -1059,6 +1122,8 @@ mod tests {
     fn windows_names_are_refused_in_package_paths() {
         for bad in [
             "NUL",
+            "COM0",
+            "lpt0.txt",
             "aux.dll",
             "plugins/COM1.txt",
             "a/b.",
