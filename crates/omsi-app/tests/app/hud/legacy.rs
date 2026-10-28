@@ -93,30 +93,30 @@ fn a_server_notice_is_read_and_fades() {
 #[test]
 fn centre_hud_moves_menu_controls_and_chat_hitboxes_together() {
     let mut ui = Ui::new().unwrap();
-    ui.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
-    ui.menu_ctl.push(Some([600.0, 110.0, 860.0, 130.0]));
-    ui.menu_side.push([30.0, 100.0, 200.0, 140.0]);
-    ui.dd_rects.push([650.0, 150.0, 850.0, 180.0]);
-    ui.menu_arrows.push(Some([600.0, 640.0, 820.0]));
+    ui.hits.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
+    ui.hits.menu_ctl.push(Some([600.0, 110.0, 860.0, 130.0]));
+    ui.hits.menu_side.push([30.0, 100.0, 200.0, 140.0]);
+    ui.hits.dd_rects.push([650.0, 150.0, 850.0, 180.0]);
+    ui.hits.menu_arrows.push(Some([600.0, 640.0, 820.0]));
     ui.chat.rect = [10.0, 800.0, 400.0, 1000.0];
-    ui.dd_scroll = Some(([850.0, 150.0, 860.0, 300.0], [844.0, 160.0, 864.0, 200.0]));
-    ui.menu_pane_scroll = Some((
+    ui.hits.dd_scroll = Some(([850.0, 150.0, 860.0, 300.0], [844.0, 160.0, 864.0, 200.0]));
+    ui.hits.menu_pane_scroll = Some((
         [880.0, 150.0, 890.0, 700.0],
         [874.0, 160.0, 894.0, 220.0],
         40,
         10,
     ));
     ui.shift_hitboxes(1920.0);
-    let track = ui.menu_ctl[0].unwrap();
+    let track = ui.hits.menu_ctl[0].unwrap();
     assert_eq!((2650.0 - track[0]) / (track[2] - track[0]), 0.5);
     assert!(ui.chat.contains(2020.0, 900.0));
     assert!(!ui.chat.contains(100.0, 900.0));
-    assert_eq!(ui.dd_rects[0], [2570.0, 150.0, 2770.0, 180.0]);
-    assert_eq!(ui.menu_arrows[0], Some([2520.0, 2560.0, 2740.0]));
-    assert_eq!(ui.dd_scroll.unwrap().0[0], 2770.0);
-    assert_eq!(ui.menu_pane_scroll.unwrap().1[0], 2794.0);
+    assert_eq!(ui.hits.dd_rects[0], [2570.0, 150.0, 2770.0, 180.0]);
+    assert_eq!(ui.hits.menu_arrows[0], Some([2520.0, 2560.0, 2740.0]));
+    assert_eq!(ui.hits.dd_scroll.unwrap().0[0], 2770.0);
+    assert_eq!(ui.hits.menu_pane_scroll.unwrap().1[0], 2794.0);
     ui.shift_hitboxes(-1920.0);
-    assert_eq!(ui.menu_ctl[0], Some([600.0, 110.0, 860.0, 130.0]));
+    assert_eq!(ui.hits.menu_ctl[0], Some([600.0, 110.0, 860.0, 130.0]));
 }
 
 #[test]

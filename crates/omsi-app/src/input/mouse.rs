@@ -473,8 +473,8 @@ impl App {
         }
         if let Some(k) = self.menu_drag {
             let c = self.ui.as_ref().and_then(|u| {
-                k.checked_sub(u.menu_start)
-                    .and_then(|i| u.menu_ctl.get(i).copied().flatten())
+                k.checked_sub(u.hits.menu_start)
+                    .and_then(|i| u.hits.menu_ctl.get(i).copied().flatten())
             });
             match c {
                 Some(c) => {
@@ -541,18 +541,21 @@ impl App {
                 return true;
             };
 
-            if let (Some(track), Some(thumb)) = (ui.menu_scroll_track, ui.menu_scroll_thumb) {
+            if let (Some(track), Some(thumb)) =
+                (ui.hits.menu_scroll_track, ui.hits.menu_scroll_thumb)
+            {
                 let track_h = (track[3] - track[1]).max(1.0);
                 let thumb_h = (thumb[3] - thumb[1]).max(1.0);
                 let travel = (track_h - thumb_h).max(1.0);
 
-                let max_top = (self.menu_len() as f32 - ui.menu_rows as f32).max(0.0);
+                let max_top = (self.menu_len() as f32 - ui.hits.menu_rows as f32).max(0.0);
 
                 if max_top > 0.0 {
                     let delta = (y - last.1) / travel * max_top;
 
                     self.menu_top = Some(
-                        (self.menu_top.unwrap_or(ui.menu_start as f32) + delta).clamp(0.0, max_top),
+                        (self.menu_top.unwrap_or(ui.hits.menu_start as f32) + delta)
+                            .clamp(0.0, max_top),
                     );
                 }
             }
@@ -871,10 +874,10 @@ impl App {
         let (Some(grab), Some(ui)) = (self.dd_scroll_drag, self.ui.as_ref()) else {
             return;
         };
-        let Some((track, thumb)) = ui.dd_scroll else {
+        let Some((track, thumb)) = ui.hits.dd_scroll else {
             return;
         };
-        let rows = ui.dd_rows.max(1);
+        let rows = ui.hits.dd_rows.max(1);
         let Some(d) = self.dropdown.as_mut() else {
             return;
         };
@@ -887,7 +890,8 @@ impl App {
         let (Some(grab), Some(k)) = (self.pane_scroll_drag, self.chooser) else {
             return;
         };
-        let Some((track, thumb, n, fit)) = self.ui.as_ref().and_then(|u| u.menu_pane_scroll) else {
+        let Some((track, thumb, n, fit)) = self.ui.as_ref().and_then(|u| u.hits.menu_pane_scroll)
+        else {
             return;
         };
         self.pane_scroll = Some((
@@ -907,7 +911,7 @@ impl App {
                 return;
             }
             self.wheel_acc -= steps as f32;
-            let rows = self.ui.as_ref().map(|u| u.dd_rows).unwrap_or(8);
+            let rows = self.ui.as_ref().map(|u| u.hits.dd_rows).unwrap_or(8);
             if let Some(d) = self.dropdown.as_mut() {
                 let max = d.items.len().saturating_sub(rows) as i64;
                 d.top = (d.top as i64 - steps).clamp(0, max) as usize;
@@ -927,10 +931,11 @@ impl App {
         // the wheel over the timetable beside the tours scrolls its stops
         if let (Some(u), Some(k)) = (self.ui.as_ref(), self.chooser) {
             let (x, y) = self.cursor;
-            if u.menu_pane_box
+            if u.hits
+                .menu_pane_box
                 .is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             {
-                let first = (u.menu_pane_start as i64 - steps).max(0) as usize;
+                let first = (u.hits.menu_pane_start as i64 - steps).max(0) as usize;
                 self.pane_scroll = Some((k, first));
                 return;
             }
@@ -941,7 +946,7 @@ impl App {
         let (start, rows) = self
             .ui
             .as_ref()
-            .map(|u| (u.menu_start as f32, u.menu_rows as f32))
+            .map(|u| (u.hits.menu_start as f32, u.hits.menu_rows as f32))
             .unwrap_or((0.0, n));
         let top = (self.menu_top.unwrap_or(start) - steps as f32).clamp(0.0, (n - rows).max(0.0));
         self.menu_top = Some(top);
@@ -1222,16 +1227,17 @@ impl App {
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.cursor;
         let inside = |r: &[f32; 4]| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
-        let clickable = u.menu_scroll_thumb.is_some_and(|r| inside(&r))
-            || u.menu_side.iter().any(|r| inside(r))
-            || u.menu_pane.iter().any(|r| inside(r))
-            || u.menu_pane_go.as_ref().is_some_and(|r| inside(r))
-            || u.menu_time.iter().any(|r| inside(r))
-            || u.menu_ctl.iter().flatten().any(|r| inside(r))
-            || u.menu_rects
+        let clickable = u.hits.menu_scroll_thumb.is_some_and(|r| inside(&r))
+            || u.hits.menu_side.iter().any(|r| inside(r))
+            || u.hits.menu_pane.iter().any(|r| inside(r))
+            || u.hits.menu_pane_go.as_ref().is_some_and(|r| inside(r))
+            || u.hits.menu_time.iter().any(|r| inside(r))
+            || u.hits.menu_ctl.iter().flatten().any(|r| inside(r))
+            || u.hits
+                .menu_rects
                 .iter()
                 .enumerate()
-                .any(|(i, r)| inside(r) && !self.menu_item_off(i + u.menu_start));
+                .any(|(i, r)| inside(r) && !self.menu_item_off(i + u.hits.menu_start));
         if clickable {
             1
         } else {

@@ -3180,7 +3180,7 @@ impl ApplicationHandler for App {
                             info_rect: self
                                 .ui
                                 .as_ref()
-                                .and_then(|u| u.info_rect)
+                                .and_then(|u| u.hits.info_rect)
                                 .filter(|_| !vr_active),
                         };
                         let __tn = Instant::now();
@@ -3477,7 +3477,7 @@ impl ApplicationHandler for App {
                         }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
                         if let (Some(p), Some(area)) = (page.as_ref(), menu_area) {
-                            p.write_hits(ui, area);
+                            p.write_hits(&mut ui.hits, area);
                         }
                         new_page = page;
                     }
@@ -4465,17 +4465,18 @@ impl App {
                         && self.cursor.1 <= r[3]
                 };
                 let hit = self.ui.as_ref().and_then(|u| {
-                    u.dd_rects
+                    u.hits
+                        .dd_rects
                         .iter()
                         .position(|r| inside(r))
-                        .map(|i| i + u.dd_top)
+                        .map(|i| i + u.hits.dd_top)
                 });
                 // its scroll bar is dragged (a press on the track beside the thumb takes the
                 // thumb there by its middle); before, the press closed the list (#794)
                 if let Some((track, thumb)) = self
                     .ui
                     .as_ref()
-                    .and_then(|u| u.dd_scroll)
+                    .and_then(|u| u.hits.dd_scroll)
                     .filter(|_| hit.is_none())
                 {
                     let bar = [thumb[0], track[1], thumb[2], track[3]];
@@ -4499,7 +4500,7 @@ impl App {
 
             // Pressing the mouse button on the scrollbar thumb starts dragging.
             if state == ElementState::Pressed {
-                if let Some(thumb) = self.ui.as_ref().and_then(|u| u.menu_scroll_thumb) {
+                if let Some(thumb) = self.ui.as_ref().and_then(|u| u.hits.menu_scroll_thumb) {
                     if self.cursor.0 >= thumb[0]
                         && self.cursor.0 <= thumb[2]
                         && self.cursor.1 >= thumb[1]
@@ -4513,7 +4514,7 @@ impl App {
                 // The sidebar of a settings window: a page, or the way back.
                 if self.chooser.is_some() {
                     let side = self.ui.as_ref().and_then(|u| {
-                        u.menu_side.iter().position(|r| {
+                        u.hits.menu_side.iter().position(|r| {
                             self.cursor.0 >= r[0]
                                 && self.cursor.0 <= r[2]
                                 && self.cursor.1 >= r[1]
@@ -4531,7 +4532,7 @@ impl App {
                     // its scroll bar is dragged (a press on the track beside the thumb takes
                     // the thumb there by its middle)
                     if let Some((track, thumb, _, _)) =
-                        self.ui.as_ref().and_then(|u| u.menu_pane_scroll)
+                        self.ui.as_ref().and_then(|u| u.hits.menu_pane_scroll)
                     {
                         let inside = |r: &[f32; 4]| {
                             self.cursor.0 >= r[0]
@@ -4557,16 +4558,17 @@ impl App {
                                 && self.cursor.1 >= r[1]
                                 && self.cursor.1 <= r[3]
                         };
-                        if u.menu_pane_go.as_ref().is_some_and(inside) {
+                        if u.hits.menu_pane_go.as_ref().is_some_and(inside) {
                             return Some(usize::MAX);
                         }
-                        if let Some(j) = u.menu_time.iter().position(inside) {
+                        if let Some(j) = u.hits.menu_time.iter().position(inside) {
                             return Some(usize::MAX - 1 - j);
                         }
-                        u.menu_pane
+                        u.hits
+                            .menu_pane
                             .iter()
                             .position(inside)
-                            .map(|i| i + u.menu_pane_start)
+                            .map(|i| i + u.hits.menu_pane_start)
                     });
                     if let Some(i) = pane {
                         self.tour_pane_click(i);
@@ -4576,7 +4578,7 @@ impl App {
 
                 // Otherwise check whether a menu row was clicked.
                 let hit = self.ui.as_ref().and_then(|u| {
-                    u.menu_rects.iter().position(|r| {
+                    u.hits.menu_rects.iter().position(|r| {
                         self.cursor.0 >= r[0]
                             && self.cursor.0 <= r[2]
                             && self.cursor.1 >= r[1]
@@ -4586,11 +4588,11 @@ impl App {
 
                 if let Some(row) = hit {
                     // (a click on a slider or a stepper sets the value there)
-                    let k = row + self.ui.as_ref().map(|u| u.menu_start).unwrap_or(0);
+                    let k = row + self.ui.as_ref().map(|u| u.hits.menu_start).unwrap_or(0);
                     let ctl = self
                         .ui
                         .as_ref()
-                        .and_then(|u| u.menu_ctl.get(row).copied().flatten());
+                        .and_then(|u| u.hits.menu_ctl.get(row).copied().flatten());
 
                     // (a greyed-out line cannot be clicked)
                     if self.menu_item_off(k) {
@@ -4633,7 +4635,7 @@ impl App {
                     let arrows = self
                         .ui
                         .as_ref()
-                        .and_then(|u| u.menu_arrows.get(row).copied().flatten());
+                        .and_then(|u| u.hits.menu_arrows.get(row).copied().flatten());
                     match arrows {
                         Some([from, to, _]) if self.cursor.0 >= from && self.cursor.0 < to => {
                             self.chooser_adjust(k, "-")
