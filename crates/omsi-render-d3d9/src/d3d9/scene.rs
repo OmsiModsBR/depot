@@ -596,24 +596,16 @@ const fn four_cc(c: &[u8; 4]) -> u32 {
     u32::from_le_bytes(*c)
 }
 
-/// The cut of an alpha-tested draw under alpha-to-coverage: only what is all but transparent
-/// is discarded, the rest hands its alpha to the multisampling as coverage.
-const COVERAGE_CUT: f32 = 0.02;
-
 /// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
 /// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
 /// edge as multisampled OMSI 2 does.
 fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: A2c) -> Result<()> {
     let coverage_now = kind == DrawKind::AlphaTest && coverage != A2c::None;
     let flags = [
-        if coverage_now {
-            COVERAGE_CUT
-        } else {
-            ALPHA_CUT
-        },
+        ALPHA_CUT,
         f32::from(u8::from(kind == DrawKind::AlphaTest)),
         f32::from(u8::from(kind == DrawKind::SurfaceDepth)),
-        0.0,
+        f32::from(u8::from(coverage_now)),
     ];
     coverage.set(device, coverage_now)?;
     // SAFETY: plain state setters; the constant array outlives the call.

@@ -220,7 +220,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
 }
 
 /// `text` for a URL's query (everything but the unreserved characters as `%XX`).
-fn url_encode(text: &str) -> String {
+pub fn url_encode(text: &str) -> String {
     let mut out = String::new();
     for b in text.bytes() {
         if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
@@ -230,13 +230,4 @@ fn url_encode(text: &str) -> String {
         }
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn a_report_body_is_encoded_for_the_issue_link() {
-        assert_eq!(super::url_encode("a b\n(c)"), "a%20b%0A%28c%29");
-        assert_eq!(super::url_encode("Depot-0.2_x.~"), "Depot-0.2_x.~");
-    }
 }

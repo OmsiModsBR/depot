@@ -157,6 +157,8 @@ pub struct Settings {
     /// How the city map is turned: "map" (as the map is drawn, openOMSI's way), "north" (real north up, where the map
     /// says where it is) or "heading" (the way the vehicle faces up).
     pub nav_orientation: String,
+    /// How the minimap looks at the map: `perspective` (tilted ahead of the vehicle) or `top`.
+    pub nav_view: String,
     /// The driver may get up from the seat and walk about (Ctrl+Shift+G).
     pub get_up: bool,
     /// Uncompressed texture files are compressed on loading where that leaves the picture
@@ -500,6 +502,7 @@ impl Settings {
             nav_light: false,
             nav_contours: false,
             nav_orientation: "map".into(),
+            nav_view: "perspective".into(),
             get_up: false,
             texture_compression: true,
             texture_memory: 0,
@@ -829,6 +832,13 @@ impl Settings {
                         v.to_string()
                     } else {
                         "map".to_string()
+                    }
+                }
+                "nav_view" => {
+                    s.nav_view = if v == "top" {
+                        "top".to_string()
+                    } else {
+                        "perspective".to_string()
                     }
                 }
                 "get_up" => s.get_up = b(v),

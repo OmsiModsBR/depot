@@ -3180,6 +3180,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("nav_light", json!(false)),
         ("nav_contours", json!(false)),
         ("nav_orientation", json!("map")),
+        ("nav_view", json!("perspective")),
         ("info_bar_mode", json!("full")),
         ("info_bar_pos", json!("top")),
         ("info_bar_fps", json!(false)),
@@ -3938,6 +3939,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "mouse_right_off"
             | "mouse_smooth"
             | "blinker_cancel" => v[&k] = json!(b(val)),
+            "nav_view" => v[&k] = json!(if val == "top" { "top" } else { "perspective" }),
             "nav_orientation" => {
                 v[&k] = json!(if matches!(val, "north" | "heading") {
                     val
@@ -4529,6 +4531,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         } else {
             "map"
         }
+    ));
+    let view = v
+        .get("nav_view")
+        .and_then(|x| x.as_str())
+        .unwrap_or("perspective");
+    text.push_str(&format!(
+        "nav_view={}\n",
+        if view == "top" { "top" } else { "perspective" }
     ));
     text.push_str(&format!("info_bar={}\n", b("info_bar", false)));
     let mode = v

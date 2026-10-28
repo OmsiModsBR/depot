@@ -49,7 +49,7 @@ pub struct PadsView {
     pub io: Option<crate::controllers::Devices>,
     /// The set-up assistant, while it runs.
     pub wizard: Option<Wizard>,
-    feedback_test: bool,
+    pub feedback_test: bool,
     pub devices: Option<Vec<crate::controllers::DeviceCfg>>,
     pub selected: usize,
     /// Waiting for a button of the shown device to be pressed (to add its binding).
@@ -74,13 +74,13 @@ pub struct Wizard {
     pub rest: [Option<f32>; 8],
     pub at: Vec<[Option<f32>; 8]>,
     pub error: Option<String>,
-    calibration: Option<(std::time::Instant, crate::ffb_calibration::Calibration)>,
-    ff_choice: Option<bool>,
-    test_strength: f32,
+    pub calibration: Option<(std::time::Instant, crate::ffb_calibration::Calibration)>,
+    pub ff_choice: Option<bool>,
+    pub test_strength: f32,
 }
 
 impl PadsView {
-    pub(super) fn cancel_feedback_test(&mut self) {
+    pub fn cancel_feedback_test(&mut self) {
         release_feedback(&mut self.io, &mut self.feedback_test);
         if let Some((_, test)) = self.wizard.as_mut().and_then(|w| w.calibration.as_mut()) {
             if test.result.is_none() {
@@ -430,7 +430,7 @@ fn record_card(l: &mut Launcher, card: Rect) {
 }
 
 /// The drive's title in the lists: its line (and tour) or a free drive, and the map.
-fn drive_title(s: &core::Session) -> String {
+pub fn drive_title(s: &core::Session) -> String {
     match &s.line {
         Some(line) => omsi_ui::tr("Line %{line} · %{map}")
             .replace(
@@ -535,7 +535,7 @@ fn recent_drives(l: &mut Launcher, right: Rect) {
 }
 
 /// What a drive's details window lists: (what, the value).
-fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
+pub fn drive_rows(s: &core::Session) -> Vec<(&'static str, String)> {
     let on_time = (s.stops - s.early - s.late).max(0);
     vec![
         ("Map", short_map(&s.map)),
@@ -686,7 +686,7 @@ fn chrono_like(t: u64) -> String {
 /// and gears of any bus, looking round while held, the bus radio while held, the cameras
 /// and the views - both of OMSI's view resets, the one view's (C) and every view's (Space),
 /// which a controller could not bring back to the first camera (#1167).
-const PAD_GAME_ACTIONS: [&str; 26] = [
+pub const PAD_GAME_ACTIONS: [&str; 26] = [
     "doors_all",
     "door_4",
     "door_3",
@@ -730,7 +730,7 @@ pub(super) fn control_names(l: &Launcher) -> &'static crate::describe::ControlNa
     )
 }
 
-fn known_action(a: &str) -> Option<String> {
+pub fn known_action(a: &str) -> Option<String> {
     if let Some(gear) = a
         .strip_prefix("kw_s_")
         .and_then(|s| s.strip_suffix("_fest"))
@@ -1307,7 +1307,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
 }
 
 /// Hide empty slots beyond the physical buttons without changing the saved controller file.
-fn shown_button_count(
+pub fn shown_button_count(
     buttons: &[(String, String)],
     physical: usize,
     revealed: Option<usize>,
@@ -2015,14 +2015,17 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
 
 /// Take the device shown (`selected`) out of the list; the one below it (or the last) is
 /// shown next. Its name.
-fn remove_device(devices: &mut Vec<crate::controllers::DeviceCfg>, selected: &mut usize) -> String {
+pub fn remove_device(
+    devices: &mut Vec<crate::controllers::DeviceCfg>,
+    selected: &mut usize,
+) -> String {
     let name = devices.remove(*selected).name;
     *selected = (*selected).min(devices.len().saturating_sub(1));
     name
 }
 
 /// The steps of the set-up assistant (see `Wizard`): what the player is asked each time.
-const WIZARD_STEPS: [(&str, &str); 5] = [
+pub const WIZARD_STEPS: [(&str, &str); 5] = [
     ("Let go of everything", "Take your hands off the wheel and your feet off the pedals (the wheel in the middle), then press Next."),
     ("Steering", "Turn the wheel (or move the stick) all the way to the LEFT and hold it there, then press Next."),
     ("Throttle", "Press the throttle pedal all the way down and hold it, then press Next. No pedals: Skip."),
@@ -2183,7 +2186,7 @@ fn wizard(
     Some(true)
 }
 
-fn feedback_setup(
+pub fn feedback_setup(
     ui: &mut Ui,
     r: Rect,
     w: &mut Wizard,
@@ -2313,7 +2316,7 @@ fn feedback_setup(
 /// The axes the assistant found: `rest` where everything rested, `at` where the axes stood
 /// with the wheel turned left, the throttle, the brake and the clutch pressed (all None: that
 /// step skipped).
-fn wizard_result(
+pub fn wizard_result(
     rest: &[Option<f32>; 8],
     at: &[[Option<f32>; 8]],
 ) -> [Option<(crate::controllers::Func, bool)>; 8] {
@@ -2900,301 +2903,5 @@ pub fn tutorials(l: &mut Launcher, area: Rect) {
     }
     if let Some(n) = start {
         l.state.launch_tutorial(n);
-    }
-}
-
-#[cfg(test)]
-mod wizard_tests {
-    fn feedback_wizard() -> super::Wizard {
-        super::Wizard {
-            step: super::WIZARD_STEPS.len(),
-            rest: [Some(0.0); 8],
-            at: vec![
-                [Some(-1.0), None, None, None, None, None, None, None],
-                [None; 8],
-                [None; 8],
-                [None; 8],
-            ],
-            error: None,
-            calibration: None,
-            ff_choice: None,
-            test_strength: crate::ffb_calibration::PULSE_FORCE,
-        }
-    }
-
-    fn click_feedback(
-        name: &str,
-        w: &mut super::Wizard,
-        d: &mut crate::controllers::DeviceCfg,
-    ) -> Option<bool> {
-        use super::*;
-        let mut ui = Ui::new();
-        let size = Vec2::new(900.0, 700.0);
-        let area = Rect::new(20.0, 20.0, 700.0, 600.0);
-        let mut io = None;
-        let mut active = false;
-        ui.begin(size, 1.0, 0.016);
-        feedback_setup(
-            &mut ui,
-            area,
-            w,
-            d,
-            &[],
-            None,
-            &mut io,
-            &mut active,
-            None,
-            false,
-        );
-        let rect = ui.drawn[&id_of(name)];
-        ui.input.mouse = rect.center();
-        ui.input.pressed = true;
-        ui.input.down = true;
-        ui.begin(size, 1.0, 0.016);
-        feedback_setup(
-            &mut ui,
-            area,
-            w,
-            d,
-            &[],
-            None,
-            &mut io,
-            &mut active,
-            None,
-            false,
-        );
-        ui.input.pressed = false;
-        ui.input.down = false;
-        ui.input.released = true;
-        ui.begin(size, 1.0, 0.016);
-        let done = feedback_setup(
-            &mut ui,
-            area,
-            w,
-            d,
-            &[],
-            None,
-            &mut io,
-            &mut active,
-            None,
-            false,
-        );
-        assert!(!active);
-        assert!(io.is_none());
-        done
-    }
-
-    #[test]
-    fn manual_direction_is_only_applied_on_finish_and_cancel_preserves_the_device() {
-        let original = crate::controllers::DeviceCfg {
-            ff_invert: Some(true),
-            ..Default::default()
-        };
-        let mut device = original.clone();
-        let mut w = feedback_wizard();
-        assert_eq!(click_feedback("wiz-ff-manual", &mut w, &mut device), None);
-        assert_eq!(w.ff_choice, Some(false));
-        assert_eq!(device, original);
-        assert_eq!(
-            click_feedback("wiz-cancel", &mut w, &mut device),
-            Some(false)
-        );
-        assert_eq!(device, original);
-        assert_eq!(
-            click_feedback("wiz-ff-finish", &mut w, &mut device),
-            Some(true)
-        );
-        assert_eq!(device.ff_invert, Some(false));
-        assert_eq!(device.axes[0], Some((Func::Steering, false)));
-    }
-
-    #[test]
-    fn disconnected_wheel_cannot_start_a_hardware_test() {
-        let mut device = crate::controllers::DeviceCfg::default();
-        let mut w = feedback_wizard();
-        assert_eq!(click_feedback("wiz-ff-test", &mut w, &mut device), None);
-        assert!(w.error.is_some());
-        assert!(w.calibration.is_none());
-    }
-
-    #[test]
-    fn cancelling_feedback_releases_io_and_invalidates_the_test() {
-        let mut pads = super::PadsView::default();
-        pads.feedback_test = true;
-        pads.wizard = Some(super::Wizard {
-            step: super::WIZARD_STEPS.len(),
-            rest: [None; 8],
-            at: Vec::new(),
-            error: None,
-            calibration: Some((
-                std::time::Instant::now(),
-                crate::ffb_calibration::Calibration::new(crate::ffb_calibration::PULSE_FORCE),
-            )),
-            ff_choice: None,
-            test_strength: crate::ffb_calibration::PULSE_FORCE,
-        });
-        pads.cancel_feedback_test();
-        assert!(!pads.feedback_test);
-        assert!(pads.io.is_none());
-        let test = &pads
-            .wizard
-            .as_ref()
-            .unwrap()
-            .calibration
-            .as_ref()
-            .unwrap()
-            .1;
-        assert!(test.result.unwrap().is_err());
-        assert_eq!(pads.wizard.as_ref().unwrap().ff_choice, None);
-    }
-
-    use crate::controllers::Func;
-
-    #[test]
-    fn h_pattern_gears_have_a_clear_name() {
-        assert_eq!(
-            super::known_action("kw_s_1_fest").as_deref(),
-            Some("Gear 1 (H-pattern)")
-        );
-        assert_eq!(
-            super::known_action("kw_s_R_fest").as_deref(),
-            Some("Gear R (H-pattern)")
-        );
-    }
-
-    #[test]
-    fn empty_saved_button_slots_do_not_fill_the_controller_list() {
-        let mut buttons = vec![(String::new(), "0".to_string()); 131];
-        buttons[10].0 = "horn".to_string();
-        assert_eq!(super::shown_button_count(&buttons, 18, None), 18);
-        assert_eq!(super::shown_button_count(&buttons, 18, Some(128)), 129);
-    }
-
-    #[test]
-    fn a_wheel_with_three_pedals() {
-        // X the wheel; Y throttle, Z brake, Rz clutch - pedals reading 1 up, -1 down (as the
-        // G25's run, "reversed")
-        let rest = [
-            Some(0.0),
-            Some(1.0),
-            Some(1.0),
-            None,
-            None,
-            Some(1.0),
-            None,
-            None,
-        ];
-        let mut left = rest;
-        left[0] = Some(-1.0);
-        let mut thr = rest;
-        thr[1] = Some(-1.0);
-        let mut brk = rest;
-        brk[2] = Some(-1.0);
-        let mut clu = rest;
-        clu[5] = Some(-1.0);
-        let a = super::wizard_result(&rest, &[left, thr, brk, clu]);
-        assert_eq!(a[0], Some((Func::Steering, false)));
-        assert_eq!(a[1], Some((Func::Throttle, true)));
-        assert_eq!(a[2], Some((Func::Brake, true)));
-        assert_eq!(a[5], Some((Func::Clutch, true)));
-    }
-
-    #[test]
-    fn pedals_on_one_axis_and_a_wheel_the_other_way() {
-        let rest = [Some(0.0), Some(0.0), None, None, None, None, None, None];
-        let a = super::wizard_result(
-            &rest,
-            &[
-                [Some(0.9), Some(0.0), None, None, None, None, None, None],
-                [Some(0.0), Some(-1.0), None, None, None, None, None, None],
-                [Some(0.0), Some(1.0), None, None, None, None, None, None],
-                [None; 8],
-            ],
-        );
-        assert_eq!(a[0], Some((Func::Steering, true)));
-        assert_eq!(a[1], Some((Func::ThrottleBrake, true)));
-    }
-}
-
-#[cfg(test)]
-mod pad_action_tests {
-    /// Every game action a button can be given is one the game carries out from a
-    /// controller (app_events: `view_look_*` / `voice_radio` while held, the gears by name,
-    /// the rest through `is_game_action`, the doors through `Player::action`) - Space's
-    /// reset of every view among them (#1167).
-    #[test]
-    fn a_button_can_reset_every_view() {
-        assert!(super::PAD_GAME_ACTIONS.contains(&"view_reset_all_directions"));
-        assert!(super::PAD_GAME_ACTIONS.contains(&"voice_radio"));
-        assert_eq!(
-            super::known_action("voice_radio").as_deref(),
-            Some("Multiplayer: bus radio (hold)")
-        );
-        for a in super::PAD_GAME_ACTIONS {
-            let held = a.starts_with("view_look_") || a == "voice_radio";
-            let handled = held
-                || crate::actions::is_game_action(a)
-                || a.starts_with("gear_")
-                || crate::player::door_action(a).is_some();
-            assert!(handled, "{a}");
-        }
-        // held pad actions are game actions so they never reach the bus script
-        assert!(crate::actions::is_game_action("voice_radio"));
-        assert!(crate::actions::is_game_action("view_look_left"));
-    }
-}
-
-#[cfg(test)]
-mod pad_remove_tests {
-    use crate::controllers::{cfg_text, parse_cfg};
-
-    /// A device taken out of the list is gone from the file Save writes, and the next one is
-    /// shown - the one below it, or above it when it was the last (#636).
-    #[test]
-    fn a_removed_device_leaves_the_file() {
-        let mut devices = parse_cfg("[ctrl]\r\nSideWinder Joystick\r\n0\r\n\r\n[ctrl]\r\nLogitech G25 Racing Wheel USB\r\n1\r\n\r\n[ctrl]\r\nMOZA R3 Base\r\n0\r\n");
-        let mut sel = 1;
-        assert_eq!(
-            super::remove_device(&mut devices, &mut sel),
-            "Logitech G25 Racing Wheel USB"
-        );
-        assert_eq!(sel, 1);
-        let names = |text: &str| {
-            parse_cfg(text)
-                .into_iter()
-                .map(|d| d.name)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(
-            names(&cfg_text(&devices)),
-            ["SideWinder Joystick", "MOZA R3 Base"]
-        );
-        assert_eq!(super::remove_device(&mut devices, &mut sel), "MOZA R3 Base");
-        assert_eq!(sel, 0);
-        assert_eq!(
-            super::remove_device(&mut devices, &mut sel),
-            "SideWinder Joystick"
-        );
-        assert_eq!(sel, 0);
-        assert!(names(&cfg_text(&devices)).is_empty());
-    }
-}
-
-#[cfg(test)]
-mod profile_tests {
-    fn drive() -> super::core::Session {
-        serde_json::from_value(serde_json::json!({"time":0,"driver":"T","map":"maps/Spandau/global.cfg","bus":"Vehicles/X/a.bus","line":"136","tour":"2","seconds":1500.0,"metres":8400.0,"stops":14,"early":1,"late":2,"tickets":4,"cash":7.5,"crashes":0,"hurt":0,"jolts":2,"driving":96.0,"comfort":88.0,"ticketing":100.0})).unwrap()
-    }
-
-    /// The stops on time are the ones served neither early nor late (the personnel file
-    /// counts all of them, and of those the early and the late ones).
-    #[test]
-    fn a_drives_details_count_the_stops_on_time() {
-        let rows = super::drive_rows(&drive());
-        let get = |k: &str| rows.iter().find(|r| r.0 == k).map(|r| r.1.clone()).unwrap();
-        assert_eq!(get("On time / early / late"), "11 / 1 / 2");
-        assert_eq!(get("Line"), "136 / 2");
-        assert_eq!(get("Distance"), "8.4 km");
-        assert_eq!(super::drive_title(&drive()), "Line 136 / 2 · Spandau");
     }
 }

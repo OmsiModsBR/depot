@@ -132,6 +132,12 @@ pub fn host_allowed(url: &str) -> bool {
     )
 }
 
+/// The URL of a file attached to a release of the official repository (the hosts a redirect
+/// may pass through are checked apart, hop by hop).
+pub fn official_asset(url: &str) -> bool {
+    host_allowed(url) && url.starts_with(&format!("https://github.com/{REPO}/releases/download/"))
+}
+
 pub fn releases_url() -> String {
     format!("https://api.github.com/repos/{REPO}/releases?per_page=10")
 }
@@ -148,7 +154,7 @@ pub fn download(
     rel: &ReleaseInfo,
     progress: &mut dyn FnMut(u64, Option<u64>) -> bool,
 ) -> Result<(Vec<u8>, String)> {
-    if !host_allowed(&rel.zip_url) || !host_allowed(&rel.sha_url) {
+    if !official_asset(&rel.zip_url) || !official_asset(&rel.sha_url) {
         bail!("the release points outside the official download hosts");
     }
     let sha_text = f.get(&rel.sha_url, 4096, &mut |_, _| true)?;
@@ -196,7 +202,41 @@ pub fn safe_rel(p: &str) -> Option<String> {
     let ok = Path::new(p)
         .components()
         .all(|c| matches!(c, Component::Normal(_)));
-    ok.then(|| p.to_string())
+    (ok && p.split('/').all(windows_name_ok)).then(|| p.to_string())
+}
+
+/// A file or folder name Windows keeps as written: no trailing dot or space (stripped),
+/// none of `<>"|?*` or control characters, and not a device name (`NUL`, `aux.dll`).
+fn windows_name_ok(n: &str) -> bool {
+    if n.is_empty()
+        || n.ends_with('.')
+        || n.ends_with(' ')
+        || n.chars().any(|c| c.is_control() || "<>\"|?*".contains(c))
+    {
+        return false;
+    }
+    let stem = n.split('.').next().unwrap_or_default().trim_end();
+    let up = stem.to_ascii_uppercase();
+    let numbered = |p: &str| {
+        up.strip_prefix(p).is_some_and(|d| {
+            matches!(
+                d.chars().collect::<Vec<_>>()[..],
+                ['0'..='9' | '¹' | '²' | '³']
+            )
+        })
+    };
+    !(matches!(
+        up.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) || numbered("COM")
+        || numbered("LPT"))
+}
+
+/// A path as a package's zip entry spells it. The zip format uses `/`, but a package built
+/// on Windows may carry `\`; both mean the same folder step, and the result goes through the
+/// same `safe_rel` checks (no `..`, no drive, no absolute path).
+fn entry_rel(name: &str) -> Option<String> {
+    safe_rel(&name.replace('\\', "/"))
 }
 
 fn key(p: &str) -> String {
@@ -238,16 +278,41 @@ fn linked_part(root: &Path, rel: &str) -> Option<String> {
     None
 }
 
-/// The files of an OmsiLaunch already in the folder, by its own manifest.
-pub fn owned_paths(root: &Path) -> BTreeSet<String> {
-    let mut s = BTreeSet::new();
-    if let Some(m) = read_manifest(&root.join("release-manifest.json")) {
-        s.insert(key("release-manifest.json"));
-        for (p, _) in m {
-            s.insert(key(&p));
-        }
+/// The files Depot put in the folder, in the case it wrote them. The record Depot keeps
+/// outside the OMSI 2 folder is the authority; the manifest inside the folder is not (any
+/// program can write one), so for an install made without a record only the files that
+/// are exactly what the manifest says count.
+pub fn owned_list(root: &Path, data: &Path) -> Vec<String> {
+    // Without a record nothing is owned: a manifest in the folder can be written by anyone,
+    // hashes of real files included, so it never gives the right to replace or delete.
+    match load_record(data).filter(|r| same_root(Path::new(&r.root), root)) {
+        Some(r) => r.files.into_iter().filter_map(|p| safe_rel(&p)).collect(),
+        None => Vec::new(),
     }
-    s
+}
+
+/// Whether two folder paths are the same folder as far as spelling goes: no trailing
+/// separator, and on Windows no difference of case or of `/` and `\\`.
+fn same_root(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| -> Vec<String> {
+        p.to_string_lossy()
+            .replace('\\', "/")
+            .split('/')
+            .filter(|c| !c.is_empty())
+            .map(|c| {
+                if cfg!(windows) {
+                    c.to_lowercase()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
+    };
+    norm(a) == norm(b)
+}
+
+fn owned_paths(root: &Path, data: &Path) -> BTreeSet<String> {
+    owned_list(root, data).iter().map(|p| key(p)).collect()
 }
 
 /// `(path, sha256)` of every file a manifest lists.
@@ -277,9 +342,10 @@ fn open_zip(zip: &[u8]) -> Result<zip::ZipArchive<std::io::Cursor<&[u8]>>> {
 }
 
 /// Lists what the package would add, without writing anything.
-pub fn plan_install(root: &Path, zip: &[u8]) -> Result<InstallPlan> {
+pub fn plan_install(root: &Path, data: &Path, zip: &[u8]) -> Result<InstallPlan> {
     let mut a = open_zip(zip)?;
-    let owned = owned_paths(root);
+    let owned = owned_paths(root, data);
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     let (mut files, mut replaces, mut conflicts) = (Vec::new(), Vec::new(), Vec::new());
     let mut total = 0u64;
     for i in 0..a.len() {
@@ -293,8 +359,11 @@ pub fn plan_install(root: &Path, zip: &[u8]) -> Result<InstallPlan> {
         {
             bail!("the package holds a link ({})", f.name());
         }
-        let path = safe_rel(f.name())
+        let path = entry_rel(f.name())
             .ok_or_else(|| anyhow!("the package holds an unsafe path ({})", f.name()))?;
+        if !seen.insert(key(&path)) {
+            bail!("the package lists {path} twice");
+        }
         total = total.saturating_add(f.size());
         if total > MAX_UNPACKED {
             bail!("the package unpacks to too much data");
@@ -330,6 +399,9 @@ pub struct InstallRecord {
     pub version: String,
     pub sha256: String,
     pub files: Vec<String>,
+    /// Folders Depot made for these files (the only ones a removal may take away).
+    #[serde(default)]
+    pub dirs: Vec<String>,
 }
 
 pub fn record_path(data: &Path) -> PathBuf {
@@ -351,7 +423,20 @@ fn copy_into(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Installs the (already hash-checked) package into the OMSI 2 folder.
+/// The folders on the way to `rel` that do not exist yet, outermost first.
+fn missing_dirs(root: &Path, rel: &str) -> Vec<String> {
+    let parts: Vec<&str> = rel.split('/').collect();
+    let mut out = Vec::new();
+    for n in 1..parts.len() {
+        let d = parts[..n].join("/");
+        if !root.join(&d).exists() {
+            out.push(d);
+        }
+    }
+    out
+}
+
+/// Installs the package into the OMSI 2 folder; the bytes must be the ones `sha256` names.
 pub fn install(
     root: &Path,
     data: &Path,
@@ -359,7 +444,10 @@ pub fn install(
     sha256: &str,
     version: &str,
 ) -> Result<InstallRecord> {
-    let plan = plan_install(root, zip)?;
+    if sha256_hex(zip) != sha256.to_ascii_uppercase() {
+        bail!("the package does not match its SHA-256");
+    }
+    let plan = plan_install(root, data, zip)?;
     if !plan.conflicts.is_empty() {
         bail!(
             "these files already exist in the OMSI 2 folder and are not OmsiLaunch's: {}",
@@ -385,7 +473,7 @@ pub fn install(
             if f.is_dir() {
                 continue;
             }
-            let path = safe_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
+            let path = entry_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
             let dst = staged.join(&path);
             std::fs::create_dir_all(dst.parent().unwrap())?;
             let mut out = std::fs::File::create(&dst)?;
@@ -415,22 +503,24 @@ pub fn install(
         }
         // files of the release being replaced that the new one no longer has
         let keep: BTreeSet<String> = plan.files.iter().map(|f| key(&f.path)).collect();
-        let obsolete: Vec<String> = read_manifest(&root.join("release-manifest.json"))
-            .unwrap_or_default()
+        let obsolete: Vec<String> = owned_list(root, data)
             .into_iter()
-            .map(|(p, _)| p)
             .filter(|p| !keep.contains(&key(p)) && root.join(p).is_file())
             .collect();
+        for p in &obsolete {
+            if let Some(link) = linked_part(root, p) {
+                bail!("{link} is a link: nothing is removed through links");
+            }
+        }
+        let prev_dirs = load_record(data)
+            .filter(|r| same_root(Path::new(&r.root), root))
+            .map(|r| r.dirs)
+            .unwrap_or_default();
         // move in; remember what to undo
         let mut created: Vec<String> = Vec::new();
         let mut replaced: Vec<String> = Vec::new();
-        let rec = InstallRecord {
-            root: root.to_string_lossy().into_owned(),
-            version: version.to_string(),
-            sha256: sha256.to_string(),
-            files: plan.files.iter().map(|f| f.path.clone()).collect(),
-        };
         let mut dropped: Vec<String> = Vec::new();
+        let mut made_dirs: Vec<String> = Vec::new();
         let moved = (|| -> Result<()> {
             for f in &plan.files {
                 let target = root.join(&f.path);
@@ -441,10 +531,18 @@ pub fn install(
                     replaced.push(f.path.clone());
                 } else {
                     created.push(f.path.clone());
+                    for d in missing_dirs(root, &f.path) {
+                        if !made_dirs.contains(&d) {
+                            made_dirs.push(d);
+                        }
+                    }
                 }
                 copy_into(&staged.join(&f.path), &target)?;
             }
             for p in &obsolete {
+                if let Some(link) = linked_part(root, p) {
+                    bail!("{link} is a link: nothing is removed through links");
+                }
                 let target = root.join(p);
                 let b = backup.join(p);
                 std::fs::create_dir_all(b.parent().unwrap())?;
@@ -454,19 +552,38 @@ pub fn install(
                 dropped.push(p.clone());
             }
             // the record is part of the transaction: a failure here restores the old install
+            let mut dirs = prev_dirs.clone();
+            dirs.extend(
+                made_dirs
+                    .iter()
+                    .filter(|d| !dirs.contains(d))
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+            let rec = InstallRecord {
+                root: root.to_string_lossy().into_owned(),
+                version: version.to_string(),
+                sha256: sha256.to_string(),
+                files: plan.files.iter().map(|f| f.path.clone()).collect(),
+                dirs,
+            };
             super::config::write_atomic(&record_path(data), &serde_json::to_vec_pretty(&rec)?)?;
             Ok(())
         })();
         if let Err(e) = moved {
-            for p in &created {
-                let _ = std::fs::remove_file(root.join(p));
-            }
+            // the old files first, then what was new, then the folders made for it
             for p in replaced.iter().chain(&dropped) {
                 let _ = std::fs::copy(backup.join(p), root.join(p));
             }
+            for p in &created {
+                let _ = std::fs::remove_file(root.join(p));
+            }
+            for d in made_dirs.iter().rev() {
+                let _ = std::fs::remove_dir(root.join(d));
+            }
             return Err(e);
         }
-        Ok(rec)
+        load_record(data).ok_or_else(|| anyhow!("the install record was not written"))
     })();
     let _ = std::fs::remove_dir_all(&stage);
     result
@@ -542,16 +659,13 @@ pub struct RemovePlan {
 const OWN_DIRS: [&str; 4] = ["assets", "docs", "examples", "diagnostics"];
 
 pub fn plan_remove(root: &Path, data: &Path) -> RemovePlan {
-    let mut files: BTreeSet<String> = BTreeSet::new();
-    if let Some(m) = read_manifest(&root.join("release-manifest.json")) {
-        files.extend(m.into_iter().map(|(p, _)| p));
-        files.insert("release-manifest.json".into());
-    } else if let Some(r) = load_record(data).filter(|r| Path::new(&r.root) == root) {
-        files.extend(r.files.into_iter().filter_map(|p| safe_rel(&p)));
-    }
+    let mut files: BTreeSet<String> = owned_list(root, data).into_iter().collect();
     files.retain(|p| root.join(p).exists());
+    // the manifest goes last, so a failure half way leaves it to find the rest by
+    let mut files: Vec<String> = files.into_iter().collect();
+    files.sort_by_key(|p| p == "release-manifest.json");
     RemovePlan {
-        files: files.into_iter().collect(),
+        files,
         pending_recovery: root.join(".omsilaunch").join("journal.json").exists(),
     }
 }
@@ -564,24 +678,52 @@ pub fn remove(root: &Path, data: &Path) -> Result<RemovePlan> {
     if let Some(link) = plan.files.iter().find_map(|p| linked_part(root, p)) {
         bail!("{link} is a link: nothing is removed through links");
     }
+    // all or nothing: a copy of each file is kept until the last one is gone
+    let stage = super::config::omsi2_dir_in(data)
+        .join("staging")
+        .join(format!("remove-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&stage);
+    let mut gone: Vec<&String> = Vec::new();
     for p in &plan.files {
         let t = root.join(p);
-        std::fs::remove_file(&t).with_context(|| format!("removing {}", t.display()))?;
-    }
-    for d in OWN_DIRS {
-        let _ = std::fs::remove_dir_all(root.join(".omsilaunch").join(d));
-    }
-    // empty folders the package made go; a folder with anything else in it stays
-    for p in &plan.files {
-        let mut cur = root.join(p);
-        while let Some(parent) = cur.parent().map(Path::to_path_buf) {
-            if parent == root || std::fs::remove_dir(&parent).is_err() {
-                break;
+        let step = (|| -> Result<()> {
+            let b = stage.join(p);
+            std::fs::create_dir_all(b.parent().unwrap())?;
+            std::fs::copy(&t, &b)?;
+            std::fs::remove_file(&t).with_context(|| format!("removing {}", t.display()))
+        })();
+        if let Err(e) = step {
+            for q in &gone {
+                let _ = std::fs::copy(stage.join(q), root.join(q));
             }
-            cur = parent;
+            let _ = std::fs::remove_dir_all(&stage);
+            return Err(e);
+        }
+        gone.push(p);
+    }
+    let _ = std::fs::remove_dir_all(&stage);
+    for d in OWN_DIRS {
+        let dir = root.join(".omsilaunch").join(d);
+        if linked_part(root, &format!(".omsilaunch/{d}")).is_none() {
+            let _ = std::fs::remove_dir_all(dir);
         }
     }
-    let _ = std::fs::remove_dir(root.join(".omsilaunch"));
+    // only folders Depot made, and only when empty, go
+    let dirs = load_record(data)
+        .filter(|r| same_root(Path::new(&r.root), root))
+        .map(|r| r.dirs)
+        .unwrap_or_default();
+    let mut dirs: Vec<String> = dirs.into_iter().filter(|d| safe_rel(d).is_some()).collect();
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.matches('/').count()));
+    for d in dirs {
+        let t = root.join(&d);
+        if linked_part(root, &d).is_none() {
+            let _ = std::fs::remove_dir(t);
+        }
+    }
+    if linked_part(root, ".omsilaunch").is_none() {
+        let _ = std::fs::remove_dir(root.join(".omsilaunch"));
+    }
     let _ = std::fs::remove_file(record_path(data));
     Ok(plan)
 }
@@ -707,8 +849,8 @@ mod tests {
         let rel = ReleaseInfo {
             version: "1".into(),
             zip_name: "OmsiLaunch-1.zip".into(),
-            zip_url: "https://github.com/a/OmsiLaunch-1.zip".into(),
-            sha_url: "https://github.com/a/OmsiLaunch-1.zip.sha256".into(),
+            zip_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip".into(),
+            sha_url: "https://github.com/OmsiModsBR/OmsiLaunch/releases/download/v1/OmsiLaunch-1.zip.sha256".into(),
             page_url: String::new(),
         };
         let z = package(&[], false);
@@ -727,7 +869,7 @@ mod tests {
         std::fs::write(root.join("plugins/Other.opl"), b"theirs").unwrap();
         std::fs::write(root.join("Omsi.exe"), b"game").unwrap();
         let z = package(&[], false);
-        let plan = plan_install(&root, &z).unwrap();
+        let plan = plan_install(&root, &data, &z).unwrap();
         assert!(plan.ok() && plan.files.len() == 5 && plan.replaces.is_empty());
         let rec = install(&root, &data, &z, &sha256_hex(&z), "0.1.0-beta4").unwrap();
         assert_eq!(rec.files.len(), 5);
@@ -738,7 +880,7 @@ mod tests {
             .map(|mut d| d.next().is_some())
             .unwrap_or(false));
         // installing again is an update of its own files, not a conflict
-        let again = plan_install(&root, &z).unwrap();
+        let again = plan_install(&root, &data, &z).unwrap();
         assert!(again.conflicts.is_empty() && again.replaces.len() == 5);
         let rp = remove(&root, &data).unwrap();
         assert_eq!(rp.files.len(), 5);
@@ -759,9 +901,9 @@ mod tests {
         let data = tmp("confd");
         std::fs::write(root.join("OmsiLaunch.exe"), b"someone else's").unwrap();
         let z = package(&[], false);
-        let plan = plan_install(&root, &z).unwrap();
+        let plan = plan_install(&root, &data, &z).unwrap();
         assert_eq!(plan.conflicts, vec!["OmsiLaunch.exe".to_string()]);
-        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
         assert_eq!(
             std::fs::read(root.join("OmsiLaunch.exe")).unwrap(),
             b"someone else's"
@@ -776,7 +918,7 @@ mod tests {
         let root = tmp("bad");
         let data = tmp("badd");
         let z = package(&[], true);
-        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&data);
@@ -792,7 +934,105 @@ mod tests {
             .unwrap();
         w.write_all(b"x").unwrap();
         let z = w.finish().unwrap().into_inner();
-        assert!(plan_install(&tmp("esc"), &z).is_err());
+        assert!(plan_install(&tmp("esc"), &tmp("escd"), &z).is_err());
+    }
+
+    #[test]
+    fn backslash_entries_of_a_windows_built_package_are_read_as_folders() {
+        // the published beta 4 package spells its entries with `\`
+        assert_eq!(
+            entry_rel("plugins\\OmsiLaunch.Plugin.opl").as_deref(),
+            Some("plugins/OmsiLaunch.Plugin.opl")
+        );
+        assert_eq!(entry_rel("OmsiLaunch.exe").as_deref(), Some("OmsiLaunch.exe"));
+        for bad in ["..\\x", "a\\..\\..\\x", "\\abs", "C:\\x", "a\\..\\..", ""] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("..\\evil.dll", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("esc-bs"), &tmp("esc-bsd"), &z).is_err());
+        // device and reserved names stay refused when spelled with a backslash
+        for bad in ["plugins\\NUL", "plugins\\aux.dll", "COM1", "docs\\x.", "docs\\a<b"] {
+            assert!(entry_rel(bad).is_none(), "{bad}");
+        }
+    }
+
+    /// The published beta 4 shape: entries with backslashes, the manifest with `/`.
+    fn backslash_package() -> Vec<u8> {
+        let entries: [(&str, &str, &[u8]); 4] = [
+            ("OmsiLaunch.exe", "OmsiLaunch.exe", b"exe"),
+            ("OmsiLaunchW.exe", "OmsiLaunchW.exe", b"exew"),
+            (
+                "plugins\\OmsiLaunch.Plugin.opl",
+                "plugins/OmsiLaunch.Plugin.opl",
+                b"opl",
+            ),
+            (
+                ".omsilaunch\\docs\\README.md",
+                ".omsilaunch/docs/README.md",
+                b"doc",
+            ),
+        ];
+        let files: Vec<String> = entries
+            .iter()
+            .map(|(_, m, b)| {
+                format!(
+                    "{{\"path\":\"{m}\",\"bytes\":{},\"sha256\":\"{}\"}}",
+                    b.len(),
+                    sha256_hex(b)
+                )
+            })
+            .collect();
+        let manifest = format!(
+            "{{\"product_version\":\"0.1.0-beta4\",\"files\":[{}]}}",
+            files.join(",")
+        );
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        for (n, _, b) in &entries {
+            w.start_file(*n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.start_file("release-manifest.json", o).unwrap();
+        w.write_all(manifest.as_bytes()).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn a_package_with_backslash_entries_installs_and_is_removed_again() {
+        let root = tmp("bs-root");
+        let data = tmp("bs-data");
+        let z = backslash_package();
+        let plan = plan_install(&root, &data, &z).unwrap();
+        assert!(plan.ok());
+        assert!(plan.files.iter().all(|f| !f.path.contains('\\')));
+        install(&root, &data, &z, &sha256_hex(&z), "0.1.0-beta4").unwrap();
+        assert!(root.join("OmsiLaunch.exe").is_file());
+        assert!(root.join("plugins/OmsiLaunch.Plugin.opl").is_file());
+        assert!(root.join(".omsilaunch/docs/README.md").is_file());
+        // a backslash must not end up as one odd file name in the folder
+        assert!(!root
+            .read_dir()
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().contains('\\')));
+        remove(&root, &data).unwrap();
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_backslash_entry_with_a_device_name_is_refused_by_the_plan() {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        w.start_file("plugins\\NUL", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(b"x").unwrap();
+        let z = w.finish().unwrap().into_inner();
+        assert!(plan_install(&tmp("dev-bs"), &tmp("dev-bsd"), &z).is_err());
     }
 
     #[test]
@@ -800,7 +1040,7 @@ mod tests {
         let root = tmp("rm");
         let data = tmp("rmd");
         let z = package(&[], false);
-        install(&root, &data, &z, "x", "1").unwrap();
+        install(&root, &data, &z, &sha256_hex(&z), "1").unwrap();
         std::fs::create_dir_all(root.join(".omsilaunch/session-profiles/mine")).unwrap();
         std::fs::write(root.join(".omsilaunch/journal.json"), b"{}").unwrap();
         assert!(remove(&root, &data).is_err());
@@ -837,10 +1077,10 @@ mod tests {
         let root = tmp("unl");
         let data = tmp("unld");
         let z = zip_with(&[("a.dll", b"a"), ("b.dll", b"b")], &["a.dll"]);
-        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
         let z = zip_with(&[("a.dll", b"a")], &[]);
-        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&data);
     }
@@ -853,12 +1093,12 @@ mod tests {
             &[("plugins/Old.opl", b"old"), ("x.dll", b"x")],
             &["plugins/Old.opl", "x.dll"],
         );
-        install(&root, &data, &v1, "1", "1").unwrap();
+        install(&root, &data, &v1, &sha256_hex(&v1), "1").unwrap();
         let v2 = zip_with(
             &[("plugins/New.opl", b"new"), ("x.dll", b"x2")],
             &["plugins/New.opl", "x.dll"],
         );
-        let rec = install(&root, &data, &v2, "2", "2").unwrap();
+        let rec = install(&root, &data, &v2, &sha256_hex(&v2), "2").unwrap();
         assert!(!root.join("plugins/Old.opl").exists());
         assert!(root.join("plugins/New.opl").is_file());
         assert!(!rec.files.iter().any(|f| f == "plugins/Old.opl"));
@@ -873,12 +1113,12 @@ mod tests {
         let root = tmp("rec");
         let data = tmp("recd");
         let v1 = zip_with(&[("x.dll", b"one")], &["x.dll"]);
-        install(&root, &data, &v1, "1", "1").unwrap();
+        install(&root, &data, &v1, &sha256_hex(&v1), "1").unwrap();
         // the record's place is taken by a folder, so writing it fails
         std::fs::remove_file(record_path(&data)).unwrap();
         std::fs::create_dir(record_path(&data)).unwrap();
         let v2 = zip_with(&[("x.dll", b"two"), ("y.dll", b"y")], &["x.dll", "y.dll"]);
-        assert!(install(&root, &data, &v2, "2", "2").is_err());
+        assert!(install(&root, &data, &v2, &sha256_hex(&v2), "2").is_err());
         assert_eq!(std::fs::read(root.join("x.dll")).unwrap(), b"one");
         assert!(!root.join("y.dll").exists());
         let _ = std::fs::remove_dir_all(&root);
@@ -893,9 +1133,187 @@ mod tests {
         let outside = tmp("lnko");
         std::os::unix::fs::symlink(&outside, root.join("plugins")).unwrap();
         let z = zip_with(&[("plugins/A.opl", b"a")], &["plugins/A.opl"]);
-        assert!(plan_install(&root, &z).is_err());
-        assert!(install(&root, &data, &z, "x", "1").is_err());
+        assert!(plan_install(&root, &data, &z).is_err());
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
         assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn a_forged_manifest_with_the_real_hash_does_not_make_files_ours() {
+        let root = tmp("forge2");
+        let data = tmp("forged2");
+        std::fs::write(root.join("OMSI.exe"), b"game").unwrap();
+        let h = sha256_hex(b"game");
+        std::fs::write(
+            root.join("release-manifest.json"),
+            format!(r#"{{"files":[{{"path":"OMSI.exe","sha256":"{h}"}}]}}"#),
+        )
+        .unwrap();
+        assert!(owned_list(&root, &data).is_empty());
+        assert!(remove(&root, &data).unwrap().files.is_empty());
+        assert_eq!(std::fs::read(root.join("OMSI.exe")).unwrap(), b"game");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn the_record_is_found_however_the_folder_is_spelled() {
+        let a = Path::new("/games/OMSI 2");
+        assert!(same_root(a, Path::new("/games/OMSI 2/")));
+        assert!(same_root(a, Path::new("/games//OMSI 2")));
+        assert!(!same_root(a, Path::new("/games/OMSI 3")));
+        if cfg!(windows) {
+            assert!(same_root(
+                Path::new(r"C:\Games\OMSI 2"),
+                Path::new("c:/games/omsi 2/")
+            ));
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn removal_does_not_go_through_a_linked_omsilaunch_folder() {
+        let root = tmp("lnkrm");
+        let data = tmp("lnkrmd");
+        let outside = tmp("lnkrmo");
+        std::fs::create_dir_all(outside.join("assets")).unwrap();
+        std::fs::write(outside.join("assets/keep.txt"), b"x").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".omsilaunch")).unwrap();
+        let _ = remove(&root, &data);
+        assert!(outside.join("assets/keep.txt").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn a_manifest_written_by_someone_else_does_not_make_files_ours() {
+        let root = tmp("forge");
+        let data = tmp("forged");
+        std::fs::write(root.join("OMSI.exe"), b"game").unwrap();
+        // a manifest in the folder that claims the game's own file (with a wrong hash)
+        std::fs::write(
+            root.join("release-manifest.json"),
+            r#"{"files":[{"path":"OMSI.exe","sha256":"00"}]}"#,
+        )
+        .unwrap();
+        assert!(owned_list(&root, &data).is_empty());
+        // a package that carries a file of that name is a conflict, not an update
+        let z = zip_with(&[("OMSI.exe", b"other")], &["OMSI.exe"]);
+        assert!(plan_install(&root, &data, &z)
+            .unwrap()
+            .conflicts
+            .contains(&"OMSI.exe".to_string()));
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
+        assert!(remove(&root, &data).unwrap().files.is_empty());
+        assert_eq!(std::fs::read(root.join("OMSI.exe")).unwrap(), b"game");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn duplicate_or_case_colliding_entries_are_refused() {
+        let root = tmp("dup");
+        let data = tmp("dupd");
+        let z = zip_with(&[("a.dll", b"a"), ("A.DLL", b"b")], &["a.dll", "A.DLL"]);
+        assert!(plan_install(&root, &data, &z).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn windows_names_are_refused_in_package_paths() {
+        for bad in [
+            "NUL",
+            "COM0",
+            "lpt0.txt",
+            "aux.dll",
+            "plugins/COM1.txt",
+            "a/b.",
+            "a /b",
+            "x<y",
+            "a|b",
+            "q?",
+        ] {
+            assert!(safe_rel(bad).is_none(), "{bad}");
+        }
+        for ok in [
+            ".omsilaunch/docs/README.md",
+            "plugins/OmsiLaunch.Plugin.opl",
+            "COM10.dll",
+            "console.cfg",
+        ] {
+            assert!(safe_rel(ok).is_some(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn only_the_official_repository_path_is_a_release_asset() {
+        let ok = format!("https://github.com/{REPO}/releases/download/v1/OmsiLaunch-1.zip");
+        assert!(official_asset(&ok));
+        assert!(!official_asset(
+            "https://github.com/someone/else/releases/download/v1/x.zip"
+        ));
+        assert!(!official_asset(
+            "https://example.com/OmsiModsBR/OmsiLaunch/releases/download/v1/x.zip"
+        ));
+    }
+
+    #[test]
+    fn a_package_that_is_not_the_one_hashed_is_not_installed() {
+        let root = tmp("hsh");
+        let data = tmp("hshd");
+        let z = zip_with(&[("a.dll", b"a")], &["a.dll"]);
+        assert!(install(&root, &data, &z, &"AB".repeat(32), "1").is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_failed_install_takes_back_the_folders_it_made_and_a_removal_keeps_others() {
+        let root = tmp("dirs");
+        let data = tmp("dirsd");
+        std::fs::create_dir_all(root.join("plugins")).unwrap();
+        let z = zip_with(
+            &[("plugins/A.opl", b"a"), ("new/deep/B.dll", b"b")],
+            &["plugins/A.opl", "new/deep/B.dll"],
+        );
+        std::fs::create_dir_all(record_path(&data)).unwrap();
+        assert!(install(&root, &data, &z, &sha256_hex(&z), "1").is_err());
+        assert!(!root.join("new").exists() && root.join("plugins").is_dir());
+        std::fs::remove_dir_all(record_path(&data)).unwrap();
+        install(&root, &data, &z, &sha256_hex(&z), "1").unwrap();
+        remove(&root, &data).unwrap();
+        // the empty folder that was there before stays; the ones Depot made go
+        assert!(root.join("plugins").is_dir() && !root.join("new").exists());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_update_never_removes_through_a_linked_folder() {
+        let root = tmp("lnku");
+        let data = tmp("lnkud");
+        let outside = tmp("lnkuo");
+        let v1 = zip_with(
+            &[("plugins/Old.opl", b"old"), ("x.dll", b"x")],
+            &["plugins/Old.opl", "x.dll"],
+        );
+        install(&root, &data, &v1, &sha256_hex(&v1), "1").unwrap();
+        // the plugins folder becomes a link to a folder holding a file of the same name
+        std::fs::write(outside.join("Old.opl"), b"theirs").unwrap();
+        std::fs::remove_dir_all(root.join("plugins")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("plugins")).unwrap();
+        let v2 = zip_with(&[("x.dll", b"x2")], &["x.dll"]);
+        assert!(install(&root, &data, &v2, &sha256_hex(&v2), "2").is_err());
+        assert_eq!(std::fs::read(outside.join("Old.opl")).unwrap(), b"theirs");
+        assert!(remove(&root, &data).is_err());
+        assert_eq!(std::fs::read(outside.join("Old.opl")).unwrap(), b"theirs");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&outside);

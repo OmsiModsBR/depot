@@ -628,10 +628,66 @@ pub fn import_from_options(root: &Path) -> Map<String, Value> {
     out
 }
 
+fn kind_text(k: &Kind) -> String {
+    match k {
+        Bool => "on / off".into(),
+        Int(a, b) => format!("whole number {a} to {b}"),
+        Float(a, b) => format!("number {a} to {b}"),
+        Choice(c) => format!("one of {}", c.join(", ")),
+        Particles => "enabled, per-emitter maximum, player vehicle only, in reflections".into(),
+    }
+}
+
+/// The table of `docs/ORIGINAL_ENGINE.md`: every setting Depot sends, in catalog order.
+/// A test keeps the document equal to this text.
+pub fn docs_table() -> String {
+    let mut out = String::from(
+        "| OmsiLaunch key | Depot setting | Group | Values | Default | Import from `options.cfg` |\n|---|---|---|---|---|---|\n",
+    );
+    for e in CATALOG {
+        let imp = match e.token {
+            Some(Token::Flag { name, inverted }) => {
+                format!("`{name}`{}", if inverted { " (inverted)" } else { "" })
+            }
+            Some(Token::Value { name, .. }) => format!("`[{name}]`"),
+            Some(Token::Line { name, index }) => format!("`[{name}]` line {}", index + 1),
+            None => "-".into(),
+        };
+        out.push_str(&format!(
+            "| `{}` | {} | {:?} | {} | `{}` | {} |\n",
+            e.key,
+            e.depot.map_or("-".to_string(), |d| format!("`{d}`")),
+            e.group,
+            kind_text(&e.kind),
+            e.default,
+            imp
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// `docs/ORIGINAL_ENGINE.md` carries the table between two markers; regenerate it with
+    /// `cargo test -p omsi-launcher-core print_docs_table -- --ignored --nocapture`.
+    #[test]
+    fn the_documented_table_is_the_catalog() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/ORIGINAL_ENGINE.md");
+        // A Windows checkout may have CRLF line endings.
+        let doc = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
+        let a = doc.find("<!-- catalog:start -->\n").unwrap() + "<!-- catalog:start -->\n".len();
+        let b = doc.find("<!-- catalog:end -->").unwrap();
+        assert_eq!(&doc[a..b], docs_table());
+    }
+
+    #[test]
+    #[ignore]
+    fn print_docs_table() {
+        print!("{}", docs_table());
+    }
 
     #[test]
     fn every_default_is_valid_and_keys_are_unique() {

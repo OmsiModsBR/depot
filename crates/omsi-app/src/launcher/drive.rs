@@ -16,10 +16,10 @@ use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
 
 #[derive(Clone)]
-struct BusVariant {
-    file: String,
+pub struct BusVariant {
+    pub file: String,
     name: String,
-    variant: String,
+    pub variant: String,
     fresh: bool,
     installed: bool,
     paints: usize,
@@ -27,10 +27,10 @@ struct BusVariant {
 }
 
 #[derive(Clone)]
-struct BusManufacturer {
+pub struct BusManufacturer {
     key: String,
-    name: String,
-    variants: Vec<BusVariant>,
+    pub name: String,
+    pub variants: Vec<BusVariant>,
 }
 
 #[derive(Default)]
@@ -787,7 +787,7 @@ fn duty_panel(l: &mut Launcher, body: Rect) {
 /// Whether all of a tour's trips have left at `now`, and the trip a start then takes: the one
 /// under way or the next, or with a search (`q`, lower case) the first still to come that
 /// matches it by name, line or stop (a tour whose number matches keeps the usual one).
-fn tour_trip(t: &omsi_launcher_lib::TourInfo, now: f64, q: &str) -> (bool, Option<usize>) {
+pub fn tour_trip(t: &omsi_launcher_lib::TourInfo, now: f64, q: &str) -> (bool, Option<usize>) {
     let ended = t.runs && t.trips.iter().all(|x| x.departure < now - 120.0);
     let first = trip_index_at(t, now);
     let has = |s: &str| s.to_lowercase().contains(q);
@@ -1325,7 +1325,7 @@ fn map_labels(l: &mut Launcher, map: Rect, avoid: &[Rect]) {
 
 /// OMSI takes the manufacturer and the complete type from [friendlyname]. The
 /// vehicle folder and rendering configuration do not define this hierarchy.
-fn build_bus_manufacturers(
+pub fn build_bus_manufacturers(
     vehicles: &[omsi_launcher_lib::VehicleInfo],
     allowed: Option<&std::collections::HashSet<String>>,
     fresh: &std::collections::HashSet<String>,
@@ -1405,7 +1405,7 @@ fn build_bus_manufacturers(
 
 /// Sort numeric runs wherever they occur: DL9 precedes DL10; case does not change
 /// a manufacturer's position.
-fn bus_name_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+pub fn bus_name_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let a = a.to_lowercase();
     let b = b.to_lowercase();
@@ -1438,7 +1438,7 @@ fn bus_name_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-pub(super) fn default_livery_label(vehicle: &omsi_launcher_lib::VehicleInfo) -> &str {
+pub fn default_livery_label(vehicle: &omsi_launcher_lib::VehicleInfo) -> &str {
     if vehicle.default_paint.trim().is_empty() {
         "Default paint"
     } else {
@@ -1458,7 +1458,7 @@ pub(super) fn liveries_text(repaints: usize) -> String {
 }
 
 /// A type of a bus family in its dropdown: the type and its liveries.
-fn variant_option(variant: &BusVariant) -> String {
+pub fn variant_option(variant: &BusVariant) -> String {
     format!("{} · {}", variant.variant, liveries_text(variant.paints))
 }
 
@@ -1469,7 +1469,7 @@ fn variant_matches(variant: &BusVariant, q: &str) -> bool {
         || display_bus_name(&variant.file).to_lowercase().contains(q)
 }
 
-fn manufacturer_matches(model: &BusManufacturer, q: &str) -> bool {
+pub fn manufacturer_matches(model: &BusManufacturer, q: &str) -> bool {
     q.is_empty()
         || model.name.to_lowercase().contains(q)
         || model.variants.iter().any(|v| variant_matches(v, q))
@@ -3185,184 +3185,4 @@ pub(crate) fn nearest_airport(root: &str, map: &str) -> String {
         .unwrap_or_else(|| "EDDB".into());
     cache.insert(map.to_string(), code.clone());
     code
-}
-
-#[cfg(test)]
-mod vehicle_picker_tests {
-    use super::*;
-
-    fn vehicle(
-        folder: &str,
-        maker: &str,
-        name: &str,
-        file: &str,
-    ) -> omsi_launcher_lib::VehicleInfo {
-        omsi_launcher_lib::VehicleInfo {
-            name: format!("{maker} {name}"),
-            manufacturer: maker.into(),
-            type_name: name.into(),
-            folder: folder.into(),
-            file: format!("Vehicles/{folder}/{file}.bus"),
-            description: String::new(),
-            paints: vec!["Paint".into()],
-            hofs: vec![],
-            installed: false,
-            missing_packs: vec![],
-            numbers: vec![],
-            default_paint: "Beige".into(),
-        }
-    }
-
-    #[test]
-    fn a_tour_search_finds_the_next_trip_of_a_route_and_skips_the_ones_gone() {
-        let trip = |index: usize, name: &str, departure: f64| omsi_launcher_lib::TripInfo {
-            name: name.into(),
-            index,
-            line: "9106".into(),
-            from: "Massy".into(),
-            terminus: "Cormeilles".into(),
-            departure,
-            arrival: departure + 1800.0,
-            stops: Vec::new(),
-            km: 10.0,
-        };
-        let tour = |trips: Vec<omsi_launcher_lib::TripInfo>| omsi_launcher_lib::TourInfo {
-            number: "12".into(),
-            ai_group: String::new(),
-            first: 0.0,
-            last: 0.0,
-            days: "Mon-Fri".into(),
-            runs: true,
-            next_run: None,
-            trips,
-        };
-        let h = |x: f64| x * 3600.0;
-        let morning_b = tour(vec![
-            trip(1, "9106B_HC_MASSY", h(7.0)),
-            trip(2, "9106A_HC_CORMEILLES", h(8.0)),
-            trip(3, "9106A_HC_MASSY", h(13.0)),
-        ]);
-        assert_eq!(tour_trip(&morning_b, h(12.0), "9106b"), (false, None));
-        assert_eq!(tour_trip(&morning_b, h(12.0), ""), (false, Some(2)));
-        let later_b = tour(vec![
-            trip(1, "9106A_HC_MASSY", h(11.5)),
-            trip(2, "9106B_HC_CORMEILLES", h(12.5)),
-            trip(3, "9106B_HC_MASSY", h(14.0)),
-        ]);
-        assert_eq!(tour_trip(&later_b, h(12.0), "9106b"), (false, Some(1)));
-        assert_eq!(tour_trip(&later_b, h(12.0), "12"), (false, Some(1)));
-        assert_eq!(tour_trip(&later_b, h(15.0), ""), (true, Some(2)));
-        assert_eq!(tour_trip(&later_b, h(15.0), "9106b"), (true, Some(1)));
-    }
-
-    #[test]
-    fn empty_vehicle_types_use_the_file_name() {
-        for empty in ["", "   "] {
-            let manufacturers = build_bus_manufacturers(
-                &[vehicle("Pack", "MAN", empty, "NL_202")],
-                None,
-                &Default::default(),
-            );
-            assert_eq!(manufacturers[0].variants[0].variant, "NL 202");
-        }
-    }
-
-    #[test]
-    fn omsi_manufacturer_groups_dl_and_lions_city_across_packs() {
-        let vehicles = vec![
-            vehicle("MAN_DL05", "MAN", "DL05", "dl05"),
-            vehicle("MAN_DL05", "MAN", "DL07", "dl07"),
-            vehicle("MAN_DL05", "MAN", "DL08", "dl08"),
-            vehicle("MAN_DL05", "MAN", "DL09", "dl09"),
-            vehicle("MAN_LC_MVG", "MAN", "Lion's City (MVG)", "mvg"),
-            vehicle("MAN_LC_GUE", "MAN", "Lion's City G (ORN)", "orn"),
-        ];
-        let manufacturers = build_bus_manufacturers(&vehicles, None, &Default::default());
-        assert_eq!(manufacturers.len(), 1);
-        assert_eq!(manufacturers[0].name, "MAN");
-        assert_eq!(manufacturers[0].variants.len(), 6);
-        assert!(manufacturers[0]
-            .variants
-            .iter()
-            .any(|v| v.variant == "DL07"));
-        assert!(manufacturers[0]
-            .variants
-            .iter()
-            .any(|v| v.variant == "Lion's City G (ORN)"));
-        assert!(manufacturer_matches(&manufacturers[0], "orn"));
-        assert!(!manufacturer_matches(&manufacturers[0], "not a bus"));
-    }
-
-    #[test]
-    fn author_defined_manufacturer_and_complete_type_are_preserved() {
-        let vehicles = vec![
-            vehicle(
-                "Pack",
-                "Mercedes-Benz Release",
-                "MB_C2_E6_GN_BVG_Leasing 2",
-                "leasing",
-            ),
-            vehicle("Pack", "Mercedes-Benz", "O530", "o530"),
-        ];
-        let manufacturers = build_bus_manufacturers(&vehicles, None, &Default::default());
-        assert_eq!(manufacturers.len(), 2);
-        let maker = manufacturers
-            .iter()
-            .find(|m| m.name == "Mercedes-Benz Release")
-            .unwrap();
-        assert_eq!(maker.variants[0].variant, "MB C2 E6 GN BVG Leasing 2");
-    }
-
-    #[test]
-    fn duplicate_names_remain_selectable_and_host_filter_is_respected() {
-        let vehicles = vec![
-            vehicle("MAN", "MAN", "NL202", "en92"),
-            vehicle("MAN", "MAN", "NL202", "en93"),
-            vehicle("OtherPack", "MAN", "NL202", "en92"),
-        ];
-        let manufacturers = build_bus_manufacturers(&vehicles, None, &Default::default());
-        let labels: std::collections::HashSet<_> = manufacturers[0]
-            .variants
-            .iter()
-            .map(|v| &v.variant)
-            .collect();
-        assert_eq!(labels.len(), 3);
-        let allowed = std::collections::HashSet::from([vehicles[1].file.to_lowercase()]);
-        let filtered = build_bus_manufacturers(&vehicles, Some(&allowed), &Default::default());
-        assert_eq!(filtered[0].variants.len(), 1);
-        assert_eq!(filtered[0].variants[0].file, vehicles[1].file);
-    }
-
-    /// Each type in a family's dropdown says how many liveries it has, as the Livery list
-    /// beside counts them: its own paint and its repaints (#717).
-    #[test]
-    fn each_bus_type_says_how_many_liveries_it_has() {
-        let mut one = vehicle("MAN_SD200", "MAN", "SD77", "sd77");
-        one.paints.clear();
-        let mut many = vehicle("MAN_SD200", "MAN", "SD78", "sd78");
-        many.paints = vec!["BVG".into(), "Werbung".into(), "Neu".into()];
-        let manufacturers = build_bus_manufacturers(&[one, many], None, &Default::default());
-        let options: Vec<String> = manufacturers[0]
-            .variants
-            .iter()
-            .map(variant_option)
-            .collect();
-        assert_eq!(
-            options,
-            vec![
-                "SD77 · 1 livery".to_string(),
-                "SD78 · 4 liveries".to_string()
-            ]
-        );
-    }
-
-    #[test]
-    fn numbers_in_type_names_sort_naturally_and_default_livery_has_its_omsi_name() {
-        assert_eq!(bus_name_cmp("DL9", "DL10"), std::cmp::Ordering::Less);
-        assert_eq!(bus_name_cmp("MAN", "man"), std::cmp::Ordering::Equal);
-        let mut vehicle = vehicle("MAN", "MAN", "DL07", "dl07");
-        assert_eq!(default_livery_label(&vehicle), "Beige");
-        vehicle.default_paint.clear();
-        assert_eq!(default_livery_label(&vehicle), "Default paint");
-    }
 }

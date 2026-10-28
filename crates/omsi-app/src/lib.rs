@@ -84,7 +84,6 @@ mod settings;
 mod threads;
 mod tiles;
 mod traffic;
-mod ui;
 
 // the game itself, split by what each part does
 mod app;
@@ -609,7 +608,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         vr_nav_profiles: crate::vr_navigator::Profiles::load(),
         vr_nav_edit: None,
         spanned: false,
-        ui: ui::Ui::new(),
+        ui: hud::Ui::new(),
         fps: 0.0,
         frame_stats: Default::default(),
         fps_low: None,
