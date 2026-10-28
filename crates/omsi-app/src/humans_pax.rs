@@ -781,7 +781,7 @@ impl Cabin {
             // would have to cross the bus to it (a bus with doors on both sides, at a stop on
             // its left, sent everybody to the right front door before a door opened). Then
             // the nearest door on their own side.
-            if open.is_some() {
+            if open.is_some() && !any_open {
                 let side = |q: &Vec3| q.x * p.x > 0.0 && p.x.abs() >= 0.6;
                 let first_across = list
                     .first()
