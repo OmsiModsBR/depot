@@ -23,10 +23,12 @@ pub(crate) mod mapview;
 pub mod mobile;
 #[cfg(feature = "lan")]
 mod multiplayer;
+mod original;
+mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
-pub(crate) mod preview;
 mod prerender;
+pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
 mod showroom;
@@ -1657,7 +1659,18 @@ impl Launcher {
             .get("ui_accent")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        omsi_ui::theme::set_accent(omsi_ui::theme::Accent::named(accent).unwrap_or_default());
+        // (the original OMSI 2 mode has an accent of its own, so the two cannot be mistaken)
+        let accent = if self
+            .state
+            .original
+            .engine(&self.state.config.original_engine)
+            == omsi_launcher_lib::original_engine::Engine::Omsi2
+        {
+            omsi_ui::theme::Accent::Blue
+        } else {
+            omsi_ui::theme::Accent::named(accent).unwrap_or_default()
+        };
+        omsi_ui::theme::set_accent(accent);
         // (and its corners: square ones are flatter, closer to Content Manager)
         omsi_ui::theme::set_square(
             self.state
@@ -1685,6 +1698,8 @@ impl Launcher {
             && self.page == Page::Controls
             && self.pages.controls_tab == 0
             && self.pages.kb.dialog.is_some();
+        // (and OmsiLaunch's install or removal dialogs)
+        let engine = !mobile && !matches!(self.state.original.flow, original::Flow::Idle);
         // (and the integrity report's export over Diagnostics)
         let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
         if self.browser.is_some() || crash || reset || disconnected {
@@ -1697,6 +1712,7 @@ impl Launcher {
             || window
             || drive
             || keys
+            || engine
             || diag)
             .then(|| {
                 let i = self.ui.input.clone();
@@ -1822,6 +1838,8 @@ impl Launcher {
                 self.draw_crash_dialog();
             } else if reset {
                 settings::reset_dialog(self);
+            } else if engine {
+                self.draw_engine_dialog();
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
@@ -2231,11 +2249,25 @@ impl Launcher {
             omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string())
         };
         let page = self.page.shown().unwrap_or(UiPage::Drive);
+        // the Depot | OMSI 2 switch: only with the flag on and OmsiLaunch installed
+        let engine = self
+            .state
+            .original
+            .switch_shown(&self.state.config.original_engine)
+            .then(|| omsi_launcher_ui::shell::EngineSwitch {
+                omsi2: self
+                    .state
+                    .original
+                    .engine(&self.state.config.original_engine)
+                    == omsi_launcher_lib::original_engine::Engine::Omsi2,
+                locked: self.state.in_game(),
+            });
         let nav = if self.top_nav() {
             omsi_launcher_ui::shell::TopBar {
                 page,
                 logo: self.logo,
                 badges: &badges,
+                engine,
             }
             .draw(&mut self.ui, size.x)
         } else {
@@ -2244,6 +2276,7 @@ impl Launcher {
                 logo: self.logo,
                 badges: &badges,
                 footer: (&name, &level),
+                engine,
                 footer_ask: ask,
                 compact: self.sidebar_compact(),
             }
@@ -2252,6 +2285,13 @@ impl Launcher {
         match nav {
             Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
             Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
+            Some(omsi_launcher_ui::shell::Nav::Engine(omsi2)) => {
+                self.state.engine_set_mode(if omsi2 {
+                    omsi_launcher_lib::original_engine::Engine::Omsi2
+                } else {
+                    omsi_launcher_lib::original_engine::Engine::Depot
+                })
+            }
             None => {}
         }
     }
@@ -2409,10 +2449,10 @@ impl Launcher {
             self.prerender.cancel();
             return;
         }
-        if self.prerender.content_ready(
-            self.state.loading_content,
-            self.state.vehicles.is_empty(),
-        ) {
+        if self
+            .prerender
+            .content_ready(self.state.loading_content, self.state.vehicles.is_empty())
+        {
             let c = &self.state.choice;
             // (the light the pictures are drawn in: the chosen map, else the first there is)
             let map = if c.map.is_empty() {
