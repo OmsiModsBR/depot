@@ -172,7 +172,10 @@ pub mod hpattern {
     pub use crate::hpattern::*;
 }
 pub mod hud {
-    pub use crate::hud::*;
+    pub use crate::hud::domain::*;
+    pub use crate::hud::implementation::legacy::oft::*;
+    pub use crate::hud::implementation::legacy::*;
+    pub use crate::hud::implementation::*;
 }
 pub mod humans {
     pub use crate::humans::*;
@@ -209,6 +212,82 @@ pub mod lan_mods {
 #[cfg(feature = "lan")]
 pub mod lan_world {
     pub use crate::lan_world::*;
+}
+pub mod launcher {
+    pub use crate::launcher::*;
+
+    pub mod ai_edit {
+        pub use crate::launcher::ai_edit::*;
+    }
+    pub mod ai_traffic {
+        pub use crate::launcher::ai_traffic::*;
+    }
+    pub mod backdrop {
+        pub use crate::launcher::backdrop::*;
+    }
+    pub mod chrome {
+        pub use crate::launcher::chrome::*;
+    }
+    pub mod diagnostics {
+        pub use crate::launcher::diagnostics::*;
+    }
+    pub mod dialogs {
+        pub use crate::launcher::dialogs::*;
+    }
+    pub mod drive {
+        pub use crate::launcher::drive::*;
+    }
+    pub mod integrity {
+        pub use crate::launcher::integrity::*;
+    }
+    pub mod keyboard {
+        pub use crate::launcher::keyboard::*;
+    }
+    pub mod mapview {
+        pub use crate::launcher::mapview::*;
+    }
+    pub mod original_ui {
+        pub use crate::launcher::original_ui::*;
+    }
+    pub mod pages {
+        pub use crate::launcher::pages::*;
+    }
+    pub mod prerender {
+        pub use crate::launcher::prerender::*;
+    }
+    pub mod preview {
+        pub use crate::launcher::preview::*;
+    }
+    pub mod settings {
+        pub use crate::launcher::settings::*;
+    }
+    pub mod setup {
+        pub use crate::launcher::setup::*;
+    }
+    pub mod showroom {
+        pub use crate::launcher::showroom::*;
+    }
+    pub mod start {
+        pub use crate::launcher::start::*;
+    }
+    pub mod state {
+        pub use crate::launcher::state::*;
+    }
+    pub mod thumbs {
+        pub use crate::launcher::thumbs::*;
+    }
+    pub mod timetable {
+        pub use crate::launcher::timetable::*;
+    }
+    pub mod timetable_plan {
+        pub use crate::launcher::timetable_plan::*;
+    }
+    pub mod tray {
+        pub use crate::launcher::tray::*;
+    }
+    pub mod ui {
+        pub use crate::launcher::ui::*;
+    }
 }
 pub mod lights {
     pub use crate::lights::*;
@@ -298,9 +377,9 @@ pub mod new_ui_loading {
     pub use crate::new_ui_loading::*;
 }
 pub mod new_ui_pages {
+    use crate::hud::{Frame, MenuKind};
     use crate::new_ui::MenuFrame;
     pub use crate::new_ui_pages::*;
-    use crate::ui::{Frame, MenuKind};
 
     /// The Esc menu's column of a session with every line (tests).
     pub fn test_column(paused: bool) -> MenuFrame {
@@ -499,7 +578,7 @@ pub mod settings {
             text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
             // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
             text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
-            text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_follow_view={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_follow_view as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
+            text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_follow_view={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nnav_view={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_follow_view as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.nav_view, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
             text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
             text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
             text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
@@ -543,9 +622,6 @@ pub mod traffic {
 }
 pub mod tutorial {
     pub use crate::tutorial::*;
-}
-pub mod ui {
-    pub use crate::ui::*;
 }
 #[cfg(feature = "lan")]
 pub mod voice {

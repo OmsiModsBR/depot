@@ -390,6 +390,8 @@ pub struct Navigator {
     pub show_contours: bool,
     /// How the city map is turned: 0 as the map is drawn, 1 real north up, 2 the vehicle's heading up (a click on the compass changes it).
     pub orient: u8,
+    /// The minimap looks straight down (the `nav_view` setting `top`) instead of tilted ahead of the vehicle.
+    pub view_top: bool,
     /// The map's marker pictures as a texture of the navigator's own GPU state.
     icon_tex: Option<usize>,
     /// The municipality and the street the bus is on (from the package), refreshed now and then.

@@ -18,12 +18,15 @@ pub struct Client<'a, R: OriginalEngineRunner> {
 }
 
 impl<'a, R: OriginalEngineRunner> Client<'a, R> {
-    pub fn in_root(runner: &'a R, root: &Path) -> Self {
-        Client {
+    /// The client of the OmsiLaunch in `root`, once its two programs match the manifest of
+    /// the folder (nothing unlisted or changed is ever run).
+    pub fn in_root(runner: &'a R, root: &Path) -> Result<Self, String> {
+        super::detect::verify_executables(root)?;
+        Ok(Client {
             runner,
             exe: root.join("OmsiLaunch.exe"),
             windowed: root.join("OmsiLaunchW.exe"),
-        }
+        })
     }
 
     fn call(&self, args: &[&str]) -> Result<RunOutput> {
