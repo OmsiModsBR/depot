@@ -140,3 +140,33 @@ fn client_session_and_recovery_against_the_fake() {
     assert!(matches!(outcome, Outcome::Failed { code: Some(1), .. }));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn in_root_runs_only_programs_that_match_the_manifest() {
+    use omsi_launcher_lib::original_engine::install::sha256_hex as sha256_hex_of;
+    let dir = std::env::temp_dir().join(format!("depot-fake-inroot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // no manifest: refused
+    assert!(Client::in_root(&ProcessRunner, &dir).is_err());
+    std::fs::write(dir.join("OmsiLaunch.exe"), b"a").unwrap();
+    std::fs::write(dir.join("OmsiLaunchW.exe"), b"b").unwrap();
+    let manifest = |a: &str, b: &str| {
+        format!(
+            r#"{{"files":[{{"path":"OmsiLaunch.exe","sha256":"{a}"}},{{"path":"OmsiLaunchW.exe","sha256":"{b}"}}]}}"#
+        )
+    };
+    std::fs::write(dir.join("release-manifest.json"), manifest("00", "00")).unwrap();
+    assert!(Client::in_root(&ProcessRunner, &dir).is_err());
+    std::fs::write(
+        dir.join("release-manifest.json"),
+        manifest(&sha256_hex_of(b"a"), &sha256_hex_of(b"b")),
+    )
+    .unwrap();
+    let c = Client::in_root(&ProcessRunner, &dir).unwrap();
+    assert_eq!(c.exe, dir.join("OmsiLaunch.exe"));
+    // a program changed after the manifest was written is refused again
+    std::fs::write(dir.join("OmsiLaunch.exe"), b"changed").unwrap();
+    assert!(Client::in_root(&ProcessRunner, &dir).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}

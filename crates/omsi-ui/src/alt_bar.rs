@@ -4,8 +4,8 @@
 //! caller supplies the buttons; what they do is the game's.
 
 use crate::paint::Align;
+use crate::theme::accent;
 use crate::theme::v5::{BAR, FG, MUTED, OK, TS};
-use crate::theme::{accent, on as on_color};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -27,7 +27,7 @@ pub const BAR_H: f32 = 40.0;
 pub const TAB: Vec2 = Vec2::new(30.0, 40.0);
 
 /// The panel behind the tiles.
-const PANEL: Color = Color::rgba(14, 15, 17, 0.92);
+const PANEL: Color = Color::rgba(14, 15, 17, 0.82);
 const EDGE: Color = Color::rgba(255, 255, 255, 0.12);
 /// A tile that cannot be used now, and its icon.
 /// (the tiles' tints are mixed here, over the panel's own colour, as the concept's page
@@ -36,6 +36,8 @@ const DIM_FILL: Color = Color::hex(0x26272a);
 /// The panel's colour, for the tints.
 const BASE: Color = Color::hex(0x0e0f11);
 const DIM_ICON: Color = Color::hex(0x6f747e);
+/// The icon of a tile that can be used and is not open.
+const TILE_ICON: Color = Color::hex(0xd4d7de);
 
 /// What a button shows: an icon, or a word on a destination sign (the "Line and
 /// destination" button).
@@ -169,9 +171,15 @@ pub fn draw<'a>(
     let size = panel_size(buttons.len());
     let p = Rect::new(at.x, at.y, size.x, size.y);
     ui.solid(p);
+    ui.opaque_under = Some(p);
     ui.p().shadow(p, 8.0, 24.0, Color::rgba(0, 0, 0, 0.55));
     ui.p().rounded(p, 8.0, PANEL);
     ui.p().rounded_border(p, 8.0, 1.0, EDGE);
+    // (the light stroke along the top edge the windows have)
+    ui.p().rect(
+        Rect::new(p.x + 8.0, p.y, p.w - 16.0, 1.0),
+        Color::WHITE.alpha(0.14),
+    );
     let mut clicked = None;
     let mut shown: Option<(&Button, Rect)> = None;
     for (i, b) in buttons.iter().enumerate() {
@@ -184,18 +192,35 @@ pub fn draw<'a>(
         let a = accent();
         let focus = state.focus.as_deref() == Some(b.id);
         let chosen = state.chosen.as_deref() == Some(b.id);
-        // a tile on is filled; one that can be used is tinted; one that cannot is grey
+        // a tile that can be used is neutral (the accent is kept for the one whose window is
+        // open); one that cannot is dimmed
         let (fill, edge, ink) = if b.on {
-            (BASE.mix(a, 0.85), Color::rgba(0, 0, 0, 0.0), on_color(a))
+            (BASE.mix(a, 0.2), BASE.mix(a, 0.45), a)
         } else if !enabled {
             (DIM_FILL, Color::rgba(0, 0, 0, 0.0), DIM_ICON)
         } else if hover {
-            (BASE.mix(a, 0.38), BASE.mix(a, 0.7), a)
+            (
+                BASE.mix(Color::WHITE, 0.13),
+                Color::rgba(255, 255, 255, 0.10),
+                FG,
+            )
         } else {
-            (BASE.mix(a, 0.22), BASE.mix(a, 0.4), a)
+            (
+                BASE.mix(Color::WHITE, 0.07),
+                Color::rgba(0, 0, 0, 0.0),
+                TILE_ICON,
+            )
         };
         ui.p().rounded(r, 6.0, fill);
         ui.p().rounded_border(r, 6.0, 1.0, edge);
+        if b.on {
+            // (the mark under the icon of the tile that is open)
+            ui.p().rounded(
+                Rect::new(r.center().x - 8.0, r.bottom() - 9.0, 16.0, 3.0),
+                1.5,
+                a,
+            );
+        }
         if focus || (chosen && b.on) {
             ui.p().rounded_border(
                 Rect::new(r.x - 3.0, r.y - 3.0, r.w + 6.0, r.h + 6.0),

@@ -776,6 +776,29 @@ impl Cabin {
             }
         }
         if found.is_none() {
+            // every door shut and none with a button (entries): the list's first door stays
+            // the choice unless it lies on the other side of the bus from the person, who
+            // would have to cross the bus to it (a bus with doors on both sides, at a stop on
+            // its left, sent everybody to the right front door before a door opened). Then
+            // the nearest door on their own side.
+            if open.is_some() && !any_open {
+                let side = |q: &Vec3| q.x * p.x > 0.0 && p.x.abs() >= 0.6;
+                let first_across = list
+                    .first()
+                    .copied()
+                    .flatten()
+                    .and_then(|k| pts.get(k))
+                    .is_some_and(|q| q.x * p.x < 0.0 && p.x.abs() >= 0.6);
+                if first_across {
+                    let own: Vec<Option<usize>> = list
+                        .iter()
+                        .map(|k| k.filter(|&k| pts.get(k).is_some_and(side)))
+                        .collect();
+                    if own.iter().any(|k| k.is_some()) {
+                        return self.omsi_nearest(p, &own, avoid, level, flags, None);
+                    }
+                }
+            }
             if !(avoid && flags.is_some()) {
                 // (a list narrowed to the sections somebody is in, #718: the first door of
                 // theirs, not the first of the list - another section's, left out)

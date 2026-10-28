@@ -900,12 +900,12 @@ impl App {
                     let (start, row_h) = self
                         .ui
                         .as_ref()
-                        .map(|u| (u.menu_start as f32, u.menu_row_h.max(1.0)))
+                        .map(|u| (u.hits.menu_start as f32, u.hits.menu_row_h.max(1.0)))
                         .unwrap_or((0.0, 1.0));
                     let top = self.menu_top.unwrap_or(start) - (p.y - last.y) / row_h;
                     let (n, rows) = (
                         self.menu_len() as f32,
-                        self.ui.as_ref().map(|u| u.menu_rows).unwrap_or(0) as f32,
+                        self.ui.as_ref().map(|u| u.hits.menu_rows).unwrap_or(0) as f32,
                     );
                     self.menu_top = Some(top.clamp(0.0, (n - rows).max(0.0)));
                 } else {
@@ -1315,7 +1315,7 @@ impl App {
             .map(|p| p.vehicle.motion().velocity_kmh().abs());
         let lock_angle = touch_lock_angle(&self.settings);
         // (the buttons' backgrounds follow the interface's opacity; their icons stay solid)
-        let panel_bg = PANEL_BG.alpha(crate::ui::backdrop(self.settings.ui_opacity));
+        let panel_bg = PANEL_BG.alpha(crate::hud::backdrop(self.settings.ui_opacity));
         let (w, h) = self.touch.size;
         let t = &mut self.touch;
         let u = t.u;

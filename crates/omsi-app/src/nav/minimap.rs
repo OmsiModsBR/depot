@@ -62,6 +62,7 @@ impl Navigator {
             show_surface: true,
             show_contours: false,
             orient: 0,
+            view_top: false,
             icon_tex: None,
             loc_city: None,
             loc_street: None,
@@ -631,7 +632,7 @@ impl Navigator {
         }
         let start = scene.overlays.len();
         self.frame(renderer, scene, f);
-        crate::ui::shift_overlays(scene, start, origin_x);
+        crate::hud::shift_overlays(scene, start, origin_x);
         for rect in [&mut self.panel_rect, &mut self.city.rect] {
             rect[0] += origin_x;
             rect[2] += origin_x;
@@ -973,18 +974,7 @@ impl Navigator {
         let hd = self.cam_heading.to_radians();
         let fwd = DVec2::new(hd.sin(), hd.cos());
         let look_at = f.bus.truncate() - anchor + fwd * self.zoom * 0.28;
-        let pitch = PITCH.to_radians();
-        let back = fwd * self.zoom * pitch.cos();
-        let eye = DVec3::new(
-            look_at.x - back.x,
-            look_at.y - back.y,
-            self.zoom * pitch.sin(),
-        );
-        let view = Mat4::look_at_rh(
-            eye.as_vec3(),
-            Vec3::new(look_at.x as f32, look_at.y as f32, 0.0),
-            Vec3::Z,
-        );
+        let view = map_view(look_at, fwd, self.zoom, self.view_top);
         let clip_panel = [0.0, 0.0, pw, ph];
         let map_layer = Layer::world(
             view,
@@ -1801,7 +1791,7 @@ impl Navigator {
             if self.cockpit_display {
                 self.opacity
             } else {
-                crate::ui::backdrop(self.opacity).min(1.0)
+                crate::hud::backdrop(self.opacity).min(1.0)
             },
         );
         let mut layers = [flat, map_layer, backdrop];
@@ -1882,5 +1872,51 @@ impl Navigator {
             &draws,
         );
         queue.submit([enc.finish()]);
+    }
+}
+
+/// The minimap's camera: `zoom` metres from `look_at`, behind it along `fwd` and tilted
+/// (`PITCH`), or straight above it with the heading up (`top`: Z cannot be the up vector of a
+/// camera that looks straight down).
+fn map_view(look_at: DVec2, fwd: DVec2, zoom: f64, top: bool) -> Mat4 {
+    let pitch = if top { 90.0 } else { PITCH }.to_radians();
+    let back = fwd * zoom * pitch.cos();
+    let eye = DVec3::new(look_at.x - back.x, look_at.y - back.y, zoom * pitch.sin());
+    let up = if top {
+        Vec3::new(fwd.x as f32, fwd.y as f32, 0.0)
+    } else {
+        Vec3::Z
+    };
+    Mat4::look_at_rh(
+        eye.as_vec3(),
+        Vec3::new(look_at.x as f32, look_at.y as f32, 0.0),
+        up,
+    )
+}
+
+#[cfg(test)]
+mod view_tests {
+    use super::*;
+
+    /// Both views keep the point looked at in the middle of the map and what is ahead of it
+    /// above, so the heading is up in the tilted view and in the top view alike.
+    #[test]
+    fn the_top_and_the_tilted_view_both_have_ahead_up() {
+        for top in [false, true] {
+            let fwd = DVec2::new(1.0, 0.0);
+            let look = DVec2::new(10.0, 20.0);
+            let vp = Mat4::perspective_rh(FOV.to_radians(), 1.0, 1.0, 10_000.0)
+                * map_view(look, fwd, 200.0, top);
+            let at = |p: Vec3| {
+                let c = vp * p.extend(1.0);
+                (c.x / c.w, c.y / c.w)
+            };
+            let (mx, my) = at(Vec3::new(10.0, 20.0, 0.0));
+            assert!(mx.abs() < 1e-4 && my.abs() < 1e-4, "top={top}");
+            let (_, ahead) = at(Vec3::new(60.0, 20.0, 0.0));
+            assert!(ahead > 0.05, "top={top} ahead={ahead}");
+            let (right, _) = at(Vec3::new(10.0, 20.0 - 50.0, 0.0));
+            assert!(right > 0.05, "top={top} right={right}");
+        }
     }
 }

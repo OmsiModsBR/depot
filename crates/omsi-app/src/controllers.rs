@@ -22,9 +22,6 @@ use gilrs::{Axis, EventType, Gilrs};
 pub(crate) use omsi_content::input::gamectrler::{
     axis_shape, write as save_cfg_to, DeviceCfg, Func, AXIS_SHAPES,
 };
-// (the launcher's tests still read and write a cfg through here)
-#[cfg(test)]
-pub(crate) use omsi_content::input::gamectrler::{parse as parse_cfg, to_text as cfg_text};
 use std::path::Path;
 
 /// The `gamectrler.cfg` in use: the content folder's (written by the launcher) before

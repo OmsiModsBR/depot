@@ -1,6 +1,6 @@
 use ab_glyph::{Font, FontVec};
 use openomsi_game::testing;
-use openomsi_game::testing::ui::*;
+use openomsi_game::testing::hud::*;
 
 /// The information bar is broken between its groups into rows that fit the room it has,
 /// as many groups to a row as go in; a group wider than the room alone is a row of its
@@ -93,30 +93,30 @@ fn a_server_notice_is_read_and_fades() {
 #[test]
 fn centre_hud_moves_menu_controls_and_chat_hitboxes_together() {
     let mut ui = Ui::new().unwrap();
-    ui.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
-    ui.menu_ctl.push(Some([600.0, 110.0, 860.0, 130.0]));
-    ui.menu_side.push([30.0, 100.0, 200.0, 140.0]);
-    ui.dd_rects.push([650.0, 150.0, 850.0, 180.0]);
-    ui.menu_arrows.push(Some([600.0, 640.0, 820.0]));
+    ui.hits.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
+    ui.hits.menu_ctl.push(Some([600.0, 110.0, 860.0, 130.0]));
+    ui.hits.menu_side.push([30.0, 100.0, 200.0, 140.0]);
+    ui.hits.dd_rects.push([650.0, 150.0, 850.0, 180.0]);
+    ui.hits.menu_arrows.push(Some([600.0, 640.0, 820.0]));
     ui.chat.rect = [10.0, 800.0, 400.0, 1000.0];
-    ui.dd_scroll = Some(([850.0, 150.0, 860.0, 300.0], [844.0, 160.0, 864.0, 200.0]));
-    ui.menu_pane_scroll = Some((
+    ui.hits.dd_scroll = Some(([850.0, 150.0, 860.0, 300.0], [844.0, 160.0, 864.0, 200.0]));
+    ui.hits.menu_pane_scroll = Some((
         [880.0, 150.0, 890.0, 700.0],
         [874.0, 160.0, 894.0, 220.0],
         40,
         10,
     ));
     ui.shift_hitboxes(1920.0);
-    let track = ui.menu_ctl[0].unwrap();
+    let track = ui.hits.menu_ctl[0].unwrap();
     assert_eq!((2650.0 - track[0]) / (track[2] - track[0]), 0.5);
     assert!(ui.chat.contains(2020.0, 900.0));
     assert!(!ui.chat.contains(100.0, 900.0));
-    assert_eq!(ui.dd_rects[0], [2570.0, 150.0, 2770.0, 180.0]);
-    assert_eq!(ui.menu_arrows[0], Some([2520.0, 2560.0, 2740.0]));
-    assert_eq!(ui.dd_scroll.unwrap().0[0], 2770.0);
-    assert_eq!(ui.menu_pane_scroll.unwrap().1[0], 2794.0);
+    assert_eq!(ui.hits.dd_rects[0], [2570.0, 150.0, 2770.0, 180.0]);
+    assert_eq!(ui.hits.menu_arrows[0], Some([2520.0, 2560.0, 2740.0]));
+    assert_eq!(ui.hits.dd_scroll.unwrap().0[0], 2770.0);
+    assert_eq!(ui.hits.menu_pane_scroll.unwrap().1[0], 2794.0);
     ui.shift_hitboxes(-1920.0);
-    assert_eq!(ui.menu_ctl[0], Some([600.0, 110.0, 860.0, 130.0]));
+    assert_eq!(ui.hits.menu_ctl[0], Some([600.0, 110.0, 860.0, 130.0]));
 }
 
 #[test]
@@ -258,25 +258,25 @@ fn backgrounds_follow_the_opacity_setting() {
 fn the_game_menu_grows_with_the_interface_size_as_far_as_it_fits() {
     // (it ignored the setting: 1.5 drew the menu as 1.0 while the HUD grew)
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false),
+        testing::hud::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false),
         1.0
     );
-    let s = testing::ui::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
+    let s = testing::hud::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
     assert!(
         s > 1.1 && s < 1.5 && 880.0 * s + 24.0 <= 1280.0 && 600.0 * s <= 720.0 * 0.94 + 0.01,
         "{s}"
     );
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false),
+        testing::hud::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false),
         1.5
     );
     // never smaller than it always was, and the headset keeps its own size
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 800.0, 500.0, false),
+        testing::hud::menu_scale_for(1.0, 1.5, 800.0, 500.0, false),
         1.0
     );
     assert_eq!(
-        testing::ui::menu_scale_for(1.0, 1.5, 1920.0, 1080.0, true),
+        testing::hud::menu_scale_for(1.0, 1.5, 1920.0, 1080.0, true),
         1.0
     );
 }
@@ -284,15 +284,15 @@ fn the_game_menu_grows_with_the_interface_size_as_far_as_it_fits() {
 #[test]
 fn destinations_split_into_code_and_name() {
     assert_eq!(
-        testing::ui::code_and_name(" 13  BETRIEBSFAHRT"),
+        testing::hud::code_and_name(" 13  BETRIEBSFAHRT"),
         Some(("13", "BETRIEBSFAHRT"))
     );
     assert_eq!(
-        testing::ui::code_and_name("1001  Blanko.tga"),
+        testing::hud::code_and_name("1001  Blanko.tga"),
         Some(("1001", "Blanko.tga"))
     );
-    assert_eq!(testing::ui::code_and_name("Route number: 5..."), None);
-    assert_eq!(testing::ui::code_and_name("Line 76  (1 tours)"), None);
+    assert_eq!(testing::hud::code_and_name("Route number: 5..."), None);
+    assert_eq!(testing::hud::code_and_name("Line 76  (1 tours)"), None);
 }
 
 #[test]
