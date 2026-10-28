@@ -11,6 +11,11 @@ use crate::{Color, Rect, Weight};
 
 pub const COLUMN_W: f32 = 340.0;
 pub const BAR_H: f32 = 45.0;
+/// How much of the column's colour covers the frozen picture behind it (the picture shows a
+/// little through it, as through the in-game windows; no blur).
+const COLUMN_ALPHA: f32 = 0.9;
+/// The corners of a row.
+const ROW_R: f32 = 5.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -134,19 +139,19 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     let (w, h) = (ui.size.x, ui.size.y);
     let col = Rect::new(0.0, 0.0, COLUMN_W, h);
     ui.solid(col);
-    ui.p().rect(col, SIDE.alpha(0.96));
+    ui.p().rect(col, SIDE.alpha(COLUMN_ALPHA));
     ui.p().rect(Rect::new(COLUMN_W - 1.0, 0.0, 1.0, h), LINE);
     if let Some((tex, aspect)) = view.logo {
         ui.image(Rect::new(22.0, 22.0, 220.0, 220.0 * aspect), tex, 0.0);
     }
     text(
         ui,
-        &crate::tr("Game menu").to_uppercase(),
+        &crate::tr("Game menu"),
         22.0,
         109.0,
-        12.0,
-        Weight::Regular,
-        MUTED,
+        17.0,
+        Weight::Bold,
+        FG,
     );
     let step = row_height(view, h);
     let mut head = 142.0;
@@ -154,11 +159,11 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
     for section in view.sections {
         text(
             ui,
-            &section.title.to_uppercase(),
+            &crate::tr(section.title),
             22.0,
             head,
             11.0,
-            Weight::Regular,
+            Weight::Medium,
             MUTED,
         );
         let mut top = head + 13.0;
@@ -168,13 +173,18 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
             let (hover, _, click) = ui.interact(id, r);
             let enabled = item.disabled.is_none();
             match item.kind {
-                Kind::Primary => ui.p().rect(r, accent()),
+                Kind::Primary => ui.p().rounded(r, ROW_R, accent()),
                 Kind::Current => {
-                    ui.p().rect(r, Color::hex(0x2a2518));
-                    ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
+                    ui.p().rounded(r, ROW_R, Color::WHITE.alpha(0.06));
+                    // (the pill of the page open, as Windows 11's navigation marks it)
+                    ui.p().rounded(
+                        Rect::new(r.x, r.y + r.h * 0.5 - 8.0, 3.0, 16.0),
+                        1.5,
+                        accent(),
+                    );
                 }
                 _ if (hover || view.selected == Some(item.id)) && enabled => {
-                    ui.p().rect(r, Color::WHITE.alpha(0.06))
+                    ui.p().rounded(r, ROW_R, Color::WHITE.alpha(0.07))
                 }
                 _ => {}
             }
@@ -203,14 +213,25 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
                 } else {
                     MUTED
                 };
-                right(
-                    ui,
+                // (the key as a small keycap)
+                let kw = ui.width(item.key, 11.0 * TS, Weight::Medium) + 14.0;
+                let cap = Rect::new(r.right() - 12.0 - kw, cy - 10.0, kw, 20.0);
+                ui.p().rounded(
+                    cap,
+                    4.0,
+                    if item.kind == Kind::Primary {
+                        Color::BLACK.alpha(0.12)
+                    } else {
+                        Color::WHITE.alpha(0.07)
+                    },
+                );
+                ui.text_in(
                     item.key,
-                    r.right() - 21.0,
-                    cy,
-                    11.0,
-                    weight,
+                    cap,
+                    11.0 * TS,
+                    Weight::Medium,
                     key_c.alpha(dim),
+                    Align::Center,
                 );
             }
             if let Some(why) = item.disabled {
@@ -255,14 +276,24 @@ pub fn draw<'a>(ui: &mut Ui, view: &'a View<'a>) -> Output<'a> {
         Weight::Regular,
         MUTED,
     );
-    right(
-        ui,
-        &crate::tr(view.state).to_uppercase(),
-        w - 24.0,
-        BAR_H * 0.5,
-        13.0,
+    // the state as a pill with the pause mark
+    let state = crate::tr(view.state).to_uppercase();
+    let sw = ui.width(&state, 13.0 * TS, Weight::Medium);
+    let pill = Rect::new(w - 20.0 - sw - 40.0, BAR_H * 0.5 - 12.0, sw + 40.0, 24.0);
+    ui.p().rounded(pill, 12.0, accent().alpha(0.16));
+    ui.icon(
+        "pause",
+        glam::Vec2::new(pill.x + 15.0, pill.center().y),
+        14.0,
+        accent(),
+    );
+    ui.text_in(
+        &state,
+        Rect::new(pill.x + 26.0, pill.y, sw + 10.0, pill.h),
+        13.0 * TS,
         Weight::Medium,
         accent(),
+        Align::Left,
     );
     Output {
         clicked,
