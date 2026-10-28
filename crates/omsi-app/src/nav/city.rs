@@ -1665,8 +1665,8 @@ impl Navigator {
             (true, Some(sf)) => sf
                 .palette(self.light)
                 .land
-                .alpha(crate::ui::backdrop(self.opacity).min(1.0)),
-            _ => v5::BAR.alpha(crate::ui::backdrop(self.opacity).min(1.0)),
+                .alpha(crate::hud::backdrop(self.opacity).min(1.0)),
+            _ => v5::BAR.alpha(crate::hud::backdrop(self.opacity).min(1.0)),
         };
         bg.rounded(win, RADIUS * s, ground);
         let n_bg = bg.len();
@@ -2306,7 +2306,7 @@ impl Navigator {
         // header: what this is, the line and where it goes, the next stop; buttons on the right
         // (opaque: the route and the stops showed through behind its text)
         let head = Rect::new(0.0, 0.0, w, head_h);
-        ui.rect(head, v5::BAR);
+        ui.rect(head, WINDOW_BAR);
         ui.rect(Rect::new(0.0, head.bottom() - 1.0, w, 1.0), v5::LINE);
         self.city.buttons.clear();
         if let Some(r) = self.city.compass.take() {
@@ -2383,32 +2383,64 @@ impl Navigator {
         // (the texts keep clear of the buttons)
         let right = bx + bs - 16.0 * s;
         let mut tx = pad;
-        tx += spaced(
-            &mut ui,
-            &mut self.atlas,
-            &self.fonts,
-            &tr(lt.city_map).to_uppercase(),
-            10.5 * s,
-            tx,
-            head.center().y,
-            omsi_ui::theme::accent(),
-            1.8 * s,
-        ) + 22.0 * s;
-        let wd = words(f.language);
-        let title = match (&f.line, &f.terminus) {
-            (Some(l), Some(t)) => format!("{}  ›  {}", l.trim(), t.trim()),
-            _ => wd.no_duty.to_string(),
-        };
+        // (the window's title, then the line as a badge in the accent and where it goes)
         tx += ui.text_in(
             &mut self.atlas,
             &self.fonts,
-            &title,
+            &tr(lt.city_map),
             17.0 * s,
             Weight::Bold,
             Rect::new(tx, head.y, (right - tx).max(0.0), head.h),
             Align::Left,
             v5::FG,
-        ) + 22.0 * s;
+        ) + 16.0 * s;
+        let wd = words(f.language);
+        match (&f.line, &f.terminus) {
+            (Some(l), Some(t)) if right - tx >= 24.0 * s => {
+                let num = l.trim();
+                // (the badge never grows past the room the buttons leave, and is left out
+                // when there is hardly any)
+                let room = (right - tx).max(0.0);
+                let bw = (self.fonts.width(num, 13.0 * s, Weight::Bold) + 16.0 * s).min(room);
+                let badge = Rect::new(tx, head.center().y - 11.0 * s, bw, 22.0 * s);
+                ui.rounded(badge, 5.0 * s, omsi_ui::theme::accent());
+                ui.text_in(
+                    &mut self.atlas,
+                    &self.fonts,
+                    num,
+                    13.0 * s,
+                    Weight::Bold,
+                    badge,
+                    Align::Center,
+                    omsi_ui::theme::on_accent(),
+                );
+                tx += bw + 10.0 * s;
+                tx += ui.text_in(
+                    &mut self.atlas,
+                    &self.fonts,
+                    t.trim(),
+                    15.0 * s,
+                    Weight::Bold,
+                    Rect::new(tx, head.y, (right - tx).max(0.0), head.h),
+                    Align::Left,
+                    v5::FG,
+                ) + 22.0 * s;
+            }
+            // (a duty, but no room for it)
+            (Some(_), Some(_)) => {}
+            _ => {
+                tx += ui.text_in(
+                    &mut self.atlas,
+                    &self.fonts,
+                    wd.no_duty,
+                    15.0 * s,
+                    Weight::Bold,
+                    Rect::new(tx, head.y, (right - tx).max(0.0), head.h),
+                    Align::Left,
+                    v5::FG,
+                ) + 22.0 * s;
+            }
+        }
         if let (Some(st), true) = (f.stops.first(), right - tx > 80.0 * s) {
             let parts = [
                 format!("{}: {}", tr(lt.next_stop), st.name.trim()),
@@ -2526,8 +2558,8 @@ impl Navigator {
         }
         // what the colours mean, and how the map is moved
         if let Some((r, items)) = &legend {
-            ui.rounded(*r, 4.0 * s, v5::CARD.alpha(0.94));
-            ui.rounded_border(*r, 4.0 * s, 1.0, v5::LINE);
+            ui.rounded(*r, 8.0 * s, v5::CARD.alpha(0.94));
+            ui.rounded_border(*r, 8.0 * s, 1.0, v5::LINE);
             let row = Rect::new(r.x + 12.0 * s, r.y + 6.0 * s, r.w - 24.0 * s, 20.0 * s);
             let mut x = row.x;
             for (label, c, bar) in items {
@@ -2746,12 +2778,15 @@ fn distance_text(d: f64) -> String {
     }
 }
 
+/// The header's colour: the in-game windows' panel, solid.
+const WINDOW_BAR: Color = Color::hex(0x202124);
+
 /// A button of the map in the new look: dark and outlined, or (`on`) outlined in the accent
 /// on its faint shade. Returns the ink for what is written on it.
 fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
     ui.rounded(
         r,
-        4.0 * s,
+        6.0 * s,
         if on {
             omsi_ui::theme::accent_soft()
         } else {
@@ -2760,7 +2795,7 @@ fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
     );
     ui.rounded_border(
         r,
-        4.0 * s,
+        6.0 * s,
         1.0,
         if on {
             omsi_ui::theme::accent()
@@ -2911,8 +2946,8 @@ impl Navigator {
         title: &str,
         rows: &[(&'static str, String)],
     ) {
-        ui.rounded(r, 4.0 * s, v5::CARD.alpha(0.94));
-        ui.rounded_border(r, 4.0 * s, 1.0, v5::LINE);
+        ui.rounded(r, 8.0 * s, v5::CARD.alpha(0.94));
+        ui.rounded_border(r, 8.0 * s, 1.0, v5::LINE);
         let pad = 14.0 * s;
         spaced(
             ui,

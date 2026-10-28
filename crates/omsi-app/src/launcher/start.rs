@@ -635,7 +635,7 @@ fn start_point(l: &mut Launcher) {
         .chain(
             entries
                 .into_iter()
-                .filter(|(_, n)| search.trim().is_empty() || super::ui::matches(n, &search)),
+                .filter(|(_, n)| entry_matches(n, &search)),
         )
         .collect();
     l.start.search = search;
@@ -838,4 +838,10 @@ fn explore(l: &mut Launcher) {
     if l.state.choice.entry != entry {
         l.state.choice.entry = entry;
     }
+}
+
+/// Whether a start point's name shows for the typed search (case does not matter).
+pub fn entry_matches(name: &str, search: &str) -> bool {
+    let q = search.trim().to_lowercase();
+    q.is_empty() || super::ui::matches(name, &q)
 }

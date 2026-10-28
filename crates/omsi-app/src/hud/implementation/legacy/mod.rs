@@ -6,11 +6,17 @@
 //! Every text is rendered once into a small texture and kept while it is shown; the
 //! overlays are rectangles in physical pixels (`Scene::overlays`).
 
+use super::super::domain::{Frame, InfoTone, MenuKind, NoticeKind};
+use crate::hud::interface::output::{Renderer, Scene, TextureId};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
-use omsi_render::{Renderer, Scene, TextureId};
+
+pub(crate) mod oft;
+
+pub use oft::Hud;
 
 /// Roboto (Apache 2.0), the interface font.
-pub const ROBOTO: &[u8] = include_bytes!("../../../assets/fonts/Roboto-VariableFont_wdth,wght.ttf");
+pub const ROBOTO: &[u8] =
+    include_bytes!("../../../../../../assets/fonts/Roboto-VariableFont_wdth,wght.ttf");
 
 /// A rendered text: its texture and size in pixels.
 #[derive(Clone, Copy)]
@@ -317,87 +323,6 @@ const CHAT_SHOWN: usize = 8;
 #[cfg_attr(not(feature = "lan"), allow(dead_code))]
 pub const CHAT_KEEP: usize = 200;
 
-/// A notification from the server (`notify`): a card over the navigator that goes by itself.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Notice {
-    pub kind: NoticeKind,
-    pub text: String,
-    /// Seconds it still shows, of `total`.
-    pub left: f32,
-    pub total: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum NoticeKind {
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    Info,
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    Warn,
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    Alert,
-}
-
-/// How many notifications show at once (the newest; an older one makes room).
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub const NOTICES_SHOWN: usize = 3;
-
-impl Notice {
-    /// `notify`'s argument: `<id> <seconds> <info|warn|alert> <text>` → the id and the notice
-    /// (seconds held to 2 .. 30; an unknown kind is information).
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn parse(arg: &str) -> Option<(String, Notice)> {
-        let mut it = arg.trim().splitn(4, ' ');
-        let id = it.next().filter(|s| !s.is_empty())?.to_string();
-        let secs: f32 = it.next()?.parse().ok().filter(|s: &f32| s.is_finite())?;
-        let kind = match it.next()? {
-            "warn" => NoticeKind::Warn,
-            "alert" => NoticeKind::Alert,
-            _ => NoticeKind::Info,
-        };
-        let text = it
-            .next()
-            .map(str::trim)
-            .filter(|t| !t.is_empty())?
-            .to_string();
-        let total = secs.clamp(2.0, 30.0);
-        Some((
-            id,
-            Notice {
-                kind,
-                text,
-                left: total,
-                total,
-            },
-        ))
-    }
-
-    /// How opaque it is: fading in for a quarter second, out for its last half second.
-    pub fn alpha(&self) -> f32 {
-        (self.left / 0.5)
-            .min((self.total - self.left) / 0.25)
-            .clamp(0.0, 1.0)
-    }
-}
-
-/// A new notice in the list, the oldest going when there are more than `NOTICES_SHOWN`.
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub fn push_notice(list: &mut Vec<Notice>, n: Notice) {
-    list.push(n);
-    while list.len() > NOTICES_SHOWN {
-        list.remove(0);
-    }
-}
-
-/// What the chat widget needs from the session each frame.
-pub struct ChatView<'a> {
-    /// Every line, oldest first ("Name: text" or "* notice").
-    pub lines: &'a [String],
-    /// The line being typed (the input box is open).
-    pub typing: Option<&'a str>,
-    /// Why the last line was not sent.
-    pub error: Option<&'a str>,
-}
-
 /// The chat's own state: shown or hidden (V), the scroll position and whether the cursor is
 /// over it.
 #[derive(Default)]
@@ -446,115 +371,6 @@ pub fn size_factor(height_px: f32, dpi: f32, size: f32, window: bool) -> f32 {
 /// through them (never less than 0.3), higher a little darker. The texts stay solid.
 pub fn backdrop(opacity: f32) -> f32 {
     (opacity / 0.85).clamp(0.3, 1.3)
-}
-
-/// Which menu is open: its layout follows from it.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
-pub enum MenuKind {
-    /// The game menu itself.
-    #[default]
-    Game,
-    /// A settings window (options, vehicle, world): a sidebar of pages and rows with switches,
-    /// sliders and buttons. A row's label is `name\u{1f}kind\u{1f}value\u{1f}description\u{1f}fraction`
-    /// (kind: `s` switch, `v` slider, `c` stepper, `o` opens a list, `a` button, `i` information).
-    Options,
-    /// The lines of the map's timetable.
-    Lines,
-    /// One line's tours.
-    Tours,
-    /// Any other list (drivers, fleet numbers, destinations, liveries ...).
-    List,
-}
-
-/// The timetable beside a list of lines or tours: a title, a line of facts and rows of
-/// (what, time).
-pub struct Preview {
-    pub title: String,
-    pub meta: String,
-    pub rows: Vec<(String, String)>,
-    /// The row chosen, when the rows can be chosen (the stops to start a tour from).
-    pub chosen: Option<usize>,
-    /// The button under the rows, when there is one.
-    pub button: Option<String>,
-    /// The time of the timetable the rows are of, with buttons to put it ahead (the trip of
-    /// a tour to take on later), when it can be set.
-    pub time: Option<String>,
-}
-
-/// A drop-down open over a row of a settings window: the entries, the one the keyboard is
-/// on, the first one shown and the one in force now.
-pub struct DropdownView<'a> {
-    pub row: usize,
-    pub items: Vec<&'a str>,
-    pub sel: usize,
-    pub top: usize,
-    pub current: Option<usize>,
-}
-
-/// Everything the interface draws in a frame.
-pub struct Frame<'a> {
-    /// Physical pixels per logical one.
-    pub scale: f32,
-    /// How much larger than designed (`size_factor`): everything below is drawn this much
-    /// larger on top of `scale`.
-    pub ui_scale: f32,
-    /// How strongly the backgrounds are drawn (`backdrop`): the menu's and the timetable's
-    /// panels, the chat's box, the plates under the notes, the tooltip and the frame rate.
-    pub opacity: f32,
-    pub width: f32,
-    pub height: f32,
-    pub cursor: (f32, f32),
-    /// An OpenXR headset is drawing this frame.
-    pub vr: bool,
-    /// The name of what the cursor points at (a switch, a part), shown next to it.
-    pub tooltip: Option<String>,
-    /// The chat, when a LAN session runs and the chat is not switched off.
-    pub chat: Option<ChatView<'a>>,
-    /// The chat's own size on top of `ui_scale` (`Settings::chat_size`).
-    pub chat_size: f32,
-    /// What the driver has to act on (why the bus does not move, a passenger's wish, the
-    /// change due, a service done), top left.
-    pub notes: &'a [String],
-    /// The frame rate and its 1 % low, top right (the `show_fps` setting).
-    pub fps: Option<(f32, Option<f32>)>,
-    /// The game stands paused.
-    pub paused: bool,
-    /// The game menu is open, with this line chosen (labels from `GAME_MENU`).
-    pub menu: Option<(usize, &'a [(&'a str, &'a str)])>,
-    /// The first line shown when a finger scrolled the menu (`App::menu_top`).
-    pub menu_top: Option<f32>,
-    /// The timetable window: its title and per stop (name, time, 0 served / 1 next / 2 ahead).
-    pub timetable: Option<(String, Vec<(String, String, u8)>)>,
-    /// The information bar: its items in groups (a hairline between the groups).
-    pub info: Option<InfoBar>,
-    /// The room the information bar has along the top: from x to x, from y down (on a
-    /// touch screen the gap between its buttons); none: the window's width.
-    pub info_room: Option<[f32; 3]>,
-    /// A tutorial page: title, text, picture, page number and count.
-    pub tutorial: Option<(&'a str, &'a str, Option<&'a std::path::Path>, usize, usize)>,
-    /// Name tags: a screen position (the point above a bus), the name and a second line.
-    pub tags: Vec<((f32, f32), String, String, f32)>,
-    /// The server's notifications, oldest first.
-    pub notices: &'a [Notice],
-    /// Where the navigator is on the screen (the notifications stand over it, or under it
-    /// in a top corner); none: they go to the top middle.
-    pub notice_anchor: Option<[f32; 4]>,
-    /// What kind of menu the lines belong to.
-    pub menu_kind: MenuKind,
-    /// The open list's title and the small line above it (the line a tour list is of).
-    pub menu_head: Option<(String, String)>,
-    /// The timetable of the chosen line or tour, beside the list.
-    pub menu_preview: Option<Preview>,
-    /// The first stop shown of the timetable beside the tours, when the wheel has scrolled it
-    /// (`None`: the stop chosen is kept in view).
-    pub pane_first: Option<usize>,
-    /// The pages of an open settings window (their titles) and the one shown.
-    pub menu_tabs: Option<(Vec<String>, usize)>,
-    /// The keyboard chose the menu's line last: that line is shown lit (else only the one
-    /// under the mouse is).
-    pub menu_kbd: bool,
-    /// The drop-down open over a row of the settings window.
-    pub dropdown: Option<DropdownView<'a>>,
 }
 
 pub struct Ui {
@@ -615,58 +431,6 @@ pub struct Ui {
     /// Where the information bar was drawn (within the panel, before `origin_x`), for the
     /// navigator to keep out of its way.
     pub info_rect: Option<[f32; 4]>,
-}
-
-/// How an item of the information bar looks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InfoTone {
-    /// White text.
-    Plain,
-    /// Grey text: a unit, a label.
-    Dim,
-    /// The line number: dark text on the accent.
-    Badge,
-    /// The speed limit: dark text on a white sign with a red frame.
-    Limit,
-    /// A delay: red text.
-    Late,
-    /// Ahead of the timetable: green text.
-    Early,
-    /// A frame rate that keeps up (green dot), is going slow (amber) or struggles (red).
-    Fps(u8),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct InfoItem {
-    pub text: String,
-    pub tone: InfoTone,
-    /// A name from the map or the timetable, drawn as it is (not looked up as an interface
-    /// text, in which "Depot" or "Station" would come out in another language).
-    pub raw: bool,
-}
-
-impl InfoItem {
-    pub(crate) fn new(text: impl Into<String>, tone: InfoTone) -> InfoItem {
-        InfoItem {
-            text: text.into(),
-            tone,
-            raw: false,
-        }
-    }
-
-    pub(crate) fn raw(text: impl Into<String>, tone: InfoTone) -> InfoItem {
-        InfoItem {
-            raw: true,
-            ..InfoItem::new(text, tone)
-        }
-    }
-}
-
-/// The information bar: items in groups, along the top or the bottom of the screen.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct InfoBar {
-    pub groups: Vec<Vec<InfoItem>>,
-    pub bottom: bool,
 }
 
 /// The information bar's groups in rows no wider than `room` (`widths`: each group's), each

@@ -82,7 +82,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         .file_name()
         .context("path without a name")?
         .to_string_lossy();
-    let tmp = dir.join(format!(".{name}.tmp"));
+    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
     std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
     std::fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
@@ -122,6 +122,34 @@ pub fn save_modules_in(data: &Path, modules: &Map<String, Value>) -> Result<()> 
     write_atomic(&modules_path_in(data), &serde_json::to_vec_pretty(modules)?)
 }
 
+/// Takes away what an interrupted run or install left under `~/.depot/omsi2`: launch
+/// descriptions and staging folders older than `max_age`.
+pub fn sweep_leftovers(data: &Path, max_age: std::time::Duration) {
+    let old = |p: &Path| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > max_age)
+    };
+    let base = omsi2_dir_in(data);
+    for sub in ["launch", "staging"] {
+        let Ok(rd) = std::fs::read_dir(base.join(sub)) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if old(&p) {
+                if p.is_dir() {
+                    let _ = std::fs::remove_dir_all(&p);
+                } else {
+                    let _ = std::fs::remove_file(&p);
+                }
+            }
+        }
+    }
+}
+
 /// Removes a finished run's launch description.
 pub fn remove_launch_file(path: &Path) {
     let _ = std::fs::remove_file(path);
@@ -136,6 +164,19 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn leftovers_are_swept_only_when_old() {
+        let d = tmp("sweep");
+        let launch = launch_file_in(&d, "t1");
+        write_atomic(&launch, b"{}").unwrap();
+        std::fs::create_dir_all(omsi2_dir_in(&d).join("staging/1-1")).unwrap();
+        sweep_leftovers(&d, std::time::Duration::from_secs(3600));
+        assert!(launch.exists() && omsi2_dir_in(&d).join("staging/1-1").exists());
+        sweep_leftovers(&d, std::time::Duration::ZERO);
+        assert!(!launch.exists() && !omsi2_dir_in(&d).join("staging/1-1").exists());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

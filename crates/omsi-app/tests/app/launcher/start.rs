@@ -45,3 +45,12 @@ fn times_are_typed_with_or_without_a_colon() {
     assert_eq!(time_typed("12:60"), None);
     assert_eq!(time_typed("noon"), None);
 }
+
+#[test]
+fn start_point_search_ignores_case() {
+    assert!(entry_matches("Terminal Laranjeiras", "Laranjeiras"));
+    assert!(entry_matches("Terminal Laranjeiras", "  LARANJEIRAS "));
+    assert!(entry_matches("Laranjeiras Velha", "laranjeiras"));
+    assert!(entry_matches("Terminal Laranjeiras", ""));
+    assert!(!entry_matches("Terminal Centro", "Laranjeiras"));
+}

@@ -71,6 +71,7 @@ use crate::app::{App, FrozenMirrors};
 use crate::camera_util::{render_mirrors, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::hud;
 use crate::humans;
 #[cfg(feature = "lan")]
 use crate::lan;
@@ -84,7 +85,6 @@ use crate::traffic;
 #[cfg(feature = "lan")]
 use crate::traffic_link::lan_outlines;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
-use crate::ui;
 use crate::weather_setup::{
     apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
 };
@@ -3219,7 +3219,7 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map_or(1.0, |w| w.scale_factor() as f32);
                         let settings = &self.settings;
-                        let size = ui::size_factor(
+                        let size = hud::size_factor(
                             hud[3],
                             dpi,
                             settings.ui_scale,
@@ -3235,7 +3235,7 @@ impl ApplicationHandler for App {
                                 || map_open,
                             cursor: self.cursor,
                             dt,
-                            backdrop: ui::backdrop(settings.ui_opacity),
+                            backdrop: hud::backdrop(settings.ui_opacity),
                             navigator: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
                         let mut state = plugin_ui.borrow_mut();
@@ -3253,10 +3253,10 @@ impl ApplicationHandler for App {
                             self.online.remotes.chat.disabled = !self.settings.chat;
                         }
                         #[cfg(not(feature = "lan"))]
-                        let chat: Option<ui::ChatView> = None;
+                        let chat: Option<hud::ChatView> = None;
                         #[cfg(feature = "lan")]
                         let chat = (self.online.lan.is_some() && self.settings.chat).then(|| {
-                            ui::ChatView {
+                            hud::ChatView {
                                 lines: &self.online.remotes.chat.lines,
                                 typing: self.online.remotes.chat.typing.as_deref(),
                                 error: self.online.remotes.chat.error(),
@@ -3332,7 +3332,7 @@ impl ApplicationHandler for App {
                             .dropdown
                             .as_ref()
                             .filter(|_| self.chooser.is_some())
-                            .map(|d| ui::DropdownView {
+                            .map(|d| hud::DropdownView {
                                 row: d.row,
                                 items: d.items.iter().map(|x| x.0.as_str()).collect(),
                                 sel: d.sel,
@@ -3358,15 +3358,15 @@ impl ApplicationHandler for App {
                             self.schedule.as_ref(),
                             self.clock.time,
                         );
-                        let mut frame = ui::Frame {
+                        let mut frame = hud::Frame {
                             scale,
-                            ui_scale: ui::size_factor(
+                            ui_scale: hud::size_factor(
                                 h,
                                 scale,
                                 self.settings.ui_scale,
                                 self.settings.ui_scale_window,
                             ),
-                            opacity: ui::backdrop(self.settings.ui_opacity),
+                            opacity: hud::backdrop(self.settings.ui_opacity),
                             width: w,
                             height: h,
                             cursor: (self.cursor.0 - hud[0], self.cursor.1),
@@ -3927,7 +3927,7 @@ impl ApplicationHandler for App {
                                     hud[3],
                                     (self.cursor.0 - hud[0], self.cursor.1),
                                 );
-                                crate::ui::shift_overlays(scene, start, hud[0]);
+                                crate::hud::shift_overlays(scene, start, hud[0]);
                             }
                         }
                         if !mirrored
@@ -4803,8 +4803,8 @@ pub struct InfoData<'a> {
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
 /// and the trip with its next stop and delay. A group of it is one thing the player reads at
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
-pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
-    use ui::{InfoItem, InfoTone};
+pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
+    use crate::hud::{InfoItem, InfoTone};
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
     // (the custom layout is the full one less what is switched off, item by item: the time,
@@ -4929,7 +4929,7 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
         }
     }
     if let Some((fps, low)) = d.fps {
-        let level = ui::fps_level(fps);
+        let level = hud::fps_level(fps);
         let text = match (full, low) {
             (true, Some(low)) => {
                 format!("{fps:.0} fps   {} {low:.0}", omsi_ui::tr("1 % low"))
@@ -4939,7 +4939,7 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
         };
         groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
     }
-    ui::InfoBar { groups, bottom }
+    hud::InfoBar { groups, bottom }
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.
