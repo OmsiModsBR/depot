@@ -77,6 +77,9 @@ impl TrafficGroup {
 /// A tour of a timetable line.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TrafficTour {
+    /// The tour's place among the tours of its line's file (before the day's filter), as
+    /// `[newtour]` blocks come in the file.
+    pub index: usize,
     pub number: String,
     pub ai_group: String,
     /// Whether an AI list has that group.
@@ -374,10 +377,12 @@ impl AiTraffic {
                 tours: line
                     .tours
                     .iter()
-                    .filter(|tour| runs(&tour.extra, bits))
-                    .map(|tour| {
+                    .enumerate()
+                    .filter(|(_, tour)| runs(&tour.extra, bits))
+                    .map(|(index, tour)| {
                         let deps = tour.trips.iter().map(|x| x.departure);
                         TrafficTour {
+                            index,
                             number: tour.number.clone(),
                             ai_group: tour.ai_group.trim().to_string(),
                             group_known: t

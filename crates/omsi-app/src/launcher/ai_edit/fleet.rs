@@ -7,6 +7,9 @@ use super::*;
 use crate::launcher::ai_traffic::{status_of, table, Col};
 use omsi_integrity::traffic::{AiTraffic, TrafficLine};
 
+/// The height of the panel under the fleet that holds the save bar.
+const BAR: f32 = 56.0;
+
 /// The fields of a bus of a fleet list while they are typed.
 pub struct BusForm {
     group: usize,
@@ -43,11 +46,18 @@ pub fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         return;
     };
     show(l, &mut e, body, t);
+    // the foot of the middle panel: what is not saved yet, Discard and Save
+    let (_, mid, _) = columns(body);
+    let bar = Rect::new(mid.x, mid.bottom() - BAR, mid.w, BAR);
+    l.ui.p().rounded(bar, omsi_ui::theme::RADIUS, PANEL);
+    save_bar(l, &mut e, bar);
     l.pages.diag.ai.edit = Some(e);
 }
 
 fn show(l: &mut Launcher, e: &mut Editor, body: Rect, t: &AiTraffic) {
     let (left, mid, right_r) = columns(body);
+    // (the save bar is drawn under the middle panels)
+    let mid = Rect::new(mid.x, mid.y, mid.w, mid.h - BAR - 8.0);
     card(&mut l.ui, left, "Lines", Some(&t.lines.len().to_string()));
     if t.lines.is_empty() {
         clipped(
@@ -101,23 +111,22 @@ fn show(l: &mut Launcher, e: &mut Editor, body: Rect, t: &AiTraffic) {
     };
     card(&mut l.ui, tours_r, &title, Some(&note));
     e.tour = keep(e.tour, line.tours.len());
-    // (the group a tour has now: the edited file's, else the one read)
-    let group_of = |e: &Editor, number: &str, read: &str| -> String {
+    // (the tour in the file: the one at its place, when it is the one read)
+    let doc_tour = |e: &Editor, x: &omsi_integrity::traffic::TrafficTour| -> Option<String> {
         ttl.and_then(|i| {
-            e.now.ttls[i]
-                .doc
-                .tours()
-                .iter()
-                .find(|d| d.number.trim() == number.trim())
-                .map(|d| d.ai_group.trim().to_string())
+            let d = e.now.ttls[i].doc.tours().get(x.index)?;
+            (d.number.trim() == x.number.trim()).then(|| d.ai_group.trim().to_string())
         })
-        .unwrap_or_else(|| read.trim().to_string())
+    };
+    // (the group a tour has now: the edited file's, else the one read)
+    let group_of = |e: &Editor, x: &omsi_integrity::traffic::TrafficTour| -> String {
+        doc_tour(e, x).unwrap_or_else(|| x.ai_group.trim().to_string())
     };
     let rows: Vec<(Vec<String>, Status, bool)> = line
         .tours
         .iter()
         .map(|x| {
-            let g = group_of(e, &x.number, &x.ai_group);
+            let g = group_of(e, x);
             let known = e.now.ailists.find(&g).is_some() || x.group_known;
             (
                 vec![x.number.clone(), g, x.trips.to_string()],
@@ -154,7 +163,7 @@ fn show(l: &mut Launcher, e: &mut Editor, body: Rect, t: &AiTraffic) {
         "Change AI group",
         Some("tune"),
         ButtonKind::Normal,
-        editable && tour.is_some(),
+        editable && tour.is_some_and(|x| doc_tour(e, x).is_some()),
         if editable {
             "Makes the chosen tour take its buses from another AI group. The line's file is changed on Save."
         } else {
@@ -163,18 +172,11 @@ fn show(l: &mut Launcher, e: &mut Editor, body: Rect, t: &AiTraffic) {
     ) {
         if let (Some(i), Some(tour)) = (ttl, tour) {
             let file = e.now.ttls[i].file.clone();
-            let at = e.now.ttls[i]
-                .doc
-                .tours()
-                .iter()
-                .position(|d| d.number.trim() == tour.number.trim());
-            if let Some(at) = at {
-                e.dialog = Some(Dialog::TourGroup {
-                    file,
-                    tour: at,
-                    sel: None,
-                });
-            }
+            e.dialog = Some(Dialog::TourGroup {
+                file,
+                tour: tour.index,
+                sel: None,
+            });
         }
     }
 
@@ -190,7 +192,7 @@ fn show(l: &mut Launcher, e: &mut Editor, body: Rect, t: &AiTraffic) {
         details(l, right_r, &[]);
         return;
     };
-    let gname = group_of(e, &tour.number, &tour.ai_group);
+    let gname = group_of(e, tour);
     let Some(gi) = e.now.ailists.find(&gname) else {
         card(&mut l.ui, fleet_r, "Depot fleet", None);
         l.ui.paragraph(
