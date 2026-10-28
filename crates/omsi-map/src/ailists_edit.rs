@@ -5,6 +5,7 @@
 //! The groups are read the way [`AiLists::parse`](crate::AiLists::parse) reads them, so a
 //! vehicle here is the vehicle the game takes.
 
+use crate::ailists::DepotEntry;
 use omsi_cfg::codepage::CodePage;
 use omsi_cfg::{CfgFile, KeywordRule, TextEncoding};
 
@@ -190,6 +191,16 @@ pub enum EditError {
     HoldsFleet,
     #[error("the file's text encoding cannot hold this name")]
     Unwritable,
+    #[error("there is no such list of a depot's vehicles")]
+    NoFleet,
+    #[error("a fleet number, plate or paint cannot hold a tab or a line break")]
+    BadField,
+    #[error("a day is eight digits, year month day")]
+    BadDate,
+    #[error("a fleet number is needed")]
+    NoNumber,
+    #[error("a list of numbers alone cannot keep a bus's plate, repaint and days")]
+    FleetFormat,
 }
 
 /// The kind of block a group is.
@@ -219,12 +230,34 @@ pub struct DocVehicle {
     on_depot_line: bool,
 }
 
+/// A bus of a depot's fleet list and the line it is on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocFleetBus {
+    pub entry: DepotEntry,
+    line: usize,
+}
+
+/// A depot's list of one vehicle type (`[aigroup_depot_typgroup]` or `..._2`): the buses it
+/// has. It belongs to the group before it in the file, as the game reads it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocFleet {
+    pub file: String,
+    /// `_2`: number, plate, paint and days; else the number alone.
+    pub detailed: bool,
+    pub buses: Vec<DocFleetBus>,
+    header: usize,
+    /// The `[end]` line; none for a list that is cut off (not changed then).
+    end: Option<usize>,
+}
+
 /// A group of `ailists.cfg` and where it is in the file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocGroup {
     pub name: String,
     pub kind: GroupKind,
     pub vehicles: Vec<DocVehicle>,
+    /// The depot fleet lists that follow the group.
+    pub fleets: Vec<DocFleet>,
     header: usize,
     /// The depot line (the second after the keyword), when the file has it.
     depot_line: Option<usize>,
@@ -330,6 +363,7 @@ impl AiListsDoc {
                             GroupKind::Plain
                         },
                         vehicles: Vec::new(),
+                        fleets: Vec::new(),
                         header,
                         depot_line: (depot_at < n).then_some(depot_at),
                         end: None,
@@ -371,14 +405,47 @@ impl AiListsDoc {
                         name,
                         kind: GroupKind::Depot,
                         vehicles: Vec::new(),
+                        fleets: Vec::new(),
                         header,
                         depot_line: Some(header + 2).filter(|l| *l < n),
                         end: None,
                     });
                 }
                 "aigroup_depot_typgroup" | "aigroup_depot_typgroup_2" => {
-                    let _ = r.str();
-                    let _ = r.until("[end]");
+                    let detailed = k == "aigroup_depot_typgroup_2";
+                    let file = r.str().trim().to_string();
+                    let mut fleet = DocFleet {
+                        file,
+                        detailed,
+                        buses: Vec::new(),
+                        header,
+                        end: None,
+                    };
+                    while r.pos() < n {
+                        let at = r.pos();
+                        let l = r.line();
+                        if l.eq_ignore_ascii_case("[end]") {
+                            fleet.end = Some(at);
+                            break;
+                        }
+                        if l.trim().is_empty() {
+                            continue;
+                        }
+                        let entry = if detailed {
+                            DepotEntry::parse(l)
+                        } else {
+                            DepotEntry {
+                                number: l.trim().to_string(),
+                                paint: l.trim().to_string(),
+                                ..Default::default()
+                            }
+                        };
+                        fleet.buses.push(DocFleetBus { entry, line: at });
+                    }
+                    // (the game gives the list to the group read last)
+                    if let Some(g) = groups.last_mut() {
+                        g.fleets.push(fleet);
+                    }
                 }
                 _ => {}
             }
@@ -400,6 +467,174 @@ impl AiListsDoc {
             return Err(EditError::Truncated);
         }
         Ok(grp)
+    }
+
+    fn fleet(&self, g: usize, f: usize) -> Result<&DocFleet, EditError> {
+        let fl = self.group(g)?.fleets.get(f).ok_or(EditError::NoFleet)?;
+        if fl.end.is_none() {
+            return Err(EditError::Truncated);
+        }
+        Ok(fl)
+    }
+
+    /// The line of a bus as its list writes it (a plain list has the number alone).
+    fn bus_text(&self, detailed: bool, e: &DepotEntry) -> Result<String, EditError> {
+        let number = e.number.trim();
+        if number.is_empty() {
+            return Err(EditError::NoNumber);
+        }
+        for t in [number, e.registration.as_str(), e.paint.as_str()] {
+            if t.contains(['\t', '\r', '\n']) {
+                return Err(EditError::BadField);
+            }
+            if !self.text.holds(t) {
+                return Err(EditError::Unwritable);
+            }
+        }
+        if !detailed {
+            return Ok(number.to_string());
+        }
+        let day = |d: Option<i32>| match d {
+            None => Ok(String::new()),
+            Some(d) if (10_000_101..=99_991_231).contains(&d) => Ok(d.to_string()),
+            Some(_) => Err(EditError::BadDate),
+        };
+        Ok(format!(
+            "{number}\t{}\t{}\t{}\t{}",
+            e.registration,
+            e.paint,
+            day(e.from)?,
+            day(e.to)?
+        ))
+    }
+
+    /// `bus` added at the end of fleet list `f` of group `g`.
+    pub fn add_bus(&mut self, g: usize, f: usize, bus: &DepotEntry) -> Result<(), EditError> {
+        let fl = self.fleet(g, f)?;
+        let text = self.bus_text(fl.detailed, bus)?;
+        let at = fl.buses.last().map_or(fl.end.unwrap_or(0), |b| b.line + 1);
+        self.text.insert(at, &text);
+        self.index();
+        Ok(())
+    }
+
+    /// Bus `b` of fleet list `f` of group `g` becomes `bus` (what follows the fifth field of
+    /// its line stays).
+    pub fn set_bus(
+        &mut self,
+        g: usize,
+        f: usize,
+        b: usize,
+        bus: &DepotEntry,
+    ) -> Result<(), EditError> {
+        let fl = self.fleet(g, f)?;
+        let line = fl.buses.get(b).ok_or(EditError::NoVehicle)?.line;
+        let mut text = self.bus_text(fl.detailed, bus)?;
+        if fl.detailed {
+            let old = self.text.line(line);
+            let fields: Vec<&str> = old.split('\t').collect();
+            if fields.len() > 5 {
+                text.push('\t');
+                text.push_str(&fields[5..].join("\t"));
+            }
+        }
+        self.text.set(line, &text);
+        self.index();
+        Ok(())
+    }
+
+    /// Bus `b` of fleet list `f` of group `g` taken out.
+    pub fn remove_bus(&mut self, g: usize, f: usize, b: usize) -> Result<(), EditError> {
+        let line = self
+            .fleet(g, f)?
+            .buses
+            .get(b)
+            .ok_or(EditError::NoVehicle)?
+            .line;
+        self.text.remove(line);
+        self.index();
+        Ok(())
+    }
+
+    /// Bus `b` of fleet list `f` of group `g` moved to the end of fleet list `to` of group
+    /// `tg`, as the entry it is.
+    pub fn move_bus(
+        &mut self,
+        g: usize,
+        f: usize,
+        b: usize,
+        tg: usize,
+        to: usize,
+    ) -> Result<(), EditError> {
+        let bus = self
+            .fleet(g, f)?
+            .buses
+            .get(b)
+            .ok_or(EditError::NoVehicle)?
+            .entry
+            .clone();
+        // (a list of numbers alone would lose the plate, the repaint and the days)
+        if self.fleet(g, f)?.detailed && !self.fleet(tg, to)?.detailed {
+            return Err(EditError::FleetFormat);
+        }
+        let before = self.text.clone();
+        self.remove_bus(g, f, b)?;
+        // (a bus taken out moves no list: the lists are numbered in file order)
+        if let Err(e) = self.add_bus(tg, to, &bus) {
+            self.text = before;
+            self.index();
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// A new, empty fleet list for vehicle `file` after the last list of group `g` (or
+    /// after the depot's own lines). Its index in the group.
+    pub fn add_fleet(&mut self, g: usize, file: &str, detailed: bool) -> Result<usize, EditError> {
+        let grp = self.group(g)?;
+        let file = file.trim();
+        if file.is_empty() {
+            return Err(EditError::NoName);
+        }
+        if file.contains(['\t', '\r', '\n']) {
+            return Err(EditError::BadField);
+        }
+        if !self.text.holds(file) {
+            return Err(EditError::Unwritable);
+        }
+        // a fleet list is the group's: only a depot group, which has none of its own vehicles
+        if grp.kind != GroupKind::Depot {
+            return Err(EditError::NoFleet);
+        }
+        let at = match grp.fleets.last() {
+            Some(l) => l.end.ok_or(EditError::Truncated)? + 1,
+            None => grp.depot_line.ok_or(EditError::Truncated)? + 1,
+        };
+        let key = if detailed {
+            "[aigroup_depot_typgroup_2]"
+        } else {
+            "[aigroup_depot_typgroup]"
+        };
+        for (i, l) in ["", key, file, "[end]"].iter().enumerate() {
+            self.text.insert(at + i, l);
+        }
+        self.index();
+        Ok(self.groups[g].fleets.len() - 1)
+    }
+
+    /// Fleet list `f` of group `g` taken out with its buses.
+    pub fn remove_fleet(&mut self, g: usize, f: usize) -> Result<(), EditError> {
+        let fl = self.fleet(g, f)?;
+        let (from, mut to) = (fl.header, fl.end.unwrap_or(fl.header));
+        // (the blank line that separates it from what follows goes with it)
+        if self.text.line(to + 1).trim().is_empty() && to + 1 < self.text.len() {
+            to += 1;
+        }
+        for i in (from..=to).rev() {
+            self.text.remove(i);
+        }
+        self.index();
+        Ok(())
     }
 
     /// The weight of vehicle `v` of group `g` becomes `w`.
@@ -730,6 +965,80 @@ mod tests {
             d.add_vehicle(d.find("Buses").unwrap(), "x.bus", 1.0),
             Err(EditError::Depot)
         );
+    }
+
+    #[test]
+    fn the_fleet_of_a_depot_is_read_and_changed_line_by_line() {
+        let mut d = AiListsDoc::from_bytes(SAMPLE.as_bytes());
+        let b = d.find("Buses").unwrap();
+        assert_eq!(d.groups()[b].fleets.len(), 1);
+        assert_eq!(d.groups()[b].fleets[0].buses[0].entry.number, "1001");
+        let bus = |n: &str, from| DepotEntry {
+            number: n.into(),
+            registration: format!("B-{n}"),
+            paint: "blue".into(),
+            from,
+            to: None,
+        };
+        d.add_bus(b, 0, &bus("1002", Some(19900101))).unwrap();
+        let text = String::from_utf8(d.to_bytes()).unwrap();
+        assert!(text.contains("1001\tB-1001\tred\r\n1002\tB-1002\tblue\t19900101\t\r\n[end]"));
+        // the parser sees what the document sees
+        let a = lists(&d);
+        let tg = &a
+            .groups
+            .iter()
+            .find(|g| g.name == "Buses")
+            .unwrap()
+            .typgroups[0];
+        assert_eq!(tg.entries[1].from, Some(19900101));
+        d.set_bus(b, 0, 0, &bus("1001", None)).unwrap();
+        assert!(String::from_utf8(d.to_bytes())
+            .unwrap()
+            .contains("1001\tB-1001\tblue\t\t\r\n"));
+        d.remove_bus(b, 0, 1).unwrap();
+        assert!(!String::from_utf8(d.to_bytes()).unwrap().contains("1002"));
+        // refused: no number, a tab in a field, a bad day
+        assert_eq!(d.add_bus(b, 0, &bus("", None)), Err(EditError::NoNumber));
+        assert_eq!(
+            d.add_bus(b, 0, &bus("a\tb", None)),
+            Err(EditError::BadField)
+        );
+        assert_eq!(
+            d.add_bus(b, 0, &bus("5", Some(12))),
+            Err(EditError::BadDate)
+        );
+        assert_eq!(d.add_bus(b, 3, &bus("5", None)), Err(EditError::NoFleet));
+    }
+
+    #[test]
+    fn a_fleet_list_comes_and_goes_and_a_bus_moves() {
+        let mut d = AiListsDoc::from_bytes(SAMPLE.as_bytes());
+        let b = d.find("Buses").unwrap();
+        let before = d.to_bytes();
+        let f = d.add_fleet(b, "Vehicles\\Bus\\other.bus", true).unwrap();
+        assert_eq!(f, 1);
+        let e = d.groups()[b].fleets[0].buses[0].entry.clone();
+        d.move_bus(b, 0, 0, b, 1).unwrap();
+        assert!(d.groups()[b].fleets[0].buses.is_empty());
+        assert_eq!(d.groups()[b].fleets[1].buses[0].entry.number, e.number);
+        d.move_bus(b, 1, 0, b, 0).unwrap();
+        d.remove_fleet(b, 1).unwrap();
+        let back = d.to_bytes();
+        assert_eq!(
+            String::from_utf8(back)
+                .unwrap()
+                .replace("red\t\t\r\n", "red\r\n"),
+            String::from_utf8(before).unwrap()
+        );
+        // a plain list of numbers cannot take a bus of a detailed one
+        d.add_fleet(b, "Vehicles\\Bus\\plain.bus", false).unwrap();
+        assert_eq!(d.move_bus(b, 0, 0, b, 1), Err(EditError::FleetFormat));
+        d.remove_fleet(b, 1).unwrap();
+        // cars have no fleet lists
+        let cars = d.find("NormalCars").unwrap();
+        assert_eq!(d.add_fleet(cars, "x.bus", true), Err(EditError::NoFleet));
+        same_as_the_parser(&d);
     }
 
     #[test]

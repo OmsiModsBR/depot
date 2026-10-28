@@ -7,6 +7,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ## Unreleased
 
 ### Changed
+- AI lists writer (no screen yet): the buses of a depot's fleet lists in `ailists.cfg` (`[aigroup_depot_typgroup]` / `_2`) can be added, changed (number, plate, paint, first and last day), moved between lists and removed, and a whole fleet list added or removed, writing only the lines changed, like the car groups. First part of editing the buses of the timetable's lines.
 - Launcher → Setup → Install OmsiLaunch: the dialog's text no longer touches or runs out of the window's edges. The dialog has more room around its text, the text breaks at the width it is drawn at (long values such as the package's SHA-256 break onto the next line instead of running past the panel), and the panel fits its text in narrow windows and with long translations.
 - City map (Shift+M), look of the header and its cards (nothing the map shows or does changes): the header is the in-game windows' panel colour with the title "City map" in plain case, the line as a badge in the accent and where it goes after it, the buttons, the Trip and You-are-here cards and the legend have rounder corners.
 - Navigator minimap and city map: the vehicles are drawn as rounded pictograms (a bus with a rounded nose and its windscreen, a tram and a metro train with rounded ends) instead of one flat hexagon, and a trolleybus has its two poles trailing behind it, so it can be told from a bus. Looks only: which vehicles are shown, their colours and the lines beside them are unchanged.
