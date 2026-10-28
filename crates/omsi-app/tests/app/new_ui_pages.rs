@@ -3,10 +3,10 @@ use omsi_ui::menu_page::Back;
 use omsi_ui::pause_menu;
 use openomsi_game::testing;
 use openomsi_game::testing::game_lists::{row, ListKind};
+use openomsi_game::testing::hud::MenuKind;
+use openomsi_game::testing::hud::{DropdownView, Preview};
 use openomsi_game::testing::new_ui::{Area, MenuFrameInternals};
 use openomsi_game::testing::new_ui_pages::*;
-use openomsi_game::testing::ui::MenuKind;
-use openomsi_game::testing::ui::{DropdownView, Preview};
 
 #[test]
 fn every_kind_of_settings_row_maps_to_its_control() {
@@ -156,14 +156,14 @@ fn a_list_has_the_way_back_under_it_and_its_tour_and_timetable_marked() {
     assert_eq!(p.active, Some(1));
     assert_eq!(p.note, "Line 50");
     assert_eq!(p.column.current(), Some("duty"));
-    let mut ui = testing::ui::Ui::new().unwrap();
-    p.write_hits(&mut ui, Area::whole((1672, 941)));
+    let mut ui = testing::hud::Ui::new().unwrap();
+    p.write_hits(&mut ui.hits, Area::whole((1672, 941)));
     // the way back at its row's index, the stops, their button and the arrows of the time
-    assert_eq!(ui.menu_rects.len(), 3);
-    assert_eq!(ui.menu_pane.len(), 2);
-    assert!(ui.menu_pane_go.is_some() && ui.menu_pane_box.is_some());
-    assert_eq!(ui.menu_time.len(), 2);
-    assert!(ui.menu_side.is_empty());
+    assert_eq!(ui.hits.menu_rects.len(), 3);
+    assert_eq!(ui.hits.menu_pane.len(), 2);
+    assert!(ui.hits.menu_pane_go.is_some() && ui.hits.menu_pane_box.is_some());
+    assert_eq!(ui.hits.menu_time.len(), 2);
+    assert!(ui.hits.menu_side.is_empty());
     // the way back chosen is not a tour marked
     f.menu = Some((2, &items));
     let p = page_frame(
@@ -191,18 +191,23 @@ fn the_hud_gets_the_rectangles_in_window_pixels() {
     });
     let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
     for size in [(1672u32, 941u32), (1920, 1080), (3840, 2160)] {
-        let mut ui = testing::ui::Ui::new().unwrap();
-        p.write_hits(&mut ui, Area::whole(size));
+        let mut ui = testing::hud::Ui::new().unwrap();
+        p.write_hits(&mut ui.hits, Area::whole(size));
         let (s, l) = p.layout(size);
-        assert_eq!(ui.menu_rects[0], px(l.rows[0], s, Vec2::ZERO), "{size:?}");
-        assert_eq!(ui.dd_rects.len(), 3, "{size:?}");
-        assert_eq!(ui.dd_rows, 3);
+        assert_eq!(
+            ui.hits.menu_rects[0],
+            px(l.rows[0], s, Vec2::ZERO),
+            "{size:?}"
+        );
+        assert_eq!(ui.hits.dd_rects.len(), 3, "{size:?}");
+        assert_eq!(ui.hits.dd_rows, 3);
         // (all inside the window, right of the column)
         for r in ui
+            .hits
             .menu_rects
             .iter()
-            .chain(&ui.menu_side)
-            .chain(&ui.dd_rects)
+            .chain(&ui.hits.menu_side)
+            .chain(&ui.hits.dd_rects)
         {
             assert!(
                 r[0] >= pause_menu::COLUMN_W * s && r[2] <= size.0 as f32 && r[3] <= size.1 as f32,
@@ -227,16 +232,16 @@ fn on_a_triple_screen_the_page_is_clicked_where_the_centre_screen_shows_it() {
     });
     let p = page_frame(&f, Some(&ListKind::Options(0)), test_column(true)).unwrap();
     // the page of one 1920x1080 screen, and the same on the centre one of three
-    let mut one = testing::ui::Ui::new().unwrap();
-    p.write_hits(&mut one, Area::whole((1920, 1080)));
-    let mut three = testing::ui::Ui::new().unwrap();
+    let mut one = testing::hud::Ui::new().unwrap();
+    p.write_hits(&mut one.hits, Area::whole((1920, 1080)));
+    let mut three = testing::hud::Ui::new().unwrap();
     let area = testing::new_ui::menu_area(true, false, (5760, 1080));
-    p.write_hits(&mut three, area);
+    p.write_hits(&mut three.hits, area);
     let moved = |r: &[f32; 4]| [r[0] + 1920.0, r[1], r[2] + 1920.0, r[3]];
     for (a, b) in [
-        (&one.menu_rects, &three.menu_rects),
-        (&one.menu_side, &three.menu_side),
-        (&one.dd_rects, &three.dd_rects),
+        (&one.hits.menu_rects, &three.hits.menu_rects),
+        (&one.hits.menu_side, &three.hits.menu_side),
+        (&one.hits.dd_rects, &three.hits.dd_rects),
     ] {
         assert!(!a.is_empty());
         let a: Vec<_> = a.iter().map(moved).collect();
@@ -250,12 +255,12 @@ fn on_a_triple_screen_the_page_is_clicked_where_the_centre_screen_shows_it() {
         }
     }
     // in the headset the window's picture is the menu plane's: the window's rectangles
-    let mut vr = testing::ui::Ui::new().unwrap();
+    let mut vr = testing::hud::Ui::new().unwrap();
     p.write_hits(
-        &mut vr,
+        &mut vr.hits,
         testing::new_ui::menu_area(true, true, (1920, 1080)),
     );
-    assert_eq!(vr.menu_rects, one.menu_rects);
+    assert_eq!(vr.hits.menu_rects, one.hits.menu_rects);
 }
 
 #[test]

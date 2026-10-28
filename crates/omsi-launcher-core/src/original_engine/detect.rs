@@ -182,8 +182,9 @@ pub fn omsilaunch_in(root: &Path) -> OmsiLaunchStatus {
             st.integrity = Integrity::Unreadable;
             return st;
         };
-        // only the permanent plugin closure matters at run time (like OmsiLaunch itself)
-        if !path.starts_with("plugins/") || path.contains("..") {
+        // what runs: the two programs and the permanent plugin closure (like OmsiLaunch itself)
+        let runs = path.starts_with("plugins/") || EXECUTABLES.contains(&path);
+        if !runs || path.contains("..") {
             continue;
         }
         match file_sha256(&root.join(path)) {
@@ -197,6 +198,39 @@ pub fn omsilaunch_in(root: &Path) -> OmsiLaunchStatus {
         Integrity::Damaged(bad)
     };
     st
+}
+
+/// The programs Depot starts.
+pub const EXECUTABLES: [&str; 2] = ["OmsiLaunch.exe", "OmsiLaunchW.exe"];
+
+/// Checks the programs Depot is about to run against the manifest of the folder: they must
+/// be listed and match. Called right before every run, not only when the page is drawn.
+pub fn verify_executables(root: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(root.join("release-manifest.json"))
+        .map_err(|_| "The OmsiLaunch files cannot be checked: its manifest is missing. Install OmsiLaunch again.".to_string())?;
+    let m: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|_| {
+        "The OmsiLaunch manifest is unreadable. Install OmsiLaunch again.".to_string()
+    })?;
+    let files = m.get("files").and_then(Value::as_array);
+    for exe in EXECUTABLES {
+        let want = files.and_then(|fs| {
+            fs.iter().find_map(|f| {
+                (f.get("path").and_then(Value::as_str) == Some(exe))
+                    .then(|| f.get("sha256").and_then(Value::as_str).map(str::to_string))
+                    .flatten()
+            })
+        });
+        let ok = match (want, file_sha256(&root.join(exe))) {
+            (Some(w), Some(g)) => g.eq_ignore_ascii_case(&w),
+            _ => false,
+        };
+        if !ok {
+            return Err(format!(
+                "{exe} does not match the OmsiLaunch manifest. Install OmsiLaunch again."
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The full picture for a (possibly absent) OMSI 2 folder.
@@ -240,11 +274,13 @@ mod tests {
             plugin_bytes,
         )
         .unwrap();
+        let x = format!("{:X}", Sha256::digest(b"x"));
         std::fs::write(
             root.join("release-manifest.json"),
             format!(
                 "\u{feff}{{\"product_version\":\"0.1.0-beta4\",\"control_protocol\":\"0.1\",\"files\":[\
-                 {{\"path\":\"OmsiLaunch.exe\",\"bytes\":1,\"sha256\":\"00\"}},\
+                 {{\"path\":\"OmsiLaunch.exe\",\"bytes\":1,\"sha256\":\"{x}\"}},\
+                 {{\"path\":\"OmsiLaunchW.exe\",\"bytes\":1,\"sha256\":\"{x}\"}},\
                  {{\"path\":\"plugins/OmsiLaunch.Plugin.opl\",\"bytes\":1,\"sha256\":\"{manifest_hash}\"}}]}}"
             ),
         )
@@ -274,6 +310,24 @@ mod tests {
             omsilaunch_in(&d).integrity,
             Integrity::Damaged(vec!["plugins/OmsiLaunch.Plugin.opl".into()])
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_programs_are_checked_against_the_manifest_before_every_run() {
+        let d = tmp("exes");
+        let good = format!("{:X}", Sha256::digest(b"plugin"));
+        install(&d, b"plugin", &good);
+        assert!(verify_executables(&d).is_ok());
+        std::fs::write(d.join("OmsiLaunchW.exe"), b"swapped").unwrap();
+        assert!(verify_executables(&d).is_err());
+        assert_eq!(
+            omsilaunch_in(&d).integrity,
+            Integrity::Damaged(vec!["OmsiLaunchW.exe".into()])
+        );
+        // no manifest at all: nothing is run
+        std::fs::remove_file(d.join("release-manifest.json")).unwrap();
+        assert!(verify_executables(&d).is_err());
         let _ = std::fs::remove_dir_all(&d);
     }
 

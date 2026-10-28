@@ -253,7 +253,7 @@ fn save_all(tv: &mut TimetableView) -> (usize, Option<String>) {
 
 /// Copies of `base` every `every` minutes after it, as long as the copy's first departure is
 /// not after `until` (minutes of the day); numbered on from the highest. Returns how many.
-fn repeat_tour(tours: &mut Vec<Tour>, base: &Tour, every: f32, until: f32) -> usize {
+pub fn repeat_tour(tours: &mut Vec<Tour>, base: &Tour, every: f32, until: f32) -> usize {
     let first = base.trips.first().map(|t| t.departure).unwrap_or(0.0);
     let mut made = 0;
     let mut k = 1.0;
@@ -271,7 +271,7 @@ fn repeat_tour(tours: &mut Vec<Tour>, base: &Tour, every: f32, until: f32) -> us
 }
 
 /// A new tour's number: one past the highest that is a number.
-fn next_number(tours: &[Tour]) -> String {
+pub fn next_number(tours: &[Tour]) -> String {
     (tours
         .iter()
         .filter_map(|t| t.number.trim().parse::<i64>().ok())
@@ -2309,63 +2309,5 @@ fn trips_card(l: &mut Launcher, right: Rect) {
     }
     if let Some((s, err)) = status {
         l.state.set_status(s, err);
-    }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn times() {
-        assert_eq!(parse_time("4:07"), Some(247.0));
-        assert_eq!(parse_time("24:10"), Some(1450.0));
-        assert_eq!(parse_time("4:7:30"), Some(247.5));
-        assert_eq!(parse_time("4"), None);
-        assert_eq!(parse_time("4:61"), None);
-        assert_eq!(fmt_time(247.0), "4:07");
-        assert_eq!(fmt_time(247.5), "4:07:30");
-    }
-
-    #[test]
-    fn numbers() {
-        let t = |n: &str| Tour {
-            number: n.into(),
-            ..Default::default()
-        };
-        assert_eq!(next_number(&[t("1"), t("7"), t("x")]), "8");
-        assert_eq!(next_number(&[]), "1");
-    }
-}
-
-#[cfg(test)]
-mod repeat_tests {
-    use super::*;
-
-    #[test]
-    fn a_tour_every_twenty_minutes_until_eight() {
-        let base = Tour {
-            number: "1".into(),
-            ai_group: "Busses".into(),
-            extra: String::new(),
-            trips: vec![
-                TourTrip {
-                    trip: "a".into(),
-                    profile: 0,
-                    departure: 6.0 * 60.0,
-                },
-                TourTrip {
-                    trip: "b".into(),
-                    profile: 0,
-                    departure: 6.5 * 60.0,
-                },
-            ],
-        };
-        let mut tours = vec![base.clone()];
-        let made = repeat_tour(&mut tours, &base, 20.0, 8.0 * 60.0);
-        // 6:20, 6:40 … 8:00
-        assert_eq!(made, 6);
-        assert_eq!(tours.last().unwrap().trips[0].departure, 8.0 * 60.0);
-        assert_eq!(tours.last().unwrap().trips[1].departure, 8.5 * 60.0);
-        assert_eq!(tours.last().unwrap().number, "7");
     }
 }

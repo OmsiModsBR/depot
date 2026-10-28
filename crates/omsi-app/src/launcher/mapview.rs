@@ -95,46 +95,46 @@ pub struct Pointer {
 /// choice and the game count (`--entry` is the position in that list), so an entry point
 /// whose position cannot be resolved leaves a gap that does not shift every marker after it
 /// onto the wrong spawn.
-struct Entry {
+pub struct Entry {
     /// Where the marker stands, in world metres.
-    at: DVec2,
+    pub at: DVec2,
     /// Its name, as `global.cfg` writes it.
-    name: String,
+    pub name: String,
     /// Its position in `global.entry_points`.
-    index: usize,
+    pub index: usize,
 }
 
 /// A map as the map needs it: the roads the game's own city map draws, the lanes they were
 /// grouped from (the chosen trip's route runs on those), where its entry points stand and
 /// where its objects do - all in world metres.
 #[derive(Default)]
-struct Roads {
+pub struct Roads {
     /// Every carriageway the map has, as the game groups them: points in world metres.
-    roads: Vec<crate::nav::MapRoad>,
+    pub roads: Vec<crate::nav::MapRoad>,
     /// The linked network behind them (a trip's road pieces are lanes of it).
-    net: Arc<Network>,
+    pub net: Arc<Network>,
     /// (tile x, tile y, spline id, path) → the lane the timetable names.
-    lanes: HashMap<(i32, i32, i64, u16), usize>,
+    pub lanes: HashMap<(i32, i32, i64, u16), usize>,
     /// (tile x, tile y, spline id) → every lane of that spline (for a piece whose exact path
     /// is not there any more).
-    splines: HashMap<(i32, i32, i64), Vec<usize>>,
+    pub splines: HashMap<(i32, i32, i64), Vec<usize>>,
     /// The world point the drawn lines are measured from: an f32 cannot hold a map's own
     /// millions of metres to the centimetre, and roads are drawn to the centimetre.
-    origin: DVec2,
+    pub origin: DVec2,
     /// The world rectangle the roads cover (the 1 - 99 % box: see `read_map`).
-    lo: DVec2,
-    hi: DVec2,
+    pub lo: DVec2,
+    pub hi: DVec2,
     /// The entry points that could be placed, in `global.cfg`'s order - each carrying its own
     /// place in that list (see `Entry`).
-    entries: Vec<Entry>,
+    pub entries: Vec<Entry>,
     /// Every placed object's world place: the trip's stops are found here.
-    objects: HashMap<i64, DVec2>,
+    pub objects: HashMap<i64, DVec2>,
     /// The streets the map's name signs name, each once (any case), with where its first
     /// sign stands: the Timetable page's search finds them.
-    streets: Vec<(String, DVec2)>,
+    pub streets: Vec<(String, DVec2)>,
     /// The map's own surface (`openomsi-realmap`: water, green, built-up land, rivers, rail,
     /// borders), drawn under the roads when the map's author ships it.
-    surface: Option<Arc<crate::map_surface::MapSurface>>,
+    pub surface: Option<Arc<crate::map_surface::MapSurface>>,
 }
 
 /// What a worker read.
@@ -148,26 +148,26 @@ struct Reply {
 
 /// The plan (buffer 0): the roads and the route as one vertex list, and what it was built
 /// for - another map, another trip, or another zoom band (whose own thinning it is).
-struct Plan {
-    key: Key,
-    verts: Vec<Vertex>,
-    count: u32,
-    uploaded: bool,
+pub struct Plan {
+    pub key: Key,
+    pub verts: Vec<Vertex>,
+    pub count: u32,
+    pub uploaded: bool,
 }
 
 #[derive(Clone, PartialEq)]
-struct Key {
-    global: PathBuf,
-    trip: String,
+pub struct Key {
+    pub global: PathBuf,
+    pub trip: String,
     /// The simplification the plan was built with, as the bit pattern of its metres.
-    tolerance: u32,
+    pub tolerance: u32,
 }
 
 /// The map: what it shows, where it is looking, and the texture it is drawn into.
 pub struct MapView {
     want: Option<Look>,
     shown: Option<Look>,
-    roads: Option<Arc<Roads>>,
+    pub roads: Option<Arc<Roads>>,
     trip: omsi_launcher_lib::TripPath,
     /// Where the trip calls: (its place on the map, the stop's own number in the timetable).
     stops: Vec<(DVec2, usize)>,
@@ -178,10 +178,10 @@ pub struct MapView {
 
     /// The world point the middle of the window looks at, and what one pixel of it holds.
     center: DVec2,
-    mpp: f64,
+    pub mpp: f64,
     /// When the wheel last moved the map: while it keeps moving, the plan is not built again
     /// for the new zoom (see `plan_is_stale`).
-    wheeled: Option<Instant>,
+    pub wheeled: Option<Instant>,
     /// The plan must be fitted into the window again (another map, another trip, a window
     /// that changed while nothing was moved by hand).
     fit: bool,
@@ -194,11 +194,11 @@ pub struct MapView {
     /// The drawn marker under the mouse, and the one a click took this frame - both a number
     /// among the drawn markers; `take_clicked` turns the second into the choice's own number.
     hover: Option<usize>,
-    clicked: Option<usize>,
+    pub clicked: Option<usize>,
 
     /// The plan and the markers (buffers 0 and 1); the markers are built every frame, the
     /// plan only when its key changes.
-    plan: Option<Plan>,
+    pub plan: Option<Plan>,
     gpu: Option<Gpu>,
     target: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
     /// Bumped whenever `target` was made anew (the interface binds it again).
@@ -697,7 +697,7 @@ impl MapView {
     /// built per notch - and the plan is the whole map in one vertex list, thirty thousand
     /// roads' worth of it, over a hundred megabytes through the queue each time. Rounded, only
     /// a crossing between bands builds one, and a half pixel stands for at most 0.71 of one.
-    fn tolerance(&self) -> f32 {
+    pub fn tolerance(&self) -> f32 {
         let half_a_pixel = (self.mpp * 0.5) as f32;
         (2f32.powf(half_a_pixel.max(f32::MIN_POSITIVE).log2().round())).clamp(0.05, 24.0)
     }
@@ -840,7 +840,7 @@ impl MapView {
     /// which is what makes a big map's zoom smooth - a plan of thirty thousand roads is over a
     /// hundred megabytes to build and to send, and a wheel that keeps moving would ask for one
     /// per notch.
-    fn plan_is_stale(&self, key: &Key) -> bool {
+    pub fn plan_is_stale(&self, key: &Key) -> bool {
         match self.plan.as_ref() {
             // nothing at all to draw: a map being read shows nothing until one is built
             None => true,
@@ -1204,122 +1204,5 @@ fn read_map(look: &Look) -> Roads {
         streets,
         // (after `configure_grid`: the package is put onto this game's grid)
         surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Three entry points are in the file, the second of which has no place on this map: the
-    /// drawn markers are the file's first and third, and must answer with those places.
-    fn map() -> MapView {
-        let mut m = MapView::new();
-        m.roads = Some(Arc::new(Roads {
-            entries: vec![
-                Entry {
-                    at: DVec2::new(0.0, 0.0),
-                    name: "Depot".into(),
-                    index: 0,
-                },
-                Entry {
-                    at: DVec2::new(100.0, 0.0),
-                    name: "Station".into(),
-                    index: 2,
-                },
-            ],
-            ..Default::default()
-        }));
-        m
-    }
-
-    #[test]
-    fn a_marker_answers_with_its_own_place_in_the_file() {
-        let mut m = map();
-        // the second drawn marker is the file's third entry point, not its second
-        m.clicked = Some(1);
-        assert_eq!(m.take_clicked(), Some(2));
-        m.clicked = Some(0);
-        assert_eq!(m.take_clicked(), Some(0));
-        // a click is taken once
-        assert_eq!(m.take_clicked(), None);
-    }
-
-    #[test]
-    fn the_choice_finds_its_marker_by_the_files_own_place() {
-        let m = map();
-        assert_eq!(m.shown_of(0), Some(0));
-        assert_eq!(m.shown_of(2), Some(1));
-        // the entry point that could not be placed has no marker to ring
-        assert_eq!(m.shown_of(1), None);
-        // automatic, and anything out of the list
-        assert_eq!(m.shown_of(-1), None);
-        assert_eq!(m.shown_of(9), None);
-    }
-
-    /// The thinning a plan is built at is rounded to a power of two, so a wheel that keeps
-    /// turning asks for the whole map to be built again only when it crosses into another band.
-    #[test]
-    fn a_zoom_builds_the_plan_again_only_across_a_band() {
-        let mut m = MapView::new();
-        m.mpp = 4.0;
-        let band = m.tolerance();
-        assert_eq!(
-            band, 2.0,
-            "half of four metres a pixel, which is a power of two"
-        );
-        // a band is a factor of two wide: a wheel notch moves the metres a pixel by 12 %, and
-        // six or seven of them, a whole gesture, stay inside the one the plan was built for
-        for factor in [1.12, 1.25, 1.12 * 1.12, 0.88, 0.8, 0.88 * 0.88] {
-            m.mpp = 4.0 * factor;
-            assert_eq!(m.tolerance(), band, "at {factor} of four metres a pixel");
-        }
-        // twice as close, and twice as far out, are other bands
-        m.mpp = 2.0;
-        assert_eq!(m.tolerance(), 1.0);
-        m.mpp = 8.0;
-        assert_eq!(m.tolerance(), 4.0);
-        // and the far out view is held where the clamp always held it
-        m.mpp = 800.0;
-        assert_eq!(m.tolerance(), 24.0);
-        m.mpp = 100_000.0;
-        assert_eq!(m.tolerance(), 24.0);
-    }
-
-    /// A zoom that keeps moving does not build the plan again: what stands on the screen is the
-    /// same map, thinned for the zoom before it, and the camera is a matrix over it either way.
-    #[test]
-    fn a_zoom_in_progress_keeps_the_plan_it_has() {
-        let mut m = map();
-        let built = Key {
-            global: PathBuf::from("maps/Grundorf/global.cfg"),
-            trip: String::new(),
-            tolerance: 2.0f32.to_bits(),
-        };
-        let finer = Key {
-            tolerance: 1.0f32.to_bits(),
-            ..built.clone()
-        };
-        let plan = || {
-            Some(Plan {
-                key: built.clone(),
-                verts: Vec::new(),
-                count: 0,
-                uploaded: true,
-            })
-        };
-        m.plan = plan();
-        // (whatever the zoom now asks for, while the wheel is still turning)
-        m.wheeled = Some(Instant::now());
-        assert!(!m.plan_is_stale(&finer));
-        assert!(!m.plan_is_stale(&built));
-        // (and a map that has no plan at all is always built one: it shows nothing until then)
-        m.plan = None;
-        assert!(m.plan_is_stale(&finer));
-        // the wheel has stopped: the band it stopped in is built
-        m.plan = plan();
-        m.wheeled = Some(Instant::now() - std::time::Duration::from_secs(1));
-        assert!(m.plan_is_stale(&finer));
-        assert!(!m.plan_is_stale(&built));
     }
 }

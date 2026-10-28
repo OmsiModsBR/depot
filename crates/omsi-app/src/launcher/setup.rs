@@ -32,7 +32,7 @@ pub struct SetupView {
 const FIELDS: [&str; 3] = ["root", "game", "content"];
 
 /// A folder's line under its field: what was found there.
-fn check(field: usize, value: &str, root: &str) -> (Status, String) {
+pub fn check(field: usize, value: &str, root: &str) -> (Status, String) {
     let v = value.trim();
     let p = std::path::Path::new(v);
     match field {
@@ -1121,7 +1121,7 @@ struct Slice<'a> {
 
 /// The node at `path` from `tree`, with its depth and the type it belongs to; a path that no
 /// longer fits (the content read again) is cut back to what still fits.
-fn node_at<'a>(tree: &'a Node, path: &mut Vec<usize>) -> (&'a Node, Option<&'a str>) {
+pub fn node_at<'a>(tree: &'a Node, path: &mut Vec<usize>) -> (&'a Node, Option<&'a str>) {
     let mut n = tree;
     let mut ty = None;
     for (d, &k) in path.clone().iter().enumerate() {
@@ -1451,77 +1451,5 @@ fn save_folders(l: &mut Launcher) {
             }
         }
         Err(e) => l.state.set_status(format!("{e:#}"), true),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn tree() -> Node {
-        let leaf = |n: &str, b: u64| Node {
-            name: n.into(),
-            bytes: b,
-            kids: Vec::new(),
-        };
-        let part = |n: &str, kids: Vec<Node>| Node {
-            name: n.into(),
-            bytes: kids.iter().map(|k| k.bytes).sum(),
-            kids,
-        };
-        part(
-            "content",
-            vec![part(
-                "OMSI 2 folder",
-                vec![
-                    part(
-                        "Vehicles",
-                        vec![part("Bus", vec![leaf("Textures", 60), leaf("Models", 20)])],
-                    ),
-                    part(
-                        "Maps",
-                        vec![part("Town", vec![leaf("Settings and text", 20)])],
-                    ),
-                ],
-            )],
-        )
-    }
-
-    #[test]
-    fn a_path_that_no_longer_fits_is_cut_back() {
-        let t = tree();
-        let mut path = vec![0, 0, 0];
-        let (n, ty) = node_at(&t, &mut path);
-        assert_eq!((n.name.as_str(), ty), ("Bus", Some("Vehicles")));
-        let mut gone = vec![0, 5, 0];
-        let (n, _) = node_at(&t, &mut gone);
-        assert_eq!(n.name, "OMSI 2 folder");
-        assert_eq!(gone, [0]);
-    }
-
-    #[test]
-    fn the_content_folder_is_never_the_omsi_folder() {
-        let base = std::env::temp_dir().join(format!("depot-setup-{}", std::process::id()));
-        std::fs::create_dir_all(&base).unwrap();
-        let root = base.to_string_lossy().to_string();
-        assert_eq!(check(2, &root, &root).0, Status::Error);
-        assert_eq!(
-            check(2, &base.join("depot").to_string_lossy(), &root).0,
-            Status::Error
-        );
-        let beside = base.with_extension("content");
-        assert_eq!(
-            check(2, &beside.to_string_lossy(), &root).0,
-            Status::Warning
-        );
-        assert_eq!(check(2, "", &root).0, Status::Found);
-        assert!(core::content_folder_problem(&base, &base).is_some());
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn sizes_read_as_the_chart_says_them() {
-        assert_eq!(fmt_size(100 * 1_073_741_824), "100 GB");
-        assert_eq!(fmt_size(3 * 536_870_912), "1.5 GB");
     }
 }

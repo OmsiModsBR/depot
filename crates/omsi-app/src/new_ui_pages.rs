@@ -7,15 +7,15 @@
 //! game's lists as before), and what a key or a click does is the game's code as it was. This
 //! module only draws them, with `omsi_ui::menu_page`, in the room right of the Esc menu's
 //! column (still drawn, its line of the page marked), and hands the HUD the rectangles the
-//! page was drawn in: the HUD's mouse code hit-tests those as it did its own (`ui::Ui`'s
+//! page was drawn in: the HUD's mouse code hit-tests those as it did its own (`hud::Hits`:
 //! `menu_rects`, `menu_ctl`, `menu_side`, `dd_rects` ...), so nothing of how the pages work
 //! changes. On a triple screen the page stands on the centre screen with the column, and the
 //! rectangles are where it is drawn there; the headset shows the window's picture of it (see
 //! `new_ui`).
 
 use crate::game_lists::ListKind;
+use crate::hud::{Frame, Hits, MenuKind};
 use crate::new_ui::{Area, MenuFrame};
-use crate::ui::{Frame, MenuKind};
 use glam::Vec2;
 use omsi_ui::menu_page::{self, Back, Control, Dropdown, Layout, Lead, Page, Pane, Row};
 use omsi_ui::pause_menu;
@@ -421,31 +421,31 @@ impl PageFrame {
     /// for its mouse code (a row, a slider's track, a page, the way back, a drop-down's entry,
     /// the timetable's stops, its arrows and its button, the scroll bars): in window pixels,
     /// the page laid out in `area` (the centre screen of a triple screen, else the window).
-    pub fn write_hits(&self, ui: &mut crate::ui::Ui, area: Area) {
+    pub fn write_hits(&self, hits: &mut Hits, area: Area) {
         let (s, l) = self.layout(area.size);
         let o = area.origin;
         let px = |r: Rect| px(r, s, o);
-        ui.menu_rects = l.rows.iter().map(|r| px(*r)).collect();
-        ui.menu_ctl = l.controls.iter().map(|c| c.map(px)).collect();
-        ui.menu_arrows.clear();
-        ui.menu_side = l.tabs.iter().map(|r| px(*r)).collect();
-        ui.menu_start = l.start;
-        ui.menu_rows = l.shown;
-        ui.menu_row_h = l.row_h * s;
-        ui.menu_scroll_track = l.scroll.map(|(t, _)| px(t));
-        ui.menu_scroll_thumb = l.scroll.map(|(_, g)| px(g));
-        ui.menu_pane = l.pane_rows.iter().map(|r| px(*r)).collect();
-        ui.menu_pane_start = l.pane_first;
-        ui.menu_pane_go = l.pane_go.map(px);
-        ui.menu_pane_box = l.pane_card.filter(|_| l.pane_go.is_some()).map(px);
-        ui.menu_pane_scroll = l.pane_scroll.map(|(t, g, n, fit)| (px(t), px(g), n, fit));
-        ui.menu_time = l.time.iter().map(|r| px(*r)).collect();
-        ui.dd_rects = l.dd.iter().map(|r| px(*r)).collect();
-        ui.dd_top = l.dd_top;
+        hits.menu_rects = l.rows.iter().map(|r| px(*r)).collect();
+        hits.menu_ctl = l.controls.iter().map(|c| c.map(px)).collect();
+        hits.menu_arrows.clear();
+        hits.menu_side = l.tabs.iter().map(|r| px(*r)).collect();
+        hits.menu_start = l.start;
+        hits.menu_rows = l.shown;
+        hits.menu_row_h = l.row_h * s;
+        hits.menu_scroll_track = l.scroll.map(|(t, _)| px(t));
+        hits.menu_scroll_thumb = l.scroll.map(|(_, g)| px(g));
+        hits.menu_pane = l.pane_rows.iter().map(|r| px(*r)).collect();
+        hits.menu_pane_start = l.pane_first;
+        hits.menu_pane_go = l.pane_go.map(px);
+        hits.menu_pane_box = l.pane_card.filter(|_| l.pane_go.is_some()).map(px);
+        hits.menu_pane_scroll = l.pane_scroll.map(|(t, g, n, fit)| (px(t), px(g), n, fit));
+        hits.menu_time = l.time.iter().map(|r| px(*r)).collect();
+        hits.dd_rects = l.dd.iter().map(|r| px(*r)).collect();
+        hits.dd_top = l.dd_top;
         if l.dd_panel.is_some() {
-            ui.dd_rows = l.dd_rows;
+            hits.dd_rows = l.dd_rows;
         }
-        ui.dd_scroll = l.dd_scroll.map(|(t, g)| (px(t), px(g)));
+        hits.dd_scroll = l.dd_scroll.map(|(t, g)| (px(t), px(g)));
     }
 
     /// Draw the page over a window of `size` points: the world dimmed, the column and its bar,

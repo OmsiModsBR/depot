@@ -72,15 +72,15 @@ struct Run {
     progress: Arc<Progress>,
 }
 
-struct Done {
-    name: String,
+pub struct Done {
+    pub name: String,
     /// The map's folder or the vehicle's file, as checked.
-    target: String,
+    pub target: String,
     /// The name of what it was compared with.
-    compared: Option<String>,
+    pub compared: Option<String>,
     /// When it was checked (`YYYY-MM-DD HH:MM`), for the report.
-    when: String,
-    report: Report,
+    pub when: String,
+    pub report: Report,
 }
 
 /// The export window's choices.
@@ -96,7 +96,7 @@ struct Export {
 }
 
 /// One line of the result.
-enum Row {
+pub enum Row {
     Head(Severity, usize),
     Item {
         severity: Severity,
@@ -130,7 +130,7 @@ const SEVERITIES: [Severity; 3] = [Severity::Error, Severity::Warning, Severity:
 
 /// The result's tabs after "All": the kinds of file a map (0) or a vehicle (1) has, and any
 /// other kind the report found something in.
-fn tabs(kind: usize, r: &Report) -> Vec<Category> {
+pub fn tabs(kind: usize, r: &Report) -> Vec<Category> {
     let base: &[Category] = if kind == 0 {
         &[
             Category::Tiles,
@@ -225,7 +225,7 @@ fn start(
 /// when the check was cancelled. Both checks follow the one `progress`, so that Cancel stops
 /// the comparison too (whose steps are not shown: the bar stays full meanwhile, as `steps`
 /// keeps the count within the total).
-fn check_and_compare(
+pub fn check_and_compare(
     run: impl Fn(&str, &Progress) -> Report,
     target: &str,
     other: Option<&str>,
@@ -253,7 +253,7 @@ fn now_text() -> String {
     }
 }
 
-fn rows_of(r: &Report, only: Option<Category>, show: [bool; 3], search: &str) -> Vec<Row> {
+pub fn rows_of(r: &Report, only: Option<Category>, show: [bool; 3], search: &str) -> Vec<Row> {
     let needle = search.trim().to_lowercase();
     let mut rows = Vec::new();
     for (i, s) in SEVERITIES.into_iter().enumerate() {
@@ -345,7 +345,7 @@ fn report_text(d: &Done, kind: usize, opts: Option<&Export>, open: Option<Catego
 }
 
 /// The report's file name: what was checked and when, without what a file name cannot hold.
-fn file_name(d: &Done) -> String {
+pub fn file_name(d: &Done) -> String {
     let stamp = d.when.replace(':', "");
     let clean: String = d
         .name
@@ -1270,107 +1270,4 @@ pub fn dialog(l: &mut Launcher) {
     }
     l.ui.tooltip(save_r, "Chooses where to save the report as a text file.");
     l.pages.diag.export = Some(e);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Cancel while the compared one is read: that read sees it and nothing is sent.
-    #[test]
-    fn cancel_stops_the_comparison_too() {
-        let clicked = Progress::new();
-        let seen = std::cell::Cell::new(false);
-        let run = |t: &str, p: &Progress| {
-            if t == "baseline" {
-                clicked.cancel();
-                seen.set(p.cancelled());
-            }
-            Report::default()
-        };
-        assert!(check_and_compare(run, "map", Some("baseline"), &clicked).is_none());
-        assert!(seen.get(), "the comparison runs on its own progress");
-        // without a comparison, or not cancelled: the report
-        let p = Progress::new();
-        let plain = |_: &str, _: &Progress| Report::default();
-        assert!(check_and_compare(plain, "map", None, &p).is_some());
-        assert!(check_and_compare(plain, "map", Some("other"), &p).is_some());
-    }
-
-    #[test]
-    fn the_file_name_holds_what_was_checked_and_when() {
-        let d = Done {
-            name: "Spandau: Nord/2.1".into(),
-            target: "Spandau Nord".into(),
-            compared: None,
-            when: "2026-10-27 02:40".into(),
-            report: Report::default(),
-        };
-        assert_eq!(
-            file_name(&d),
-            "Spandau_ Nord_2.1 - integrity 2026-10-27 0240.txt"
-        );
-    }
-
-    #[test]
-    fn a_map_has_its_tabs_and_others_only_with_findings() {
-        let mut r = Report::default();
-        assert_eq!(
-            tabs(0, &r),
-            vec![
-                Category::Tiles,
-                Category::Objects,
-                Category::Splines,
-                Category::Models,
-                Category::Textures,
-                Category::AiLists,
-                Category::Timetable,
-                Category::Paths
-            ]
-        );
-        r.findings.push(omsi_integrity::Finding {
-            severity: Severity::Error,
-            code: "map-unreadable",
-            file: "Maps/x/global.cfg".into(),
-            message: String::new(),
-            detail: None,
-            referenced_by: None,
-            known: false,
-        });
-        assert_eq!(tabs(0, &r)[0], Category::Map);
-        assert!(tabs(1, &Report::default()).contains(&Category::Sounds));
-    }
-
-    #[test]
-    fn rows_follow_the_tab_the_severities_and_the_text() {
-        let f = |severity, code: &'static str, file: &str| omsi_integrity::Finding {
-            severity,
-            code,
-            file: file.into(),
-            message: "missing".into(),
-            detail: None,
-            referenced_by: None,
-            known: false,
-        };
-        let r = Report {
-            findings: vec![
-                f(Severity::Error, "object-missing", "a/house.sco"),
-                f(Severity::Warning, "texture-missing", "a/wall.bmp"),
-                f(Severity::NotOptimized, "texture-npot", "a/roof.bmp"),
-            ],
-            ..Default::default()
-        };
-        let items = |rows: Vec<Row>| {
-            rows.iter()
-                .filter(|r| matches!(r, Row::Item { .. }))
-                .count()
-        };
-        assert_eq!(items(rows_of(&r, None, [true; 3], "")), 3);
-        assert_eq!(
-            items(rows_of(&r, Some(Category::Textures), [true; 3], "")),
-            2
-        );
-        assert_eq!(items(rows_of(&r, None, [true, true, false], "")), 2);
-        assert_eq!(items(rows_of(&r, None, [true; 3], "ROOF")), 1);
-    }
 }

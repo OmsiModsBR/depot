@@ -1142,7 +1142,7 @@ impl App {
 
     /// The drop-down's chosen entry is in view.
     pub(crate) fn dd_reveal(&mut self) {
-        let rows = self.ui.as_ref().map(|u| u.dd_rows).unwrap_or(8).max(1);
+        let rows = self.ui.as_ref().map(|u| u.hits.dd_rows).unwrap_or(8).max(1);
         if let Some(d) = self.dropdown.as_mut() {
             if d.sel < d.top {
                 d.top = d.sel;
