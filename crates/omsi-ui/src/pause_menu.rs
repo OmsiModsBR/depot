@@ -78,19 +78,6 @@ fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color
     );
 }
 
-fn right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
-    let px = px * TS;
-    let w = ui.width(s, px, weight);
-    ui.text_in(
-        s,
-        Rect::new(x - w - 2.0, cy - px, w + 2.0, px * 2.0),
-        px,
-        weight,
-        c,
-        Align::Right,
-    );
-}
-
 /// Row height for a window of `h` points: the column's items shrink to fit a small window.
 fn row_height(view: &View, h: f32) -> f32 {
     let items: usize = view.sections.iter().map(|s| s.items.len()).sum();
