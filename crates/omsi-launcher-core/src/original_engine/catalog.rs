@@ -676,7 +676,8 @@ mod tests {
     #[test]
     fn the_documented_table_is_the_catalog() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/ORIGINAL_ENGINE.md");
-        let doc = std::fs::read_to_string(path).unwrap();
+        // A Windows checkout may have CRLF line endings.
+        let doc = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
         let a = doc.find("<!-- catalog:start -->\n").unwrap() + "<!-- catalog:start -->\n".len();
         let b = doc.find("<!-- catalog:end -->").unwrap();
         assert_eq!(&doc[a..b], docs_table());
