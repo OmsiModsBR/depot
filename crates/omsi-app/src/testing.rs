@@ -210,6 +210,82 @@ pub mod lan_mods {
 pub mod lan_world {
     pub use crate::lan_world::*;
 }
+pub mod launcher {
+    pub use crate::launcher::*;
+
+    pub mod ai_edit {
+        pub use crate::launcher::ai_edit::*;
+    }
+    pub mod ai_traffic {
+        pub use crate::launcher::ai_traffic::*;
+    }
+    pub mod backdrop {
+        pub use crate::launcher::backdrop::*;
+    }
+    pub mod chrome {
+        pub use crate::launcher::chrome::*;
+    }
+    pub mod diagnostics {
+        pub use crate::launcher::diagnostics::*;
+    }
+    pub mod dialogs {
+        pub use crate::launcher::dialogs::*;
+    }
+    pub mod drive {
+        pub use crate::launcher::drive::*;
+    }
+    pub mod integrity {
+        pub use crate::launcher::integrity::*;
+    }
+    pub mod keyboard {
+        pub use crate::launcher::keyboard::*;
+    }
+    pub mod mapview {
+        pub use crate::launcher::mapview::*;
+    }
+    pub mod original_ui {
+        pub use crate::launcher::original_ui::*;
+    }
+    pub mod pages {
+        pub use crate::launcher::pages::*;
+    }
+    pub mod prerender {
+        pub use crate::launcher::prerender::*;
+    }
+    pub mod preview {
+        pub use crate::launcher::preview::*;
+    }
+    pub mod settings {
+        pub use crate::launcher::settings::*;
+    }
+    pub mod setup {
+        pub use crate::launcher::setup::*;
+    }
+    pub mod showroom {
+        pub use crate::launcher::showroom::*;
+    }
+    pub mod start {
+        pub use crate::launcher::start::*;
+    }
+    pub mod state {
+        pub use crate::launcher::state::*;
+    }
+    pub mod thumbs {
+        pub use crate::launcher::thumbs::*;
+    }
+    pub mod timetable {
+        pub use crate::launcher::timetable::*;
+    }
+    pub mod timetable_plan {
+        pub use crate::launcher::timetable_plan::*;
+    }
+    pub mod tray {
+        pub use crate::launcher::tray::*;
+    }
+    pub mod ui {
+        pub use crate::launcher::ui::*;
+    }
+}
 pub mod lights {
     pub use crate::lights::*;
 }

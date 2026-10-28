@@ -800,7 +800,7 @@ fn worst(all: impl IntoIterator<Item = bool>) -> Status {
     }
 }
 
-pub(super) fn weight_text(w: f32) -> String {
+pub fn weight_text(w: f32) -> String {
     if w.fract() == 0.0 {
         format!("{w:.0}")
     } else {
@@ -822,7 +822,7 @@ pub(super) fn percent(x: f32) -> String {
 }
 
 /// What the game calls a vehicle: its friendly name, else its file's name.
-pub(super) fn shown_name(name: &str, file: &str) -> String {
+pub fn shown_name(name: &str, file: &str) -> String {
     if name.is_empty() {
         file.rsplit(['\\', '/']).next().unwrap_or(file).to_string()
     } else {
@@ -1633,7 +1633,7 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
 }
 
 /// 1, 2 or 5 times a power of ten, at least `x`.
-fn nice_step(x: f32) -> f32 {
+pub fn nice_step(x: f32) -> f32 {
     let p = 10f32.powf(x.max(1e-3).log10().floor());
     for m in [1.0, 2.0, 5.0, 10.0] {
         if m * p >= x {
@@ -1643,26 +1643,7 @@ fn nice_step(x: f32) -> f32 {
     10.0 * p
 }
 
-fn trim_num(v: f32) -> String {
+pub fn trim_num(v: f32) -> String {
     let s = format!("{v:.2}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chart_steps_and_numbers_read_well() {
-        assert_eq!(nice_step(0.3), 0.5);
-        assert_eq!(nice_step(4.0), 5.0);
-        assert_eq!(nice_step(1.5), 2.0);
-        assert_eq!(trim_num(1.0), "1");
-        assert_eq!(trim_num(0.25), "0.25");
-        assert_eq!(trim_num(0.5), "0.5");
-        assert_eq!(weight_text(4.0), "4");
-        assert_eq!(weight_text(0.5), "0.5");
-        assert_eq!(shown_name("", "Vehicles\\Car\\a.ovh"), "a.ovh");
-        assert_eq!(shown_name("Maker Sedan", "x"), "Maker Sedan");
-    }
 }

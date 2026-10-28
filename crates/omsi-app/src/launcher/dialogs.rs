@@ -14,7 +14,7 @@ use omsi_ui::{Rect, Weight};
 /// of that, and it drew with Vulkan (as the phone's shell decides it, `android.rs`). Any
 /// compile stage anywhere in the log said so of every silent end - a phone run out of memory
 /// 75 % into loading a map on OpenGL was told its Vulkan driver had failed (#848).
-pub(crate) fn died_compiling_on_vulkan(log: &str) -> bool {
+pub fn died_compiling_on_vulkan(log: &str) -> bool {
     let last = log
         .lines()
         .rev()
@@ -30,21 +30,6 @@ pub(crate) fn died_compiling_on_vulkan(log: &str) -> bool {
         .lines()
         .any(|l| l.contains("graphics: ") && l.to_ascii_uppercase().contains("VULKAN"));
     compiling && vulkan
-}
-
-#[cfg(test)]
-mod hint_tests {
-    #[test]
-    fn only_a_run_that_died_compiling_on_vulkan_is_told_so() {
-        let compiled = "[t INFO r] opening graphics device: Mali (Vulkan, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n";
-        assert!(super::died_compiling_on_vulkan(compiled));
-        // compiled long ago, then ran out of memory loading
-        assert!(!super::died_compiling_on_vulkan(&format!(
-            "{compiled}[t INFO g] status: 63 fps, view driver\n[t INFO m] loading tiles 75 %\n"
-        )));
-        // on OpenGL it is never the Vulkan driver
-        assert!(!super::died_compiling_on_vulkan("[t INFO r] opening graphics device: Mali (Gl, vendor 0x13b5)\n[t INFO r] renderer: compiling the scene shaders\n"));
-    }
 }
 
 impl Launcher {

@@ -175,7 +175,7 @@ pub fn tag(look: &Look) -> u64 {
 /// changed or a paint added is drawn anew, never shown as it was), the build (which draws
 /// it), and the shape it was drawn for (a page's preview is wider than another's, and frames
 /// the bus elsewhere: a picture kept for one page was shown stretched on the other).
-fn cache_file(look: &Look, shape: Shape) -> PathBuf {
+pub fn cache_file(look: &Look, shape: Shape) -> PathBuf {
     let bus = look.root.join(&look.bus);
     cache_file_with(
         look,
@@ -185,15 +185,11 @@ fn cache_file(look: &Look, shape: Shape) -> PathBuf {
 }
 
 /// `cache_file` with the fingerprint of the bus's folder already read.
-fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf {
+pub fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf {
     let small = shape == thumb_shape();
     // (the small pictures drawn ahead of time are not drawn again with every build: they
     // change with the bus and with `THUMB_REVISION`, bumped when the showroom's drawing does)
-    let build = if small {
-        THUMB_REVISION
-    } else {
-        crate::BUILD
-    };
+    let build = if small { THUMB_REVISION } else { crate::BUILD };
     let h = fnv(&[
         &look.root.to_string_lossy(),
         &look.bus,
@@ -276,7 +272,9 @@ pub fn missing_kept(looks: Vec<Look>, shape: Shape) -> Vec<Look> {
 /// The picture kept for `look`'s bus and paint at `shape`, if there is one (read off the
 /// launcher's thread: it reads a file and walks the bus's folder).
 pub fn kept_picture(look: &Look, shape: Shape) -> Option<image::RgbaImage> {
-    image::open(cache_file(look, shape)).ok().map(|i| i.to_rgba8())
+    image::open(cache_file(look, shape))
+        .ok()
+        .map(|i| i.to_rgba8())
 }
 
 /// The small picture drawn ahead of time of `bus` (`Vehicles/<folder>/<file>`) in `paint`
@@ -324,7 +322,7 @@ impl Shape {
 const KEEP: usize = 300;
 
 /// Only the `keep` newest pictures in `dir`.
-fn prune(dir: &std::path::Path, keep: usize) {
+pub fn prune(dir: &std::path::Path, keep: usize) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
@@ -453,7 +451,14 @@ pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::
                         }
                     }
                     if let Some(dir) = file.parent() {
-                        prune(dir, if key.1 == thumb_shape() { KEEP_SMALL } else { KEEP });
+                        prune(
+                            dir,
+                            if key.1 == thumb_shape() {
+                                KEEP_SMALL
+                            } else {
+                                KEEP
+                            },
+                        );
                     }
                 });
             }
@@ -550,7 +555,7 @@ pub fn helper_log() -> PathBuf {
 /// need not draw it as the game does. A helper that ends, or goes `FIRST_PICTURE_LIMIT`
 /// without a word before its first picture, is started again on the next one. `OMSI_BACKEND` set for the
 /// launcher holds for the helper too.
-fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
+pub fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
     if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
         return vec![None];
     }
@@ -572,15 +577,15 @@ fn helper_backends(chosen: &str) -> Vec<Option<&'static str>> {
 /// taken for one that hung (stopped, and started on the next graphics interface): a backstop
 /// for a helper held open after a crash, its output never closing. Generous: opening the
 /// renderer alone took 70-80 s on a software driver.
-const FIRST_PICTURE_LIMIT: Duration = Duration::from_secs(240);
+pub const FIRST_PICTURE_LIMIT: Duration = Duration::from_secs(240);
 
 /// The way to a running helper.
-struct Link {
-    cmds: Sender<Cmd>,
-    msgs: Receiver<Msg>,
-    child: Option<std::process::Child>,
+pub struct Link {
+    pub cmds: Sender<Cmd>,
+    pub msgs: Receiver<Msg>,
+    pub child: Option<std::process::Child>,
     /// The file name of the helper's own mark of the bus it reads (None: the common one).
-    mark: Option<&'static str>,
+    pub mark: Option<&'static str>,
 }
 
 /// The mark of a bus a helper was reading taken away: `mark`'s, or the common one.
@@ -790,7 +795,7 @@ const LINGER: f32 = 2.0;
 /// The launcher's side of the preview.
 pub struct Preview {
     wanted: Option<Look>,
-    link: Option<Link>,
+    pub link: Option<Link>,
     sent: (Option<Look>, Option<(u32, u32)>, f32),
     size: Option<(u32, u32)>,
     pub focus_x: f32,
@@ -811,7 +816,7 @@ pub struct Preview {
     unused: f32,
     /// The helper could not be started, or stopped on its own (not tried again for the same
     /// bus).
-    broken: Option<Look>,
+    pub broken: Option<Look>,
     /// The page shows a picture of the bus, not the live view (`want_picture`).
     picture_only: bool,
     /// The settled picture the helper said it kept last.
@@ -823,15 +828,15 @@ pub struct Preview {
     /// started on, whether the one running has sent a picture yet, and whether one has on
     /// that interface (then it stays: a helper that dies on one bus says nothing of the
     /// interface).
-    backends: Vec<Option<&'static str>>,
-    backend: usize,
-    drew: bool,
+    pub backends: Vec<Option<&'static str>>,
+    pub backend: usize,
+    pub drew: bool,
     pinned: bool,
     /// When the helper running started, or last sent something (`FIRST_PICTURE_LIMIT`).
-    heard: Instant,
+    pub heard: Instant,
     /// The file name of the mark this preview's helper keeps of the bus it reads (None: the
     /// common one the page's live helper uses).
-    mark: Option<&'static str>,
+    pub mark: Option<&'static str>,
 }
 
 impl Default for Preview {
@@ -964,7 +969,7 @@ impl Preview {
 
     /// A page that shows a picture has it, kept (from an earlier time, or by the helper just
     /// now for this shape): no helper is needed for it.
-    fn picture_done(&self) -> bool {
+    pub fn picture_done(&self) -> bool {
         let Some(t) = self.wanted.as_ref().map(tag) else {
             return false;
         };
@@ -1010,7 +1015,9 @@ impl Preview {
         // all, and the mark of the bus it was reading is the launcher's to clear)
         let mark = self.mark;
         if let Some(mut c) = self.link.as_mut().and_then(|l| l.child.take()) {
-            log::info!("launcher: the preview helper is stopped (the window is hidden, or a game runs)");
+            log::info!(
+                "launcher: the preview helper is stopped (the window is hidden, or a game runs)"
+            );
             let _ = c.kill();
             std::thread::spawn(move || {
                 let _ = c.wait();
@@ -1228,409 +1235,5 @@ impl Preview {
     /// A bus is wanted and its picture is still to come (no error stopped it).
     pub fn loading(&self) -> bool {
         self.wanted.is_some() && !self.has_picture() && self.error.is_none()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn messages_go_through_the_pipe_as_they_were_sent() {
-        let msgs = [
-            Msg::Frame(2, 1, 77, vec![1, 2, 3, 255, 4, 5, 6, 255]),
-            Msg::Status {
-                busy: true,
-                error: None,
-            },
-            Msg::Status {
-                busy: false,
-                error: Some("no bus".into()),
-            },
-            Msg::Kept(77, Shape::of(1280, 720, 0.5)),
-        ];
-        let mut buf = Vec::new();
-        for m in &msgs {
-            write_msg(&mut buf, m).unwrap();
-        }
-        let mut r = std::io::Cursor::new(buf);
-        for m in &msgs {
-            assert_eq!(&read_msg(&mut r).unwrap(), m);
-        }
-        assert!(read_msg(&mut r).is_err(), "nothing more");
-    }
-
-    #[test]
-    fn a_stray_line_is_passed_over_and_a_wrong_size_refused() {
-        let mut buf = b"hello world, a log line\n".to_vec();
-        write_msg(
-            &mut buf,
-            &Msg::Status {
-                busy: true,
-                error: None,
-            },
-        )
-        .unwrap();
-        let mut r = std::io::Cursor::new(buf);
-        assert_eq!(
-            read_msg(&mut r).unwrap(),
-            Msg::Status {
-                busy: true,
-                error: None
-            }
-        );
-        assert!(read_msg(&mut std::io::Cursor::new(b"only a line\n".to_vec())).is_err());
-        let mut buf = Vec::new();
-        write_msg(&mut buf, &Msg::Frame(2, 2, 0, vec![0; 4])).unwrap();
-        assert!(
-            read_msg(&mut std::io::Cursor::new(buf)).is_err(),
-            "a 2x2 picture is 16 bytes"
-        );
-    }
-
-    #[test]
-    fn commands_are_one_line_each() {
-        let cmds = [
-            Cmd::Look(Look {
-                bus: "Vehicles/A/a.bus".into(),
-                time: 480,
-                ..Default::default()
-            }),
-            Cmd::Size(800, 450),
-            Cmd::Orbit(1.5, -2.0),
-            Cmd::Zoom(0.9),
-            Cmd::Focus(0.6),
-        ];
-        for c in cmds {
-            let line = serde_json::to_string(&c).unwrap();
-            assert!(!line.contains('\n'));
-            assert_eq!(serde_json::from_str::<Cmd>(&line).unwrap(), c);
-        }
-    }
-
-    /// A picture of the bus shown before is not taken for the one wanted, and when the helper
-    /// stops nothing of its last picture stays (no picture kept: "No preview").
-    #[test]
-    fn only_a_picture_of_the_bus_wanted_is_shown() {
-        let a = Look {
-            root: "/nowhere".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let b = Look {
-            bus: "Vehicles/B/b.bus".into(),
-            ..a.clone()
-        };
-        let mut p = Preview::new();
-        let (cmds, _cmd_rx) = channel();
-        let (msg_tx, msgs) = channel();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        p.want(a.clone());
-        msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
-        p.update(0.016, Some((2, 1)));
-        assert!(p.has_picture() && p.live);
-        assert!(p.take_frame().is_some());
-        // another bus: the helper still draws the first until the second is read
-        p.want(b.clone());
-        msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
-        p.update(0.016, Some((2, 1)));
-        assert!(
-            !p.has_picture() && !p.live,
-            "the first bus is not shown as the second"
-        );
-        assert!(p.take_frame().is_none());
-        msg_tx.send(Msg::Frame(2, 1, tag(&b), vec![0; 8])).unwrap();
-        p.update(0.016, Some((2, 1)));
-        assert!(p.has_picture() && p.live);
-        // the helper stops
-        drop(msg_tx);
-        p.update(0.016, Some((2, 1)));
-        assert!(!p.has_picture() && !p.live && p.error.is_some());
-    }
-
-    /// A helper with no picture that says nothing for `FIRST_PICTURE_LIMIT` (one that crashed
-    /// and is held open, its output never closing) is taken for one that ended: started again
-    /// on the next graphics interface. One still within the limit is waited for.
-    #[test]
-    fn a_helper_with_no_picture_for_too_long_is_tried_on_the_next_interface() {
-        let a = Look {
-            root: "/nowhere".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let mut p = Preview::new();
-        p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
-        let (cmds, _cmd_rx) = channel();
-        let (_msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        p.want(a.clone());
-        p.update(0.016, Some((2, 1)));
-        assert!(p.link.is_some() && p.backend == 0, "still waited for");
-        p.heard = Instant::now() - FIRST_PICTURE_LIMIT - Duration::from_secs(1);
-        p.update(0.016, Some((2, 1)));
-        assert!(p.link.is_none());
-        assert_eq!(p.backend, 1);
-        assert!(
-            p.broken.is_none() && p.error.is_none(),
-            "tried again, not given up"
-        );
-    }
-
-    /// A helper that ends before its first picture is started again on the next graphics
-    /// interface (where there is one); one that had drawn is not.
-    #[test]
-    fn a_helper_gone_before_its_first_picture_is_tried_on_the_next_interface() {
-        let a = Look {
-            root: "/nowhere".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let mut p = Preview::new();
-        p.backends = vec![Some("vulkan"), Some("dx12"), Some("gl")];
-        let (cmds, _cmd_rx) = channel();
-        let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        p.want(a.clone());
-        drop(msg_tx);
-        p.update(0.016, Some((2, 1)));
-        assert!(p.link.is_none());
-        assert_eq!(p.backend, 1);
-        assert!(
-            p.broken.is_none() && p.error.is_none(),
-            "tried again, not given up"
-        );
-        // one that drew pins its interface: a later helper gone early does not move it on
-        let (cmds, _cmd_rx) = channel();
-        let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
-        p.update(0.016, Some((2, 1)));
-        drop(msg_tx);
-        p.update(0.016, Some((2, 1)));
-        let (cmds, _cmd_rx) = channel();
-        let (msg_tx, msgs) = channel::<Msg>();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        p.drew = false;
-        drop(msg_tx);
-        p.update(0.016, Some((2, 1)));
-        assert_eq!(p.backend, 1);
-        assert!(p.broken.is_some());
-    }
-
-    /// The player's own graphics interface comes first, then the others; Automatic starts on
-    /// Vulkan (Windows only: elsewhere the helper uses the settings' one as the game does).
-    #[test]
-    fn the_helper_starts_on_the_interface_the_player_chose() {
-        if !cfg!(windows) || omsi_cfg::flags::BACKEND.is_set() {
-            assert_eq!(helper_backends("dx12"), vec![None]);
-            return;
-        }
-        // (Vulkan first even when the game's setting names DirectX 12 or OpenGL)
-        assert_eq!(
-            helper_backends("auto"),
-            vec![Some("vulkan"), Some("dx12"), Some("gl")]
-        );
-        assert_eq!(
-            helper_backends("vulkan"),
-            vec![Some("vulkan"), Some("dx12"), Some("gl")]
-        );
-        assert_eq!(
-            helper_backends("dx12"),
-            vec![Some("vulkan"), Some("dx12"), Some("gl")]
-        );
-        assert_eq!(
-            helper_backends("gl"),
-            vec![Some("vulkan"), Some("gl"), Some("dx12")]
-        );
-        assert_eq!(
-            helper_backends(" D3D12 "),
-            vec![Some("vulkan"), Some("dx12"), Some("gl")]
-        );
-        assert_eq!(
-            helper_backends("OpenGL"),
-            vec![Some("vulkan"), Some("gl"), Some("dx12")]
-        );
-    }
-
-    /// A page that shows a picture (Drive) keeps the helper only until the picture is kept, and
-    /// the picture stays; turning it asks for the live view.
-    #[test]
-    fn a_picture_page_lets_the_helper_go_once_the_picture_is_kept() {
-        let a = Look {
-            root: "/nowhere".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let mut p = Preview::new();
-        let (cmds, _cmd_rx) = channel();
-        let (msg_tx, msgs) = channel();
-        p.link = Some(Link {
-            cmds,
-            msgs,
-            child: None,
-            mark: None,
-        });
-        p.want_picture(a.clone());
-        msg_tx.send(Msg::Frame(2, 1, tag(&a), vec![0; 8])).unwrap();
-        p.update(0.016, Some((2, 1)));
-        assert!(p.has_picture() && p.live && p.link.is_some());
-        msg_tx
-            .send(Msg::Kept(tag(&a), Shape::of(2, 1, p.focus_x)))
-            .unwrap();
-        for _ in 0..4 {
-            p.update(1.0, Some((2, 1)));
-        }
-        assert!(p.link.is_none(), "the helper ends once the picture is kept");
-        assert!(p.has_picture() && !p.live, "and the picture stays");
-        // dragging it: the live view, asked for
-        p.orbit(3.0, 0.0);
-        assert!(!p.picture_done());
-    }
-
-    #[test]
-    fn only_the_newest_pictures_are_kept() {
-        let dir = std::env::temp_dir().join(format!("depot-previews-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        for i in 0..5 {
-            let f = dir.join(format!("{i}.png"));
-            std::fs::write(&f, b"x").unwrap();
-            let t = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000 + i * 60);
-            std::fs::File::options()
-                .write(true)
-                .open(&f)
-                .unwrap()
-                .set_modified(t)
-                .unwrap();
-        }
-        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
-        prune(&dir, 2);
-        let mut left: Vec<String> = std::fs::read_dir(&dir)
-            .unwrap()
-            .flatten()
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .collect();
-        left.sort();
-        assert_eq!(left, ["3.png", "4.png", "notes.txt"]);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_kept_picture_is_per_bus_and_paint_not_per_light() {
-        let a = Look {
-            root: "/omsi".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            paint: "Red".into(),
-            time: 480,
-            ..Default::default()
-        };
-        let b = Look {
-            time: 1200,
-            weather: "rain".into(),
-            ..a.clone()
-        };
-        let c = Look {
-            paint: "Blue".into(),
-            ..a.clone()
-        };
-        let shape = Shape::of(1280, 720, 0.5);
-        assert_eq!(cache_file(&a, shape), cache_file(&b, shape));
-        assert_ne!(cache_file(&a, shape), cache_file(&c, shape));
-        assert_eq!(tag(&a), tag(&b));
-        assert_ne!(tag(&a), tag(&c));
-        // (another page's preview, wider and with the bus further left, keeps its own)
-        assert_ne!(
-            cache_file(&a, shape),
-            cache_file(&a, Shape::of(1600, 720, 0.35))
-        );
-        assert_eq!(
-            shape,
-            Shape::of(1284, 722, 0.51),
-            "a few pixels more is the same shape"
-        );
-    }
-
-    #[test]
-    fn only_the_paints_with_no_kept_picture_are_missing() {
-        let root = std::env::temp_dir().join(format!("depot-missing-kept-{}", std::process::id()));
-        let look = |paint: &str| Look {
-            root: root.clone(),
-            bus: "Vehicles/A/a.bus".into(),
-            paint: paint.into(),
-            ..Default::default()
-        };
-        let shape = Shape::of(336, 208, 0.5);
-        let all = vec![look(""), look("Red"), look("Blue")];
-        // nothing kept: all three; with the Red one kept: the other two
-        assert_eq!(missing_kept(all.clone(), shape).len(), 3);
-        let file = cache_file(&look("Red"), shape);
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, b"png").unwrap();
-        let left = missing_kept(all.clone(), shape);
-        let _ = std::fs::remove_file(&file);
-        assert_eq!(
-            left.iter().map(|l| l.paint.as_str()).collect::<Vec<_>>(),
-            vec!["", "Blue"]
-        );
-        assert!(missing_kept(Vec::new(), shape).is_empty());
-        // (the small pictures of the page are named by bus, paint and shape)
-        assert_ne!(
-            kept_key(&look("Red"), shape),
-            kept_key(&look("Blue"), shape)
-        );
-        assert_ne!(
-            kept_key(&look("Red"), shape),
-            kept_key(&look("Red"), Shape::of(1600, 720, 0.5))
-        );
-    }
-
-    #[test]
-    fn the_small_pictures_have_a_folder_of_their_own_and_do_not_change_with_the_build() {
-        let look = Look {
-            root: "/omsi".into(),
-            bus: "Vehicles/A/a.bus".into(),
-            ..Default::default()
-        };
-        let small = cache_file_with(&look, thumb_shape(), "1:2:3");
-        let page = cache_file_with(&look, Shape::of(1280, 720, 0.5), "1:2:3");
-        assert_eq!(small.parent().unwrap().file_name().unwrap(), "small");
-        assert_ne!(page.parent().unwrap().file_name().unwrap(), "small");
-        assert_ne!(small, page);
-        // (a bus that changed is drawn anew)
-        assert_ne!(small, cache_file_with(&look, thumb_shape(), "1:2:4"));
-        // the run is smaller than what is kept, so it never prunes its own pictures
-        assert!(RUN_MAX < KEEP_SMALL);
-    }
-
-    #[test]
-    fn a_prerender_preview_has_a_mark_of_its_own() {
-        assert_eq!(Preview::new().mark, None);
-        let own = Preview::for_prerender().mark.unwrap();
-        assert!(own.starts_with("showroom-placing") && own != "showroom-placing.txt");
     }
 }

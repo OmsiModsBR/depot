@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 
 /// Global actions a controller button should send to the game instead of to the bus script.
-pub(crate) fn is_game_action(name: &str) -> bool {
+pub fn is_game_action(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.starts_with("view_")
         || matches!(
