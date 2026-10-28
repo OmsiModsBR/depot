@@ -18,6 +18,7 @@ fn all_on() -> AltCtx {
         entry_points: true,
         controls: "alt-wheel",
         pumping: None,
+        route_arrows: false,
     }
 }
 
@@ -77,7 +78,7 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
     };
     assert_eq!(
         enabled_ids(&AltCtx::default()),
-        vec!["add", "time", "weather", "controls", "driver"]
+        vec!["add", "help", "time", "weather", "controls", "driver"]
     );
     assert_eq!(
         enabled_ids(&all_on()),
@@ -90,6 +91,7 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
             "destination",
             "repair",
             "service",
+            "help",
             "time",
             "weather",
             "controls",
@@ -133,9 +135,17 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
         by_id(&bs, "tour").disabled.as_deref(),
         Some("Not on a server")
     );
+    // the help marker switches the route arrows: always usable, drawn pressed while they are on
+    assert_eq!(by_id(&bs, "help").disabled, None);
+    assert!(!by_id(&bs, "help").on);
+    let bs_on = buttons(&AltCtx {
+        route_arrows: true,
+        ..all_on()
+    });
+    assert!(by_id(&bs_on, "help").on);
     // what is not in the game yet stays dim whatever the state
     let bs = buttons(&all_on());
-    for id in ["ai", "accident", "help"] {
+    for id in ["ai", "accident"] {
         assert_eq!(by_id(&bs, id).disabled.as_deref(), Some(NOT_YET), "{id}");
     }
 }
@@ -323,8 +333,7 @@ fn the_keyboard_walks_the_usable_buttons_only() {
     assert_eq!(id(step_focus(&bs, at("driver"), Nav::Up)), "service");
     assert_eq!(id(step_focus(&bs, at("repair"), Nav::Down)), "controls");
     assert_eq!(id(step_focus(&bs, at("controls"), Nav::Down)), "reposition");
-    // (over the dim "Help marker" below it, to the line and tour)
-    assert_eq!(id(step_focus(&bs, first, Nav::Up)), "tour");
+    assert_eq!(id(step_focus(&bs, first, Nav::Up)), "help");
     // a few usable: Right goes round them, Down stays where its column has none
     let few = buttons(&AltCtx {
         lan_client: true,
@@ -332,7 +341,7 @@ fn the_keyboard_walks_the_usable_buttons_only() {
     });
     let at = |id: &str| few.iter().position(|b| b.id == id);
     assert_eq!(step_focus(&few, at("driver"), Nav::Right), at("add"));
-    assert_eq!(step_focus(&few, at("add"), Nav::Right), at("controls"));
+    assert_eq!(step_focus(&few, at("add"), Nav::Right), at("help"));
     assert_eq!(step_focus(&few, at("controls"), Nav::Down), at("controls"));
     assert_eq!(step_focus(&few, None, Nav::Right), at("add"));
     // a window open: nothing on the bar takes the keyboard, and Enter on the button the

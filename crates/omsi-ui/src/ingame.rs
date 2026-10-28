@@ -7,7 +7,7 @@
 //! them (for example the end-of-trip report's note) is the caller's business.
 
 use crate::paint::Align;
-use crate::theme::{accent, accent_soft, on_accent};
+use crate::theme::{accent, on_accent};
 use crate::widgets::{id_of, Ui};
 use crate::{Color, Rect, Weight};
 use glam::Vec2;
@@ -23,13 +23,12 @@ const ROW_LINE: Color = Color::hex(0x20242b);
 const FG: Color = Color::hex(0xe9eaec);
 const MUTED: Color = Color::hex(0x9aa0aa);
 const FIELD: Color = Color::hex(0x1b1d22);
-const PANEL_ALPHA: f32 = 0.97;
 /// The window's and a button's corners.
 const WINDOW_R: f32 = 8.0;
 const BUTTON_R: f32 = 4.0;
 const TS: f32 = 1.16;
 
-pub const TITLE_H: f32 = 40.0;
+pub const TITLE_H: f32 = 48.0;
 pub const ROW_H: f32 = 34.0;
 
 pub(crate) fn text(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight: Weight, c: Color) {
@@ -58,29 +57,86 @@ pub(crate) fn text_right(ui: &mut Ui, s: &str, x: f32, cy: f32, px: f32, weight:
     );
 }
 
-/// A window, as the Windows 11 concept draws it: the panel with rounded corners and a
-/// shadow, its title at the left and a note at the right. Returns the area under the title.
+/// How much of a window's own colour covers the scene behind it: the picture shows through
+/// a little, as it does through the concept's glass (no blur: it costs a pass of its own, and
+/// the DirectX 9 output has none).
+const PANEL_ALPHA: f32 = 0.88;
+
+/// A window, as the Windows 11 concept draws it: the panel with rounded corners, a soft
+/// shadow and a light stroke along its top edge, its title at the left and a note at the right
+/// in a small pill. Returns the area under the title.
 pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
+    window_with(ui, r, title, note, 0.0)
+}
+
+/// Room kept free at the right of the title for the close button (see [`window_close`]).
+pub const CLOSE_GUTTER: f32 = 44.0;
+
+/// [`window`] with `gutter` pixels kept free at the right of the title, so the note's pill
+/// does not sit under the close button.
+pub fn window_with(ui: &mut Ui, r: Rect, title: &str, note: &str, gutter: f32) -> Rect {
     ui.solid(r);
-    ui.p().shadow(r, WINDOW_R, 24.0, Color::rgba(0, 0, 0, 0.5));
+    ui.p().shadow(r, WINDOW_R, 40.0, Color::rgba(0, 0, 0, 0.35));
+    ui.p().shadow(r, WINDOW_R, 8.0, Color::rgba(0, 0, 0, 0.30));
+    if let Some(bar) = ui.opaque_under {
+        // (where the window covers the Alt bar the tiles would show through it: that part is opaque)
+        let c = WINDOW_R * 0.4;
+        let (x0, y0) = (bar.x.max(r.x + c), bar.y.max(r.y + c));
+        let (x1, y1) = (
+            bar.right().min(r.right() - c),
+            bar.bottom().min(r.bottom() - c),
+        );
+        if x1 > x0 && y1 > y0 {
+            ui.p().rect(Rect::new(x0, y0, x1 - x0, y1 - y0), PANEL);
+        }
+    }
     ui.p().rounded(r, WINDOW_R, PANEL.alpha(PANEL_ALPHA));
     ui.p().rounded_border(r, WINDOW_R, 1.0, EDGE);
-    text(ui, title, r.x + 16.0, r.y + 24.0, 15.5, Weight::Bold, FG);
-    text_right(
-        ui,
-        note,
-        r.right() - 20.0,
-        r.y + 24.0,
-        12.0,
-        Weight::Regular,
-        MUTED,
+    ui.p().rect(
+        Rect::new(r.x + WINDOW_R, r.y, r.w - 2.0 * WINDOW_R, 1.0),
+        Color::WHITE.alpha(0.14),
     );
+    text(
+        ui,
+        title,
+        r.x + 20.0,
+        r.y + TITLE_H * 0.5,
+        17.0,
+        Weight::Bold,
+        FG,
+    );
+    if !note.is_empty() {
+        let px = 12.0 * TS;
+        let w = ui.width(note, px, Weight::Regular) + 20.0;
+        let pill = Rect::new(
+            r.right() - 20.0 - gutter - w,
+            r.y + TITLE_H * 0.5 - 12.0,
+            w,
+            24.0,
+        );
+        ui.p().rounded(pill, 12.0, Color::WHITE.alpha(0.07));
+        ui.text_in(note, pill, px, Weight::Regular, MUTED, Align::Center);
+    }
     Rect::new(
         r.x,
         r.y + TITLE_H + 1.0,
         r.w,
         (r.h - TITLE_H - 1.0).max(0.0),
     )
+}
+
+/// The close button at the right of a window's title (`r` is the window): a square with a
+/// cross, named `name`. Returns whether it was clicked. It does what the window's Cancel or
+/// Close does.
+pub fn window_close(ui: &mut Ui, name: &str, r: Rect) -> bool {
+    let b = Rect::new(r.right() - 44.0, r.y + (TITLE_H - 36.0) * 0.5, 36.0, 36.0);
+    let (hover, _, click) = ui.interact(id_of(name), b);
+    if hover {
+        ui.p().rounded(b, BUTTON_R, Color::WHITE.alpha(0.10));
+    }
+    ui.icon("close", b.center(), 18.0, if hover { FG } else { MUTED });
+    ui.tooltip(b, "Close");
+    click
 }
 
 /// A table: column heads, rows of cells, the chosen row marked. `columns` are the x offsets
@@ -116,11 +172,10 @@ pub fn table(
         );
         let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
         if selected == Some(i) {
-            ui.p().rect(r, accent_soft());
-            ui.p().rect(Rect::new(r.x, r.y, 3.0, r.h), accent());
+            chosen_row(ui, r, 1.0);
         } else {
             if hover {
-                ui.p().rect(r, Color::WHITE.alpha(0.04));
+                ui.p().rect(r, Color::WHITE.alpha(0.05));
             }
             ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
         }
@@ -182,11 +237,11 @@ pub enum ButtonKind {
 }
 
 /// The height of a window's button.
-pub const BUTTON_H: f32 = 39.0;
+pub const BUTTON_H: f32 = 36.0;
 
 /// The width a button with `label` takes in a row of [`buttons`].
 pub fn button_width(ui: &Ui, label: &str) -> f32 {
-    ui.width(label, 14.0 * TS, Weight::Medium) + 44.0
+    (ui.width(label, 14.0 * TS, Weight::Medium) + 44.0).max(88.0)
 }
 
 /// One button in `r`; a dim one (`enabled` false) is drawn but cannot be clicked. Returns
@@ -199,7 +254,7 @@ pub fn button(
     kind: ButtonKind,
     enabled: bool,
 ) -> bool {
-    let (hover, _, click) = ui.interact(id_of(id), r);
+    let (hover, held, click) = ui.interact(id_of(id), r);
     let primary = kind == ButtonKind::Primary;
     let fill = match (primary, enabled) {
         (true, true) => accent(),
@@ -209,7 +264,9 @@ pub fn button(
     ui.p().rounded(
         r,
         BUTTON_R,
-        if hover && enabled {
+        if held && hover && enabled {
+            fill.mix(Color::BLACK, 0.12)
+        } else if hover && enabled {
             fill.lighten(0.08)
         } else {
             fill
@@ -321,19 +378,47 @@ fn foot_with(
         .map(|(l, _)| button_width(ui, l) + 8.0)
         .sum::<f32>()
         - 8.0;
-    let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 12.0);
+    let at = Vec2::new(r.right() - 20.0 - used, r.bottom() - FOOT_H + 14.0);
     let clicked = row_of_buttons(ui, name, at, labels, accent);
     // (the hint keeps clear of the buttons: cut, never under them)
     let room = (r.w - 40.0 - used - 16.0).max(0.0);
+    let mut hint_x = r.x + 20.0;
+    let mut room = room;
+    if !hint.is_empty() {
+        // (a mark of information before the hint)
+        ui.icon(
+            "info",
+            Vec2::new(hint_x + 8.0, r.bottom() - FOOT_H * 0.5),
+            16.0,
+            MUTED,
+        );
+        hint_x += 24.0;
+        room = (room - 24.0).max(0.0);
+    }
     ui.text_in(
         hint,
-        Rect::new(r.x + 20.0, r.bottom() - FOOT_H, room, FOOT_H),
+        Rect::new(hint_x, r.bottom() - FOOT_H, room, FOOT_H),
         12.0 * TS,
         Weight::Regular,
         MUTED,
         Align::Left,
     );
     clicked
+}
+
+/// The row chosen in a table or a list: a light face and a small accent pill at its left,
+/// as Windows 11 marks the chosen item (`alpha` dims it with a list that cannot be used).
+fn chosen_row(ui: &mut Ui, r: Rect, alpha: f32) {
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.y + 2.0, r.w - 8.0, r.h - 4.0),
+        BUTTON_R,
+        Color::WHITE.alpha(0.08 * alpha),
+    );
+    ui.p().rounded(
+        Rect::new(r.x + 4.0, r.center().y - 8.0, 3.0, 16.0),
+        1.5,
+        accent().alpha(alpha),
+    );
 }
 
 /// A small heading over a part of a window (muted, as a table's column heads are), its
@@ -349,6 +434,73 @@ pub fn note(ui: &mut Ui, s: &str, r: Rect) {
 
 /// The height of a row with a check box ([`check_row`]).
 pub const CHECK_H: f32 = 40.0;
+
+/// A row with a switch at its right, for an option that applies at once: `label` at the
+/// left, on when `on`. A dim one (`disabled`: the reason, shown before the switch) cannot be
+/// clicked. Returns whether it was clicked. (An option a window applies only on its OK has
+/// the box of [`check_row`].)
+pub fn switch_row(
+    ui: &mut Ui,
+    id: &str,
+    r: Rect,
+    label: &str,
+    on: bool,
+    disabled: Option<&str>,
+) -> bool {
+    let enabled = disabled.is_none();
+    let (hover, _, click) = ui.interact(id_of(id), r);
+    if hover && enabled {
+        ui.p().rect(r, Color::WHITE.alpha(0.04));
+    }
+    // (a switch at the right, as Windows 11 has a setting that applies at once)
+    let a = if enabled { 1.0 } else { 0.4 };
+    let track = Rect::new(
+        r.right() - 16.0 - 40.0,
+        (r.center().y - 10.0).round(),
+        40.0,
+        20.0,
+    );
+    let t = ui.tween(id_of(id) ^ 0x5a17, if on { 1.0 } else { 0.0 }, 0.12);
+    ui.p().rounded(track, 10.0, accent().alpha(t * a));
+    if t < 1.0 {
+        let edge = if hover && enabled {
+            MUTED
+        } else {
+            MUTED.alpha(0.7)
+        };
+        ui.p()
+            .rounded_border(track, 10.0, 1.0, edge.alpha((1.0 - t) * a));
+    }
+    let kx = track.x + 10.0 + 20.0 * t;
+    ui.p().rounded(
+        Rect::new(kx - 5.0, track.center().y - 5.0, 10.0, 10.0),
+        5.0,
+        MUTED.mix(on_accent(), t).alpha(a),
+    );
+    let lx = r.x + 16.0;
+    let reason_w = disabled
+        .map(|d| (ui.width(d, 12.0 * TS, Weight::Regular) + 16.0).min(r.w * 0.55))
+        .unwrap_or(0.0);
+    ui.text_in(
+        label,
+        Rect::new(lx, r.y, (track.x - 12.0 - reason_w - lx).max(0.0), r.h),
+        14.0 * TS,
+        Weight::Regular,
+        if enabled { FG } else { FG.alpha(0.4) },
+        Align::Left,
+    );
+    if let Some(why) = disabled {
+        ui.text_in(
+            why,
+            Rect::new(track.x - 12.0 - reason_w, r.y, reason_w, r.h),
+            12.0 * TS,
+            Weight::Regular,
+            MUTED,
+            Align::Right,
+        );
+    }
+    click && enabled
+}
 
 /// A row with a check box: `label` at the right of the box, ticked when `on`. A dim one
 /// (`disabled`: the reason, shown at the right) cannot be clicked. Returns whether it was
@@ -589,12 +741,10 @@ pub fn list_rows(
             let (hover, _, click) = ui.interact(id_of(&format!("{name}:row:{i}")), r);
             let chosen = selected == Some(i);
             if chosen {
-                ui.p().rect(r, accent_soft().alpha(alpha));
-                ui.p()
-                    .rect(Rect::new(r.x, r.y, 3.0, r.h), accent().alpha(alpha));
+                chosen_row(ui, r, alpha);
             } else {
                 if hover && look.enabled {
-                    ui.p().rect(r, Color::WHITE.alpha(0.04));
+                    ui.p().rect(r, Color::WHITE.alpha(0.05));
                 }
                 ui.p().rect(Rect::new(r.x, r.y, r.w, 1.0), ROW_LINE);
             }
@@ -1254,25 +1404,44 @@ pub fn trip_report(ui: &mut Ui, size: glam::Vec2, v: &TripReport) -> bool {
         FG,
     );
     let foot_h = FOOT_H;
-    let totals_h = v.totals.len() as f32 * ROW_H;
-    let head_y = body.y + 44.0;
+    // the totals as tiles under the trip's title, before the stops
+    let tiles_y = body.y + 40.0;
+    let tiles_h = if v.totals.is_empty() { 0.0 } else { 64.0 };
+    if !v.totals.is_empty() {
+        let n = v.totals.len() as f32;
+        let gap = 12.0;
+        let w = ((body.w - 32.0 - gap * (n - 1.0)) / n).floor();
+        for (i, (k, val)) in v.totals.iter().enumerate() {
+            let t = Rect::new(body.x + 16.0 + i as f32 * (w + gap), tiles_y, w, tiles_h);
+            ui.p().rounded(t, BUTTON_R, Color::WHITE.alpha(0.05));
+            ui.p().rounded_border(t, BUTTON_R, 1.0, EDGE);
+            ui.text_in(
+                k,
+                Rect::new(t.x + 14.0, t.y + 6.0, t.w - 28.0, 20.0),
+                12.0 * TS,
+                Weight::Regular,
+                MUTED,
+                Align::Left,
+            );
+            ui.text_in(
+                val,
+                Rect::new(t.x + 14.0, t.y + 26.0, (t.w - 28.0).max(0.0), 32.0),
+                20.0 * TS,
+                Weight::Bold,
+                FG,
+                Align::Left,
+            );
+        }
+    }
+    let head_y = tiles_y + tiles_h + if tiles_h > 0.0 { 8.0 } else { 4.0 };
     let area = Rect::new(
         body.x,
         head_y,
         body.w,
-        (r.bottom() - foot_h - totals_h - 8.0 - head_y).max(ROW_H + 34.0),
+        (r.bottom() - foot_h - 8.0 - head_y).max(ROW_H + 34.0),
     );
     // (each trip's report starts at its first stop: the id is the trip's)
-    let rows_area = stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
-    let totals = Rect::new(r.x, rows_area.bottom() + 8.0, r.w, totals_h);
-    ui.p()
-        .rect(Rect::new(r.x + 1.0, totals.y - 1.0, r.w - 2.0, 1.0), LINE);
-    let rows: Vec<(&str, String, Option<Color>)> = v
-        .totals
-        .iter()
-        .map(|(k, val)| (*k, val.clone(), None))
-        .collect();
-    key_values(ui, totals, &rows);
+    stops_table(ui, &format!("report:rows:{}", v.title), area, v.rows);
     foot(
         ui,
         "report",
@@ -1290,6 +1459,22 @@ mod tests {
 
     fn rows() -> Vec<Vec<String>> {
         vec![vec!["A".into(), "1".into()], vec!["B".into(), "2".into()]]
+    }
+
+    #[test]
+    fn a_window_over_the_alt_bar_is_opaque_where_they_overlap() {
+        let mut ui = Ui::new();
+        ui.begin(glam::Vec2::new(800.0, 600.0), 1.0, 0.05);
+        let bar = Rect::new(10.0, 10.0, 100.0, 300.0);
+        ui.opaque_under = Some(bar);
+        let before = ui.p().len();
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let over = ui.p().len();
+        ui.opaque_under = None;
+        window(&mut ui, Rect::new(60.0, 100.0, 300.0, 200.0), "T", "");
+        let clear = ui.p().len() - over;
+        // (more is drawn for the part over the bar)
+        assert!(over - before > clear);
     }
 
     #[test]

@@ -71,6 +71,7 @@ use crate::app::{App, FrozenMirrors};
 use crate::camera_util::{render_mirrors, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::hud;
 use crate::humans;
 #[cfg(feature = "lan")]
 use crate::lan;
@@ -84,7 +85,6 @@ use crate::traffic;
 #[cfg(feature = "lan")]
 use crate::traffic_link::lan_outlines;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
-use crate::ui;
 use crate::weather_setup::{
     apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
 };
@@ -3180,7 +3180,7 @@ impl ApplicationHandler for App {
                             info_rect: self
                                 .ui
                                 .as_ref()
-                                .and_then(|u| u.info_rect)
+                                .and_then(|u| u.hits.info_rect)
                                 .filter(|_| !vr_active),
                         };
                         let __tn = Instant::now();
@@ -3219,7 +3219,7 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map_or(1.0, |w| w.scale_factor() as f32);
                         let settings = &self.settings;
-                        let size = ui::size_factor(
+                        let size = hud::size_factor(
                             hud[3],
                             dpi,
                             settings.ui_scale,
@@ -3235,7 +3235,7 @@ impl ApplicationHandler for App {
                                 || map_open,
                             cursor: self.cursor,
                             dt,
-                            backdrop: ui::backdrop(settings.ui_opacity),
+                            backdrop: hud::backdrop(settings.ui_opacity),
                             navigator: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
                         let mut state = plugin_ui.borrow_mut();
@@ -3253,10 +3253,10 @@ impl ApplicationHandler for App {
                             self.online.remotes.chat.disabled = !self.settings.chat;
                         }
                         #[cfg(not(feature = "lan"))]
-                        let chat: Option<ui::ChatView> = None;
+                        let chat: Option<hud::ChatView> = None;
                         #[cfg(feature = "lan")]
                         let chat = (self.online.lan.is_some() && self.settings.chat).then(|| {
-                            ui::ChatView {
+                            hud::ChatView {
                                 lines: &self.online.remotes.chat.lines,
                                 typing: self.online.remotes.chat.typing.as_deref(),
                                 error: self.online.remotes.chat.error(),
@@ -3332,7 +3332,7 @@ impl ApplicationHandler for App {
                             .dropdown
                             .as_ref()
                             .filter(|_| self.chooser.is_some())
-                            .map(|d| ui::DropdownView {
+                            .map(|d| hud::DropdownView {
                                 row: d.row,
                                 items: d.items.iter().map(|x| x.0.as_str()).collect(),
                                 sel: d.sel,
@@ -3358,15 +3358,15 @@ impl ApplicationHandler for App {
                             self.schedule.as_ref(),
                             self.clock.time,
                         );
-                        let mut frame = ui::Frame {
+                        let mut frame = hud::Frame {
                             scale,
-                            ui_scale: ui::size_factor(
+                            ui_scale: hud::size_factor(
                                 h,
                                 scale,
                                 self.settings.ui_scale,
                                 self.settings.ui_scale_window,
                             ),
-                            opacity: ui::backdrop(self.settings.ui_opacity),
+                            opacity: hud::backdrop(self.settings.ui_opacity),
                             width: w,
                             height: h,
                             cursor: (self.cursor.0 - hud[0], self.cursor.1),
@@ -3477,7 +3477,7 @@ impl ApplicationHandler for App {
                         }
                         ui.draw_at(r, scene, &frame, dt, hud[0]);
                         if let (Some(p), Some(area)) = (page.as_ref(), menu_area) {
-                            p.write_hits(ui, area);
+                            p.write_hits(&mut ui.hits, area);
                         }
                         new_page = page;
                     }
@@ -3927,7 +3927,7 @@ impl ApplicationHandler for App {
                                     hud[3],
                                     (self.cursor.0 - hud[0], self.cursor.1),
                                 );
-                                crate::ui::shift_overlays(scene, start, hud[0]);
+                                crate::hud::shift_overlays(scene, start, hud[0]);
                             }
                         }
                         if !mirrored
@@ -4465,17 +4465,18 @@ impl App {
                         && self.cursor.1 <= r[3]
                 };
                 let hit = self.ui.as_ref().and_then(|u| {
-                    u.dd_rects
+                    u.hits
+                        .dd_rects
                         .iter()
                         .position(|r| inside(r))
-                        .map(|i| i + u.dd_top)
+                        .map(|i| i + u.hits.dd_top)
                 });
                 // its scroll bar is dragged (a press on the track beside the thumb takes the
                 // thumb there by its middle); before, the press closed the list (#794)
                 if let Some((track, thumb)) = self
                     .ui
                     .as_ref()
-                    .and_then(|u| u.dd_scroll)
+                    .and_then(|u| u.hits.dd_scroll)
                     .filter(|_| hit.is_none())
                 {
                     let bar = [thumb[0], track[1], thumb[2], track[3]];
@@ -4499,7 +4500,7 @@ impl App {
 
             // Pressing the mouse button on the scrollbar thumb starts dragging.
             if state == ElementState::Pressed {
-                if let Some(thumb) = self.ui.as_ref().and_then(|u| u.menu_scroll_thumb) {
+                if let Some(thumb) = self.ui.as_ref().and_then(|u| u.hits.menu_scroll_thumb) {
                     if self.cursor.0 >= thumb[0]
                         && self.cursor.0 <= thumb[2]
                         && self.cursor.1 >= thumb[1]
@@ -4513,7 +4514,7 @@ impl App {
                 // The sidebar of a settings window: a page, or the way back.
                 if self.chooser.is_some() {
                     let side = self.ui.as_ref().and_then(|u| {
-                        u.menu_side.iter().position(|r| {
+                        u.hits.menu_side.iter().position(|r| {
                             self.cursor.0 >= r[0]
                                 && self.cursor.0 <= r[2]
                                 && self.cursor.1 >= r[1]
@@ -4531,7 +4532,7 @@ impl App {
                     // its scroll bar is dragged (a press on the track beside the thumb takes
                     // the thumb there by its middle)
                     if let Some((track, thumb, _, _)) =
-                        self.ui.as_ref().and_then(|u| u.menu_pane_scroll)
+                        self.ui.as_ref().and_then(|u| u.hits.menu_pane_scroll)
                     {
                         let inside = |r: &[f32; 4]| {
                             self.cursor.0 >= r[0]
@@ -4557,16 +4558,17 @@ impl App {
                                 && self.cursor.1 >= r[1]
                                 && self.cursor.1 <= r[3]
                         };
-                        if u.menu_pane_go.as_ref().is_some_and(inside) {
+                        if u.hits.menu_pane_go.as_ref().is_some_and(inside) {
                             return Some(usize::MAX);
                         }
-                        if let Some(j) = u.menu_time.iter().position(inside) {
+                        if let Some(j) = u.hits.menu_time.iter().position(inside) {
                             return Some(usize::MAX - 1 - j);
                         }
-                        u.menu_pane
+                        u.hits
+                            .menu_pane
                             .iter()
                             .position(inside)
-                            .map(|i| i + u.menu_pane_start)
+                            .map(|i| i + u.hits.menu_pane_start)
                     });
                     if let Some(i) = pane {
                         self.tour_pane_click(i);
@@ -4576,7 +4578,7 @@ impl App {
 
                 // Otherwise check whether a menu row was clicked.
                 let hit = self.ui.as_ref().and_then(|u| {
-                    u.menu_rects.iter().position(|r| {
+                    u.hits.menu_rects.iter().position(|r| {
                         self.cursor.0 >= r[0]
                             && self.cursor.0 <= r[2]
                             && self.cursor.1 >= r[1]
@@ -4586,11 +4588,11 @@ impl App {
 
                 if let Some(row) = hit {
                     // (a click on a slider or a stepper sets the value there)
-                    let k = row + self.ui.as_ref().map(|u| u.menu_start).unwrap_or(0);
+                    let k = row + self.ui.as_ref().map(|u| u.hits.menu_start).unwrap_or(0);
                     let ctl = self
                         .ui
                         .as_ref()
-                        .and_then(|u| u.menu_ctl.get(row).copied().flatten());
+                        .and_then(|u| u.hits.menu_ctl.get(row).copied().flatten());
 
                     // (a greyed-out line cannot be clicked)
                     if self.menu_item_off(k) {
@@ -4633,7 +4635,7 @@ impl App {
                     let arrows = self
                         .ui
                         .as_ref()
-                        .and_then(|u| u.menu_arrows.get(row).copied().flatten());
+                        .and_then(|u| u.hits.menu_arrows.get(row).copied().flatten());
                     match arrows {
                         Some([from, to, _]) if self.cursor.0 >= from && self.cursor.0 < to => {
                             self.chooser_adjust(k, "-")
@@ -4803,8 +4805,8 @@ pub struct InfoData<'a> {
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
 /// and the trip with its next stop and delay. A group of it is one thing the player reads at
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
-pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
-    use ui::{InfoItem, InfoTone};
+pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
+    use crate::hud::{InfoItem, InfoTone};
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
     // (the custom layout is the full one less what is switched off, item by item: the time,
@@ -4929,7 +4931,7 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
         }
     }
     if let Some((fps, low)) = d.fps {
-        let level = ui::fps_level(fps);
+        let level = hud::fps_level(fps);
         let text = match (full, low) {
             (true, Some(low)) => {
                 format!("{fps:.0} fps   {} {low:.0}", omsi_ui::tr("1 % low"))
@@ -4939,7 +4941,7 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> ui::InfoBar {
         };
         groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
     }
-    ui::InfoBar { groups, bottom }
+    hud::InfoBar { groups, bottom }
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.

@@ -66,6 +66,8 @@ pub struct AltCtx {
     pub controls: &'static str,
     /// The pump ("refuel") or the wash ("wash") is running.
     pub pumping: Option<&'static str>,
+    /// The route arrows over the road are on (the help marker button is drawn pressed).
+    pub route_arrows: bool,
 }
 
 /// Why a button for something the game does not have yet cannot be used.
@@ -183,7 +185,11 @@ pub fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
                 ]),
             )
         },
-        b("help", Icon("alt-help"), "Help marker", Some(NOT_YET)),
+        // (switches the route arrows over the road, as the Esc menu's switch does)
+        OwnedButton {
+            on: ctx.route_arrows,
+            ..b("help", Icon("alt-help"), "Help marker", None)
+        },
         b(
             "time",
             Icon("alt-clock"),
@@ -475,6 +481,7 @@ impl App {
                 "alt-keyboard"
             },
             pumping: self.pumping.map(|p| p.0),
+            route_arrows: crate::game_lists::route_arrows_on(self),
         }
     }
 
@@ -522,6 +529,9 @@ impl App {
             "swap" => self.switch_vehicle(),
             "remove" => self.remove_driven_vehicle(),
             "repair" => self.run_service(id),
+            "help" => {
+                crate::game_lists::toggle_route_arrows(self);
+            }
             "reposition" | "tour" | "destination" | "service" | "time" | "weather" | "controls"
             | "driver" => self.open_tool(id),
             _ => {}

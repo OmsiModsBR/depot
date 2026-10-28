@@ -13,7 +13,6 @@ use omsi_ui::paint::Align;
 use omsi_ui::{Rect, Weight};
 use std::sync::atomic::Ordering::Relaxed;
 
-const DOTNET_URL: &str = "https://dotnet.microsoft.com/download/dotnet/6.0";
 const ROW: f32 = 34.0;
 
 /// What the install dialog lists: the package's files grouped by their first folder, with
@@ -159,7 +158,7 @@ pub fn engine_card(l: &mut Launcher, at: Rect) -> f32 {
             if l.ui
                 .button(id, b, "Open Microsoft download", None, ButtonKind::Normal)
             {
-                crate::about::open_url(DOTNET_URL);
+                crate::about::open_dotnet_download();
             }
             l.ui.tooltip(
                 b,
@@ -436,34 +435,5 @@ impl Launcher {
             ),
             Flow::Idle => (String::new(), vec![], vec![]),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use omsi_launcher_lib::original_engine::install::PlannedFile;
-
-    #[test]
-    fn files_are_summed_up_by_folder_with_root_files_first() {
-        let f = |p: &str, b| PlannedFile {
-            path: p.into(),
-            bytes: b,
-        };
-        let plan = InstallPlan {
-            files: vec![
-                f("plugins/a.dll", 10),
-                f("OmsiLaunch.exe", 5),
-                f("plugins/b.dll", 20),
-                f(".omsilaunch/docs/x.md", 1),
-            ],
-            total_bytes: 36,
-            replaces: vec![],
-            conflicts: vec![],
-        };
-        let s = summarize(&plan);
-        assert_eq!(s[0], ("OmsiLaunch.exe".to_string(), 1, 5));
-        assert_eq!(s[1], ("plugins\\".to_string(), 2, 30));
-        assert_eq!(s[2], (".omsilaunch\\".to_string(), 1, 1));
     }
 }

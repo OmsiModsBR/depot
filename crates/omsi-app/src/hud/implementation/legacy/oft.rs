@@ -1,7 +1,7 @@
 //! Text overlay (time, speed, line/next stop/delay, fps) drawn with an OMSI `.oft` font.
 
+use crate::hud::interface::output::{Renderer, Scene, TextureId};
 use omsi_content::font::FontAtlas;
-use omsi_render::{Renderer, Scene, TextureId};
 use std::sync::Arc;
 
 pub struct Hud {

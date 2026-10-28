@@ -10,39 +10,39 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
-mod backdrop;
-mod chrome;
-mod diagnostics;
+pub(crate) mod ai_edit;
+pub(crate) mod ai_traffic;
+pub(crate) mod backdrop;
+pub(crate) mod chrome;
+pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
-mod integrity;
-mod ai_edit;
-mod ai_traffic;
-mod keyboard;
+pub(crate) mod integrity;
+pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
 #[cfg(feature = "lan")]
 mod multiplayer;
 mod original;
-mod original_ui;
+pub(crate) mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
-mod prerender;
+pub(crate) mod prerender;
 pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
-mod showroom;
-mod start;
-mod state;
+pub(crate) mod showroom;
+pub(crate) mod start;
+pub(crate) mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use state::crash_of;
-mod dialogs;
+pub(crate) mod dialogs;
 mod theme;
-mod thumbs;
-mod timetable;
-mod timetable_plan;
-mod tray;
-mod ui;
+pub(crate) mod thumbs;
+pub(crate) mod timetable;
+pub(crate) mod timetable_plan;
+pub(crate) mod tray;
+pub(crate) mod ui;
 
 use glam::Vec2;
 use omsi_launcher_lib as core;
@@ -77,7 +77,7 @@ pub enum Page {
 
 impl Page {
     /// The sidebar's page (`omsi_launcher_ui`): every page but the hidden Multiplayer.
-    fn shown(self) -> Option<UiPage> {
+    pub fn shown(self) -> Option<UiPage> {
         Some(match self {
             Page::Drive => UiPage::Drive,
             Page::Vehicles => UiPage::Vehicles,
@@ -94,7 +94,7 @@ impl Page {
         })
     }
 
-    fn of(p: UiPage) -> Page {
+    pub fn of(p: UiPage) -> Page {
         match p {
             UiPage::Drive => Page::Drive,
             UiPage::Vehicles => Page::Vehicles,
@@ -111,7 +111,7 @@ impl Page {
     }
 
     /// The page called `name` (`OMSI_LAUNCHER_PAGE`, the input script), any case.
-    fn named(name: &str) -> Option<Page> {
+    pub fn named(name: &str) -> Option<Page> {
         UiPage::named(name).map(Page::of)
     }
 }
@@ -2767,24 +2767,6 @@ fn windows_motion() -> bool {
     #[cfg(not(windows))]
     {
         true
-    }
-}
-
-#[cfg(test)]
-mod page_tests {
-    use super::{Page, UiPage};
-
-    /// Every page of the sidebar is a page of the launcher and back, and the names the input
-    /// script and `OMSI_LAUNCHER_PAGE` use find them.
-    #[test]
-    fn the_sidebar_pages_are_the_launchers() {
-        for p in UiPage::ALL {
-            let page = Page::of(p);
-            assert_eq!(page.shown(), Some(p));
-            assert_eq!(Page::named(&p.title().to_lowercase()), Some(page));
-        }
-        assert_eq!(Page::Multiplayer.shown(), None);
-        assert_eq!(Page::named("nope"), None);
     }
 }
 
