@@ -242,7 +242,7 @@ pub fn changes(saved: &Lists, now: &Lists) -> Vec<Change> {
 }
 
 /// A window over the tab.
-enum Dialog {
+pub enum Dialog {
     /// Pick a vehicle to add to group `group`.
     AddVehicle {
         group: usize,
@@ -273,25 +273,25 @@ enum Dialog {
 pub struct Editor {
     /// The map's folder (as the AI traffic tab names it) and its name.
     pub folder: String,
-    name: String,
-    map_dir: PathBuf,
-    now: Lists,
-    saved: Lists,
-    undo: Vec<Lists>,
-    redo: Vec<Lists>,
-    group: usize,
-    vehicle: Option<usize>,
-    park: usize,
-    car: Option<usize>,
-    dialog: Option<Dialog>,
+    pub name: String,
+    pub map_dir: PathBuf,
+    pub now: Lists,
+    pub saved: Lists,
+    pub undo: Vec<Lists>,
+    pub redo: Vec<Lists>,
+    pub group: usize,
+    pub vehicle: Option<usize>,
+    pub park: usize,
+    pub car: Option<usize>,
+    pub dialog: Option<Dialog>,
     /// The vehicles there are to add, once read.
-    vehicles: Option<Vec<VehicleFile>>,
-    reading: Option<Receiver<Vec<VehicleFile>>>,
+    pub vehicles: Option<Vec<VehicleFile>>,
+    pub reading: Option<Receiver<Vec<VehicleFile>>>,
     /// Whether a file named by the lists is there (by its name in lower case).
-    exists: HashMap<String, bool>,
+    pub exists: HashMap<String, bool>,
     /// The vehicles' own names, by file in lower case: from the lists as read, and from the vehicles there
     /// are to add once read.
-    names: HashMap<String, String>,
+    pub names: HashMap<String, String>,
 }
 
 impl Editor {
@@ -299,12 +299,12 @@ impl Editor {
         self.dialog.is_some()
     }
 
-    fn dirty(&self) -> bool {
+    pub fn dirty(&self) -> bool {
         self.now != self.saved
     }
 
     /// Change the lists with `f`, kept for Undo when something changed.
-    fn act(
+    pub fn act(
         &mut self,
         f: impl FnOnce(&mut Lists) -> Result<(), EditError>,
     ) -> Result<(), EditError> {
@@ -317,13 +317,13 @@ impl Editor {
         Ok(())
     }
 
-    fn undo(&mut self) {
+    pub fn undo(&mut self) {
         if let Some(prev) = self.undo.pop() {
             self.redo.push(std::mem::replace(&mut self.now, prev));
         }
     }
 
-    fn redo(&mut self) {
+    pub fn redo(&mut self) {
         if let Some(next) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.now, next));
         }
@@ -2070,142 +2070,4 @@ fn leave(l: &mut Launcher, e: &mut Editor) -> bool {
     }
     e.dialog = Some(Dialog::Leave);
     false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const LISTS: &str =
-        "[aigroup_2]\r\nCars\r\n\r\nVehicles\\A\\a.ovh\t2\r\nVehicles\\B\\b.ovh\t1\r\n[end]\r\n";
-
-    fn lists() -> Lists {
-        Lists {
-            ailists_file: "ailists.cfg".into(),
-            ailists: AiListsDoc::from_bytes(LISTS.as_bytes()),
-            parks: vec![Park {
-                file: "parklist_p.txt".into(),
-                index: 0,
-                doc: ParkListDoc::from_bytes(b"P\\x.sco\r\nP\\x.sco\r\n"),
-            }],
-        }
-    }
-
-    #[test]
-    fn the_changes_are_named_one_by_one() {
-        let saved = lists();
-        let mut now = saved.clone();
-        assert!(changes(&saved, &now).is_empty());
-        assert!(now.to_write(&saved).is_empty());
-        now.ailists.set_weight(0, 0, 5.0).unwrap();
-        now.ailists.remove_vehicle(0, 1).unwrap();
-        now.ailists
-            .add_vehicle(0, "Vehicles\\C\\c.ovh", 3.0)
-            .unwrap();
-        let g = now.ailists.add_group("Taxis").unwrap();
-        now.ailists
-            .add_vehicle(g, "Vehicles\\T\\t.ovh", 1.0)
-            .unwrap();
-        now.parks[0].doc.set_count("P\\x.sco", 1).unwrap();
-        now.parks[0].doc.add("P\\y.sco").unwrap();
-        let c = changes(&saved, &now);
-        assert_eq!(
-            c,
-            [
-                Change::Weight {
-                    group: "Cars".into(),
-                    file: "Vehicles\\A\\a.ovh".into(),
-                    from: 2.0,
-                    to: 5.0
-                },
-                Change::Added {
-                    group: "Cars".into(),
-                    file: "Vehicles\\C\\c.ovh".into(),
-                    weight: Some(3.0)
-                },
-                Change::Removed {
-                    group: "Cars".into(),
-                    file: "Vehicles\\B\\b.ovh".into()
-                },
-                Change::GroupAdded("Taxis".into()),
-                Change::Added {
-                    group: "Taxis".into(),
-                    file: "Vehicles\\T\\t.ovh".into(),
-                    weight: Some(1.0)
-                },
-                Change::Parked {
-                    list: "parklist_p.txt".into(),
-                    file: "P\\x.sco".into(),
-                    from: 2,
-                    to: 1
-                },
-                Change::Parked {
-                    list: "parklist_p.txt".into(),
-                    file: "P\\y.sco".into(),
-                    from: 0,
-                    to: 1
-                },
-            ]
-        );
-        let files: Vec<String> = now.to_write(&saved).into_iter().map(|f| f.0).collect();
-        assert_eq!(files, ["ailists.cfg", "parklist_p.txt"]);
-        // a group taken out
-        let mut fewer = saved.clone();
-        fewer.ailists.remove_vehicle(0, 0).unwrap();
-        fewer.ailists.remove_vehicle(0, 0).unwrap();
-        fewer.ailists.remove_group(0).unwrap();
-        assert!(changes(&saved, &fewer).contains(&Change::GroupRemoved("Cars".into())));
-    }
-
-    #[test]
-    fn undo_and_redo_walk_the_changes() {
-        let lists = lists();
-        let mut e = Editor {
-            folder: "M".into(),
-            name: "M".into(),
-            map_dir: PathBuf::new(),
-            now: lists.clone(),
-            saved: lists,
-            undo: Vec::new(),
-            redo: Vec::new(),
-            group: 0,
-            vehicle: None,
-            park: 0,
-            car: None,
-            dialog: None,
-            vehicles: None,
-            reading: None,
-            exists: HashMap::new(),
-            names: HashMap::new(),
-        };
-        e.act(|x| x.ailists.set_weight(0, 0, 4.0)).unwrap();
-        // a change that changes nothing is not kept
-        e.act(|x| x.ailists.set_weight(0, 0, 4.0)).unwrap();
-        assert_eq!(e.undo.len(), 1);
-        assert!(e.dirty());
-        e.undo();
-        assert!(!e.dirty());
-        e.redo();
-        assert_eq!(e.now.ailists.groups()[0].vehicles[0].weight, 4.0);
-        assert!(e.act(|x| x.ailists.add_group("cars").map(|_| ())).is_err());
-        assert_eq!(e.undo.len(), 1);
-    }
-
-    #[test]
-    fn a_map_folder_is_read_with_its_parking_lists() {
-        let dir = std::env::temp_dir().join(format!("depot-ai-edit-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("AIlists.cfg"), LISTS).unwrap();
-        std::fs::write(dir.join("parklist_p_2.txt"), "b.sco\r\n").unwrap();
-        std::fs::write(dir.join("parklist_p.txt"), "a.sco\r\n").unwrap();
-        std::fs::write(dir.join("parklist_old.txt"), "c.sco\r\n").unwrap();
-        let l = Lists::load(&dir);
-        assert_eq!(l.ailists_file, "AIlists.cfg");
-        assert_eq!(l.ailists.groups().len(), 1);
-        let parks: Vec<(&str, usize)> =
-            l.parks.iter().map(|p| (p.file.as_str(), p.index)).collect();
-        assert_eq!(parks, [("parklist_p.txt", 0), ("parklist_p_2.txt", 2)]);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 }

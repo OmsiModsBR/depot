@@ -72,6 +72,29 @@ pub fn follow_surface(cur: f64, target: f64, speed: f64, dt: f64) -> f64 {
     }
 }
 
+/// The floor of somebody on foot, given the `surface` found under them and, on a pedestrian
+/// path, the path's own `path_z` there. A high platform may have no face to find (or one
+/// above a step's reach) and the surface then found is the road under it: who got off a
+/// bus there walked in the road's height, sunk in the platform. A surface well under the
+/// path (more than `PATH_SLACK`) is not the floor of somebody on it: the path's height is,
+/// when it is within `MAX_PATH_REACH` of the feet (a path far above or below is another
+/// level's).
+pub fn walk_floor(surface: Option<f64>, feet: f64, path_z: Option<f64>) -> Option<f64> {
+    match path_z {
+        Some(pz)
+            if (pz - feet).abs() <= MAX_PATH_REACH
+                && surface.map_or(true, |s| s < pz - PATH_SLACK) =>
+        {
+            Some(pz)
+        }
+        _ => surface,
+    }
+}
+/// How far a path may lie over the surface found under it before the path is the floor (m).
+const PATH_SLACK: f64 = 0.3;
+/// The highest or lowest a path may lie from somebody's feet to be their floor (m).
+const MAX_PATH_REACH: f64 = 1.5;
+
 /// The map's traffic keeps left (its stops are on the left): see the doors of `Cabin`.
 pub(crate) static LEFT_HAND: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -5233,6 +5256,13 @@ impl Humans {
     ) {
         let dt64 = dt as f64;
         let time = self.time;
+        // the height of the path under a walker on one: the surface they follow
+        let path_z = match (&self.people[i].state, net) {
+            (State::Strolling(walk), Some(net)) => {
+                walk.legs.get(walk.leg).map(|leg| leg.at(net, walk.s).0.z)
+            }
+            _ => None,
+        };
         let p = &mut self.people[i];
         let speed = w.vel.length();
         // somebody pressed against somebody else for seconds slips past them
@@ -5260,7 +5290,8 @@ impl Humans {
             Place::Ground => {
                 p.position.x = w.pos.x;
                 p.position.y = w.pos.y;
-                if let Some(z) = world.walk_height_near(p.position.x, p.position.y, p.position.z) {
+                let found = world.walk_height_near(p.position.x, p.position.y, p.position.z);
+                if let Some(z) = walk_floor(found, p.position.z, path_z) {
                     // up a kerb quickly, down it smoothly (the feet find the kerb themselves);
                     // more than a kerb below the surface is no step but a wrong height (the
                     // pavement's tile came after them): straight onto it

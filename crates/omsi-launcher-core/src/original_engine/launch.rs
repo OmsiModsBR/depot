@@ -22,6 +22,25 @@ pub struct Launch {
     pub args: Vec<String>,
 }
 
+/// A map's `global.cfg`: inside `maps`, and nothing else.
+pub fn map_identity(path: &str) -> Result<String> {
+    let p = identity(path)?;
+    let lower = p.to_ascii_lowercase();
+    if !lower.starts_with("maps\\") || !lower.ends_with("\\global.cfg") {
+        bail!("{path} is not a map's global.cfg");
+    }
+    Ok(p)
+}
+
+/// A saved situation: an `.osn` file.
+pub fn situation_identity(path: &str) -> Result<String> {
+    let p = identity(path)?;
+    if !p.to_ascii_lowercase().ends_with(".osn") {
+        bail!("{path} is not a saved situation");
+    }
+    Ok(p)
+}
+
 /// `maps/Name/global.cfg` (as Depot names maps) in the form OmsiLaunch takes.
 pub fn identity(path: &str) -> Result<String> {
     let p = path.trim().replace('/', "\\");
@@ -30,7 +49,9 @@ pub fn identity(path: &str) -> Result<String> {
         && !p.contains(':')
         && p.split('\\')
             .all(|c| !c.is_empty() && c != "." && c != "..")
-        && !p.chars().any(|c| c.is_control());
+        && !p.chars().any(|c| c.is_control() || "<>\"|?*".contains(c))
+        // Windows drops trailing dots and spaces: `..  ` would be `..`
+        && p.split('\\').all(|c| !c.ends_with('.') && !c.ends_with(' '));
     if !ok {
         bail!("{path} is not a path inside the OMSI 2 folder");
     }
@@ -50,11 +71,11 @@ pub fn spec_json(root: &Path, world: &World) -> Result<Value> {
     let (mode, map, situation, entry) = match world {
         World::New { map, entrypoint } => (
             0,
-            Some(json!(identity(map)?)),
+            Some(json!(map_identity(map)?)),
             None,
             Some(json!(entrypoint)),
         ),
-        World::Saved { situation } => (1, None, Some(json!(identity(situation)?)), None),
+        World::Saved { situation } => (1, None, Some(json!(situation_identity(situation)?)), None),
     };
     Ok(json!({
         "Installation": {"RootPath": root.to_string_lossy(), "ExpectedExecutableSha256": null},
@@ -146,7 +167,7 @@ pub fn build(
     // a saved situation or a new map is already in the file; `/new` and `/saved` pick the mode
     all.push(match world {
         World::New { .. } => "/new".into(),
-        World::Saved { situation } => format!("/saved:{}", identity(situation)?),
+        World::Saved { situation } => format!("/saved:{}", situation_identity(situation)?),
     });
     all.extend(args);
     Ok(Launch {
@@ -180,6 +201,31 @@ mod tests {
             "",
             "maps//x",
             "a\nb",
+        ] {
+            assert!(identity(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_map_is_a_global_cfg_and_a_situation_an_osn() {
+        assert!(map_identity("maps/G/global.cfg").is_ok());
+        assert!(map_identity("MAPS\\G\\Global.cfg").is_ok());
+        for bad in [
+            "options.cfg",
+            "OMSI.exe",
+            "maps/G/other.cfg",
+            "vehicles/global.cfg",
+            "maps/G/global.cfg..",
+        ] {
+            assert!(map_identity(bad).is_err(), "{bad}");
+        }
+        assert!(situation_identity("situations/a.osn").is_ok());
+        assert!(situation_identity("OMSI.exe").is_err());
+        for bad in [
+            "maps/.. /x",
+            "maps/x./global.cfg",
+            "maps/a<b/global.cfg",
+            "maps/g /global.cfg",
         ] {
             assert!(identity(bad).is_err(), "{bad}");
         }

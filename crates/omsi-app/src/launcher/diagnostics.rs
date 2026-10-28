@@ -67,10 +67,9 @@ fn line(l: &mut Launcher, r: Rect, y: f32, label: &str, value: &str) {
         MUTED,
     );
     // (the value starts after the label when a translation is longer than the usual column)
-    let label_w = l
-        .ui
-        .fonts
-        .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
+    let label_w =
+        l.ui.fonts
+            .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
     let x = (r.x + 170.0).max(r.x + 19.0 + label_w + 14.0);
     clipped(
         &mut l.ui,
@@ -221,7 +220,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
 }
 
 /// `text` for a URL's query (everything but the unreserved characters as `%XX`).
-fn url_encode(text: &str) -> String {
+pub fn url_encode(text: &str) -> String {
     let mut out = String::new();
     for b in text.bytes() {
         if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
@@ -231,13 +230,4 @@ fn url_encode(text: &str) -> String {
         }
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn a_report_body_is_encoded_for_the_issue_link() {
-        assert_eq!(super::url_encode("a b\n(c)"), "a%20b%0A%28c%29");
-        assert_eq!(super::url_encode("Depot-0.2_x.~"), "Depot-0.2_x.~");
-    }
 }

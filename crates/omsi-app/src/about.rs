@@ -33,6 +33,18 @@ pub fn open_url(url: &str) {
         log::warn!("not opening {url}: only pages of {REPO_URL} are opened");
         return;
     }
+    open_in_browser(url);
+}
+
+/// The one page outside the repository the launcher opens: Microsoft's download page of the
+/// .NET 6 runtimes OmsiLaunch needs (Setup, on a click). Exactly this address, nothing else.
+pub const DOTNET_DOWNLOAD_URL: &str = "https://dotnet.microsoft.com/download/dotnet/6.0";
+
+pub fn open_dotnet_download() {
+    open_in_browser(DOTNET_DOWNLOAD_URL);
+}
+
+fn open_in_browser(url: &str) {
     #[cfg(target_os = "android")]
     crate::android::open_url(url);
     #[cfg(target_os = "macos")]
