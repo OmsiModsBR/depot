@@ -734,8 +734,8 @@ fn the_menus_draw_on_the_centre_screen_and_into_the_headset_s_picture() {
     let col = (1920.0 + pause_menu::COLUMN_W * s) as u32;
     assert!(apart(&menu, &world, size.0, 1920, col) > 0);
     let mut hud = testing::hud::Ui::new().unwrap();
-    page.write_hits(&mut hud, area);
-    for rect in hud.menu_rects.iter().filter(|r| r[0] > 0.0) {
+    page.write_hits(&mut hud.hits, area);
+    for rect in hud.hits.menu_rects.iter().filter(|r| r[0] > 0.0) {
         assert!(rect[0] >= col as f32 - 1.0 && rect[2] <= 3840.0, "{rect:?}");
         let (x0, x1) = (rect[0] as u32, rect[2] as u32);
         assert!(apart(&shown, &world, size.0, x0, x1) > 0, "{rect:?}");
@@ -787,8 +787,8 @@ fn the_menus_draw_on_the_centre_screen_and_into_the_headset_s_picture() {
     let col = (pause_menu::COLUMN_W * s) as u32;
     assert!(apart(&vr_menu, &plain, size.0, 0, col) > 0);
     let mut hud = testing::hud::Ui::new().unwrap();
-    page.write_hits(&mut hud, area);
-    for rect in hud.menu_rects.iter().filter(|r| r[0] > 0.0) {
+    page.write_hits(&mut hud.hits, area);
+    for rect in hud.hits.menu_rects.iter().filter(|r| r[0] > 0.0) {
         let (x0, x1) = (rect[0] as u32, rect[2] as u32);
         assert!(apart(&vr_page, &plain, size.0, x0, x1) > 0, "{rect:?}");
     }
