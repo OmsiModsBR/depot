@@ -25,7 +25,7 @@ const TS: f32 = 1.16;
 /// A window's frame with its close button: the body's area, and whether the cross was
 /// clicked (which asks for what Cancel or Close does).
 fn frame(ui: &mut Ui, r: Rect, title: &str, note: &str) -> (Rect, bool) {
-    let body = ingame::window(ui, r, title, note);
+    let body = ingame::window_with(ui, r, title, note, ingame::CLOSE_GUTTER);
     let closed = ingame::window_close(ui, &format!("alt:window:x:{title}"), r);
     (body, closed)
 }

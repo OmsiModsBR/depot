@@ -66,6 +66,15 @@ const PANEL_ALPHA: f32 = 0.88;
 /// shadow and a light stroke along its top edge, its title at the left and a note at the right
 /// in a small pill. Returns the area under the title.
 pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
+    window_with(ui, r, title, note, 0.0)
+}
+
+/// Room kept free at the right of the title for the close button (see [`window_close`]).
+pub const CLOSE_GUTTER: f32 = 44.0;
+
+/// [`window`] with `gutter` pixels kept free at the right of the title, so the note's pill
+/// does not sit under the close button.
+pub fn window_with(ui: &mut Ui, r: Rect, title: &str, note: &str, gutter: f32) -> Rect {
     ui.solid(r);
     ui.p().shadow(r, WINDOW_R, 40.0, Color::rgba(0, 0, 0, 0.35));
     ui.p().shadow(r, WINDOW_R, 8.0, Color::rgba(0, 0, 0, 0.30));
@@ -87,7 +96,12 @@ pub fn window(ui: &mut Ui, r: Rect, title: &str, note: &str) -> Rect {
     if !note.is_empty() {
         let px = 12.0 * TS;
         let w = ui.width(note, px, Weight::Regular) + 20.0;
-        let pill = Rect::new(r.right() - 20.0 - w, r.y + TITLE_H * 0.5 - 12.0, w, 24.0);
+        let pill = Rect::new(
+            r.right() - 20.0 - gutter - w,
+            r.y + TITLE_H * 0.5 - 12.0,
+            w,
+            24.0,
+        );
         ui.p().rounded(pill, 12.0, Color::WHITE.alpha(0.07));
         ui.text_in(note, pill, px, Weight::Regular, MUTED, Align::Center);
     }
