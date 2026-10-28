@@ -104,8 +104,9 @@ fn rounded(hw: f32, y0: f32, y1: f32, rf: f32, rb: f32) -> Vec<(f32, f32)> {
 
 /// A bus, trolleybus, tram, metro train or train on the map as a pictogram, not a dot, turned to the way it
 /// heads (`heading`: degrees clockwise from north), a dark edge round it, a windscreen where it can be driven
-/// from. A road vehicle has a cut front; a tram is long and cut at both ends, with a joint in the middle; a metro
-/// train is longer, square at both ends with a wide windscreen; a train is the longest, narrow, with a pointed nose.
+/// from. A road vehicle has a rounded nose and a windscreen, and a trolleybus two poles trailing behind it; a tram
+/// is long and rounded at both ends, with a joint in the middle; a metro train is longer, with small rounded ends
+/// and a wide windscreen; a train is the longest, narrow, with a pointed nose.
 /// `min_px` keeps it readable from far away; the line is written beside it.
 pub fn vehicle_icon(
     p: &mut Painter,
@@ -156,23 +157,22 @@ pub fn vehicle_icon(
             .collect()
     };
     let (m, px) = (6.0, min_px);
-    p.world_shape(at, &shape(1.28), m, px * 1.28, Color::rgba(8, 8, 8, 0.92));
-    p.world_shape(at, &shape(1.0), m, px, color);
     if icon == Icon::Trolley {
-        // the two poles up to the wires, raised from the roof and trailing behind
-        for x in [-0.12_f32, 0.12] {
-            let pole: Vec<Vec2> = [
-                (x - 0.035, 0.25),
-                (x + 0.035, 0.25),
-                (x + 0.035, -1.45),
-                (x - 0.035, -1.45),
-            ]
-            .iter()
-            .map(|&(px_, py)| turn(Vec2::new(px_, py)))
-            .collect();
-            p.world_shape(at, &pole, m, px, Color::rgba(8, 8, 8, 0.85));
+        // the two poles up to the wires, trailing behind the roof (drawn first: the body hides
+        // the part over it, so they read as two lines running back from it)
+        for (hw, c) in [(0.075, Color::rgba(8, 8, 8, 0.92)), (0.04, color)] {
+            for x in [-0.14_f32, 0.14] {
+                let pole: Vec<Vec2> =
+                    [(x - hw, 0.2), (x + hw, 0.2), (x + hw, -1.9), (x - hw, -1.9)]
+                        .iter()
+                        .map(|&(px_, py)| turn(Vec2::new(px_, py)))
+                        .collect();
+                p.world_shape(at, &pole, m, px, c);
+            }
         }
     }
+    p.world_shape(at, &shape(1.28), m, px * 1.28, Color::rgba(8, 8, 8, 0.92));
+    p.world_shape(at, &shape(1.0), m, px, color);
     for g in &glass {
         let g: Vec<Vec2> = g.iter().map(|&(x, y)| turn(Vec2::new(x, y))).collect();
         p.world_shape(at, &g, m, px, Color::rgba(240, 244, 248, 0.9));
