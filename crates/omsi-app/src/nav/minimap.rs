@@ -890,7 +890,7 @@ impl Navigator {
         let wd = words(f.language);
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
-        let radius = 10.0 * s;
+        let radius = 4.0 * s;
         let top_h = (34.0 * s).round();
         let map = Rect::new(0.0, top_h, pw, map_h);
         let vp = [map.x, map.y, map.w, map.h];
@@ -1150,8 +1150,7 @@ impl Navigator {
                 44.0 * s + tw + sw_,
                 34.0 * s,
             );
-            ui.rounded(b, 9.0 * s, Color::rgba(32, 33, 36, 0.92));
-            ui.rounded_border(b, 9.0 * s, 1.0, Color::WHITE.alpha(0.08));
+            ui.rounded(b, 5.0 * s, Color::rgba(32, 33, 36, 0.92));
             ui.icon(
                 &mut self.atlas,
                 icon,
@@ -1785,9 +1784,6 @@ impl Navigator {
                 y += 22.0 * s;
             }
         }
-
-        // the window's edge, over the bars and the map
-        ui.rounded_border(panel, radius, 1.0, Color::WHITE.alpha(0.10));
 
         // --- to the GPU
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue)
