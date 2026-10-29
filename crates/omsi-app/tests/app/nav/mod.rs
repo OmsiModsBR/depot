@@ -383,7 +383,14 @@ fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
     assert_eq!(bus.verts.len(), (14 + 14 + 2) * 3);
     // a trolleybus is a bus with two poles (each a dark edge and a lighter line)
     let mut trolley = Painter::new();
-    vehicle_icon(&mut trolley, Vec3::ZERO, 90.0, Color::WHITE, Icon::Trolley, 7.0);
+    vehicle_icon(
+        &mut trolley,
+        Vec3::ZERO,
+        90.0,
+        Color::WHITE,
+        Icon::Trolley,
+        7.0,
+    );
     assert_eq!(trolley.verts.len(), bus.verts.len() + 4 * 2 * 3);
     // every kind is made of whole triangles, and none is empty
     for icon in [Icon::Tram, Icon::Metro, Icon::Train, Icon::Trolley] {
@@ -400,6 +407,18 @@ fn a_vehicle_icon_is_whole_triangles_of_edge_body_and_windscreen() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn the_city_map_draws_over_the_picture() {
+    draw_the_town(true);
+}
+
+/// The same town with the minimap (the navigator's panel) instead of the city map
+/// (`DEPOT_MINIMAP_PNG`).
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn the_minimap_draws_over_the_picture() {
+    draw_the_town(false);
+}
+
+fn draw_the_town(city: bool) {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(
         &instance,
@@ -446,7 +465,7 @@ fn the_city_map_draws_over_the_picture() {
             "Station Road".to_string(),
         ),
     ];
-    let mut nav = Navigator::new(false, 0.85, "bottom-left");
+    let mut nav = Navigator::new(!city, 0.85, "bottom-left");
     nav.set_map(testing::scene::NavigationMap {
         lanes,
         road_surfaces: Vec::new(),
@@ -454,7 +473,9 @@ fn the_city_map_draws_over_the_picture() {
         signs,
     });
     nav.set_route("50/1", route, true, nav.global_version + (1 << 40));
-    nav.toggle_map();
+    if city {
+        nav.toggle_map();
+    }
     let stop = |id: i64, x: f64, y: f64, name: &str, min: f64| NavStop {
         object_id: id,
         position: DVec3::new(x, y, 0.0),
@@ -497,17 +518,19 @@ fn the_city_map_draws_over_the_picture() {
         scene.overlays.clear();
         nav.frame(&renderer, &mut scene, &frame);
     }
-    assert!(nav.map_open() && !scene.overlays.is_empty());
+    assert!(nav.map_open() == city && !scene.overlays.is_empty());
     let r = nav.city.rect;
-    // the close button is in the header, at its right end
-    let close = nav
-        .city
-        .buttons
-        .iter()
-        .find(|b| b.1 == 3)
-        .map(|b| b.0)
-        .expect("the close button");
-    assert!(close.right() <= r[2] - r[0] && close.y < 60.0, "{close:?}");
+    if city {
+        // the close button is in the header, at its right end
+        let close = nav
+            .city
+            .buttons
+            .iter()
+            .find(|b| b.1 == 3)
+            .map(|b| b.0)
+            .expect("the close button");
+        assert!(close.right() <= r[2] - r[0] && close.y < 60.0, "{close:?}");
+    }
     let camera = omsi_render::Camera {
         position: DVec3::new(0.0, 0.0, 2.0),
         yaw: 0.0,
@@ -524,8 +547,15 @@ fn the_city_map_draws_over_the_picture() {
     let pixels = renderer
         .render_to_image(&mut scene, 1672, 941, &camera, &lighting)
         .unwrap();
-    if let Ok(path) = std::env::var("DEPOT_CITY_MAP_PNG") {
+    if let Ok(path) = std::env::var(if city {
+        "DEPOT_CITY_MAP_PNG"
+    } else {
+        "DEPOT_MINIMAP_PNG"
+    }) {
         image::save_buffer(&path, &pixels, 1672, 941, image::ExtendedColorType::Rgba8).unwrap();
+    }
+    if !city {
+        return;
     }
     // the map covers the middle of the picture: dark ground, not the sky
     let at = |x: u32, y: u32| {

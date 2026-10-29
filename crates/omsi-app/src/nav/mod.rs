@@ -53,10 +53,10 @@ use streets::Streets;
 
 // neutral dark, half transparent, calm
 const NAV_REDRAW_S: f32 = 1.0 / 30.0;
-const PANEL: Color = Color::rgba(10, 10, 10, 0.70);
+const PANEL: Color = Color::rgba(28, 29, 32, 0.74);
 // (the bars under the texts darken whatever the opacity setting leaves of the panel: at a
 // third the cab showed through behind the next stop)
-const BAR: Color = Color::rgba(0, 0, 0, 0.55);
+const BAR: Color = Color::rgba(32, 33, 36, 0.90);
 // (the launcher's map picture draws with these too, so the two maps cannot look apart)
 pub(crate) const ROAD_CASING: Color = Color::rgba(30, 30, 30, 0.9);
 pub(crate) const ROAD: Color = Color::rgba(92, 92, 92, 1.0);
