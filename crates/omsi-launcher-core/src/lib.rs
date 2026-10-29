@@ -256,7 +256,9 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     v["collision_objects"] = json!(!o.flag("no_collision"));
     v["driver"] = json!(o.flag("see_own_driver"));
     if let Some(x) = num("ticketselling") {
-        v["boarding"] = json!(if x > 0.5 { "pay" } else { "auto" });
+        // (OMSI 2: 0 no ticket sales, 1 and 2 the driver sells them, with or without hints: the
+        // Depot has no hints, so both are "the driver sells the ticket")
+        v["boarding"] = json!(if x > 0.5 { "pay" } else { "walk" });
     }
     let file_stem = |p: &str| {
         Path::new(&p.replace('\\', "/"))

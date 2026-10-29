@@ -33,26 +33,24 @@ pub fn catalog_key(key: &str) -> Option<&'static str> {
         .or_else(|| TWINS.iter().find(|(d, _)| *d == key).map(|(_, k)| *k))
 }
 
-/// Settings the catalog links but whose values the Depot's page cannot yet tell apart from
-/// OMSI 2's (the three ways of boarding against the ticket-selling number 0 to 2): hidden
-/// until the two are matched.
-const NOT_YET: &[&str] = &["boarding"];
+/// Boarding in OMSI 2 mode is OMSI 2's own ticket-selling setting: 0 none, 1 with hints, 2
+/// without hints (the page lists those three instead of the Depot's three ways).
+pub const TICKET_SELLING: [(&str, &str); 3] = [
+    ("0", "No ticket sales"),
+    ("1", "Ticket sales with hints"),
+    ("2", "Ticket sales without hints"),
+];
 
 /// The Depot settings of OMSI 2 mode, each with its OmsiLaunch key.
 fn mapped() -> Vec<(&'static str, &'static str)> {
-    let mut out: Vec<_> = catalog::depot_map()
-        .into_iter()
-        .filter(|(d, _)| !NOT_YET.contains(d))
-        .collect();
+    let mut out: Vec<_> = catalog::depot_map().into_iter().collect();
     out.extend(TWINS.iter().copied());
     out
 }
 
 /// Whether the setting `key` (of section `interface`, or not) is shown in OMSI 2 mode.
 pub fn setting_in_omsi2(key: &str, interface: bool) -> bool {
-    interface
-        || LAUNCHER_OWN.contains(&key)
-        || (!NOT_YET.contains(&key) && catalog_key(key).is_some())
+    interface || LAUNCHER_OWN.contains(&key) || catalog_key(key).is_some()
 }
 
 fn number(v: &Value) -> Option<f64> {
@@ -86,6 +84,8 @@ fn to_depot(key: &str, v: &Value) -> Value {
         // (OMSI 2 counts the share in whole percent, the page in hundredths)
         "pax_density" => number(v).map_or(Value::Null, |n| json!(n / 100.0)),
         "mirror_refresh" if v.as_str() == Some("economy") => json!("eco"),
+        // (a pick of the page keeps its value as text)
+        "boarding" => number(v).map_or(Value::Null, |n| json!((n as i64).to_string())),
         _ => v.clone(),
     }
 }
@@ -96,6 +96,7 @@ fn to_catalog(key: &str, v: &Value) -> Option<(&'static str, Value)> {
     let e = catalog::entry(ckey)?;
     let out = match (key, e.kind) {
         ("pax_density", _) => json!((number(v)? * 100.0).round() as i64),
+        ("boarding", _) => json!(number(v)?.round() as i64),
         ("mirror_refresh", _) => match v.as_str()? {
             "eco" | "economy" => json!("economy"),
             "full" => json!("full"),
@@ -132,7 +133,7 @@ pub fn default_of(key: &str) -> Option<Value> {
 /// takes (no "Unlimited" frame limit, no "Automatic" distance, no frozen mirrors).
 pub fn pick_allowed(key: &str, value: &str) -> bool {
     match key {
-        "max_fps" | "max_obj_dist" | "mirror_refresh" | "maintenance" => {
+        "max_fps" | "max_obj_dist" | "mirror_refresh" | "maintenance" | "boarding" => {
             to_catalog(key, &json!(value)).is_some()
         }
         _ => true,
@@ -254,7 +255,26 @@ mod tests {
         assert!(pick_allowed("max_obj_dist", "1500"));
         assert!(!pick_allowed("mirror_refresh", "off"));
         assert!(pick_allowed("mirror_refresh", "eco"));
-        assert!(!setting_in_omsi2("boarding", false));
+        assert!(setting_in_omsi2("boarding", false));
+        // boarding is OMSI 2's ticket selling: 0 none, 1 with hints, 2 without
+        assert!(pick_allowed("boarding", "0") && pick_allowed("boarding", "2"));
+        assert!(!pick_allowed("boarding", "3") && !pick_allowed("boarding", "auto"));
+        assert_eq!(TICKET_SELLING.map(|(v, _)| v), ["0", "1", "2"]);
+    }
+
+    #[test]
+    fn ticket_selling_round_trips_as_text() {
+        assert_eq!(default_of("boarding"), Some(json!("1")));
+        let before = json!({ "boarding": "1" });
+        let after = json!({ "boarding": "2" });
+        let mut saved = Map::new();
+        let (kept, own) = store_back(&before, &after, &mut saved);
+        assert!(kept && own.is_empty());
+        assert_eq!(saved["simulation.ticketSelling"], json!(2));
+        let mut view = json!({ "boarding": "auto" });
+        overlay(&mut view, &saved);
+        assert_eq!(view["boarding"], json!("2"));
+        assert!(catalog::launch_args(&saved).is_ok());
     }
 
     #[test]
