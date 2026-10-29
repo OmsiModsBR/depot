@@ -1,9 +1,9 @@
 use clap::Parser;
 use glam::DVec3;
 use omsi_render::Camera;
-use openomsi_game::testing::app::start_centers;
-use openomsi_game::testing::cli::Args;
 use openomsi_game::testing::close_app;
+use openomsi_game::testing::core::app::start_centers;
+use openomsi_game::testing::core::cli::Args;
 
 #[test]
 fn an_app_whose_letting_go_panics_closes_without_a_crash() {

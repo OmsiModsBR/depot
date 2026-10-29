@@ -1,8 +1,8 @@
 //! What the game does when asked by a key, a menu, a page or a plugin: the game actions,
 //! placing and switching vehicles, saving and loading.
 
-use crate::app::App;
-use crate::cli::Args;
+use crate::core::app::App;
+use crate::core::cli::Args;
 use crate::input::part_in_reach;
 use crate::output::ORBIT_DEFAULT;
 use crate::player::Player;
@@ -104,7 +104,7 @@ pub(crate) fn save_or_fallback(
         Ok(()) => return Ok(out.to_path_buf()),
         Err(e) => e,
     };
-    let Some(alt) = crate::startup::save_fallback_dir()
+    let Some(alt) = crate::core::startup::save_fallback_dir()
         .map(|f| f.join(rel))
         .filter(|a| a != out)
     else {
@@ -131,7 +131,7 @@ impl App {
         // (the tiles loaded on the way added to what the map lacks)
         if let Some(w) = self.world.clone() {
             let mut none = None;
-            crate::app::report_missing_content(&w, &mut none);
+            crate::core::app::report_missing_content(&w, &mut none);
         }
         if self.player.is_none() || self.career.seconds <= 0.0 {
             return;
@@ -657,13 +657,13 @@ impl App {
                 self.game_menu = None;
                 if self.load_quicksave() {
                     self.finish_session();
-                    crate::platform::exit(event_loop);
+                    crate::core::platform::exit(event_loop);
                 }
             }
             "quit" => {
                 self.game_menu = None;
                 self.finish_session();
-                crate::platform::exit(event_loop);
+                crate::core::platform::exit(event_loop);
             }
             // (the rest are the lines of the vehicle and world pages)
             other => {
@@ -894,13 +894,13 @@ impl App {
     /// folder): a fresh process, as OMSI loads a situation into a fresh world. False when
     /// there is none.
     pub(crate) fn load_quicksave(&mut self) -> bool {
-        let dir = crate::startup::content_dir()
+        let dir = crate::core::startup::content_dir()
             .unwrap_or_else(|| self.args.root.clone())
             .join("Situations");
         let mut file = dir.join("quicksave.osn");
         // (the newer of the content folder's and the fallback folder's, see `save_or_fallback`)
-        if let Some(f) =
-            crate::startup::save_fallback_dir().map(|f| f.join("Situations").join("quicksave.osn"))
+        if let Some(f) = crate::core::startup::save_fallback_dir()
+            .map(|f| f.join("Situations").join("quicksave.osn"))
         {
             let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
             if f.exists() && (!file.exists() || age(&f) > age(&file)) {
@@ -1562,7 +1562,7 @@ impl App {
         let dir = std::path::Path::new(&self.args.map.replace('\\', "/"))
             .parent()
             .map(|d| d.to_path_buf())?;
-        let base = crate::startup::content_dir()?;
+        let base = crate::core::startup::content_dir()?;
         let dir = base.join(dir);
         let _ = std::fs::create_dir_all(&dir);
         let out = dir.join("laststn.osn");
@@ -1663,7 +1663,7 @@ impl App {
         };
         // into openOMSI's content folder, never the original installation (the menu and
         // --situation find it there as they find a mod's files)
-        let dir = crate::startup::content_dir()
+        let dir = crate::core::startup::content_dir()
             .unwrap_or_else(|| self.args.root.clone())
             .join("Situations");
         let out = dir.join("quicksave.osn");
@@ -1706,7 +1706,7 @@ impl App {
         let (Some(w), Some(cam)) = (self.world.as_ref(), self.camera.as_ref()) else {
             return;
         };
-        let Some(dir) = crate::startup::content_dir().and_then(|base| {
+        let Some(dir) = crate::core::startup::content_dir().and_then(|base| {
             std::path::Path::new(&self.args.map.replace('\\', "/"))
                 .parent()
                 .map(|d| base.join(d).join(SAVES))
@@ -1719,7 +1719,7 @@ impl App {
             .parent()
             .map(|d| d.join(SAVES))
             .unwrap_or_default();
-        let fallback = crate::startup::save_fallback_dir().map(|f| f.join(&rel_dir));
+        let fallback = crate::core::startup::save_fallback_dir().map(|f| f.join(&rel_dir));
         let taken = |n: usize| {
             dir.join(format!("Slot {n}.osn")).exists()
                 || fallback
@@ -1786,7 +1786,7 @@ impl App {
     /// OMSI's `screenshot`: the picture into the content folder's `Screenshots`, named by the
     /// time, the map and the vehicle the player is in (see `screenshot_name`).
     pub(crate) fn take_screenshot(&mut self) {
-        let dir = crate::startup::content_dir()
+        let dir = crate::core::startup::content_dir()
             .unwrap_or_else(|| self.args.root.clone())
             .join("Screenshots");
         let _ = std::fs::create_dir_all(&dir);

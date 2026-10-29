@@ -203,7 +203,7 @@ impl World {
         if let Some(t) = g[i] {
             return t;
         }
-        let n = crate::startup::MIRROR_SIZE
+        let n = crate::core::startup::MIRROR_SIZE
             .load(std::sync::atomic::Ordering::Relaxed)
             .clamp(64, 2048);
         let t = renderer.add_render_texture(scene, n, n);
@@ -9531,7 +9531,7 @@ impl World {
                 let done = self.upgrades_done.clone();
                 let restore = restores.contains(&path);
                 // (off the frame's pool: see `threads`)
-                crate::threads::background_pool().spawn(move || {
+                crate::core::threads::background_pool().spawn(move || {
                     if let Some(t) = load_texture_key(&path, true) {
                         // (a texture over the budget comes back whatever it is, and so
                         // does one put up at half its size meanwhile: see
@@ -11102,7 +11102,8 @@ impl World {
                         dist
                     );
                     let mut ss = omsi_audio::SoundSet::new(a, &cfg, &sdir);
-                    ss.master = crate::startup::sound_gain(&crate::startup::SOUND_SCENERY);
+                    ss.master =
+                        crate::core::startup::sound_gain(&crate::core::startup::SOUND_SCENERY);
                     *sounds = Some(ss);
                 }
             }

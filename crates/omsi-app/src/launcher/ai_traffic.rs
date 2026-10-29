@@ -460,8 +460,8 @@ fn export(l: &mut Launcher, t: &AiTraffic, map: &(String, String)) {
         "Build".into(),
         format!(
             "Project Depot {} ({})",
-            crate::startup::VERSION,
-            crate::startup::BUILD
+            crate::core::startup::VERSION,
+            crate::core::startup::BUILD
         ),
     ));
     match std::fs::write(&path, t.to_text(&header)) {

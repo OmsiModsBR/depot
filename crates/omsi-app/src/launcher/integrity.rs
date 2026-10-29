@@ -316,8 +316,8 @@ fn report_text(d: &Done, kind: usize, opts: Option<&Export>, open: Option<Catego
         "Build".into(),
         format!(
             "Project Depot {} ({})",
-            crate::startup::VERSION,
-            crate::startup::BUILD
+            crate::core::startup::VERSION,
+            crate::core::startup::BUILD
         ),
     ));
     header.push((

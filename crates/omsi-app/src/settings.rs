@@ -427,7 +427,7 @@ pub fn pedal_curve(v: f32, strength: f32) -> f32 {
 
 impl Default for Settings {
     fn default() -> Self {
-        if crate::platform::MOBILE {
+        if crate::core::platform::MOBILE {
             // a phone's graphics chip and battery: 2x MSAA (cheap on a tiled GPU), no
             // ambient occlusion, a smaller shadow map and mirrors, a shorter view
             return Self {
@@ -1536,7 +1536,7 @@ impl Settings {
             reflections: self.reflections,
             no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
             ray_tracing: self.ray_tracing()
-                || crate::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
+                || crate::core::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 }

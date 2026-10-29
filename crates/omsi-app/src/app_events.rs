@@ -67,7 +67,8 @@ pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     }
 }
 
-use crate::app::{App, FrozenMirrors};
+use crate::core::app::{App, FrozenMirrors};
+use crate::core::startup::process_cpu_seconds;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
@@ -78,7 +79,6 @@ use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
-use crate::startup::process_cpu_seconds;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{
@@ -125,7 +125,7 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();
                 self.finish_session();
-                crate::platform::exit(event_loop);
+                crate::core::platform::exit(event_loop);
             }
             WindowEvent::Resized(size) => {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
@@ -428,7 +428,7 @@ impl ApplicationHandler for App {
                     } else {
                         log::error!("ending the session: the graphics device was lost ({why})");
                     }
-                    crate::platform::exit(event_loop);
+                    crate::core::platform::exit(event_loop);
                     return;
                 }
                 let desktop_vsync = self.settings.vsync && !self.vr_active();
@@ -560,7 +560,7 @@ impl ApplicationHandler for App {
                                 m.maps.len(),
                                 m.vehicles.len()
                             );
-                            crate::platform::exit(event_loop);
+                            crate::core::platform::exit(event_loop);
                         }
                     }
                     let lines = m.lines();
@@ -581,7 +581,7 @@ impl ApplicationHandler for App {
                             // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
                             wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
                                 None,
-                                Some(crate::app::stand_in_view(
+                                Some(crate::core::app::stand_in_view(
                                     &mut self.stand_in,
                                     r,
                                     s.config.width,
@@ -1574,7 +1574,7 @@ impl ApplicationHandler for App {
                                 let mut started = false;
                                 if let Some(to) = target.as_ref() {
                                     if (entering || left)
-                                        && crate::app::CAM_BLEND_SECS > 0.0
+                                        && crate::core::app::CAM_BLEND_SECS > 0.0
                                         && self.settings.driverview_smooth
                                     {
                                         let from = if entering {
@@ -1614,22 +1614,23 @@ impl ApplicationHandler for App {
                                         // adds no more than a 30th of a second)
                                         if !started {
                                             self.cam_blend.t += dt
-                                                .min(crate::app::CAM_BLEND_MAX_DT)
-                                                / crate::app::CAM_BLEND_SECS;
+                                                .min(crate::core::app::CAM_BLEND_MAX_DT)
+                                                / crate::core::app::CAM_BLEND_SECS;
                                         }
                                         if self.cam_blend.t >= 1.0 {
                                             // (the hand-over to the plain camera: the glide ends exactly on it (k = 1),
                                             // so the curve's tail is not left over to twitch; only what the two ways
                                             // of making the camera might still differ in is eased out)
                                             let mut last = p.driver_world(
-                                                &crate::app::blend_local(from, to, 1.0),
+                                                &crate::core::app::blend_local(from, to, 1.0),
                                             );
                                             finish(&mut last);
-                                            self.cam_blend.carry =
-                                                Some(crate::app::CamCarry::between(&last, &cam));
+                                            self.cam_blend.carry = Some(
+                                                crate::core::app::CamCarry::between(&last, &cam),
+                                            );
                                             self.cam_blend.from = None;
                                         } else {
-                                            let mixed = crate::app::blend_local(
+                                            let mixed = crate::core::app::blend_local(
                                                 from,
                                                 to,
                                                 self.cam_blend.progress(),
@@ -3344,7 +3345,7 @@ impl ApplicationHandler for App {
                         {
                             (
                                 None,
-                                Some(crate::app::stand_in_view(
+                                Some(crate::core::app::stand_in_view(
                                     &mut self.stand_in,
                                     r,
                                     s.config.width,
@@ -3793,7 +3794,7 @@ impl ApplicationHandler for App {
                                 );
                             }
                             finish = true;
-                            crate::platform::exit(event_loop);
+                            crate::core::platform::exit(event_loop);
                         }
                     }
                     self.total_frames += 1;
@@ -3898,7 +3899,7 @@ impl ApplicationHandler for App {
         if let Some(sig) = quit::requested() {
             log::info!("{} received: ending the session", quit::signal_name(sig));
             self.finish_session();
-            crate::platform::exit(event_loop);
+            crate::core::platform::exit(event_loop);
         }
     }
 

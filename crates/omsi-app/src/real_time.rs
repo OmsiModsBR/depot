@@ -89,7 +89,7 @@ pub(crate) fn gap(mine: &SimClock, real: &SimClock) -> f64 {
 }
 
 /// Make the arguments start the game at this device's date and time.
-pub(crate) fn start_at_now(args: &mut crate::cli::Args) {
+pub(crate) fn start_at_now(args: &mut crate::core::cli::Args) {
     let Some(n) = now() else { return };
     args.date = Some(format!("{:04}-{:02}-{:02}", n.year, n.month, n.day));
     args.day_of_year = None;
