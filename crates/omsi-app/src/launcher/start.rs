@@ -435,7 +435,27 @@ pub fn card(l: &mut Launcher, r: Rect) {
         }
     }
     let _ = foot;
-    if l.ui.button(
+    // (without a usable OMSI 2 folder, or with a game running - one at a time - the button
+    // is dimmed and does nothing; the InfoBar at the foot of the page says why)
+    let games = l.state.instances.iter().any(|i| i.running);
+    if !l.root_ok() || games {
+        l.ui.p()
+            .rounded(go, CONTROL_RADIUS, omsi_ui::theme::surface(FIELD));
+        l.ui.text_in(
+            "Start driving",
+            go,
+            14.5,
+            Weight::Bold,
+            TEXT_FAINT,
+            Align::Center,
+        );
+        let tip = if games {
+            "Game: running"
+        } else {
+            "OMSI 2 folder: not chosen"
+        };
+        l.ui.tooltip(go, tip);
+    } else if l.ui.button(
         "start-go",
         go,
         "Start driving",
