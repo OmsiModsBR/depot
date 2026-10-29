@@ -353,26 +353,6 @@ pub mod new_ui {
 pub mod new_ui_add {
     pub use crate::new_ui_add::*;
 }
-pub mod new_ui_alt {
-    pub use crate::new_ui_alt::*;
-    use glam::Vec2;
-    use omsi_ui::alt_bar::Hit;
-
-    /// The bar as a test reads it.
-    pub trait AltFrameInternals {
-        /// The index of the button under `px` (window pixels) in a window of `size` pixels.
-        fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<usize>;
-    }
-
-    impl AltFrameInternals for AltFrame {
-        fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<usize> {
-            match self.hit_any(px, size) {
-                Some(Hit::Button(i)) => Some(i),
-                _ => None,
-            }
-        }
-    }
-}
 pub mod new_ui_pages {
     use crate::hud::{Frame, MenuKind};
     use crate::new_ui::MenuFrame;
@@ -423,9 +403,6 @@ pub mod new_ui_pages {
             dropdown: None,
         }
     }
-}
-pub mod new_ui_windows {
-    pub use crate::new_ui_windows::*;
 }
 pub mod offscreen {
     pub use crate::offscreen::*;
@@ -589,6 +566,26 @@ pub mod tutorial {
     pub use crate::tutorial::*;
 }
 pub mod ui {
+    pub mod alt {
+        pub use crate::ui::domain::alt::*;
+        use glam::Vec2;
+        use omsi_ui::alt_bar::Hit;
+
+        /// The bar as a test reads it.
+        pub trait AltFrameInternals {
+            /// The index of the button under `px` (window pixels) in a window of `size` pixels.
+            fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<usize>;
+        }
+
+        impl AltFrameInternals for AltFrame {
+            fn hit(&self, px: Vec2, size: (u32, u32)) -> Option<usize> {
+                match self.hit_any(px, size) {
+                    Some(Hit::Button(i)) => Some(i),
+                    _ => None,
+                }
+            }
+        }
+    }
     pub mod loading {
         pub use crate::ui::domain::loading::*;
         pub use crate::ui::implementation::loading::*;
@@ -624,6 +621,9 @@ pub mod ui {
                 }
             }
         }
+    }
+    pub mod windows {
+        pub use crate::ui::domain::windows::*;
     }
 }
 #[cfg(feature = "lan")]
