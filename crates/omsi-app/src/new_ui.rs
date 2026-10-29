@@ -373,20 +373,20 @@ pub struct State {
     pub page: Option<crate::new_ui_pages::PageFrame>,
     alt: Option<crate::ui::AltFrame>,
     /// The "Add vehicle" window.
-    add: Option<crate::new_ui_add::AddFrame>,
+    add: Option<crate::ui::AddFrame>,
     /// The end-of-trip report.
     report: Option<crate::ui::ReportFrame>,
     /// "Continue" was clicked in the report.
     report_done: bool,
     /// Clicks and the wheel over the window showing, not yet handed to it (one a frame).
-    win_input: std::collections::VecDeque<crate::new_ui_add::WinInput>,
+    win_input: std::collections::VecDeque<crate::ui::WinInput>,
     /// What clicks in that window chose, for the game to apply.
     add_events: Vec<omsi_ui::ingame::AddVehicleEvent>,
     /// A dropdown of that window has its list open: every click goes to the window then.
     add_modal: bool,
     /// The picture of the vehicle and paint chosen there, read on its thread and not yet in
     /// the GPU (none inside: no picture was drawn of them).
-    add_picture: Option<(u64, Option<crate::new_ui_add::Picture>)>,
+    add_picture: Option<(u64, Option<crate::ui::Picture>)>,
     /// The picture the window wants now: a picture read for one chosen before is dropped.
     add_picture_want: Option<u64>,
     /// The window is open (also while the Esc menu or the report hides it: its picture stays
@@ -613,16 +613,16 @@ impl Overlay {
         let size = Vec2::new(aw as f32, ah as f32) / scale;
         // (the window's click or wheel of this frame, see `NewUi::push_input`)
         match win_input {
-            Some(crate::new_ui_add::WinInput::Press) => {
+            Some(crate::ui::WinInput::Press) => {
                 self.ui.input.pressed = true;
                 self.ui.input.down = true;
             }
-            Some(crate::new_ui_add::WinInput::Release) => {
+            Some(crate::ui::WinInput::Release) => {
                 self.ui.input.released = true;
                 self.ui.input.down = false;
             }
-            Some(crate::new_ui_add::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
-            Some(crate::new_ui_add::WinInput::Lost) => self.ui.input.down = false,
+            Some(crate::ui::WinInput::Wheel(y)) => self.ui.input.wheel = Vec2::new(0.0, y),
+            Some(crate::ui::WinInput::Lost) => self.ui.input.down = false,
             None if add.is_none() && tool.is_none() && report.is_none() => {
                 self.ui.input.down = false
             }
@@ -752,7 +752,7 @@ pub struct NewUi {
     map_picture_started: bool,
     pub(crate) alt: crate::ui::AltState,
     /// The "Add vehicle" window, while it is open.
-    pub(crate) add: Option<crate::new_ui_add::AddWindow>,
+    pub(crate) add: Option<crate::ui::AddWindow>,
     /// Keys the "Add vehicle" window's registration field took: their release is its too.
     pub(crate) add_taken: std::collections::HashSet<winit::keyboard::KeyCode>,
     /// The vehicle and paint whose picture the "Add vehicle" window asked for last.
@@ -760,7 +760,7 @@ pub struct NewUi {
     /// The manufacturer and the vehicle file chosen last in that window: it opens on them.
     pub(crate) add_last: Option<(String, String)>,
     /// That window's live 3D view, while the player has it on.
-    pub(crate) add_live: Option<crate::new_ui_add::LiveView>,
+    pub(crate) add_live: Option<crate::ui::LiveView>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
     pub page: Option<crate::new_ui_pages::PageFrame>,
     /// The headset's picture of the menu and the page (a render texture of the window's size,
@@ -914,7 +914,7 @@ impl NewUi {
         &self,
         menu: Option<MenuFrame>,
         alt: Option<crate::ui::AltFrame>,
-        add: Option<crate::new_ui_add::AddFrame>,
+        add: Option<crate::ui::AddFrame>,
         tool: Option<crate::ui::ToolFrame>,
         report: Option<crate::ui::ReportFrame>,
         mouse: Vec2,
@@ -995,7 +995,7 @@ impl NewUi {
     }
 
     /// Hand the window showing a click or a turn of the wheel over it.
-    pub(crate) fn push_input(&self, input: crate::new_ui_add::WinInput) {
+    pub(crate) fn push_input(&self, input: crate::ui::WinInput) {
         if let Ok(mut s) = self.shared.lock() {
             s.win_input.push_back(input);
         }
@@ -1081,7 +1081,7 @@ impl NewUi {
         bus: &str,
         paint: &str,
     ) -> u64 {
-        let key = crate::new_ui_add::picture_key(root, bus, paint);
+        let key = crate::ui::picture_key(root, bus, paint);
         if self.add_picture == Some(key) {
             return key;
         }
@@ -1094,7 +1094,7 @@ impl NewUi {
         let _ = std::thread::Builder::new()
             .name("add-vehicle-picture".into())
             .spawn(move || {
-                let pic = crate::new_ui_add::read_picture(&root, &bus, &paint);
+                let pic = crate::ui::read_picture(&root, &bus, &paint);
                 // (a picture read for a vehicle or paint chosen before this one is dropped: it
                 // came after the one wanted, or would take its place)
                 if let Ok(mut s) = shared.lock() {

@@ -9,7 +9,8 @@
 //! `Journeys`).
 
 use super::super::domain::report::{watch_step, Report, ReportFrame, TripKey, Watch};
-use super::super::interface::output::{App, WinInput};
+use super::super::domain::win_input::WinInput;
+use super::super::interface::output::App;
 use glam::Vec2;
 use omsi_ui::ingame::{self, TripReport};
 use omsi_ui::widgets::Ui;

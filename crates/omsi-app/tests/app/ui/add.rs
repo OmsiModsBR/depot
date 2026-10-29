@@ -1,5 +1,5 @@
 use omsi_ui::ingame::Preview;
-use openomsi_game::testing::new_ui_add::*;
+use openomsi_game::testing::ui::add::*;
 
 fn window() -> AddWindow {
     let mut w = AddWindow::new(vec![
