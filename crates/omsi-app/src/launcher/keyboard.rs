@@ -533,12 +533,17 @@ pub fn draw(l: &mut Launcher, body: Rect) {
     let label = |a: &str| action_text(names, a);
     let original = l.pages.kb.original.clone().flatten();
     let factory = l.pages.kb.factory.clone();
-    let mut all = rows(
-        &l.state.keybindings,
-        original.as_ref(),
-        factory.as_ref(),
-        &label,
-    );
+    // (with OMSI 2 chosen the page shows the keys of the OMSI 2 folder's own controls file,
+    // as they are, and changes nothing: they are changed inside OMSI 2)
+    let read_only = l.state.omsi2_engine();
+    let shown_keys = if read_only {
+        original
+            .clone()
+            .unwrap_or_else(|| json!({ "vehicles": [], "game": [] }))
+    } else {
+        l.state.keybindings.clone()
+    };
+    let mut all = rows(&shown_keys, original.as_ref(), factory.as_ref(), &label);
     // (the original OMSI 2 has no action of the Depot's own: VR, chat, the any-bus doors)
     if l.state.omsi2_engine() {
         all.retain(|r| super::omsi2_map::action_in_omsi2(&r.action));
@@ -546,6 +551,7 @@ pub fn draw(l: &mut Launcher, body: Rect) {
     // (as many as a reload would change: the original's actions the Depot lacks count too)
     let changed = original
         .as_ref()
+        .filter(|_| !read_only)
         .map(|o| {
             reload_plan(&l.state.keybindings, o, &|a| a.to_string())
                 .changes
@@ -561,19 +567,25 @@ pub fn draw(l: &mut Launcher, body: Rect) {
         omsi_ui::tr("Your layout · %{n} changed from your OMSI 2")
             .replace("%{n}", &changed.to_string())
     };
-    let cw = l.ui.width(&chip, 12.0, Weight::Regular) + 24.0;
-    let cr = Rect::new(body.right() - cw, body.y - 44.0, cw, 26.0);
-    l.ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
-    l.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
-    l.ui.text_in(&chip, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
+    if !read_only {
+        let cw = l.ui.width(&chip, 12.0, Weight::Regular) + 24.0;
+        let cr = Rect::new(body.right() - cw, body.y - 44.0, cw, 26.0);
+        l.ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
+        l.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
+        l.ui.text_in(&chip, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
+    }
     let mut y = body.y;
-    y += preset_bar(l, Rect::new(body.x, y, body.w, 0.0));
-    y += import_bar(
-        l,
-        Rect::new(body.x, y, body.w, 56.0),
-        original.is_some(),
-        changed,
-    ) + 12.0;
+    if read_only {
+        y += read_only_bar(l, Rect::new(body.x, y, body.w, 44.0)) + 12.0;
+    } else {
+        y += preset_bar(l, Rect::new(body.x, y, body.w, 0.0));
+        y += import_bar(
+            l,
+            Rect::new(body.x, y, body.w, 56.0),
+            original.is_some(),
+            changed,
+        ) + 12.0;
+    }
     let cols = Rect::new(body.x, y, body.w, body.bottom() - y);
     let gw = omsi_launcher_ui::kit::fit(210.0, cols.w);
     let dw = omsi_launcher_ui::kit::fit(330.0, cols.w);
@@ -603,6 +615,11 @@ pub fn draw(l: &mut Launcher, body: Rect) {
 
 /// A key pressed while an entry waits for one (`pages.capturing`), or for the Add window.
 fn capture(l: &mut Launcher) {
+    // (with OMSI 2 chosen the keys are only shown, see `read_only`)
+    if l.state.omsi2_engine() {
+        l.pages.capturing = None;
+        return;
+    }
     let Some(code) = l.ui.input.raw_key else {
         return;
     };
@@ -678,6 +695,24 @@ fn capture(l: &mut Launcher) {
         b["modifier"] = json!(m | hold);
     }
     save_keys(l, vr);
+}
+
+/// With OMSI 2 chosen the keys and controllers are only shown: where they are changed.
+pub fn read_only_bar(l: &mut Launcher, r: Rect) -> f32 {
+    l.ui.p().rounded(r, 6.0, accent().alpha(0.08));
+    l.ui.p().rounded_border(r, 6.0, 1.0, accent().alpha(0.45));
+    l.ui.icon("info", Vec2::new(r.x + 20.0, r.center().y), 16.0, accent());
+    let text = omsi_ui::tr("Keys and controllers are read from your OMSI 2 folder. Change them inside OMSI 2: they are never written from here.");
+    let text = omsi_launcher_ui::kit::fit_text(&mut l.ui, &text, 12.5, r.w - 56.0);
+    l.ui.text_in(
+        &text,
+        Rect::new(r.x + 40.0, r.y, r.w - 52.0, r.h),
+        12.5,
+        Weight::Regular,
+        TEXT_SOFT,
+        Align::Left,
+    );
+    r.h
 }
 
 /// The ready-made driving keys win over this page's: say so, with the switch (none with
@@ -920,23 +955,35 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
         TEXT_DIM,
         Align::Right,
     );
-    let aw = l.ui.width("Add a control", 13.0, Weight::Bold) + 48.0;
+    let read_only = l.state.omsi2_engine();
+    let aw = if read_only {
+        0.0
+    } else {
+        l.ui.width("Add a control", 13.0, Weight::Bold) + 48.0
+    };
     let mut query = std::mem::take(&mut l.pages.kb.query);
     l.ui.text_input(
         "kb-search",
-        Rect::new(inner.x, inner.y, inner.w - aw - 10.0, 34.0),
+        Rect::new(
+            inner.x,
+            inner.y,
+            inner.w - if read_only { 0.0 } else { aw + 10.0 },
+            34.0,
+        ),
         &mut query,
         "Search every action...",
         Some("search"),
     );
     l.pages.kb.query = query;
-    if l.ui.button(
-        "kb-add",
-        Rect::new(inner.right() - aw, inner.y, aw, 34.0),
-        "Add a control",
-        Some("add"),
-        ButtonKind::Primary,
-    ) {
+    if !read_only
+        && l.ui.button(
+            "kb-add",
+            Rect::new(inner.right() - aw, inner.y, aw, 34.0),
+            "Add a control",
+            Some("add"),
+            ButtonKind::Primary,
+        )
+    {
         l.pages.kb.dialog = Some(Dialog::Add {
             query: String::new(),
             chosen: None,
@@ -1066,7 +1113,7 @@ fn list_card(l: &mut Launcher, r: Rect, all: &[Row]) {
                         key_click = Some((n, k));
                     }
                 }
-                if row.off_factory {
+                if row.off_factory && !read_only {
                     let xr = Rect::new(rr.right() - 30.0, cy - 12.0, 24.0, 24.0);
                     let (hx, _, cx) =
                         ui.interact(id_of(&format!("kb-reset-{}-{}", row.sec, row.action)), xr);
@@ -1107,6 +1154,9 @@ pub fn near_view(rr: Rect, area: Rect) -> bool {
 /// The `k`-th key of `row` waits to be pressed (a second key's entry is added for it when the
 /// action has one key only).
 fn wait_for_key(l: &mut Launcher, row: &Row, k: usize) {
+    if l.state.omsi2_engine() {
+        return;
+    }
     drop_added(l);
     if let Some(&e) = row.entries.get(k) {
         l.pages.capturing = Some((row.sec, e));
@@ -1159,6 +1209,9 @@ fn drop_added(l: &mut Launcher) {
 
 /// `row`'s keys as OMSI 2 has them as it comes (its `keyboard_reset.cfg`).
 fn back_to_original(l: &mut Launcher, row: &Row) {
+    if l.state.omsi2_engine() {
+        return;
+    }
     let key = SECTIONS[row.sec];
     let from = factory_entries(l.pages.kb.factory.as_ref(), key, &row.action);
     if from.is_empty() {
@@ -1191,7 +1244,11 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
             "Action",
         );
         l.ui.paragraph(
-            "Click an action to see its keys, change them, or take the original OMSI 2's back.",
+            if l.state.omsi2_engine() {
+                "Click an action to see its keys."
+            } else {
+                "Click an action to see its keys, change them, or take the original OMSI 2's back."
+            },
             Vec2::new(inner.x, inner.y + 4.0),
             inner.w,
             13.0,
@@ -1285,12 +1342,14 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
                 if key.is_some() { TEXT } else { TEXT_FAINT },
                 Align::Left,
             );
-            l.ui.icon(
-                if key.is_some() { "edit" } else { "add" },
-                Vec2::new(f.right() - 18.0, f.center().y),
-                15.0,
-                TEXT_DIM,
-            );
+            if !l.state.omsi2_engine() {
+                l.ui.icon(
+                    if key.is_some() { "edit" } else { "add" },
+                    Vec2::new(f.right() - 18.0, f.center().y),
+                    15.0,
+                    TEXT_DIM,
+                );
+            }
         }
         if c {
             wait_for_key(l, &row, k);
@@ -1374,12 +1433,19 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
     }
     let _ = y;
     // the foot: back to the original, clear; and why a shared key is fine
-    let note = "A key used twice is flagged, never blocked: both actions fire together, and you can save it that way.";
+    let read_only = l.state.omsi2_engine();
+    let note = if read_only {
+        "A key used twice is flagged: both actions fire together."
+    } else {
+        "A key used twice is flagged, never blocked: both actions fire together, and you can save it that way."
+    };
     let nh = l.ui.paragraph_height(note, inner.w, 12.0, Weight::Regular);
     let by = inner.bottom() - nh - 46.0;
     let cw = 80.0;
     let back = Rect::new(inner.x, by, inner.w - cw - 10.0, 34.0);
-    if row.off_factory {
+    if read_only {
+        // (nothing to change here)
+    } else if row.off_factory {
         if l.ui.button(
             "kb-back",
             back,
@@ -1400,13 +1466,15 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
             Align::Center,
         );
     }
-    if l.ui.button(
-        "kb-clear",
-        Rect::new(inner.right() - cw, by, cw, 34.0),
-        "Clear",
-        None,
-        ButtonKind::Normal,
-    ) && !row.unassigned()
+    if !read_only
+        && l.ui.button(
+            "kb-clear",
+            Rect::new(inner.right() - cw, by, cw, 34.0),
+            "Clear",
+            None,
+            ButtonKind::Normal,
+        )
+        && !row.unassigned()
     {
         let key = SECTIONS[row.sec];
         if let Some(a) = l
@@ -1438,6 +1506,10 @@ fn detail_card(l: &mut Launcher, r: Rect, all: &[Row], original: Option<&Value>)
 
 /// The window open over the keyboard page, if any (the page sees no mouse meanwhile).
 pub fn dialog(l: &mut Launcher) {
+    if l.state.omsi2_engine() {
+        l.pages.kb.dialog = None;
+        return;
+    }
     capture(l);
     let esc = l.ui.input.keys.contains(&Key::Escape);
     match l.pages.kb.dialog.take() {
