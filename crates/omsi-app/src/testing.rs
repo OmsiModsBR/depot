@@ -350,9 +350,6 @@ pub mod new_ui {
         }
     }
 }
-pub mod new_ui_add {
-    pub use crate::new_ui_add::*;
-}
 pub mod new_ui_pages {
     use crate::hud::{Frame, MenuKind};
     use crate::new_ui::MenuFrame;
@@ -566,6 +563,9 @@ pub mod tutorial {
     pub use crate::tutorial::*;
 }
 pub mod ui {
+    pub mod add {
+        pub use crate::ui::domain::add::*;
+    }
     pub mod alt {
         pub use crate::ui::domain::alt::*;
         use glam::Vec2;

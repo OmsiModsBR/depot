@@ -1,7 +1,7 @@
 //! The Alt bar's state: its buttons and why one is dim, what the overlay draws of it, where
 //! it stands in the window, the keyboard's walk over it and the tap of Alt that shows it.
 
-use super::super::interface::output::PLACING;
+use super::add::PLACING;
 use glam::Vec2;
 use omsi_ui::alt_bar::{self, COLUMNS};
 use winit::keyboard::KeyCode;

@@ -246,13 +246,13 @@ impl App {
         if self.new_ui.tool.window.is_some() {
             self.new_ui.tool.forget_input();
             self.new_ui.clear_win_input();
-            self.new_ui.push_input(crate::new_ui_add::WinInput::Lost);
+            self.new_ui.push_input(crate::ui::WinInput::Lost);
         }
         // (the report stays, but forgets a press whose release will not come)
         if let Some(r) = self.new_ui.report.as_mut() {
             r.forget_press();
             self.new_ui.clear_win_input();
-            self.new_ui.push_input(crate::new_ui_add::WinInput::Lost);
+            self.new_ui.push_input(crate::ui::WinInput::Lost);
         }
         if let Some(p) = self.player.as_mut() {
             p.release();

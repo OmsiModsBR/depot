@@ -52,7 +52,6 @@ mod mirror_hud;
 mod money;
 mod nav;
 mod new_ui;
-mod new_ui_add;
 mod new_ui_pages;
 mod offscreen;
 mod on_foot;
