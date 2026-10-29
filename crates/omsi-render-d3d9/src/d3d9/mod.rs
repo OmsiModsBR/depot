@@ -548,6 +548,8 @@ impl D3d9Device {
                 log::warn!(
                     "d3d9: no D24S8 depth with {granted}x multisampling here; D24X8 is used (no stencil)"
                 );
+            } else {
+                log::info!("d3d9: depth format D24S8 (with {granted}x multisampling)");
             }
             self.depth_format = depth_format;
             // (surfaces made in the old format are made again when next needed)
