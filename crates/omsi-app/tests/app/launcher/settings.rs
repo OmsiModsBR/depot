@@ -367,7 +367,14 @@ fn the_dx9_snow_option_is_shown_only_under_directx9() {
         s["graphics_api"] = json!(api);
         let sec = OPTS.iter().find(|o| o.key == "dx9_snow").unwrap().sec;
         let mut ui = Ui::new();
-        frame(&mut ui, sec, "", &mut s, &mut start(), &mut Outside::default());
+        frame(
+            &mut ui,
+            sec,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
         ui.drawn.contains_key(&id_of("opt-dx9_snow"))
     };
     assert!(!drawn("vulkan"));
