@@ -57,6 +57,10 @@ checked against the manifest before they are run. The checksum comes from the sa
 as the package, so it detects damage and tampering in transit, not a replaced release; the
 window shows the SHA-256 and the release page so the player can compare.
 
+## Starting a session
+
+With OMSI 2 chosen, Start on Maps builds the launch description under `~/.depot/omsi2/launch/` (never inside the OMSI 2 folder), asks OmsiLaunch for a plan (`/plan --json`) and starts nothing unless the plan is runnable; each reason it gives is shown as a sentence. Only the map and the start point are sent for now, together with every saved setting (`/set:`) and the enabled modules. The launcher's window is minimized while the game runs (OmsiLaunch keeps its own tray icon; the Depot adds none) and comes back when it ends; a failed exit code is shown as a sentence and kept in the log. One game runs at a time, the Depot's or the original. Continuing a saved situation and the tutorials are not available in this mode.
+
 ## Modules
 
 Optional modules (Omsi Prefetch, openHUD) are separate programs under their own license

@@ -547,6 +547,8 @@ impl State {
     /// A game is about to start, starting (not in the list of games yet) or running.
     pub fn in_game(&self) -> bool {
         self.queued_launch.is_some()
+            || self.original.starting
+            || self.original.run.is_some()
             || self
                 .launch_hold
                 .is_some_and(|t| t.elapsed().as_secs_f32() < 15.0)
@@ -1063,6 +1065,11 @@ impl State {
         }
         let mut d = self.duty();
         adjust(&mut d);
+        // (with OMSI 2 chosen the game is the original one, started through OmsiLaunch)
+        if self.omsi2_engine() {
+            self.launch_original(&d);
+            return;
+        }
         self.set_status("Starting the game…", false);
         self.queued_launch = Some(d);
     }
@@ -1167,6 +1174,10 @@ impl State {
         if self.one_game_only() || !self.save_pending_settings() {
             return;
         }
+        if self.omsi2_engine() {
+            self.set_status("This start option is not available in OMSI 2 mode.", true);
+            return;
+        }
         let pick = self.save_pick;
         let list = self.saved_situations();
         let Some(file) = list
@@ -1187,6 +1198,10 @@ impl State {
     /// Start one of OMSI's tutorials (1..4).
     pub fn launch_tutorial(&mut self, n: usize) {
         if self.one_game_only() || !self.save_pending_settings() {
+            return;
+        }
+        if self.omsi2_engine() {
+            self.set_status("This start option is not available in OMSI 2 mode.", true);
             return;
         }
         let mut d = self.duty();
@@ -1282,6 +1297,7 @@ impl State {
             self.handle(m);
         }
         self.follow_clock();
+        self.engine_poll();
         self.poll_t -= dt;
         if self.poll_t <= 0.0 {
             self.poll_t = 2.5;
