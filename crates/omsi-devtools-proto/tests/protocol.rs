@@ -80,10 +80,7 @@ fn handshake_refuses_another_version() {
         build: "x".into(),
     };
     assert!(check_hello(&ok).is_ok());
-    assert!(matches!(
-        check_hello(&old),
-        Err(CommandError::Version { .. })
-    ));
+    assert!(matches!(check_hello(&old), Err(HelloError { .. })));
 }
 
 #[test]
@@ -110,4 +107,67 @@ fn commands_with_paths_or_bad_values_are_refused() {
         Err(CommandError::UnknownFile(2))
     );
     assert!(validate_command(&Command::Reload { file_index: 1 }, 2).is_ok());
+}
+
+#[test]
+fn bytes_left_over_inside_a_frame_are_refused() {
+    let mut payload = postcard::to_stdvec(&ToGame::Hello(Hello {
+        protocol: 1,
+        build: "x".into(),
+    }))
+    .unwrap();
+    payload.push(0);
+    let mut buf = (payload.len() as u32).to_le_bytes().to_vec();
+    buf.extend(payload);
+    assert_eq!(decode::<ToGame>(&buf), Err(FrameError::TrailingBytes(1)));
+}
+
+#[test]
+fn the_length_limit_is_exact() {
+    // postcard writes a string as a length varint plus its bytes, so the payload is the text
+    // plus the enum tag and the length prefix; adjust the text until the payload is the limit.
+    let payload_len = |n: usize| {
+        postcard::to_stdvec(&ToLauncher::Rejected {
+            reason: "x".repeat(n),
+        })
+        .unwrap()
+        .len()
+    };
+    let mut n = MAX_FRAME_LEN;
+    while payload_len(n) > MAX_FRAME_LEN {
+        n -= payload_len(n) - MAX_FRAME_LEN;
+    }
+    assert_eq!(payload_len(n), MAX_FRAME_LEN);
+    let at_limit = ToLauncher::Rejected {
+        reason: "x".repeat(n),
+    };
+    let framed = encode(&at_limit).unwrap();
+    assert_eq!(decode::<ToLauncher>(&framed).unwrap().1, framed.len());
+    let over = ToLauncher::Rejected {
+        reason: "x".repeat(n + 1),
+    };
+    assert!(matches!(encode(&over), Err(FrameError::TooLong(_))));
+}
+
+#[test]
+fn text_and_subscription_limits_apply() {
+    let set = |v| Command::SetVariable {
+        name: "a".into(),
+        value: v,
+    };
+    assert_eq!(
+        validate_command(&set(VarValue::Text("x".repeat(MAX_TEXT + 1))), 0),
+        Err(CommandError::TextTooLong(MAX_TEXT))
+    );
+    assert_eq!(
+        validate_command(&set(VarValue::Text("a\nb".into())), 0),
+        Err(CommandError::ControlInText)
+    );
+    let many = Command::Subscribe {
+        names: vec!["v".into(); MAX_SUBSCRIPTION + 1],
+    };
+    assert_eq!(
+        validate_command(&many, 0),
+        Err(CommandError::TooManyNames(MAX_SUBSCRIPTION))
+    );
 }
