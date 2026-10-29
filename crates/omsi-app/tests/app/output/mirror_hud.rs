@@ -1,5 +1,5 @@
 use glam::Vec3;
-use openomsi_game::testing::mirror_hud::*;
+use openomsi_game::testing::output::mirror_hud::*;
 use winit::keyboard::KeyCode;
 
 fn editing(panels: Vec<Panel>) -> MirrorHud {

@@ -2,7 +2,7 @@
 //! is under the cursor.
 
 use crate::app::App;
-use crate::camera_util::{cursor_ray, pixel_angle, ORBIT_MAX, ORBIT_MIN};
+use crate::output::{cursor_ray, pixel_angle, ORBIT_MAX, ORBIT_MIN};
 use omsi_render::Camera;
 use winit::keyboard::KeyCode;
 

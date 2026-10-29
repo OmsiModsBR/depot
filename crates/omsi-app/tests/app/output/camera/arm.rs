@@ -1,6 +1,6 @@
 use glam::DVec3;
 use glam::Vec3;
-use openomsi_game::testing::camera_arm::*;
+use openomsi_game::testing::output::camera::arm::*;
 
 fn run(arm: &mut SpringArm, want: f32, free: f32, secs: f32) -> f32 {
     let mut l = 0.0;

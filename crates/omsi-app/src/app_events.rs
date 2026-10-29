@@ -68,13 +68,13 @@ pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
 }
 
 use crate::app::{App, FrozenMirrors};
-use crate::camera_util::{render_mirrors, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
 use crate::humans;
 use crate::lights;
 use crate::nav;
+use crate::output::{render_mirrors, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
@@ -1203,7 +1203,7 @@ impl ApplicationHandler for App {
                         // few km/h as the bus pulls away and comes back when it stands - it
                         // swayed on the road as well, #1325)
                         let idle = idle
-                            * crate::head_idle::standstill(p.vehicle.motion().velocity_kmh().abs());
+                            * crate::output::standstill(p.vehicle.motion().velocity_kmh().abs());
                         // (a switch under the cursor is a hand reaching for it, and a view that
                         // goes on sliding under the pointer is a view that misses what it was
                         // reaching for. Held, not reset: the camera stays where it is, which is
@@ -1495,7 +1495,7 @@ impl ApplicationHandler for App {
                                             s.config.width as f32 / s.config.height.max(1) as f32
                                         })
                                         .unwrap_or(16.0 / 9.0);
-                                    crate::camera_util::auto_outside_fov(aspect)
+                                    crate::output::auto_outside_fov(aspect)
                                 }
                             });
                             // Eased Space return (F1): look + zoom glide home on the

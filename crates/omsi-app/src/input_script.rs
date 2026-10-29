@@ -2,8 +2,8 @@
 
 use crate::actions::dump_display_textures;
 use crate::app::App;
-use crate::camera_util::{ORBIT_MAX, ORBIT_MIN};
 use crate::describe;
+use crate::output::{ORBIT_MAX, ORBIT_MIN};
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::KeyCode;

@@ -15,10 +15,7 @@ mod ambience;
 #[cfg(target_os = "android")]
 mod android;
 mod api_limits;
-mod camera_arm;
 mod career;
-#[cfg(windows)]
-mod d3d9_output;
 mod describe;
 mod driver;
 mod editor;
@@ -26,7 +23,6 @@ mod env_file;
 mod export;
 mod game_controller_menu;
 mod game_lists;
-mod head_idle;
 mod headtrack;
 mod hud;
 mod humans;
@@ -40,11 +36,9 @@ mod mac_game_controller;
 mod mac_hid;
 mod map_surface;
 mod menu;
-mod mirror_hud;
 mod money;
 mod nav;
-#[cfg(windows)]
-mod openxr;
+mod output;
 mod placing;
 mod platform;
 mod radio;
@@ -55,7 +49,6 @@ mod steam;
 mod touch;
 mod tr_fill;
 mod ui;
-mod vr_navigator;
 
 mod condensation;
 mod line_times;
@@ -76,7 +69,6 @@ mod app;
 mod app_events;
 mod applog;
 mod bus_service;
-mod camera_util;
 mod cli;
 mod controllers;
 mod diagnostics;
@@ -144,13 +136,13 @@ pub(crate) fn ui_language(code: &str) {
 
 use anyhow::Result;
 use app::App;
-use camera_util::ORBIT_DEFAULT;
 use clap::Parser;
 use cli::Args;
 use duty_start::place_on_duty;
 use input_script::parse_input_script;
 use launcher_link::open_launcher;
 use offscreen::run_offscreen;
+use output::ORBIT_DEFAULT;
 use services::run_export;
 use situation::apply_situation;
 use startup::{
@@ -474,7 +466,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         duty_places: false,
         hud: None,
         navigator: None,
-        vr_nav_profiles: crate::vr_navigator::Profiles::load(),
+        vr_nav_profiles: crate::output::Profiles::load(),
         vr_nav_edit: None,
         spanned: false,
         ui: hud::Ui::new(),

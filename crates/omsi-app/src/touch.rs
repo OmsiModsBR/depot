@@ -12,7 +12,7 @@
 //! or mod - is driven by them as it is by the keyboard.
 
 use crate::app::App;
-use crate::camera_util::ORBIT_DEFAULT;
+use crate::output::ORBIT_DEFAULT;
 use omsi_render::Renderer;
 use omsi_ui::paint::Align;
 use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Weight};

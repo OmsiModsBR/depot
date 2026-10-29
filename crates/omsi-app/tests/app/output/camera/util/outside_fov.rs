@@ -1,4 +1,4 @@
-use openomsi_game::testing::camera_util::auto_outside_fov;
+use openomsi_game::testing::output::camera::util::auto_outside_fov;
 
 #[test]
 fn ultrawide_keeps_the_sideways_view_of_16_9() {

@@ -9,8 +9,8 @@ Only under the render option "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
 `OMSI_BACKEND=d3d9`), on Windows and without VR; the default renderer and the other
 backends are untouched. In that mode `omsi-render` runs on wgpu's noop device and keeps
 the books (scene, culling, level of detail, alpha order); its asset events and each window
-picture's frame plan come here (`omsi-app/src/d3d9_output.rs`), and this crate draws and
-presents the window. It **declares no supported hardware**: widening the hardware matrix
+picture's frame plan come here (`omsi-app/src/output/implementation/d3d9.rs`), and
+this crate draws and presents the window. It **declares no supported hardware**: widening the hardware matrix
 is a product decision.
 
 A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
