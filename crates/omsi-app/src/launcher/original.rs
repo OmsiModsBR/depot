@@ -131,12 +131,12 @@ impl Original {
 }
 
 impl State {
-    /// Reads what is installed (in the background); at most every few seconds.
     /// The original OMSI 2 is the engine games start with: the pages show what it has.
     pub fn omsi2_engine(&self) -> bool {
         self.original.engine(&self.config.original_engine) == Engine::Omsi2
     }
 
+    /// Reads what is installed (in the background); at most every few seconds.
     pub fn engine_refresh(&mut self, force: bool) {
         if !available() {
             return;
