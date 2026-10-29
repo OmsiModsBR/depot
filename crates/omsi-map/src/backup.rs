@@ -52,23 +52,39 @@ pub fn writable(path: &Path) -> bool {
 }
 
 /// Whether `file` is a file a backup may hold and put back: an AI list (`ailists.cfg`) or a
-/// parking list (`parklist_p*.txt`) right in the map folder - never a path that leaves it.
+/// parking list (`parklist_p*.txt`) right in the map folder, or a timetable line
+/// (`TTData/<name>.ttl`) - never a path that leaves the map folder.
 pub fn allowed(file: &str) -> bool {
+    let name_ok = |n: &std::ffi::OsStr| {
+        let n = n.to_string_lossy().to_ascii_lowercase();
+        // (no `:`: on NTFS `ailists.cfg:x` is a hidden stream of the file, not the file)
+        (!n.contains(':')).then_some(n)
+    };
     let mut parts = Path::new(file).components();
-    let (Some(std::path::Component::Normal(name)), None) = (parts.next(), parts.next()) else {
+    let (Some(std::path::Component::Normal(first)), second, None) =
+        (parts.next(), parts.next(), parts.next())
+    else {
         return false;
     };
-    let name = name.to_string_lossy().to_ascii_lowercase();
-    // (no `:`: on NTFS `ailists.cfg:x` is a hidden stream of the file, not the file)
-    !name.contains(':')
-        && (name == "ailists.cfg" || (name.starts_with("parklist_p") && name.ends_with(".txt")))
+    let Some(first) = name_ok(first) else {
+        return false;
+    };
+    match second {
+        None => {
+            first == "ailists.cfg" || (first.starts_with("parklist_p") && first.ends_with(".txt"))
+        }
+        Some(std::path::Component::Normal(name)) => {
+            first == "ttdata" && name_ok(name).is_some_and(|n| n.len() > 4 && n.ends_with(".ttl"))
+        }
+        Some(_) => false,
+    }
 }
 
 fn check(files: &[&str]) -> io::Result<()> {
     match files.iter().find(|f| !allowed(f)) {
         Some(f) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("{f} is not an AI or parking list of the map folder"),
+            format!("{f} is not an AI list, a parking list or a timetable line of the map folder"),
         )),
         None => Ok(()),
     }
@@ -132,7 +148,7 @@ fn take(map_dir: &Path, store: &Path, stamp: &str, files: &[&str]) -> io::Result
 
 /// Write `files` ((path in the map folder, bytes)) into the map folder, after a backup of
 /// what they replace. When a write fails, the files already written are put back as they
-/// were and the error is returned; the backup stays. Only AI and parking lists of the map
+/// were and the error is returned; the backup stays. Only AI lists, parking lists and timetable lines of the map
 /// folder are written (see [`allowed`]).
 pub fn write_with_backup(
     map_dir: &Path,
@@ -225,7 +241,7 @@ pub fn list(store: &Path) -> Vec<Backup> {
 /// restore can itself be undone; that new backup is returned.
 pub fn restore(map_dir: &Path, store: &Path, stamp: &str, backup: &Backup) -> io::Result<Backup> {
     let names: Vec<&str> = backup.files.iter().map(|f| f.file.as_str()).collect();
-    // (`take` refuses a file that is not an AI or parking list of the map folder)
+    // (`take` refuses a file that is not an AI list, a parking list or a timetable line of the map folder)
     let now = take(map_dir, store, stamp, &names)?;
     // (every copy is read first: a backup that lost one changes nothing)
     let mut copies = Vec::new();
@@ -389,6 +405,31 @@ mod tests {
     }
 
     #[test]
+    fn a_timetable_line_is_kept_and_put_back() {
+        let base = temp("ttl");
+        let map = base.join("Grundorf");
+        let store = base.join("backups").join("Grundorf");
+        std::fs::create_dir_all(map.join("TTData")).unwrap();
+        std::fs::write(map.join("TTData").join("76.ttl"), b"old line").unwrap();
+        let files = vec![("TTData/76.ttl".to_string(), b"new line".to_vec())];
+        let b = write_with_backup(&map, &store, "2026-10-28_03-00", &files).unwrap();
+        assert_eq!(
+            std::fs::read(map.join("TTData/76.ttl")).unwrap(),
+            b"new line"
+        );
+        assert_eq!(
+            std::fs::read(b.dir.join("TTData/76.ttl")).unwrap(),
+            b"old line"
+        );
+        assert_eq!(list(&store).len(), 1);
+        restore(&map, &store, "2026-10-28_03-05", &b).unwrap();
+        assert_eq!(
+            std::fs::read(map.join("TTData/76.ttl")).unwrap(),
+            b"old line"
+        );
+    }
+
+    #[test]
     fn nothing_outside_the_map_folder_is_written_or_taken_out() {
         let base = temp("outside");
         let map = base.join("maps").join("M");
@@ -405,6 +446,12 @@ mod tests {
             victim.display().to_string(),
             "sub/ailists.cfg".to_string(),
             "global.cfg".to_string(),
+            "TTData/../global.cfg".to_string(),
+            "TTData/76.ttl:hidden".to_string(),
+            "TTData/.ttl".to_string(),
+            "TTData/76.txt".to_string(),
+            "TTData/sub/76.ttl".to_string(),
+            "Other/76.ttl".to_string(),
         ] {
             assert!(!allowed(&name), "{name}");
             let files = vec![(name.clone(), b"x".to_vec())];
@@ -418,6 +465,8 @@ mod tests {
             "AILISTS.CFG",
             "parklist_p.txt",
             "parklist_p_3.txt",
+            "TTData/76.ttl",
+            "ttdata/A.TTL",
         ] {
             assert!(allowed(name), "{name}");
         }
