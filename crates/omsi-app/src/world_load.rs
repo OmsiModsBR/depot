@@ -1,7 +1,7 @@
 //! Opening a map: the season, the world, the spawn point.
 
-use crate::camera_util::default_camera;
 use crate::cli::{parse_cam, Args};
+use crate::output::default_camera;
 use crate::scene::World;
 use crate::situation::start_clock;
 use crate::weather_setup::weather_snow;

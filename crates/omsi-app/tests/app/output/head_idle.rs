@@ -1,4 +1,4 @@
-use openomsi_game::testing::head_idle::*;
+use openomsi_game::testing::output::head_idle::*;
 
 /// The sway after `seconds` of steps of `dt`, as the game would have made it (at the pace
 /// designed here unless another one is asked for).
@@ -12,11 +12,23 @@ fn after(dt: f32, seconds: f32, strength: f32, pace: f32) -> HeadIdle {
 
 #[test]
 fn the_sway_is_for_a_bus_standing_still() {
-    assert_eq!(openomsi_game::testing::head_idle::standstill(0.0), 1.0);
-    assert_eq!(openomsi_game::testing::head_idle::standstill(0.3), 1.0);
-    assert_eq!(openomsi_game::testing::head_idle::standstill(5.0), 0.0);
-    assert_eq!(openomsi_game::testing::head_idle::standstill(50.0), 0.0);
-    let mid = openomsi_game::testing::head_idle::standstill(2.75);
+    assert_eq!(
+        openomsi_game::testing::output::head_idle::standstill(0.0),
+        1.0
+    );
+    assert_eq!(
+        openomsi_game::testing::output::head_idle::standstill(0.3),
+        1.0
+    );
+    assert_eq!(
+        openomsi_game::testing::output::head_idle::standstill(5.0),
+        0.0
+    );
+    assert_eq!(
+        openomsi_game::testing::output::head_idle::standstill(50.0),
+        0.0
+    );
+    let mid = openomsi_game::testing::output::head_idle::standstill(2.75);
     assert!(mid > 0.4 && mid < 0.6, "{mid}");
 }
 

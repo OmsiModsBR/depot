@@ -1,9 +1,6 @@
 //! The offscreen run: a scripted session rendered to pictures (`--offscreen`).
 
 use crate::actions::dump_display_textures;
-use crate::camera_util::{
-    cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
-};
 use crate::career;
 use crate::cli::{parse_time, parse_triggers, Args};
 use crate::describe;
@@ -14,6 +11,9 @@ use crate::lights;
 use crate::memory::texture_budget;
 use crate::money;
 use crate::nav;
+use crate::output::{
+    cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
+};
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
@@ -3122,7 +3122,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         let mode = omsi_cfg::flags::MIRROR_HUD
             .number::<u8>()
             .unwrap_or(settings.mirror_hud);
-        let mut panels = crate::mirror_hud::MirrorHud::default();
+        let mut panels = crate::output::MirrorHud::default();
         panels.set_aspects(world.mirror_aspect.lock().clone());
         panels.set_glass(world.mirror_glass.lock().clone());
         panels.sync(p, mode);

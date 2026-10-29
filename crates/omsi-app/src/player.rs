@@ -1,7 +1,7 @@
 //! The player: their bus, its controls and cameras.
 
-use crate::camera_arm;
-use crate::camera_util::{ray_may_hit, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
+use crate::output::camera_arm;
+use crate::output::{ray_may_hit, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::scene;
 use crate::schedule;
 use crate::weather_setup::debug_sound_every;
@@ -169,7 +169,7 @@ pub struct Player {
     /// What a head does when nothing moves it: the slow sway of a standing body, kept apart
     /// from `head` so the bus's own head movement is never fed it (Settings -> idle head sway;
     /// read through `head_offset`).
-    pub(crate) head_idle: crate::head_idle::HeadIdle,
+    pub(crate) head_idle: crate::output::HeadIdle,
     /// How far the driver's view is turned into the steering (degrees of yaw; see `move_head`).
     pub(crate) steer_look: f32,
     /// The driver's seat moved (Settings → seat position; bus frame, m).
@@ -2699,7 +2699,7 @@ impl Player {
 
     /// The outside camera must not go through walls or under the road: it stands short of
     /// the first building, wall or canopy between it and the point it orbits, and above the
-    /// ground (see `camera_arm`). `dt` 0 is a single picture: the arm is where it would
+    /// ground (see `output::camera_arm`). `dt` 0 is a single picture: the arm is where it would
     /// settle, without easing.
     pub(crate) fn camera_clipped(
         &mut self,
@@ -2805,14 +2805,14 @@ impl Player {
                 .iter()
                 .position(|x| std::ptr::eq(x, c))
                 .unwrap_or(0);
-            let aimed = crate::camera_util::mirror_view(
+            let aimed = crate::output::mirror_view(
                 &self.vehicle,
-                &crate::camera_util::adjusted(
+                &crate::output::adjusted(
                     c,
                     self.mirror_shifts.get(k).copied().unwrap_or([0.0; 3]),
                     self.mirror_fovs.get(k).copied().unwrap_or(0.0),
                 ),
-                crate::camera_util::driver_eye(self),
+                crate::output::driver_eye(self),
                 self.mirror_offsets.get(k).copied().unwrap_or([0.0; 2]),
             );
             let (eye, yaw, pitch, roll) = self.vehicle.camera_world_full(&aimed);

@@ -21,7 +21,7 @@ fn a_static_camera_does_not_follow_the_eye() {
     let views = |c: &omsi_vehicle::Camera| {
         [DVec3::new(0.0, 4.0, 2.0), DVec3::new(-0.5, 3.0, 2.2)]
             .map(|eye| {
-                openomsi_game::testing::camera_util::mirror_view_in(
+                openomsi_game::testing::output::camera::util::mirror_view_in(
                     DVec3::ZERO,
                     Mat4::IDENTITY,
                     c,
@@ -34,7 +34,7 @@ fn a_static_camera_does_not_follow_the_eye() {
     let [a, b] = views(&mirror);
     assert!((a.0 - b.0).abs() > 1.0, "{a:?} {b:?}");
     assert_eq!(views(&cctv), [(90.0, -40.0); 2]);
-    let turned = openomsi_game::testing::camera_util::mirror_view_in(
+    let turned = openomsi_game::testing::output::camera::util::mirror_view_in(
         DVec3::ZERO,
         Mat4::IDENTITY,
         &cctv,

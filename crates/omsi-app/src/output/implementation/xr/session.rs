@@ -552,7 +552,7 @@ impl Vr {
         tooltip_overlay: Option<usize>,
         cursor_position: (f32, f32),
         bus_pose: Option<(DVec3, Mat4)>,
-        navigator: Option<(usize, crate::vr_navigator::Display)>,
+        navigator: Option<(usize, crate::output::domain::vr_navigator::Display)>,
         player_uid: Option<u64>,
         head_smoothing_ms: f32,
         cockpit_pointer_enabled: bool,

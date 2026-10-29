@@ -40,11 +40,11 @@ pub(crate) struct App {
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) surface: Option<SurfaceState<'static>>,
     pub(crate) renderer: Option<Renderer>,
-    /// The "DirectX9 (D3D9Ex)" output of the window (see `d3d9_output`).
+    /// The "DirectX9 (D3D9Ex)" output of the window (see `output`).
     #[cfg(windows)]
-    pub(crate) d3d9: Option<crate::d3d9_output::D3d9Output>,
+    pub(crate) d3d9: Option<crate::output::D3d9Output>,
     #[cfg(windows)]
-    pub(crate) vr: Option<crate::openxr::Vr>,
+    pub(crate) vr: Option<crate::output::Vr>,
     pub(crate) scene: Option<Scene>,
     pub(crate) camera: Option<Camera>,
     pub(crate) player: Option<Player>,
@@ -77,8 +77,8 @@ pub(crate) struct App {
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
     pub(crate) navigator: Option<nav::Navigator>,
-    pub(crate) vr_nav_profiles: crate::vr_navigator::Profiles,
-    pub(crate) vr_nav_edit: Option<crate::vr_navigator::Editing>,
+    pub(crate) vr_nav_profiles: crate::output::Profiles,
+    pub(crate) vr_nav_edit: Option<crate::output::Editing>,
     /// The window spans the triple screen's three monitors: fullscreen would shrink it to one.
     pub(crate) spanned: bool,
     /// Chat, mouse-over names and name tags (Roboto).
@@ -116,8 +116,8 @@ pub(crate) struct App {
     /// With no real-time reflections: the bus whose mirrors are frozen (see
     /// `MIRROR_FREEZE_REDRAW`).
     pub(crate) frozen_mirrors: Option<FrozenMirrors>,
-    /// The mirror panels laid over the picture (see `mirror_hud`).
-    pub(crate) mirror_hud: crate::mirror_hud::MirrorHud,
+    /// The mirror panels laid over the picture (see `output`).
+    pub(crate) mirror_hud: crate::output::MirrorHud,
     /// Cursor and view the hover was last worked out for (see the redraw).
     pub(crate) hover_key: Option<(i32, i32, i32, i32)>,
     pub(crate) view: String,
@@ -162,7 +162,7 @@ pub(crate) struct App {
     pub(crate) hover_hand: bool,
     /// The idle head sway waiting where it is while the cursor is on a control
     /// (see `head_idle::Hold`).
-    pub(crate) head_idle_hold: crate::head_idle::Hold,
+    pub(crate) head_idle_hold: crate::output::Hold,
     /// `OMSI_INPUT` script: (seconds after start, command), in order.
     pub(crate) input_script: Vec<(f32, String)>,
     /// A pending screenshot: its output path and whether touch controls are composited over it.
@@ -582,7 +582,7 @@ impl App {
             },
         };
         // "DirectX9 (D3D9Ex)": the renderer keeps the books on wgpu's noop device, the
-        // Direct3D 9Ex device draws the window (see `d3d9_output`)
+        // Direct3D 9Ex device draws the window (see `output`)
         #[cfg(windows)]
         let d3d9 = crate::startup::d3d9_requested();
         #[cfg(not(windows))]
@@ -602,7 +602,7 @@ impl App {
         };
         #[cfg(windows)]
         if d3d9 {
-            match crate::d3d9_output::D3d9Output::attach(
+            match crate::output::D3d9Output::attach(
                 &mut renderer,
                 &window,
                 self.settings.vsync,
@@ -618,7 +618,7 @@ impl App {
         }
         #[cfg(windows)]
         if self.settings.vr_requested() {
-            match crate::openxr::Vr::new(
+            match crate::output::Vr::new(
                 &renderer,
                 self.settings.vr_scale,
                 self.settings.vr_desktop_mirror,

@@ -2,9 +2,9 @@
 //! placing and switching vehicles, saving and loading.
 
 use crate::app::App;
-use crate::camera_util::ORBIT_DEFAULT;
 use crate::cli::Args;
 use crate::input::part_in_reach;
+use crate::output::ORBIT_DEFAULT;
 use crate::player::Player;
 use crate::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
@@ -1081,7 +1081,7 @@ impl App {
                 self.vr = None;
                 self.service_msg = Some(("Desktop mode".into(), 2.0));
             } else if let Some(renderer) = self.renderer.as_ref() {
-                match crate::openxr::Vr::new(
+                match crate::output::Vr::new(
                     renderer,
                     self.settings.vr_scale,
                     self.settings.vr_desktop_mirror,

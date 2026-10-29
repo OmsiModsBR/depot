@@ -1,7 +1,7 @@
 use glam::DVec3;
 use glam::Mat4;
 use glam::Vec3;
-use openomsi_game::testing::vr_navigator::*;
+use openomsi_game::testing::output::xr::navigator::*;
 use std::path::Path;
 
 #[test]

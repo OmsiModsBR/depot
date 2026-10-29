@@ -346,7 +346,7 @@ pub(crate) fn is_d3d9(name: &str) -> bool {
 }
 
 /// wgpu's device that draws nothing (the dedicated server's, and the books of "DirectX9
-/// (D3D9Ex)", see `d3d9_output`).
+/// (D3D9Ex)", see `output`).
 fn noop_instance() -> wgpu::Instance {
     let mut descriptor = instance_descriptor(None);
     descriptor.backends = wgpu::Backends::NOOP;

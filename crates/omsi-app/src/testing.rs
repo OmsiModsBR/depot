@@ -73,12 +73,6 @@ pub mod app_events {
 pub mod bus_service {
     pub use crate::bus_service::*;
 }
-pub mod camera_arm {
-    pub use crate::camera_arm::*;
-}
-pub mod camera_util {
-    pub use crate::camera_util::*;
-}
 pub mod cli {
     pub use crate::cli::*;
 }
@@ -157,9 +151,6 @@ pub mod game_controller_menu {
 }
 pub mod game_lists {
     pub use crate::game_lists::*;
-}
-pub mod head_idle {
-    pub use crate::head_idle::*;
 }
 pub mod headtrack {
     pub use crate::headtrack::*;
@@ -285,9 +276,6 @@ pub mod mac_game_controller {
 pub mod map_surface {
     pub use crate::map_surface::*;
 }
-pub mod mirror_hud {
-    pub use crate::mirror_hud::*;
-}
 pub mod money {
     pub use crate::money::*;
 }
@@ -311,9 +299,30 @@ pub mod nav {
 pub mod on_foot {
     pub use crate::on_foot::*;
 }
-#[cfg(windows)]
-pub mod openxr {
-    pub use crate::openxr::*;
+pub mod output {
+    pub mod camera {
+        pub mod arm {
+            pub use crate::output::implementation::camera::arm::*;
+        }
+        pub mod util {
+            pub use crate::output::implementation::camera::util::*;
+        }
+    }
+    pub mod head_idle {
+        pub use crate::output::domain::head_idle::*;
+    }
+    pub mod mirror_hud {
+        pub use crate::output::domain::mirror_hud::*;
+    }
+    pub mod xr {
+        pub mod navigator {
+            pub use crate::output::domain::vr_navigator::*;
+        }
+        #[cfg(windows)]
+        pub mod session {
+            pub use crate::output::implementation::xr::session::*;
+        }
+    }
 }
 pub mod player {
     pub use crate::player::*;
@@ -597,9 +606,6 @@ pub mod ui {
     pub mod windows {
         pub use crate::ui::domain::windows::*;
     }
-}
-pub mod vr_navigator {
-    pub use crate::vr_navigator::*;
 }
 pub mod weather_cycle {
     pub use crate::weather_cycle::*;

@@ -70,7 +70,7 @@ pub struct ObjectType {
     /// A plain object that is only paint at its foot ([`paint_at_foot`]).
     pub paint: bool,
     /// What of the type stops the outside camera (decided on first use).
-    pub camera: std::sync::OnceLock<crate::camera_arm::BlockerShape>,
+    pub camera: std::sync::OnceLock<crate::output::BlockerShape>,
     /// The collision mesh as the vehicles meet it (built on first use).
     pub collision_shape: std::sync::OnceLock<Arc<omsi_sim::collision::MeshShape>>,
 }
@@ -313,12 +313,8 @@ impl ObjectType {
     }
 
     /// The type's solid shape when it stops the outside camera.
-    pub fn camera_shape(&self) -> Option<&crate::camera_arm::BlockerShape> {
-        Some(
-            self.camera
-                .get_or_init(|| crate::camera_arm::classify(self)),
-        )
-        .filter(|s| s.blocks)
+    pub fn camera_shape(&self) -> Option<&crate::output::BlockerShape> {
+        Some(self.camera.get_or_init(|| crate::output::classify(self))).filter(|s| s.blocks)
     }
 
     /// (definition, pivot) per loaded mesh, for the scenery script runtime.
@@ -1115,7 +1111,7 @@ pub struct TileState {
     /// Collision keys of the tile's `[crashmode_pole]` posts (in `World::poles`).
     pub poles: Vec<i64>,
     /// The tile's objects that stop the outside camera.
-    pub blockers: Vec<crate::camera_arm::Blocker>,
+    pub blockers: Vec<crate::output::Blocker>,
     /// The boxes of the tile's `[petrolstation]` objects (see `World::petrol_stations`).
     pub petrol_stations: Vec<omsi_sim::collision::Obb>,
     /// Parked cars the tile placed (counted in `World::parked_live`).
@@ -5608,7 +5604,7 @@ impl World {
             // what the outside camera cannot pass through: houses, walls, shelters, canopies
             // (surface objects too - a petrol station is a drivable [surface] with a roof)
             if let Some(shape) = ot.camera_shape() {
-                state.blockers.push(crate::camera_arm::Blocker {
+                state.blockers.push(crate::output::Blocker {
                     ty: Arc::downgrade(&ot),
                     pos,
                     xf,
@@ -9188,7 +9184,7 @@ impl World {
         &self,
         lo: DVec2,
         hi: DVec2,
-    ) -> Vec<(Arc<ObjectType>, crate::camera_arm::Blocker)> {
+    ) -> Vec<(Arc<ObjectType>, crate::output::Blocker)> {
         let ts = tile_size();
         // an object is kept with the tile its origin stands in, but a big one (a school, a
         // supermarket) reaches well into the next: the tiles around are looked at as well

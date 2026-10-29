@@ -1,5 +1,5 @@
 use glam::{Mat4, Vec3};
-use openomsi_game::testing::openxr::*;
+use openomsi_game::testing::output::xr::session::*;
 use openxr as xr;
 
 #[test]
