@@ -51,6 +51,8 @@ pub struct PadsView {
     pub wizard: Option<Wizard>,
     pub feedback_test: bool,
     pub devices: Option<Vec<crate::controllers::DeviceCfg>>,
+    /// OMSI 2 mode: the devices of the OMSI 2 folder's own file, only shown.
+    pub shown_devices: Option<Vec<crate::controllers::DeviceCfg>>,
     pub selected: usize,
     /// Waiting for a button of the shown device to be pressed (to add its binding).
     pub capturing: bool,
@@ -796,7 +798,90 @@ pub fn known_action(a: &str) -> Option<String> {
     known.iter().find(|k| k.0 == a).map(|k| k.1.to_string())
 }
 
+/// OMSI 2 mode: the devices of the OMSI 2 folder's own `Inputs/gamectrler.cfg` and what each
+/// axis and button does, only shown (changed inside OMSI 2; nothing is written from here).
+fn game_controllers_read_only(l: &mut Launcher, body: Rect) {
+    use crate::controllers::Func;
+    let bar = super::keyboard::read_only_bar(l, Rect::new(body.x, body.y, body.w, 44.0));
+    let body = Rect::new(
+        body.x,
+        body.y + bar + 12.0,
+        body.w,
+        (body.h - bar - 12.0).max(0.0),
+    );
+    let root = std::path::PathBuf::from(&l.state.config.root);
+    let names = control_names(l);
+    let devices = l.pages.pads.shown_devices.get_or_insert_with(|| {
+        omsi_content::input::gamectrler::read(&root.join("Inputs").join("gamectrler.cfg"))
+            .unwrap_or_default()
+    });
+    l.ui.panel(body);
+    let inner = Launcher::card_title(
+        &mut l.ui,
+        Rect::new(body.x + 18.0, body.y + 14.0, body.w - 36.0, body.h - 28.0),
+        "Devices",
+    );
+    const AXES: [&str; 8] = [
+        "X axis",
+        "Y axis",
+        "Z axis",
+        "X rotation",
+        "Y rotation",
+        "Z rotation",
+        "Slider 1",
+        "Slider 2",
+    ];
+    // one line per thing a device does: its name, then its axes and buttons
+    let mut lines: Vec<(String, bool)> = Vec::new();
+    for d in devices.iter() {
+        lines.push((d.name.clone(), true));
+        for (i, a) in d.axes.iter().enumerate() {
+            if let Some((f, _)) = a {
+                let label = omsi_ui::tr(Func::LABELS[(Func::code(Some(*f)) + 1) as usize]);
+                lines.push((format!("{}: {}", omsi_ui::tr(AXES[i]), label), false));
+            }
+        }
+        for (b, (action, _)) in d.buttons.iter().enumerate() {
+            if !action.is_empty() {
+                lines.push((
+                    format!(
+                        "{}: {}",
+                        omsi_ui::tr("Button %{n}").replace("%{n}", &(b + 1).to_string()),
+                        action_text(names, action)
+                    ),
+                    false,
+                ));
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push((omsi_ui::tr("none").into_owned(), false));
+    }
+    l.ui.scroll_area("pad-ro", inner, &mut |ui, v| {
+        let mut y = v.y;
+        for (text, head) in &lines {
+            if *head {
+                y += 10.0;
+            }
+            ui.text_in(
+                text,
+                Rect::new(v.x, y, v.w, 22.0),
+                if *head { 14.0 } else { 13.0 },
+                if *head { Weight::Bold } else { Weight::Regular },
+                if *head { TEXT } else { TEXT_SOFT },
+                Align::Left,
+            );
+            y += 24.0;
+        }
+        y - v.y
+    });
+}
+
 pub fn controls(l: &mut Launcher, area: Rect) {
+    // (the shown file is read again the next time OMSI 2 is chosen)
+    if !l.state.omsi2_engine() {
+        l.pages.pads.shown_devices = None;
+    }
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
     let (place, line) = if l.pages.controls_tab == 0 {
@@ -819,7 +904,11 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         }
         let body = Rect::new(body.x, body.y + 50.0, body.w, (body.h - 50.0).max(0.0));
         if l.pages.controls_tab == 1 {
-            game_controllers(l, body);
+            if l.state.omsi2_engine() {
+                game_controllers_read_only(l, body);
+            } else {
+                game_controllers(l, body);
+            }
         } else {
             l.pages.pads.cancel_feedback_test();
             super::keyboard::draw(l, body);

@@ -194,3 +194,52 @@ fn the_factory_keys_are_omsi_2s_own() {
     assert_eq!(day(0), "01/01/1970");
     assert_eq!(day(1_717_200_000), "01/06/2024");
 }
+
+/// With OMSI 2 chosen the page shows the OMSI 2 folder's own file: a key two actions share is
+/// flagged "shared key", nothing is "changed", and reading the controls files leaves the
+/// folder exactly as it was.
+#[test]
+fn the_original_controls_are_shown_as_they_are_and_never_written() {
+    let dir = std::env::temp_dir().join(format!("depot-ro-controls-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let inputs = dir.join("OMSI 2 ünï").join("Inputs");
+    std::fs::create_dir_all(&inputs).unwrap();
+    std::fs::write(
+        inputs.join("keyboard.cfg"),
+        "[vehicles]\n[entry]\nx_first\n35\n0\n[entry]\nx_second\n35\n0\n",
+    )
+    .unwrap();
+    std::fs::write(
+        inputs.join("gamectrler.cfg"),
+        "[ctrl]\nSample wheel\n0\n[axis]\n0\n0\n-1\n0\n-1\n0\n-1\n0\n-1\n0\n-1\n0\n-1\n0\n-1\n0\n",
+    )
+    .unwrap();
+    let snapshot = |d: &std::path::Path| -> Vec<(String, Vec<u8>, std::time::SystemTime)> {
+        let mut v: Vec<_> = std::fs::read_dir(d)
+            .unwrap()
+            .map(|e| {
+                let e = e.unwrap();
+                (
+                    e.file_name().to_string_lossy().to_string(),
+                    std::fs::read(e.path()).unwrap(),
+                    e.metadata().unwrap().modified().unwrap(),
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    let before = snapshot(&inputs);
+    let loaded = omsi_content::input::KeyboardCfg::load(&inputs.join("keyboard.cfg")).unwrap();
+    let devices = omsi_content::input::gamectrler::read(&inputs.join("gamectrler.cfg")).unwrap();
+    assert_eq!(devices.len(), 1);
+    let orig = json!({
+        "vehicles": loaded.vehicles.iter().map(|b| json!({"action": b.action, "scan_code": b.scan_code, "modifier": b.modifier})).collect::<Vec<_>>(),
+        "game": loaded.game.iter().map(|b| json!({"action": b.action, "scan_code": b.scan_code, "modifier": b.modifier})).collect::<Vec<_>>(),
+    });
+    let r = rows(&orig, Some(&orig), None, &|a| a.to_string());
+    assert!(r.iter().all(|x| !x.changed));
+    assert!(r.iter().filter(|x| x.shared).count() >= 2);
+    assert_eq!(snapshot(&inputs), before);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -138,6 +138,10 @@ Regenerate with `cargo test -p omsi-launcher-core print_docs_table -- --ignored 
 | `advanced.reducedMultithreading` | - | Advanced | on / off | `false` | - |
 <!-- catalog:end -->
 
+## Controls in OMSI 2 mode
+
+With OMSI 2 chosen, the Controls page is read only: it lists the keys and controllers found in the OMSI 2 folder and says they are changed inside OMSI 2. Capture, remapping, reset, import and the controller editors are not offered, and the page never writes `Inputs/keyboard.cfg` or the controller files of that folder.
+
 ## Files Depot writes
 
 | Where | What |
