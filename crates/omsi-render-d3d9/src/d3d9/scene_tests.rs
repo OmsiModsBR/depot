@@ -1407,11 +1407,12 @@ fn a_corona_run_outside_the_sprites_is_refused() {
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
 }
 
-/// A camera looking along +y with a 90 degree view: x to the right, z up.
+/// A camera looking along +y at the horizon, x to the right, z up, with a view of about
+/// 11 degrees: every pixel lies within the dome (it reaches 8.6 degrees below the horizon).
 const LOOK_NORTH: [[f32; 4]; 4] = [
-    [1., 0., 0., 0.],
+    [10., 0., 0., 0.],
     [0., 0., 0., 1.],
-    [0., 1., 0., 0.],
+    [0., 10., 0., 0.],
     [0., 0., 0., 0.],
 ];
 
