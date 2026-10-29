@@ -1576,7 +1576,12 @@ fn limit_or(
     name: &str,
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
-    limit_row(app.d3d9_active(), key, name, normal)
+    limit_row(
+        app.output.backend() == crate::output::Backend::D3d9,
+        key,
+        name,
+        normal,
+    )
 }
 
 /// `limit_or` with the API given (so a test can ask without a running game).
