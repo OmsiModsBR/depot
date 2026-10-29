@@ -375,7 +375,7 @@ pub struct State {
     /// The "Add vehicle" window.
     add: Option<crate::new_ui_add::AddFrame>,
     /// The end-of-trip report.
-    report: Option<crate::new_ui_report::ReportFrame>,
+    report: Option<crate::ui::ReportFrame>,
     /// "Continue" was clicked in the report.
     report_done: bool,
     /// Clicks and the wheel over the window showing, not yet handed to it (one a frame).
@@ -400,13 +400,13 @@ pub struct State {
     /// What clicks in it asked for, for the game to apply.
     tool_events: Vec<omsi_ui::alt_windows::Event>,
     /// The loading screen, while the first area of the map loads.
-    pub loading: Option<crate::new_ui_loading::LoadingFrame>,
+    pub loading: Option<crate::ui::LoadingFrame>,
     /// Screenshots decoded on their thread and not yet in the GPU.
-    pub slides: Vec<crate::new_ui_loading::Decoded>,
+    pub slides: Vec<crate::ui::Decoded>,
     /// The bus's block of the loading card, once its file has been read.
-    pub bus_card: Option<crate::new_ui_loading::CardText>,
+    pub bus_card: Option<crate::ui::CardText>,
     /// The map's own picture for its block of the card, decoded and not yet in the GPU.
-    map_picture: Option<crate::new_ui_loading::Decoded>,
+    map_picture: Option<crate::ui::Decoded>,
     /// Which loading the screenshots and the bus card being read belong to (one more each
     /// time a loading is over).
     pub loading_gen: u64,
@@ -631,8 +631,8 @@ impl Overlay {
         self.ui.begin(size, scale, dt);
         self.ui.input.mouse = area.local(mouse) / scale;
         if let Some(l) = loading {
-            for d in arrived.into_iter().take(crate::new_ui_loading::MAX_SLIDES) {
-                if self.slide_tex.len() >= crate::new_ui_loading::MAX_SLIDES {
+            for d in arrived.into_iter().take(crate::ui::MAX_SLIDES) {
+                if self.slide_tex.len() >= crate::ui::MAX_SLIDES {
                     break;
                 }
                 let tex = gpu.add_image(device, queue, d.w, d.h, &d.rgba);
@@ -651,7 +651,7 @@ impl Overlay {
             self.show.set_count(self.slide_tex.len());
             self.show.update(dt);
             fn card<'a>(
-                c: &'a Option<crate::new_ui_loading::CardText>,
+                c: &'a Option<crate::ui::CardText>,
                 icon: &'a str,
                 thumb: Option<omsi_ui::loading::Slide>,
             ) -> Option<omsi_ui::loading::Card<'a>> {
@@ -772,12 +772,12 @@ pub struct NewUi {
     /// The Alt bar's other windows.
     pub(crate) tool: crate::new_ui_windows::Tools,
     /// The end-of-trip report, while it is open.
-    pub(crate) report: Option<crate::new_ui_report::Report>,
+    pub(crate) report: Option<crate::ui::Report>,
     /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
     pub(crate) report_shown: Option<(String, String, usize)>,
     /// A trip at its last stop whose report waits for the doors to open there: its key, its
     /// place in the duty and where that stop is.
-    pub(crate) report_watch: Option<crate::new_ui_report::Watch>,
+    pub(crate) report_watch: Option<crate::ui::Watch>,
 }
 
 impl NewUi {
@@ -802,7 +802,7 @@ impl NewUi {
     }
 
     /// What the loading screen says now (`None`: it is over).
-    pub(crate) fn set_loading(&self, frame: Option<crate::new_ui_loading::LoadingFrame>) {
+    pub(crate) fn set_loading(&self, frame: Option<crate::ui::LoadingFrame>) {
         if let Ok(mut s) = self.shared.lock() {
             s.loading = frame;
         }
@@ -842,12 +842,12 @@ impl NewUi {
         let _ = std::thread::Builder::new()
             .name("loading-slides".into())
             .spawn(move || {
-                let paths = crate::new_ui_loading::recent(
+                let paths = crate::ui::recent(
                     omsi_launcher_lib::screenshots::for_map(&map),
-                    crate::new_ui_loading::MAX_SLIDES,
+                    crate::ui::MAX_SLIDES,
                 );
                 for p in paths {
-                    if let Some(d) = crate::new_ui_loading::decode(&p) {
+                    if let Some(d) = crate::ui::decode(&p) {
                         match shared.lock() {
                             Ok(mut s) if s.loading_gen == gen => s.slides.push(d),
                             _ => return,
@@ -870,7 +870,7 @@ impl NewUi {
         let _ = std::thread::Builder::new()
             .name("loading-map-picture".into())
             .spawn(move || {
-                if let Some(d) = crate::new_ui_loading::map_picture(&root, &map) {
+                if let Some(d) = crate::ui::map_picture(&root, &map) {
                     match shared.lock() {
                         Ok(mut s) if s.loading_gen == gen => s.map_picture = Some(d),
                         _ => {}
@@ -897,7 +897,7 @@ impl NewUi {
                 let Ok(v) = omsi_vehicle::Vehicle::load(&path) else {
                     return;
                 };
-                let card = crate::new_ui_loading::bus_card(&v, &folder, paint.as_deref());
+                let card = crate::ui::bus_card(&v, &folder, paint.as_deref());
                 match shared.lock() {
                     Ok(mut s) if s.loading_gen == gen => s.bus_card = Some(card),
                     _ => {}
@@ -906,7 +906,7 @@ impl NewUi {
     }
 
     /// The bus's block of the loading card, when its file has been read.
-    pub fn bus_card(&self) -> Option<crate::new_ui_loading::CardText> {
+    pub fn bus_card(&self) -> Option<crate::ui::CardText> {
         self.shared.lock().ok().and_then(|s| s.bus_card.clone())
     }
 
@@ -916,7 +916,7 @@ impl NewUi {
         alt: Option<crate::new_ui_alt::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
         tool: Option<crate::new_ui_windows::ToolFrame>,
-        report: Option<crate::new_ui_report::ReportFrame>,
+        report: Option<crate::ui::ReportFrame>,
         mouse: Vec2,
         area: Option<Area>,
     ) {

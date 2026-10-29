@@ -5,13 +5,13 @@ use omsi_ui::pause_menu;
 use omsi_ui::pause_menu::Kind;
 use openomsi_game::testing;
 use openomsi_game::testing::new_ui::*;
-use openomsi_game::testing::new_ui_report::ReportFrameInternals;
+use openomsi_game::testing::ui::report::ReportFrameInternals;
 use std::sync::{Arc, Mutex};
 
 #[test]
 fn a_new_loading_reads_its_own_bus_and_screenshots_again() {
     let mut ui = NewUi::default();
-    let card = testing::new_ui_loading::CardText {
+    let card = testing::ui::loading::CardText {
         title: "First bus".into(),
         ..Default::default()
     };
@@ -21,7 +21,7 @@ fn a_new_loading_reads_its_own_bus_and_screenshots_again() {
     {
         let mut s = ui.shared.lock().unwrap();
         s.bus_card = Some(card.clone());
-        s.slides.push(testing::new_ui_loading::Decoded {
+        s.slides.push(testing::ui::loading::Decoded {
             w: 1,
             h: 1,
             rgba: vec![0; 4],
@@ -371,7 +371,7 @@ fn the_overlay_hands_its_draws_to_the_mirror() {
     };
     draw(&mut overlay);
     assert!(seen.lock().unwrap().is_empty(), "no screen, nothing drawn");
-    shared.lock().unwrap().loading = Some(testing::new_ui_loading::LoadingFrame {
+    shared.lock().unwrap().loading = Some(testing::ui::loading::LoadingFrame {
         heading: "Example map".into(),
         progress: 0.5,
         ..Default::default()
@@ -526,7 +526,7 @@ fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
     {
         let mut s = shared.lock().unwrap();
         s.menu = None;
-        s.loading = Some(testing::new_ui_loading::LoadingFrame {
+        s.loading = Some(testing::ui::loading::LoadingFrame {
             heading: "Example map".into(),
             progress: 0.5,
             ..Default::default()
@@ -543,7 +543,7 @@ fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
         .lock()
         .unwrap()
         .slides
-        .push(testing::new_ui_loading::Decoded {
+        .push(testing::ui::loading::Decoded {
             w: 16,
             h: 9,
             rgba: [255, 0, 0, 255].repeat(16 * 9),
@@ -706,7 +706,7 @@ fn the_menus_draw_on_the_centre_screen_and_into_the_headset_s_picture() {
     save("triple-5760x1080-page", &shown, size);
     ui.page = None;
     // the end-of-trip report, on the centre screen too
-    let report = testing::new_ui_report::ReportFrame::for_test();
+    let report = testing::ui::report::ReportFrame::for_test();
     ui.set(None, None, None, None, Some(report), away, Some(area));
     let reported = shoot(&mut scene);
     save("triple-5760x1080-report", &reported, size);
