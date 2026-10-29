@@ -256,7 +256,9 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     v["collision_objects"] = json!(!o.flag("no_collision"));
     v["driver"] = json!(o.flag("see_own_driver"));
     if let Some(x) = num("ticketselling") {
-        v["boarding"] = json!(if x > 0.5 { "pay" } else { "auto" });
+        // (OMSI 2: 0 no ticket sales, 1 and 2 the driver sells them, with or without hints: the
+        // Depot has no hints, so both are "the driver sells the ticket")
+        v["boarding"] = json!(if x > 0.5 { "pay" } else { "walk" });
     }
     let file_stem = |p: &str| {
         Path::new(&p.replace('\\', "/"))
@@ -3914,30 +3916,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 100.0))
                     .unwrap_or(100.0))
             }
-            "nav_arrows"
-            | "nav_ai"
-            | "nav_follow_view"
-            | "nav_surface"
-            | "nav_light"
-            | "nav_contours"
-            | "get_up"
-            | "time_sync"
-            | "metar_sync"
-            | "ui_scale_window"
-            | "notes"
-            | "reflections"
-            | "steering_linear"
-            | "old_steering"
-            | "red_steer_spd"
-            | "ff_invert"
-            | "ff_enabled"
-            | "brake_hold"
-            | "auto_clutch"
-            | "momentary_gears"
-            | "auto_shift"
-            | "mouse_steering"
-            | "mouse_right_off"
-            | "mouse_smooth"
+            "nav_arrows" | "nav_ai" | "nav_follow_view" | "nav_surface" | "nav_light"
+            | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window"
+            | "notes" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd"
+            | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears"
+            | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth"
             | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_view" => v[&k] = json!(if val == "top" { "top" } else { "perspective" }),
             "nav_orientation" => {
@@ -6239,6 +6222,23 @@ mod omsi_options_tests {
             std::fs::write(root.join("options.cfg"), format!("[performance_realreflexions]\r\n{word}\r\n\r\n[performance_reflTexSize]\r\n9\r\n")).unwrap();
             let o = super::omsi_options(&root).unwrap();
             assert_eq!(o.settings["mirror_refresh"], mode, "{word}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ticket_selling_is_read_as_boarding() {
+        let root = std::env::temp_dir().join(format!("omsi-ticketsell-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        // (0 no ticket sales, 1 and 2 the driver sells them, with or without hints)
+        for (n, boarding) in [(0, "walk"), (1, "pay"), (2, "pay")] {
+            std::fs::write(
+                root.join("options.cfg"),
+                format!("[ticketselling]\r\n{n}\r\n"),
+            )
+            .unwrap();
+            let o = super::omsi_options(&root).unwrap();
+            assert_eq!(o.settings["boarding"], boarding, "{n}");
         }
         let _ = std::fs::remove_dir_all(&root);
     }

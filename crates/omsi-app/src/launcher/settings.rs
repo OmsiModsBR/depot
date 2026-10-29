@@ -2126,6 +2126,7 @@ pub fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
             .collect()
     };
     match &o.kind {
+        Kind::Pick(_) if st.omsi2 && o.key == "boarding" => own(&super::omsi2_map::TICKET_SELLING),
         Kind::Pick(list) => {
             // (under DirectX9 an option may leave some choices out, see `api_limits`)
             let limit = api_limit(st.s, o.key).filter(|_| !st.omsi2);
