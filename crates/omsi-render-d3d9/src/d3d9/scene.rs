@@ -12,7 +12,7 @@ use crate::scene::{
 };
 use crate::{BackendError, Result};
 
-const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
+pub(super) const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
 
 /// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
 const SAMPLERS: u32 = 7;
@@ -102,10 +102,10 @@ impl SceneCaps {
 }
 
 /// Shaders and the vertex layout of the scene, made at the first scene frame.
-struct ScenePipeline {
-    decl: IDirect3DVertexDeclaration9,
-    vs: IDirect3DVertexShader9,
-    ps: IDirect3DPixelShader9,
+pub(super) struct ScenePipeline {
+    pub(super) decl: IDirect3DVertexDeclaration9,
+    pub(super) vs: IDirect3DVertexShader9,
+    pub(super) ps: IDirect3DPixelShader9,
     /// Bound for a night, light or sphere map that is not there: it adds nothing.
     black: IDirect3DTexture9,
     /// x OR y of two bytes, at (x, y) of a 256 x 256 picture (`or_table`).
@@ -124,7 +124,7 @@ fn or_table() -> Vec<u8> {
 }
 
 /// The sampler states of an addressing.
-fn address_mode(a: TexAddress) -> u32 {
+pub(super) fn address_mode(a: TexAddress) -> u32 {
     match a {
         TexAddress::Wrap => D3DTADDRESS_WRAP.0 as u32,
         TexAddress::Mirror => D3DTADDRESS_MIRROR.0 as u32,
@@ -135,9 +135,11 @@ fn address_mode(a: TexAddress) -> u32 {
 /// The scene's resources. Ids are the game's (slots it reuses), so they index sparse lists.
 #[derive(Default)]
 pub(super) struct SceneStore {
-    meshes: Vec<Option<Mesh>>,
-    textures: Vec<Option<IDirect3DTexture9>>,
-    pipeline: Option<ScenePipeline>,
+    pub(super) meshes: Vec<Option<Mesh>>,
+    pub(super) textures: Vec<Option<IDirect3DTexture9>>,
+    pub(super) pipeline: Option<ScenePipeline>,
+    /// The raindrops-on-glass pass (see `glass_rain`).
+    pub(super) glass: super::glass_rain::GlassStore,
     /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
     pub(super) coronas: super::coronas::CoronaStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
@@ -145,7 +147,7 @@ pub(super) struct SceneStore {
     /// The per-frame instance records, and the dynamic buffer they go up in (with the
     /// records it holds).
     records: Vec<f32>,
-    instances: Option<(IDirect3DVertexBuffer9, usize)>,
+    pub(super) instances: Option<(IDirect3DVertexBuffer9, usize)>,
     /// What every mesh and texture was made from.
     pub(super) copies: SceneCopies,
     lamps: Lamps,
@@ -599,7 +601,11 @@ const fn four_cc(c: &[u8; 4]) -> u32 {
 /// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
 /// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
 /// edge as multisampled OMSI 2 does.
-fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: A2c) -> Result<()> {
+pub(super) fn kind_states(
+    device: &IDirect3DDevice9Ex,
+    kind: DrawKind,
+    coverage: A2c,
+) -> Result<()> {
     let coverage_now = kind == DrawKind::AlphaTest && coverage != A2c::None;
     let flags = [
         ALPHA_CUT,
@@ -889,6 +895,7 @@ impl D3d9Device {
         };
         frame.validate()?;
         self.ensure_scene_pipeline()?;
+        self.step_glass_rain(frame);
         let drawn = self.draw_scene_inner(
             frame,
             &material,
@@ -920,6 +927,7 @@ impl D3d9Device {
             }
         }
         self.ensure_coronas();
+        self.ensure_glass_rain();
         Ok(())
     }
 
@@ -1460,6 +1468,20 @@ impl D3d9Device {
                         .map_err(map_err)?;
                     }
                 }
+            }
+            if self.draw_glass_rain(frame, batches, material, coverage)? {
+                // SAFETY: plain calls on a live device; the pipeline belongs to it.
+                unsafe {
+                    d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
+                    d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
+                    d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
+                    d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                        .map_err(map_err)?;
+                    d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                        .map_err(map_err)?;
+                }
+                // (the batches' states and material are bound again)
+                current = (None, None, None, None);
             }
             if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
                 self.draw_coronas(frame, late)?;

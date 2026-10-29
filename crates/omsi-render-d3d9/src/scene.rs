@@ -338,6 +338,9 @@ pub struct SceneMaterial<'a> {
     pub env_mask: Option<usize>,
     /// `[matl_bumpmap]`: a height map (alpha) whose slope moves the sphere-map lookup.
     pub bump: Option<usize>,
+    /// `[matl_raindropmap]`: the areas of the pane where raindrops can gather (see
+    /// [`crate::glass_rain`]).
+    pub raindrop_map: Option<usize>,
     pub address: TexAddress,
     /// [`MATERIAL_VECTORS`] vectors.
     pub uniform: &'a [[f32; 4]],
@@ -542,6 +545,8 @@ pub struct SceneFrame<'a> {
     pub lamps: SceneLamps<'a>,
     /// The light coronas drawn over the scene.
     pub coronas: SceneCoronas<'a>,
+    /// The rain and the wiper, for the raindrops on glass.
+    pub rain: crate::glass_rain::SceneRain,
 }
 
 impl SceneFrame<'_> {
@@ -813,6 +818,7 @@ mod tests {
             surface_bias: -24,
             lamps: SceneLamps::default(),
             coronas: SceneCoronas::default(),
+            rain: Default::default(),
         };
         frame.validate().unwrap();
         let mut out = Vec::new();

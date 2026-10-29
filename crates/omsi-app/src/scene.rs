@@ -11745,6 +11745,7 @@ pub fn material_extra(
 ) -> MaterialExtra {
     MaterialExtra {
         env_mask,
+        raindrop_map: None,
         no_z_write: ov.iter().any(|o| o.no_z_write),
         writes_depth: false,
         // `[matl_noZcheck]` leaves OMSI's depth test on: its draw of the slot
@@ -14140,6 +14141,14 @@ impl World {
                     let (color, emissive, specular, ambient) = d3d_material(m, ov.iter().find_map(|o| o.allcolor), textured);
                     let mut extra = material_extra(&ov, env_mask, bump, specular);
                     extra.ambient = Some(ambient);
+                    // `[matl_raindropmap]`: where raindrops gather on a pane (the Direct3D 9
+                    // renderer draws them; the others ignore it)
+                    extra.raindrop_map = ov
+                        .iter()
+                        .rev()
+                        .find_map(|o| o.raindropmap.clone())
+                        .filter(|t| !t.trim().is_empty())
+                        .and_then(|t| tex!(&subst(&t), &dirs_ref));
                     // A vehicle's [matl_nightmap] is added whenever the mesh is drawn, by day
                     // as well, as OMSI 2 does - with or without a [matl_change] around it.
                     // Its lamps and displays are switched by the mesh's [visible] variable or

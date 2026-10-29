@@ -2585,6 +2585,11 @@ impl ApplicationHandler for App {
                             scene,
                             &buses,
                         );
+                        // where the player's wiper is, for the raindrops on glass (Direct3D 9)
+                        scene.glass_wiper = self
+                            .player
+                            .as_ref()
+                            .and_then(|p| self.rain.wiper_position(&p.vehicle));
                         // the player's bus's cabin air and the condensation on its glass
                         if let Some(p) = self.player.as_ref() {
                             let (riders, doors) = self

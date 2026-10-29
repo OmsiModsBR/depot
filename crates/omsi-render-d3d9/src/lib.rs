@@ -15,6 +15,7 @@
 
 pub mod backend;
 pub mod caps;
+pub mod glass_rain;
 pub mod scene;
 pub mod ui;
 
@@ -26,6 +27,7 @@ pub use backend::{
     TextureHandle,
 };
 pub use caps::{Caps, ShaderModel};
+pub use glass_rain::SceneRain;
 pub use scene::{
     DrawKind, SceneBatch, SceneCoronas, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
     SceneTexture, TexAddress, TexFormat,

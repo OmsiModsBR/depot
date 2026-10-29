@@ -189,6 +189,9 @@ pub struct FramePlan {
     pub light_map: [f32; 4],
     /// The sky's colour the picture is cleared to, as the lighting gives it (w 1).
     pub clear: [f32; 4],
+    /// How hard it rains (0..1; none while it snows): what a second renderer gathers
+    /// raindrops on glass by.
+    pub rain: f32,
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -229,6 +232,7 @@ pub(crate) fn plan_of(
         light_grid: cu.light_grid,
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
+        rain: (f.lighting.rain - f.lighting.snowfall).clamp(0.0, 1.0),
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists

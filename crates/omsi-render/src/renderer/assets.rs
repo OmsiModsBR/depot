@@ -145,14 +145,20 @@ impl Renderer {
                 envmap.map(|e| e.1).unwrap_or(0.0),
                 moisture,
                 // bit 1: a [matl_envmap_mask]; bit 2: a [matl_transmap]; bit 4: a vehicle's
-                // part that may be metal (see the shaders)
+                // part that may be metal (see the shaders); bit 8: a [matl_raindropmap] (only
+                // the Direct3D 9 renderer reads it; it keeps such panes' looks apart)
                 (if env_mask.is_some() { 1.0 } else { 0.0 })
                     + if extra.transmap_declared || transmap.is_some() {
                         2.0
                     } else {
                         0.0
                     }
-                    + if extra.metal_ok { 4.0 } else { 0.0 },
+                    + if extra.metal_ok { 4.0 } else { 0.0 }
+                    + if extra.raindrop_map.is_some() {
+                        8.0
+                    } else {
+                        0.0
+                    },
             ],
             emissive: [
                 emissive[0],
@@ -279,6 +285,7 @@ impl Renderer {
             lightmap,
             envmap,
             env_mask,
+            raindrop_map: extra.raindrop_map,
             bump,
             emissive,
             transmap,

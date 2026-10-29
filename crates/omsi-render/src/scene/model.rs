@@ -156,6 +156,10 @@ pub struct Scene {
     pub coronas: Vec<Corona>,
     /// Smoke particles for the next frame (set by the app every frame).
     pub smoke: Vec<SmokeParticle>,
+    /// Where the wiper of the vehicle the player drives is, 0..1 across its sweep (`None`: the
+    /// vehicle has none or does not publish it). Only a second renderer reads it (the
+    /// Direct3D 9 one clears the raindrops on glass with it).
+    pub glass_wiper: Option<f32>,
     pub(crate) smoke_buf: Option<wgpu::Buffer>,
     pub(crate) smoke_count: u32,
     /// Runs of this frame's coronas by picture: (texture, first, count).

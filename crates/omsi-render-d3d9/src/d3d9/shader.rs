@@ -19,6 +19,7 @@ pub(crate) const BASIC: &str = include_str!("shaders/basic.hlsl");
 pub(crate) const SCENE: &str = include_str!("shaders/scene.hlsl");
 pub(crate) const UI: &str = include_str!("shaders/ui.hlsl");
 pub(crate) const CORONA: &str = include_str!("shaders/corona.hlsl");
+pub(crate) const GLASS_RAIN: &str = include_str!("shaders/glass_rain.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -242,6 +243,19 @@ mod tests {
         let slots = reported_slots(&ps).unwrap();
         println!("corona pixel shader: {slots} instruction slots");
         assert!(slots <= 460, "the corona pixel shader takes {slots} slots");
+    }
+
+    #[test]
+    fn glass_rain_pixel_shader_compiles_for_sm3_in_few_slots() {
+        let ps = compile(GLASS_RAIN, "glass_rain.hlsl", "ps_main", Stage::Pixel).unwrap();
+        assert_eq!(ps[0], 0xFFFF_0300);
+        // (a pass of its own: the scene's pixel shader keeps its slots)
+        let slots = reported_slots(&ps).unwrap();
+        println!("glass rain pixel shader: {slots} instruction slots");
+        assert!(
+            slots <= 128,
+            "the glass rain pixel shader takes {slots} slots"
+        );
     }
 
     #[test]

@@ -32,6 +32,8 @@ not yet.
 | `ui` | all | The interface as this renderer takes it: `omsi-ui`'s layers, draws and vertices, and the HUD's pictures; the layout, viewport and scissor rules shared with `omsi-ui` |
 | `d3d9` interface layer | Windows | Each `omsi-ui` Gpu's pictures, atlas and vertex lists (`ui_image`, `ui_atlas`, `ui_vertices`), `draw_ui` and `draw_overlays`, with the interface shader (`shaders/ui.hlsl`, a port of `omsi-ui`'s) |
 | `d3d9` corona pass | Windows | `set_corona_texture`, and in `draw_scene` the light coronas over the scene (`shaders/corona.hlsl`) |
+| `glass_rain` | all | Raindrops on glass as a state and a picture: how far the drops have formed along a pane (rain builds them up, dry weather dries them, the wiper's stroke wipes the places it passes), and the tiling picture of drops; `SceneRain` carries the rain and the wiper into a frame |
+| `d3d9` glass rain pass | Windows | In `draw_scene`, the drops over the panes of materials with a `[matl_raindropmap]` (`shaders/glass_rain.hlsl`) |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -107,6 +109,18 @@ instruction slots it takes and how many the card allows
 (`MaxPixelShader30InstructionSlots`; one below 512, or none, is taken for a wrong cap and read as 512), and a card that allows fewer gets one clear error in
 the log instead of a black world; the scene is then not tried again every frame. That count
 (`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
+
+The raindrops on glass: a pane whose material names a `[matl_raindropmap]` (`SceneMaterial::raindrop_map`) gathers
+drops while it rains, over the areas that map marks (its red channel times its alpha), and the vehicle's
+wiper clears the part of the pane it sweeps. The game hands each window picture the rain (0..1, none while it
+snows) and the wiper's place (0..1 across its sweep, read from the player's vehicle script) in
+`SceneFrame::rain`; `glass_rain::GlassRain` keeps how far the drops have formed at 32 places across the pane's
+width (u), moves it on by the time between window pictures, and the pass draws the drops over the same
+meshes and instances the scene just drew, depth-tested without writing depth, with the scene's vertex shader
+and a small pixel shader of its own (the drops' picture is made here; red the drop's shape, green when it
+forms, blue how it catches the light). The scene's pixel shader keeps its slots; a device that cannot make the
+pass draws the world without drops. A mirror's picture draws the drops where they are and does not move them
+on. Not part of it: refraction, running streaks and condensation on glass (not part of OMSI 2).
 
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
