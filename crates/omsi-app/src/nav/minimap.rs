@@ -890,7 +890,7 @@ impl Navigator {
         let wd = words(f.language);
         self.atlas.begin_frame();
         let panel = Rect::new(0.0, 0.0, pw, ph);
-        let radius = 7.0 * s;
+        let radius = 10.0 * s;
         let top_h = (34.0 * s).round();
         let map = Rect::new(0.0, top_h, pw, map_h);
         let vp = [map.x, map.y, map.w, map.h];
@@ -1150,7 +1150,8 @@ impl Navigator {
                 44.0 * s + tw + sw_,
                 34.0 * s,
             );
-            ui.rounded(b, 5.0 * s, Color::rgba(10, 10, 10, 0.85));
+            ui.rounded(b, 9.0 * s, Color::rgba(32, 33, 36, 0.92));
+            ui.rounded_border(b, 9.0 * s, 1.0, Color::WHITE.alpha(0.08));
             ui.icon(
                 &mut self.atlas,
                 icon,
@@ -1192,7 +1193,7 @@ impl Navigator {
                 w,
                 18.0 * s,
             );
-            ui.rounded(r, 9.0 * s, Color::rgba(10, 10, 10, 0.8));
+            ui.rounded(r, 9.0 * s, Color::rgba(32, 33, 36, 0.9));
             ui.text_in(
                 &mut self.atlas,
                 &self.fonts,
@@ -1385,6 +1386,10 @@ impl Navigator {
         // top bar: speed (and the limit) · line ……… game time
         let top = Rect::new(0.0, 0.0, pw, top_h);
         ui.rect(top, BAR);
+        ui.rect(
+            Rect::new(0.0, top.bottom() - 1.0, pw, 1.0),
+            Color::WHITE.alpha(0.07),
+        );
         let pad = 11.0 * s;
         let base = top.y + top.h * 0.5 + self.fonts.cap_height(17.0 * s, Weight::Bold) * 0.5;
         let mut x = pad;
@@ -1447,13 +1452,22 @@ impl Navigator {
         let day_text = wd.days[f.weekday.clamp(0, 6) as usize];
         let time_w = self.fonts.width(&time_text, 14.0 * s, Weight::Bold);
         let day_w = self.fonts.width(day_text, 12.0 * s, Weight::Medium);
+        // (the day and the time in a chip, as the windows' headers hold theirs)
+        let tr = pw - pad - 7.0 * s;
+        let chip = Rect::new(
+            tr - time_w - 5.0 * s - day_w - 9.0 * s,
+            top.center().y - 11.0 * s,
+            time_w + 5.0 * s + day_w + 18.0 * s,
+            22.0 * s,
+        );
+        ui.rounded(chip, chip.h * 0.5, Color::WHITE.alpha(0.08));
         ui.text(
             &mut self.atlas,
             &self.fonts,
             &time_text,
             14.0 * s,
             Weight::Bold,
-            Vec2::new(pw - pad, base),
+            Vec2::new(tr, base),
             Align::Right,
             TEXT,
         );
@@ -1463,23 +1477,42 @@ impl Navigator {
             day_text,
             12.0 * s,
             Weight::Medium,
-            Vec2::new(pw - pad - time_w - 5.0 * s, base),
+            Vec2::new(tr - time_w - 5.0 * s, base),
             Align::Right,
             TEXT_DIM,
         );
 
         // Temperatures stay in the navigator header on every bus. The simulator always keeps
         // Cabinair_Temp, while scripts that model heating/air conditioning can overwrite it.
-        let temp = format!("EXT {:.0}°C · INT {:.0}°C", f.outside_temp, f.inside_temp);
-        let center = match f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
-            Some(line) => format!("{temp} · {line}"),
-            None => temp,
-        };
-        let left_edge = (if limit.is_some() { x + 24.0 * s } else { x }) + 6.0 * s;
-        let right_edge = pw - pad - time_w - 5.0 * s - day_w - 6.0 * s;
+        let mut temp = format!("EXT {:.0}°C · INT {:.0}°C", f.outside_temp, f.inside_temp);
+        let mut left_edge = (if limit.is_some() { x + 24.0 * s } else { x }) + 6.0 * s;
+        let right_edge = chip.x - 6.0 * s;
+        // the line as a badge in the accent (when there is room for it)
+        if let Some(line) = f.line.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+            let line = self.fonts.fit(line, 12.0 * s, Weight::Bold, 46.0 * s);
+            let bw = self.fonts.width(&line, 12.0 * s, Weight::Bold) + 14.0 * s;
+            if left_edge + bw + 70.0 * s < right_edge {
+                let badge = Rect::new(left_edge, top.center().y - 10.0 * s, bw, 20.0 * s);
+                ui.rounded(badge, 5.0 * s, omsi_ui::theme::accent());
+                ui.text_in(
+                    &mut self.atlas,
+                    &self.fonts,
+                    &line,
+                    12.0 * s,
+                    Weight::Bold,
+                    badge,
+                    Align::Center,
+                    omsi_ui::theme::on_accent(),
+                );
+                left_edge += bw + 6.0 * s;
+            } else {
+                // (no room for the badge: the line stays in the text, as it was)
+                temp = format!("{temp} · {line}");
+            }
+        }
         if right_edge > left_edge {
             let rect = Rect::new(left_edge, top.y, right_edge - left_edge, top.h);
-            let center = self.fonts.fit(&center, 11.5 * s, Weight::Bold, rect.w);
+            let center = self.fonts.fit(&temp, 11.5 * s, Weight::Bold, rect.w);
             ui.text_in(
                 &mut self.atlas,
                 &self.fonts,
@@ -1752,6 +1785,9 @@ impl Navigator {
                 y += 22.0 * s;
             }
         }
+
+        // the window's edge, over the bars and the map
+        ui.rounded_border(panel, radius, 1.0, Color::WHITE.alpha(0.10));
 
         // --- to the GPU
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue)

@@ -405,8 +405,8 @@ impl Navigator {
 
         // --- the data card
         let card = Rect::new(x0, top, pw, card_h);
-        ui.rounded(card, 4.0 * s, ink);
-        ui.rounded_border(card, 4.0 * s, 1.0, v5::LINE);
+        ui.rounded(card, 8.0 * s, ink);
+        ui.rounded_border(card, 8.0 * s, 1.0, v5::LINE);
         ui.text(
             &mut self.atlas,
             &self.fonts,
@@ -453,7 +453,7 @@ impl Navigator {
             {
                 let tw = self.fonts.width(lt.timetable, 11.5 * s, Weight::Bold) + 40.0 * s;
                 let rr = Rect::new(x0 + pw - pad - tw, top + 8.0 * s, tw, 22.0 * s);
-                chip(ui, rr, 4.0 * s, self.city.lines.sheet);
+                chip(ui, rr, 6.0 * s, self.city.lines.sheet);
                 ui.icon(
                     &mut self.atlas,
                     "schedule",
@@ -597,7 +597,7 @@ impl Navigator {
                     let label = format!("{} {}", tr(lt.route), k + 1);
                     let tw = self.fonts.width(&label, 11.5 * s, Weight::Bold) + 16.0 * s;
                     let rr = Rect::new(tx - tw, top + 148.0 * s, tw, 22.0 * s);
-                    chip(ui, rr, 4.0 * s, k == ri);
+                    chip(ui, rr, 6.0 * s, k == ri);
                     ui.text_in(
                         &mut self.atlas,
                         &self.fonts,
@@ -618,8 +618,8 @@ impl Navigator {
         let ly = top + card_h + 10.0 * s;
         let panel_h = (h - ly - 12.0 * s).max(60.0 * s);
         let list_panel = Rect::new(x0, ly, pw, panel_h);
-        ui.rounded(list_panel, 4.0 * s, ink);
-        ui.rounded_border(list_panel, 4.0 * s, 1.0, v5::LINE);
+        ui.rounded(list_panel, 8.0 * s, ink);
+        ui.rounded_border(list_panel, 8.0 * s, 1.0, v5::LINE);
         if let Some(i) = focus.filter(|_| self.city.lines.sheet) {
             // the timetable is read only now that it is asked for
             let Some(timetable) = sf.times(&self.chrono, self.date) else {
@@ -688,7 +688,7 @@ impl Navigator {
         let label = if all_on { lt.tick_none } else { lt.tick_all };
         let bw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 20.0 * s;
         let br = Rect::new(x0 + pw - pad - bw, ly + 6.0 * s, bw, 22.0 * s);
-        chip(ui, br, 4.0 * s, all_on);
+        chip(ui, br, 6.0 * s, all_on);
         ui.text_in(
             &mut self.atlas,
             &self.fonts,
@@ -708,7 +708,7 @@ impl Navigator {
                 let label = lt.modals[k as usize];
                 let tw = self.fonts.width(label, 12.0 * s, Weight::Bold) + 20.0 * s;
                 let rr = Rect::new(tx, ty, tw, 24.0 * s);
-                chip(ui, rr, 4.0 * s, self.city.lines.modal == k);
+                chip(ui, rr, 6.0 * s, self.city.lines.modal == k);
                 ui.text_in(
                     &mut self.atlas,
                     &self.fonts,
@@ -735,7 +735,7 @@ impl Navigator {
             ] {
                 let tw = self.fonts.width(label, 11.5 * s, Weight::Bold) + 16.0 * s;
                 let rr = Rect::new(tx, ty, tw, 22.0 * s);
-                chip(ui, rr, 4.0 * s, self.city.lines.filter == k);
+                chip(ui, rr, 6.0 * s, self.city.lines.filter == k);
                 ui.text_in(
                     &mut self.atlas,
                     &self.fonts,
@@ -768,11 +768,11 @@ impl Navigator {
             let row = Rect::new(x0 + 4.0 * s, ry, pw - 14.0 * s, row_h);
             let ticked = self.city.lines.selected.contains(&i);
             if self.city.lines.focus == Some(i) && ticked {
-                ui.rounded(row, 4.0 * s, Color::WHITE.alpha(0.07));
+                ui.rounded(row, 6.0 * s, Color::WHITE.alpha(0.07));
             }
             let cb = Rect::new(x0 + pad, ry + (row_h - 14.0 * s) * 0.5, 14.0 * s, 14.0 * s);
             if ticked {
-                ui.rounded(cb, 3.0 * s, line_color(i));
+                ui.rounded(cb, 5.0 * s, line_color(i));
                 ui.icon(
                     &mut self.atlas,
                     "check",
@@ -947,7 +947,7 @@ impl Navigator {
         );
         if pick.is_some() {
             let rr = Rect::new(x0 + pw - pad - 34.0 * s, y0 + 6.0 * s, 34.0 * s, 22.0 * s);
-            chip(ui, rr, 4.0 * s, false);
+            chip(ui, rr, 6.0 * s, false);
             ui.icon(&mut self.atlas, "arrow_back", rr.center(), 16.0 * s, TEXT);
             hits.push((rr, LinesHit::Back));
         }
@@ -973,7 +973,7 @@ impl Navigator {
         for (label, d) in lt.days.iter().zip([0usize, 5, 6]) {
             let cw = self.fonts.width(label, 13.0 * s, Weight::Bold) + 20.0 * s;
             let rr = Rect::new(cx, y0 + 60.0 * s, cw, 26.0 * s);
-            chip(ui, rr, 4.0 * s, d == day);
+            chip(ui, rr, 6.0 * s, d == day);
             ui.text_in(
                 &mut self.atlas,
                 &self.fonts,
@@ -1136,7 +1136,7 @@ impl Navigator {
                         39.0 * s,
                         row_h - 6.0 * s,
                     );
-                    chip(ui, rr, 4.0 * s, Some(d.t as u32) == next);
+                    chip(ui, rr, 6.0 * s, Some(d.t as u32) == next);
                     ui.text_in(
                         &mut self.atlas,
                         &self.fonts,
@@ -2556,6 +2556,8 @@ impl Navigator {
         if let Some(card) = trip_card {
             self.map_card(&mut ui, card, s, lt.trip_card, &trip);
         }
+        // the window's edge, over the header and the map
+        ui.rounded_border(win, RADIUS * s, 1.0, Color::WHITE.alpha(0.10));
         // what the colours mean, and how the map is moved
         if let Some((r, items)) = &legend {
             ui.rounded(*r, 8.0 * s, v5::CARD.alpha(0.94));
@@ -2949,16 +2951,18 @@ impl Navigator {
         ui.rounded(r, 8.0 * s, v5::CARD.alpha(0.94));
         ui.rounded_border(r, 8.0 * s, 1.0, v5::LINE);
         let pad = 14.0 * s;
-        spaced(
-            ui,
+        ui.text(
             &mut self.atlas,
             &self.fonts,
-            &tr(title).to_uppercase(),
-            10.0 * s,
-            r.x + pad,
-            r.y + CARD_HEAD * s * 0.5 + 1.0 * s,
+            &tr(title),
+            12.0 * s,
+            Weight::Bold,
+            Vec2::new(
+                r.x + pad,
+                r.y + CARD_HEAD * s * 0.5 + self.fonts.cap_height(12.0 * s, Weight::Bold) * 0.5,
+            ),
+            Align::Left,
             v5::MUTED,
-            1.6 * s,
         );
         for (k, (label, value)) in rows.iter().enumerate() {
             let y = r.y + (CARD_HEAD + CARD_ROW * k as f32) * s;
