@@ -6,7 +6,7 @@ use crate::maps::MapsView;
 use crate::pages::Page;
 use crate::vehicles::VehiclesView;
 use glam::Vec2;
-use omsi_ui::paint::Align;
+use omsi_ui::paint::{Align, Color};
 use omsi_ui::widgets::{id_of, Ui};
 use omsi_ui::{Rect, Weight};
 
@@ -307,6 +307,18 @@ pub struct EngineSwitch {
 
 const SWITCH_H: f32 = 32.0;
 
+/// A product name ("Depot", "OMSI 2") in `r`, as it is: the catalog's "Depot" is the
+/// place where buses park (a garage in Portuguese), which is not this program's name.
+fn product_name(ui: &mut Ui, name: &str, r: Rect, c: Color, align: Align) {
+    let px = 13.0;
+    let base = r.center().y + ui.fonts.cap_height(px, Weight::Medium) * 0.5;
+    let x = match align {
+        Align::Center => r.center().x,
+        _ => r.x,
+    };
+    ui.text_as_is(name, Vec2::new(x, base), px, Weight::Medium, c, align);
+}
+
 /// The switch as two halves in `r`; the half clicked (true: OMSI 2).
 pub fn engine_switch(ui: &mut Ui, r: Rect, sw: EngineSwitch) -> Option<bool> {
     ui.p().rounded(r, CONTROL_RADIUS, PANEL_2);
@@ -347,7 +359,7 @@ pub fn engine_switch(ui: &mut Ui, r: Rect, sw: EngineSwitch) -> Option<bool> {
         } else {
             NAV_TEXT
         };
-        ui.text_in(label, part, 13.0, Weight::Medium, c, Align::Center);
+        product_name(ui, label, part, c, Align::Center);
         ui.tooltip(
             part,
             if sw.locked {
@@ -379,11 +391,10 @@ pub fn engine_swap(ui: &mut Ui, r: Rect, sw: EngineSwitch) -> Option<bool> {
     ui.p().rounded_border(r, CONTROL_RADIUS, 1.0, LINE);
     let label = if sw.omsi2 { "OMSI 2" } else { "Depot" };
     let c = if sw.locked { MUTED.alpha(0.6) } else { FG };
-    ui.text_in(
+    product_name(
+        ui,
         label,
         Rect::new(r.x + 10.0, r.y, r.w - 34.0, r.h),
-        13.0,
-        Weight::Medium,
         c,
         Align::Left,
     );
