@@ -2028,13 +2028,15 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     if st.omsi2 && !super::omsi2_map::setting_in_omsi2(o.key, o.sec == INTERFACE) {
         return Shown::Hidden;
     }
-    if let Some(l) = api_limit(st.s, o.key).filter(|l| !l.is_row()) {
+    // (the Depot's graphics API limits are not OMSI 2's)
+    let depot_api = !st.omsi2;
+    if let Some(l) = api_limit(st.s, o.key).filter(|l| depot_api && !l.is_row()) {
         return match l.text() {
             Some(t) => Shown::Locked(t),
             None => Shown::Hidden,
         };
     }
-    let fixed = d3d9_fixes_vanilla(st.s);
+    let fixed = depot_api && d3d9_fixes_vanilla(st.s);
     let graphics = st.get("graphics").as_str().unwrap_or("");
     // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain;
     // Enhanced+ traces its shadows, occlusion and reflections: always on there)
@@ -2126,7 +2128,7 @@ pub fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
     match &o.kind {
         Kind::Pick(list) => {
             // (under DirectX9 an option may leave some choices out, see `api_limits`)
-            let limit = api_limit(st.s, o.key);
+            let limit = api_limit(st.s, o.key).filter(|_| !st.omsi2);
             list.iter()
                 .filter(|(v, _)| limit.is_none_or(|l| l.allows(v)))
                 .filter(|(v, _)| !st.omsi2 || super::omsi2_map::pick_allowed(o.key, v))
@@ -2181,7 +2183,7 @@ pub fn chosen(o: &Opt, st: &Store, options: &mut Vec<(String, String)>) -> usize
     }
     let mut cur = value_text(st.get(o.key));
     // (a saved value DirectX9 does not offer shows as the choice it takes, see `api_limits`)
-    if let Some(l) = api_limit(st.s, o.key) {
+    if let Some(l) = api_limit(st.s, o.key).filter(|_| !st.omsi2) {
         cur = l.fit(&cur);
     }
     // (anisotropy 0 is off, the same entry as 1)
@@ -3408,6 +3410,25 @@ pub fn reset_dialog(l: &mut Launcher) {
         Some("restart_alt"),
         ButtonKind::Danger,
     ) {
+        // (with OMSI 2 chosen the options on the page are its own: the Depot's stay as they are)
+        if l.state.omsi2_engine() {
+            let none = serde_json::Map::new();
+            match omsi_launcher_lib::original_engine::config::save_settings_in(
+                &omsi_launcher_lib::data_dir(),
+                &none,
+            ) {
+                Ok(()) => {
+                    l.pages.set.omsi2_saved = Some(none);
+                    l.state
+                        .set_status("Every setting is back to how it came.", false);
+                }
+                Err(e) => l
+                    .state
+                    .set_status(format!("OMSI 2 mode settings were not reset: {e:#}"), true),
+            }
+            l.pages.confirm_reset = false;
+            return;
+        }
         let language = l.state.settings.get("language").cloned();
         l.state.settings = core::settings_from_text(None);
         if let Some(lang) = language {

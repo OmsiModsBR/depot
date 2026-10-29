@@ -587,3 +587,25 @@ fn the_original_omsi2_lists_only_what_it_has() {
     let o = OPTS.iter().find(|o| o.key == "show_fps").unwrap();
     assert_eq!(shown(o, &st), Shown::Row);
 }
+
+/// The Depot's DirectX9 limits do not reach the options of the original OMSI 2.
+#[test]
+fn the_depot_graphics_api_does_not_limit_the_original_omsi2() {
+    let (mut s, mut start) = (all_rows(), start());
+    s["graphics_api"] = json!("d3d9");
+    s["mirror_refresh"] = json!("eco");
+    let st = Store {
+        s: &mut s,
+        start: &mut start,
+        changed: false,
+        start_changed: false,
+        omsi2: true,
+    };
+    let o = OPTS.iter().find(|o| o.key == "mirror_refresh").unwrap();
+    assert_eq!(shown(o, &st), Shown::Row);
+    let mut options = options_of(o, &st);
+    let values: Vec<_> = options.iter().map(|x| x.0.as_str()).collect();
+    assert_eq!(values, ["eco", "full"]);
+    let at = chosen(o, &st, &mut options);
+    assert_eq!(options[at].0, "eco");
+}
