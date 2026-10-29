@@ -11,6 +11,7 @@ pub mod calendar;
 pub mod global;
 pub mod terrain;
 pub mod tile;
+pub mod ttl_edit;
 
 pub use ailists::{
     active_chrono_dirs, chrono_deactivated_lines, date_code, typgroup_entry_valid, AiGroup,

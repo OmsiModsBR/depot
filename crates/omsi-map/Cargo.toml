@@ -9,3 +9,6 @@ description = "Map loading: global.cfg, tiles, terrain, calendar, AI lists, chro
 omsi-cfg = { path = "../omsi-cfg" }
 log.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+omsi-timetable = { path = "../omsi-timetable" }

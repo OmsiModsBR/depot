@@ -2999,6 +2999,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "omsi-cfg",
+ "omsi-timetable",
  "thiserror 2.0.21",
 ]
 

@@ -1,7 +1,8 @@
 //! Editing a map's own AI lists on the AI traffic tab: the car groups of `ailists.cfg` (each
-//! vehicle's weight, vehicles added, taken out or moved, a new group) and the parking lists
-//! (how often each car is listed). The depots' fleets, the Chrono scenarios' lists, the
-//! density and the people stay read only.
+//! vehicle's weight, vehicles added, taken out or moved, a new group), the parking lists
+//! (how often each car is listed) and, on the bus tab (`fleet`), the buses of the depots'
+//! fleet lists and the AI group each tour of the map's own `TTData` lines takes its buses
+//! from. The Chrono scenarios' lists, the density and the people stay read only.
 //!
 //! Nothing is written until Save: then only the lines that changed are (see
 //! `omsi_map::ailists_edit`), after a copy of each file goes to
@@ -16,8 +17,10 @@ use super::Launcher;
 use omsi_integrity::traffic::VehicleFile;
 use omsi_launcher_ui::kit::{card, clipped, Status};
 use omsi_launcher_ui::look::*;
+use omsi_map::ailists::DepotEntry;
 use omsi_map::ailists_edit::{AiListsDoc, EditError, GroupKind, ParkListDoc};
 use omsi_map::backup::{self, Backup};
+use omsi_map::ttl_edit::{TtlDoc, TtlEditError};
 use omsi_ui::paint::{Align, Color};
 use omsi_ui::widgets::ButtonKind;
 use omsi_ui::widgets::Ui;
@@ -25,6 +28,9 @@ use omsi_ui::{Rect, Weight};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
+
+mod fleet;
+pub use fleet::bus_lines;
 
 /// A parking list of the map and its lines.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +42,14 @@ pub struct Park {
     pub doc: ParkListDoc,
 }
 
+/// A timetable line of the map (`TTData/<name>.ttl`) and its tours' AI groups.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ttl {
+    /// Its path in the map folder, with `/`.
+    pub file: String,
+    pub doc: TtlDoc,
+}
+
 /// The map's own lists, as edited.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Lists {
@@ -43,6 +57,8 @@ pub struct Lists {
     pub ailists_file: String,
     pub ailists: AiListsDoc,
     pub parks: Vec<Park>,
+    /// The map's timetable lines.
+    pub ttls: Vec<Ttl>,
 }
 
 impl Lists {
@@ -85,6 +101,36 @@ impl Lists {
             }
         }
         l.parks.sort_by_key(|p| p.index);
+        // the lines: TTData's `.ttl` files, whatever case the folder has
+        let tt = std::fs::read_dir(map_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .find(|e| {
+                e.path().is_dir()
+                    && e.file_name()
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case("ttdata")
+            });
+        if let Some(tt) = tt {
+            let folder = tt.file_name().to_string_lossy().into_owned();
+            let mut files: Vec<String> = std::fs::read_dir(tt.path())
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|e| e.path().is_file())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.to_ascii_lowercase().ends_with(".ttl"))
+                .collect();
+            files.sort_by_key(|n| n.to_ascii_lowercase());
+            for n in files {
+                let bytes = std::fs::read(tt.path().join(&n)).unwrap_or_default();
+                l.ttls.push(Ttl {
+                    file: format!("{folder}/{n}"),
+                    doc: TtlDoc::from_bytes(&bytes),
+                });
+            }
+        }
         l
     }
 
@@ -99,6 +145,12 @@ impl Lists {
             let before = saved.parks.iter().find(|s| s.file == p.file);
             if before.is_none_or(|b| b.doc != p.doc) && p.doc.exact() {
                 out.push((p.file.clone(), p.doc.to_bytes()));
+            }
+        }
+        for t in &self.ttls {
+            let before = saved.ttls.iter().find(|s| s.file == t.file);
+            if before.is_none_or(|b| b.doc != t.doc) && t.doc.exact() {
+                out.push((t.file.clone(), t.doc.to_bytes()));
             }
         }
         out
@@ -130,6 +182,26 @@ pub enum Change {
         file: String,
         from: usize,
         to: usize,
+    },
+    /// A bus of a depot's fleet: `what` is its number and plate.
+    BusAdded {
+        group: String,
+        what: String,
+    },
+    BusRemoved {
+        group: String,
+        what: String,
+    },
+    BusChanged {
+        group: String,
+        what: String,
+    },
+    /// A tour of a timetable line now takes its buses from another group.
+    TourGroup {
+        line: String,
+        tour: String,
+        from: String,
+        to: String,
     },
 }
 
@@ -206,6 +278,7 @@ pub fn changes(saved: &Lists, now: &Lists) -> Vec<Change> {
             out.push(Change::GroupRemoved(g.name.trim().to_string()));
         }
     }
+    bus_changes(saved, now, &mut out);
     for p in &now.parks {
         let before = saved
             .parks
@@ -241,6 +314,91 @@ pub fn changes(saved: &Lists, now: &Lists) -> Vec<Change> {
     out
 }
 
+/// The buses of every depot group, each with the vehicle file of its list.
+fn fleet_of(doc: &AiListsDoc, g: usize) -> Vec<(String, DepotEntry)> {
+    doc.groups()[g]
+        .fleets
+        .iter()
+        .flat_map(|f| f.buses.iter().map(|b| (f.file.clone(), b.entry.clone())))
+        .collect()
+}
+
+/// A bus as the lists name it: its number and plate.
+fn bus_name(e: &DepotEntry) -> String {
+    if e.registration.trim().is_empty() {
+        e.number.clone()
+    } else {
+        format!("{} · {}", e.number, e.registration)
+    }
+}
+
+/// The buses added, taken out or changed in the depots' fleet lists, and the tours that
+/// changed their group.
+fn bus_changes(saved: &Lists, now: &Lists, out: &mut Vec<Change>) {
+    let (a, b) = (&saved.ailists, &now.ailists);
+    for (gi, g) in b.groups().iter().enumerate() {
+        let Some(oi) = a.find(&g.name) else { continue };
+        let name = g.name.trim().to_string();
+        let mut old = fleet_of(a, oi);
+        let mut added = Vec::new();
+        for (file, e) in fleet_of(b, gi) {
+            match old
+                .iter()
+                .position(|(f, o)| f.eq_ignore_ascii_case(&file) && *o == e)
+            {
+                Some(i) => {
+                    old.remove(i);
+                }
+                None => added.push((file, e)),
+            }
+        }
+        for (file, e) in added {
+            // (the same number in the same list: one bus changed, not two)
+            let same = old.iter().position(|(f, o)| {
+                f.eq_ignore_ascii_case(&file) && o.number.trim() == e.number.trim()
+            });
+            match same {
+                Some(i) => {
+                    old.remove(i);
+                    out.push(Change::BusChanged {
+                        group: name.clone(),
+                        what: bus_name(&e),
+                    });
+                }
+                None => out.push(Change::BusAdded {
+                    group: name.clone(),
+                    what: bus_name(&e),
+                }),
+            }
+        }
+        for (_, e) in old {
+            out.push(Change::BusRemoved {
+                group: name.clone(),
+                what: bus_name(&e),
+            });
+        }
+    }
+    for t in &now.ttls {
+        let Some(before) = saved.ttls.iter().find(|s| s.file == t.file) else {
+            continue;
+        };
+        let line = std::path::Path::new(&t.file)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        for (n, o) in t.doc.tours().iter().zip(before.doc.tours()) {
+            if n.ai_group != o.ai_group {
+                out.push(Change::TourGroup {
+                    line: line.clone(),
+                    tour: n.number.trim().to_string(),
+                    from: o.ai_group.trim().to_string(),
+                    to: n.ai_group.trim().to_string(),
+                });
+            }
+        }
+    }
+}
+
 /// A window over the tab.
 pub enum Dialog {
     /// Pick a vehicle to add to group `group`.
@@ -259,6 +417,14 @@ pub enum Dialog {
     NewGroup {
         name: String,
         error: bool,
+    },
+    /// A bus of a depot's fleet, new (`bus` none) or changed: group, fleet list, the fields.
+    Bus(fleet::BusForm),
+    /// The group a tour takes its buses from: the line's file, the tour's place in it.
+    TourGroup {
+        file: String,
+        tour: usize,
+        sel: Option<usize>,
     },
     Save,
     Backups {
@@ -283,6 +449,10 @@ pub struct Editor {
     pub vehicle: Option<usize>,
     pub park: usize,
     pub car: Option<usize>,
+    /// The line and tour looked at on the bus tab, and the bus (fleet list, bus) of the group.
+    pub line: usize,
+    pub tour: usize,
+    pub bus: Option<(usize, usize)>,
     pub dialog: Option<Dialog>,
     /// The vehicles there are to add, once read.
     pub vehicles: Option<Vec<VehicleFile>>,
@@ -308,6 +478,20 @@ impl Editor {
         &mut self,
         f: impl FnOnce(&mut Lists) -> Result<(), EditError>,
     ) -> Result<(), EditError> {
+        let before = self.now.clone();
+        f(&mut self.now)?;
+        if self.now != before {
+            self.undo.push(before);
+            self.redo.clear();
+        }
+        Ok(())
+    }
+
+    /// Like [`act`](Self::act) for a timetable line.
+    pub fn act_ttl(
+        &mut self,
+        f: impl FnOnce(&mut Lists) -> Result<(), TtlEditError>,
+    ) -> Result<(), TtlEditError> {
         let before = self.now.clone();
         f(&mut self.now)?;
         if self.now != before {
@@ -392,6 +576,9 @@ pub fn start(l: &mut Launcher, folder: &str, name: &str) {
         vehicle: None,
         park: 0,
         car: None,
+        line: 0,
+        tour: 0,
+        bus: None,
         dialog: None,
         vehicles: None,
         reading: None,
@@ -1306,12 +1493,15 @@ fn error_text(e: &EditError) -> &'static str {
         EditError::Unwritable => {
             "The list's text encoding cannot hold this name: rename the folder or file to plain letters."
         }
+        EditError::NoNumber => "A fleet number is needed.",
+        EditError::BadField => "A number, plate or repaint cannot hold a tab or a line break.",
+        EditError::BadDate => "A day is a date as YYYY-MM-DD.",
         _ => "This change cannot be made to the list.",
     }
 }
 
 /// A change as the save window lists it: (where, what, colour).
-fn change_row(c: &Change) -> (String, String, Color) {
+pub fn change_row(c: &Change) -> (String, String, Color) {
     let name = |f: &str| shown_name("", f);
     match c {
         Change::Weight {
@@ -1351,6 +1541,35 @@ fn change_row(c: &Change) -> (String, String, Color) {
             g.clone(),
             omsi_ui::tr("Group removed").to_string(),
             omsi_ui::theme::DANGER,
+        ),
+        Change::BusAdded { group, what } => (
+            group.clone(),
+            omsi_ui::tr("Added bus %{b}").replace("%{b}", what),
+            OK,
+        ),
+        Change::BusRemoved { group, what } => (
+            group.clone(),
+            omsi_ui::tr("Removed bus %{b}").replace("%{b}", what),
+            omsi_ui::theme::DANGER,
+        ),
+        Change::BusChanged { group, what } => (
+            group.clone(),
+            omsi_ui::tr("Changed bus %{b}").replace("%{b}", what),
+            FG,
+        ),
+        Change::TourGroup {
+            line,
+            tour,
+            from,
+            to,
+        } => (
+            omsi_ui::tr("Line %{l}, tour %{t}")
+                .replace("%{l}", line)
+                .replace("%{t}", tour),
+            omsi_ui::tr("AI group %{a} → %{b}")
+                .replace("%{a}", from)
+                .replace("%{b}", to),
+            FG,
         ),
         Change::Parked {
             list,
@@ -1411,6 +1630,8 @@ pub fn dialog(l: &mut Launcher) {
             } => add_vehicle(l, &mut e, group, search, kind, sel, weight),
             Dialog::MoveTo { sel } => move_to(l, &mut e, sel),
             Dialog::NewGroup { name, error } => new_group(l, &mut e, name, error),
+            Dialog::Bus(form) => fleet::bus_dialog(l, &mut e, form),
+            Dialog::TourGroup { file, tour, sel } => fleet::tour_group(l, &mut e, file, tour, sel),
             Dialog::Save => save_dialog(l, &mut e),
             Dialog::Backups { list, sel } => backups(l, &mut e, list, sel),
             Dialog::Leave => {

@@ -250,6 +250,13 @@ pub struct DocFleet {
     end: Option<usize>,
 }
 
+impl DocFleet {
+    /// Whether the list can be changed: it has its `[end]` (a cut-off list is read only).
+    pub fn end_known(&self) -> bool {
+        self.end.is_some()
+    }
+}
+
 /// A group of `ailists.cfg` and where it is in the file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocGroup {

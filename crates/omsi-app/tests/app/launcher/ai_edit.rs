@@ -1,5 +1,8 @@
+use omsi_map::ailists::DepotEntry;
 use omsi_map::ailists_edit::AiListsDoc;
 use omsi_map::ailists_edit::ParkListDoc;
+use omsi_map::backup;
+use omsi_map::ttl_edit::TtlDoc;
 use openomsi_game::testing::launcher::ai_edit::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,6 +18,10 @@ fn lists() -> Lists {
             file: "parklist_p.txt".into(),
             index: 0,
             doc: ParkListDoc::from_bytes(b"P\\x.sco\r\nP\\x.sco\r\n"),
+        }],
+        ttls: vec![Ttl {
+            file: "TTData/76.ttl".into(),
+            doc: TtlDoc::from_bytes(b"[newtour]\r\n1\r\nCars\r\n0\r\n"),
         }],
     }
 }
@@ -100,6 +107,9 @@ fn undo_and_redo_walk_the_changes() {
         vehicle: None,
         park: 0,
         car: None,
+        line: 0,
+        tour: 0,
+        bus: None,
         dialog: None,
         vehicles: None,
         reading: None,
@@ -134,4 +144,38 @@ fn a_map_folder_is_read_with_its_parking_lists() {
     let parks: Vec<(&str, usize)> = l.parks.iter().map(|p| (p.file.as_str(), p.index)).collect();
     assert_eq!(parks, [("parklist_p.txt", 0), ("parklist_p_2.txt", 2)]);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn buses_and_tours_are_named_and_written_with_their_files() {
+    let saved = Lists {
+        ailists: AiListsDoc::from_bytes(
+            b"[aigroup_depot]\r\nBuses\r\nDepot\r\n\r\n[aigroup_depot_typgroup_2]\r\nV\\b.bus\r\n1\tB-1\tred\r\n2\tB-2\tred\r\n[end]\r\n",
+        ),
+        ..lists()
+    };
+    let mut now = saved.clone();
+    let bus = |n: &str, plate: &str| DepotEntry {
+        number: n.into(),
+        registration: plate.into(),
+        paint: "red".into(),
+        from: None,
+        to: None,
+    };
+    now.ailists.set_bus(0, 0, 0, &bus("1", "B-9")).unwrap();
+    now.ailists.remove_bus(0, 0, 1).unwrap();
+    now.ailists.add_bus(0, 0, &bus("3", "B-3")).unwrap();
+    now.ttls[0].doc.set_group(0, "Buses").unwrap();
+    let list: Vec<(String, String)> = changes(&saved, &now)
+        .iter()
+        .map(|c| {
+            let (a, b, _) = change_row(c);
+            (a, b)
+        })
+        .collect();
+    assert_eq!(list.len(), 4, "{list:?}");
+    // both files are written, the line under its folder
+    let files: Vec<String> = now.to_write(&saved).into_iter().map(|f| f.0).collect();
+    assert_eq!(files, ["ailists.cfg", "TTData/76.ttl"]);
+    assert!(backup::allowed("TTData/76.ttl"));
 }
