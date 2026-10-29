@@ -571,7 +571,7 @@ fn the_overlay_draws_the_menu_and_the_loading_screen_and_nothing_else() {
 fn the_menus_draw_on_the_centre_screen_and_into_the_headset_s_picture() {
     use testing::game_lists::{row, ListKind};
     use testing::hud::MenuKind;
-    use testing::new_ui_pages::{page_frame, test_column, test_frame};
+    use testing::ui::pages::{page_frame, test_column, test_frame};
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let options = omsi_render::RenderOptions {
         msaa: 1,
