@@ -4,6 +4,7 @@
 pub(crate) mod add;
 pub(crate) mod alt;
 pub(crate) mod loading;
+pub(crate) mod pages;
 pub(crate) mod report;
 pub(crate) mod win_input;
 pub(crate) mod windows;

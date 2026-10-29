@@ -350,57 +350,6 @@ pub mod new_ui {
         }
     }
 }
-pub mod new_ui_pages {
-    use crate::hud::{Frame, MenuKind};
-    use crate::new_ui::MenuFrame;
-    pub use crate::new_ui_pages::*;
-
-    /// The Esc menu's column of a session with every line (tests).
-    pub fn test_column(paused: bool) -> MenuFrame {
-        crate::new_ui::menu_frame(
-            &crate::input::menus::GAME_MENU,
-            Some(0),
-            &|_| false,
-            "08:42".into(),
-            paused,
-        )
-    }
-
-    /// The HUD's frame with the list `items` of `kind` open on its first line (tests).
-    pub fn test_frame<'a>(items: &'a [(&'a str, &'a str)], kind: MenuKind) -> Frame<'a> {
-        Frame {
-            scale: 1.0,
-            ui_scale: 1.0,
-            opacity: 1.0,
-            width: 1672.0,
-            height: 941.0,
-            cursor: (0.0, 0.0),
-            vr: false,
-            tooltip: None,
-            chat: None,
-            chat_size: 1.0,
-            notes: &[],
-            fps: None,
-            paused: true,
-            menu: Some((0, items)),
-            menu_top: None,
-            timetable: None,
-            info: None,
-            info_room: None,
-            tutorial: None,
-            tags: Vec::new(),
-            notices: &[],
-            notice_anchor: None,
-            menu_kind: kind,
-            menu_head: Some(("Options".into(), String::new())),
-            menu_preview: None,
-            pane_first: None,
-            menu_tabs: None,
-            menu_kbd: true,
-            dropdown: None,
-        }
-    }
-}
 pub mod offscreen {
     pub use crate::offscreen::*;
 }
@@ -589,6 +538,58 @@ pub mod ui {
     pub mod loading {
         pub use crate::ui::domain::loading::*;
         pub use crate::ui::implementation::loading::*;
+    }
+    pub mod pages {
+        use crate::hud::{Frame, MenuKind};
+        use crate::new_ui::MenuFrame;
+        pub use crate::ui::domain::pages::*;
+        pub use crate::ui::implementation::pages::*;
+
+        /// The Esc menu's column of a session with every line (tests).
+        pub fn test_column(paused: bool) -> MenuFrame {
+            crate::new_ui::menu_frame(
+                &crate::input::menus::GAME_MENU,
+                Some(0),
+                &|_| false,
+                "08:42".into(),
+                paused,
+            )
+        }
+
+        /// The HUD's frame with the list `items` of `kind` open on its first line (tests).
+        pub fn test_frame<'a>(items: &'a [(&'a str, &'a str)], kind: MenuKind) -> Frame<'a> {
+            Frame {
+                scale: 1.0,
+                ui_scale: 1.0,
+                opacity: 1.0,
+                width: 1672.0,
+                height: 941.0,
+                cursor: (0.0, 0.0),
+                vr: false,
+                tooltip: None,
+                chat: None,
+                chat_size: 1.0,
+                notes: &[],
+                fps: None,
+                paused: true,
+                menu: Some((0, items)),
+                menu_top: None,
+                timetable: None,
+                info: None,
+                info_room: None,
+                tutorial: None,
+                tags: Vec::new(),
+                notices: &[],
+                notice_anchor: None,
+                menu_kind: kind,
+                menu_head: Some(("Options".into(), String::new())),
+                menu_preview: None,
+                pane_first: None,
+                menu_tabs: None,
+                menu_kbd: true,
+                dropdown: None,
+            }
+        }
     }
     pub mod report {
         pub use crate::ui::domain::report::*;

@@ -8,7 +8,7 @@ use openomsi_game::testing;
 use openomsi_game::testing::new_ui::*;
 use testing::game_lists::{row, ListKind, HEADING};
 use testing::hud::{DropdownView, MenuKind, Preview};
-use testing::new_ui_pages::{page_frame, test_column, test_frame, PageFrame};
+use testing::ui::pages::{page_frame, test_column, test_frame, PageFrame};
 
 /// The size of the window the pages are drawn in (pixels).
 const SIZE: (u32, u32) = (1672, 941);

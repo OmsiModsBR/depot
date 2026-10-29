@@ -6,7 +6,7 @@ use openomsi_game::testing::game_lists::{row, ListKind};
 use openomsi_game::testing::hud::MenuKind;
 use openomsi_game::testing::hud::{DropdownView, Preview};
 use openomsi_game::testing::new_ui::{Area, MenuFrameInternals};
-use openomsi_game::testing::new_ui_pages::*;
+use openomsi_game::testing::ui::pages::*;
 
 #[test]
 fn every_kind_of_settings_row_maps_to_its_control() {

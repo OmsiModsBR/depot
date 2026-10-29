@@ -6,7 +6,7 @@
 //! menu stays the game's own: its lines come from `game_menu_items`, a click does what
 //! `menu_choose` does for the same line, the keys are the HUD menu's, and the simulation
 //! pauses as it did. What is behind a line ("Options...", "Controls...", the lists) is drawn
-//! here too, beside the column: see `new_ui_pages`.
+//! here too, beside the column: see `ui::domain::pages`.
 //!
 //! Every picture has them: on a triple screen they stand on the centre screen (the hook is
 //! called once the three panels are in the window, and draws in that screen's [`Area`]), and
@@ -370,7 +370,7 @@ impl MenuFrame {
 pub struct State {
     pub menu: Option<MenuFrame>,
     /// A page behind one of the menu's lines, while one is open.
-    pub page: Option<crate::new_ui_pages::PageFrame>,
+    pub page: Option<crate::ui::PageFrame>,
     alt: Option<crate::ui::AltFrame>,
     /// The "Add vehicle" window.
     add: Option<crate::ui::AddFrame>,
@@ -762,7 +762,7 @@ pub struct NewUi {
     /// That window's live 3D view, while the player has it on.
     pub(crate) add_live: Option<crate::ui::LiveView>,
     /// The page open behind a line of the Esc menu, as the HUD's frame of this frame made it.
-    pub page: Option<crate::new_ui_pages::PageFrame>,
+    pub page: Option<crate::ui::PageFrame>,
     /// The headset's picture of the menu and the page (a render texture of the window's size,
     /// and its size), and the plate that dims the view behind them.
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -1111,8 +1111,8 @@ impl App {
     /// Whether the new Esc menu is the one showing: the game menu is open at its top level (no
     /// list opened from it).
     pub(crate) fn new_menu_active(&self) -> bool {
-        crate::new_ui_pages::showing(self.game_menu.is_some(), self.chooser.is_some())
-            == crate::new_ui_pages::Showing::Top
+        crate::ui::showing(self.game_menu.is_some(), self.chooser.is_some())
+            == crate::ui::Showing::Top
     }
 
     /// Where the menus are drawn in the window now (see [`menu_area`]); none before the
@@ -1165,7 +1165,7 @@ impl App {
         if self.game_menu.is_some() {
             self.new_ui.alt.focus = None;
         }
-        // (the page open behind a line: made with the HUD's frame, `new_ui_pages`)
+        // (the page open behind a line: made with the HUD's frame, `ui::domain::pages`)
         if !self.new_pages_active() {
             self.new_ui.page = None;
         }
