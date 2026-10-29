@@ -2526,8 +2526,11 @@ pub fn settings(l: &mut Launcher, area: Rect) {
             if let Err(e) =
                 omsi_launcher_lib::original_engine::config::save_settings_in(&data, saved)
             {
-                l.state
-                    .set_status(format!("OMSI 2 mode settings were not saved: {e:#}"), true);
+                l.state.set_status(
+                    omsi_ui::tr("OMSI 2 mode settings were not saved: %{error}")
+                        .replace("%{error}", &format!("{e:#}")),
+                    true,
+                );
             }
         }
         changed = !own.is_empty();
@@ -3422,9 +3425,11 @@ pub fn reset_dialog(l: &mut Launcher) {
                     l.state
                         .set_status("Every setting is back to how it came.", false);
                 }
-                Err(e) => l
-                    .state
-                    .set_status(format!("OMSI 2 mode settings were not reset: {e:#}"), true),
+                Err(e) => l.state.set_status(
+                    omsi_ui::tr("OMSI 2 mode settings were not reset: %{error}")
+                        .replace("%{error}", &format!("{e:#}")),
+                    true,
+                ),
             }
             l.pages.confirm_reset = false;
             return;
