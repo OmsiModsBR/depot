@@ -52,9 +52,7 @@ mod nav;
 mod new_ui;
 mod new_ui_add;
 mod new_ui_alt;
-mod new_ui_loading;
 mod new_ui_pages;
-mod new_ui_report;
 mod new_ui_windows;
 #[cfg(windows)]
 mod openxr;
@@ -67,6 +65,7 @@ mod screenshot_name;
 mod steam;
 mod touch;
 mod tr_fill;
+mod ui;
 #[cfg(feature = "lan")]
 mod voice;
 mod vr_navigator;

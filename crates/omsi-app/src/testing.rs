@@ -373,9 +373,6 @@ pub mod new_ui_alt {
         }
     }
 }
-pub mod new_ui_loading {
-    pub use crate::new_ui_loading::*;
-}
 pub mod new_ui_pages {
     use crate::hud::{Frame, MenuKind};
     use crate::new_ui::MenuFrame;
@@ -424,38 +421,6 @@ pub mod new_ui_pages {
             menu_tabs: None,
             menu_kbd: true,
             dropdown: None,
-        }
-    }
-}
-pub mod new_ui_report {
-    pub use crate::new_ui_report::*;
-    use omsi_ui::ingame::{self, ReportRow};
-
-    /// A report as the tests build it.
-    pub trait ReportFrameInternals {
-        /// A trip of three stops, for the overlay's tests.
-        fn for_test() -> Self;
-    }
-
-    impl ReportFrameInternals for ReportFrame {
-        fn for_test() -> Self {
-            let row = |stop: &str, at: &str, state| ReportRow {
-                stop: stop.into(),
-                scheduled: at.into(),
-                actual: at.into(),
-                deviation: "0:00".into(),
-                state,
-            };
-            ReportFrame {
-                title: "50 · Central Station".into(),
-                note: "paused",
-                rows: vec![
-                    row("Depot", "08:44", ingame::StopState::OnTime),
-                    row("Market", "08:47", ingame::StopState::OnTime),
-                    row("Central Station", "08:54", ingame::StopState::OnTime),
-                ],
-                totals: vec![("stops served", "3".into())],
-            }
         }
     }
 }
@@ -622,6 +587,44 @@ pub mod traffic {
 }
 pub mod tutorial {
     pub use crate::tutorial::*;
+}
+pub mod ui {
+    pub mod loading {
+        pub use crate::ui::domain::loading::*;
+        pub use crate::ui::implementation::loading::*;
+    }
+    pub mod report {
+        pub use crate::ui::domain::report::*;
+        use omsi_ui::ingame::{self, ReportRow};
+
+        /// A report as the tests build it.
+        pub trait ReportFrameInternals {
+            /// A trip of three stops, for the overlay's tests.
+            fn for_test() -> Self;
+        }
+
+        impl ReportFrameInternals for ReportFrame {
+            fn for_test() -> Self {
+                let row = |stop: &str, at: &str, state| ReportRow {
+                    stop: stop.into(),
+                    scheduled: at.into(),
+                    actual: at.into(),
+                    deviation: "0:00".into(),
+                    state,
+                };
+                ReportFrame {
+                    title: "50 · Central Station".into(),
+                    note: "paused",
+                    rows: vec![
+                        row("Depot", "08:44", ingame::StopState::OnTime),
+                        row("Market", "08:47", ingame::StopState::OnTime),
+                        row("Central Station", "08:54", ingame::StopState::OnTime),
+                    ],
+                    totals: vec![("stops served", "3".into())],
+                }
+            }
+        }
+    }
 }
 #[cfg(feature = "lan")]
 pub mod voice {

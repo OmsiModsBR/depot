@@ -1,4 +1,4 @@
-use openomsi_game::testing::new_ui_loading::*;
+use openomsi_game::testing::ui::loading::*;
 use std::path::PathBuf;
 
 #[test]
