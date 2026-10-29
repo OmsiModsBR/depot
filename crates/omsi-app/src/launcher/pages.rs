@@ -53,6 +53,8 @@ pub struct PadsView {
     pub devices: Option<Vec<crate::controllers::DeviceCfg>>,
     /// OMSI 2 mode: the devices of the OMSI 2 folder's own file, only shown.
     pub shown_devices: Option<Vec<crate::controllers::DeviceCfg>>,
+    /// When the Controls page was last drawn (OMSI 2 mode reads its files again after a gap).
+    pub controls_seen: Option<std::time::Instant>,
     pub selected: usize,
     /// Waiting for a button of the shown device to be pressed (to add its binding).
     pub capturing: bool,
@@ -809,6 +811,8 @@ fn game_controllers_read_only(l: &mut Launcher, body: Rect) {
         body.w,
         (body.h - bar - 12.0).max(0.0),
     );
+    // (a calibration left running by the Depot engine's page must not outlive it)
+    l.pages.pads.cancel_feedback_test();
     let root = std::path::PathBuf::from(&l.state.config.root);
     let names = control_names(l);
     let devices = l.pages.pads.shown_devices.get_or_insert_with(|| {
@@ -879,8 +883,20 @@ fn game_controllers_read_only(l: &mut Launcher, body: Rect) {
 
 pub fn controls(l: &mut Launcher, area: Rect) {
     // (the shown file is read again the next time OMSI 2 is chosen)
-    if !l.state.omsi2_engine() {
+    // (the keys and controllers are changed inside OMSI 2: coming back to the page, or back
+    // from a game, shows the files as they are now)
+    let now = std::time::Instant::now();
+    let away = l
+        .pages
+        .pads
+        .controls_seen
+        .is_none_or(|t| now.duration_since(t) > std::time::Duration::from_millis(750));
+    l.pages.pads.controls_seen = Some(now);
+    if !l.state.omsi2_engine() || away {
         l.pages.pads.shown_devices = None;
+    }
+    if away && l.state.omsi2_engine() {
+        l.pages.kb.original = None;
     }
     // (where on the page is the tab shown, and its line says how it is used)
     let (_, title, keys_line) = UiPage::Controls.heading().unwrap_or_default();
@@ -889,7 +905,8 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     } else {
         ("Game controllers", "What each axis and button of a wheel, pedals or joystick does: OMSI 2's gamectrler.cfg, in the content folder.")
     };
-    if !super::mobile::mobile() {
+    // (OMSI 2 mode has only the read-only page, on a phone too)
+    if !super::mobile::mobile() || l.state.omsi2_engine() {
         // (a computer, as the Windows 11 concept: the tabs under the heading, the keyboard in
         // groups with the chosen action beside it)
         let body = l.page_title_with(area, UiPage::Controls.title(), (place, title, line));
@@ -2491,6 +2508,10 @@ pub(super) fn use_custom_keys(l: &mut Launcher) -> bool {
 }
 
 pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
+    // (with OMSI 2 chosen the keys are only shown: the file may be the OMSI 2 folder's own)
+    if l.state.omsi2_engine() {
+        return;
+    }
     match core::save_keybindings(&l.state.keybindings) {
         Ok(()) => {
             l.state.keybindings_error.clear();
