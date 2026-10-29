@@ -91,7 +91,20 @@ fn declared_transmap_ignores_slot_alpha() {
     );
     assert_eq!(scene.materials[drops].raindrop_map, Some(map));
     assert!(scene.materials[drops].uses_texture(map));
-    assert_eq!(scene.materials[drops].uniform.params2[3], 8.0);
+    assert_eq!(
+        scene.materials[drops].uniform.params2[3],
+        8.0 + 16.0 * (map as f32 + 1.0)
+    );
+    let other_map = renderer.add_blank_texture(&mut scene, 1, 1);
+    let other = blended(
+        &mut scene,
+        None,
+        MaterialExtra {
+            raindrop_map: Some(other_map),
+            ..Default::default()
+        },
+    );
+    assert_ne!(scene.materials[drops].look, scene.materials[other].look);
     assert_eq!(scene.materials[plain].raindrop_map, None);
     assert_ne!(scene.materials[drops].look, scene.materials[plain].look);
     assert!(!scene.materials[drops].transmap_declared());

@@ -32,8 +32,12 @@ pub(super) struct GlassStore {
     pipeline: Option<GlassPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
-    /// How far the drops have formed, kept from picture to picture.
+    /// How far the drops have formed on the vehicle the camera is in (the player's), wiped
+    /// by the player's wiper; kept from picture to picture.
     pub(super) state: GlassRain,
+    /// The same without any wiper: the panes of every other vehicle (the picture carries
+    /// one wiper only, the player's).
+    pub(super) others: GlassRain,
 }
 
 fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<GlassPipeline> {
@@ -80,6 +84,10 @@ impl D3d9Device {
     /// mirror's carries no time).
     pub(super) fn step_glass_rain(&mut self, frame: &SceneFrame) {
         self.scene.glass.state.step(&frame.rain);
+        self.scene.glass.others.step(&crate::SceneRain {
+            wiper: None,
+            ..frame.rain
+        });
     }
 
     /// Whether this batch is a pane the pass draws drops on.
@@ -96,7 +104,8 @@ impl D3d9Device {
             .filter(|&t| self.scene.textures.get(t).is_some_and(Option::is_some))
     }
 
-    /// Draws the drops over the panes among `batches` (the world's or the cab's), which the
+    /// Draws the drops over the panes among `batches` (the world's, or with `late` the cab's:
+    /// the vehicle the camera is in, whose panes follow the player's wiper), which the
     /// scene has just drawn. Leaves the pass's states set: the caller binds the scene's
     /// again. Returns whether anything was drawn.
     pub(super) fn draw_glass_rain<'m>(
@@ -105,6 +114,7 @@ impl D3d9Device {
         batches: &[SceneBatch],
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
         coverage: A2c,
+        late: bool,
     ) -> Result<bool> {
         let glass = &self.scene.glass;
         let (Some(p), Some(scene), Some((instances, _))) =
@@ -112,7 +122,9 @@ impl D3d9Device {
         else {
             return Ok(false);
         };
-        if glass.state.is_dry() {
+        // (the vehicle the camera is in is the player's: only its panes follow the player's wiper)
+        let state = if late { &glass.state } else { &glass.others };
+        if state.is_dry() {
             return Ok(false);
         }
         let d = &self.device;
@@ -126,7 +138,7 @@ impl D3d9Device {
         });
         let look = [REPEATS, STRENGTH, 0.0, 0.0];
         let mut constants = Vec::with_capacity(10);
-        for four in glass.state.bins().chunks_exact(4) {
+        for four in state.bins().chunks_exact(4) {
             constants.push([four[0], four[1], four[2], four[3]]);
         }
         constants.push(look);

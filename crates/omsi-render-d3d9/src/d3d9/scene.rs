@@ -1469,7 +1469,7 @@ impl D3d9Device {
                     }
                 }
             }
-            if self.draw_glass_rain(frame, batches, material, coverage)? {
+            if self.draw_glass_rain(frame, batches, material, coverage, late)? {
                 // SAFETY: plain calls on a live device; the pipeline belongs to it.
                 unsafe {
                     d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;

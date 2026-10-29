@@ -19,7 +19,8 @@ pub struct Rain {
 /// it is taken from the values seen so far; until the wiper has moved there is no position.
 #[derive(Default)]
 struct WiperWatch {
-    /// The vehicle the slot was looked up for (a pointer's address; only compared), and the
+    /// The vehicle type the slot was looked up for (the address of its `Arc`; only compared:
+    /// two vehicles of one type share their variables' layout), and the
     /// slot, `None` when it has no such variable.
     of: usize,
     slot: Option<usize>,
@@ -45,16 +46,24 @@ impl WiperWatch {
     }
 
     fn position(&mut self, v: &omsi_sim::VehicleInstance) -> Option<f32> {
-        let id = v as *const _ as usize;
-        if self.of != id {
+        // (keyed by the vehicle's type, not by where the vehicle sits: the player's vehicle is
+        // stored inline, so the next bus the player takes lies at the same address)
+        self.retarget(std::sync::Arc::as_ptr(&v.ty) as usize, || {
+            v.var_slot_where(Self::is_position)
+        });
+        let value = v.var_by_slot(self.slot?).filter(|x| x.is_finite())?;
+        self.seen(value)
+    }
+
+    /// Forgets the slot and the range when `key` is not the vehicle type they were learnt for.
+    fn retarget(&mut self, key: usize, slot: impl FnOnce() -> Option<usize>) {
+        if self.of != key {
             *self = WiperWatch {
-                of: id,
-                slot: v.var_slot_where(Self::is_position),
+                of: key,
+                slot: slot(),
                 range: None,
             };
         }
-        let value = v.var_by_slot(self.slot?).filter(|x| x.is_finite())?;
-        self.seen(value)
     }
 
     /// `value` as a share of the range seen so far (none until the range is a stroke).
@@ -107,6 +116,20 @@ mod tests {
         assert_eq!(w.seen(0.0), Some(0.0));
         assert_eq!(w.seen(75.0), Some(1.0));
         assert_eq!(w.seen(15.0), Some(0.2));
+    }
+
+    #[test]
+    fn another_vehicle_starts_from_nothing() {
+        let mut w = WiperWatch::default();
+        w.retarget(1, || Some(7));
+        w.seen(0.0);
+        assert_eq!(w.seen(40.0), Some(1.0));
+        // the same vehicle again: kept
+        w.retarget(1, || panic!("looked up again"));
+        assert_eq!((w.slot, w.range), (Some(7), Some((0.0, 40.0))));
+        // another: its own slot (here none), no range
+        w.retarget(2, || None);
+        assert_eq!((w.slot, w.range), (None, None));
     }
 
     #[test]

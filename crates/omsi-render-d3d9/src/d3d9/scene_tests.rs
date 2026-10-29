@@ -1528,7 +1528,7 @@ fn a_dark_raindrop_map_leaves_the_pane_clear() {
 fn a_stroke_of_the_wiper_clears_the_drops_and_the_rain_brings_them_back() {
     let Some(mut dev) = pane_device() else { return };
     for _ in 0..12 {
-        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), false);
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), true);
     }
     let wet = glow(&draw_pane(
         &mut dev,
@@ -1538,10 +1538,10 @@ fn a_stroke_of_the_wiper_clears_the_drops_and_the_rain_brings_them_back() {
     ));
     assert!(wet > 4000);
     // the stroke across the pane in one picture: the whole pane is wiped
-    let px = draw_pane(&mut dev, Some(1), raining(0.1, Some(1.0)), false);
+    let px = draw_pane(&mut dev, Some(1), raining(0.1, Some(1.0)), true);
     assert_eq!(glow(&px), 0);
     for _ in 0..12 {
-        draw_pane(&mut dev, Some(1), raining(0.25, Some(1.0)), false);
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(1.0)), true);
     }
     let again = glow(&draw_pane(
         &mut dev,
@@ -1556,9 +1556,9 @@ fn a_stroke_of_the_wiper_clears_the_drops_and_the_rain_brings_them_back() {
 fn a_stroke_over_half_the_pane_clears_that_half_only() {
     let Some(mut dev) = pane_device() else { return };
     for _ in 0..12 {
-        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), false);
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), true);
     }
-    let px = draw_pane(&mut dev, Some(1), raining(0.001, Some(0.5)), false);
+    let px = draw_pane(&mut dev, Some(1), raining(0.001, Some(0.5)), true);
     let half = |left: bool| -> usize {
         let range = if left {
             0..PANE / 2 - 4
@@ -1576,6 +1576,17 @@ fn a_stroke_over_half_the_pane_clears_that_half_only() {
     };
     assert_eq!(half(true), 0, "the swept half is clean");
     assert!(half(false) > 1000, "the other half keeps its drops");
+}
+
+#[test]
+fn other_vehicles_panes_do_not_follow_the_players_wiper() {
+    let Some(mut dev) = pane_device() else { return };
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), false);
+    }
+    // the player's wiper sweeps the whole pane; a pane of the world keeps its drops
+    let px = draw_pane(&mut dev, Some(1), raining(0.1, Some(1.0)), false);
+    assert!(glow(&px) > 4000, "{}", glow(&px));
 }
 
 #[test]

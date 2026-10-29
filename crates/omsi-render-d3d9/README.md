@@ -119,7 +119,7 @@ width (u), moves it on by the time between window pictures, and the pass draws t
 meshes and instances the scene just drew, depth-tested without writing depth, with the scene's vertex shader
 and a small pixel shader of its own (the drops' picture is made here; red the drop's shape, green when it
 forms, blue how it catches the light). The scene's pixel shader keeps its slots; a device that cannot make the
-pass draws the world without drops. A mirror's picture draws the drops where they are and does not move them
+pass draws the world without drops. The vehicle the camera is in (`cab`) follows the player's wiper; every other pane, the player's seen from outside included, has the drops of the weather alone (known limit: a frame carries one wiper). A mirror's picture draws the drops where they are and does not move them
 on. Not part of it: refraction, running streaks and condensation on glass (not part of OMSI 2).
 
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
