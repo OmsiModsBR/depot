@@ -124,8 +124,10 @@ renderer draws as coronas come with them; the snowfall's own pass is not here.
 
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky, smoke,
-the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky, smoke.
+The fog covers the player's vehicle like the rest of the scene, by the full distance from the
+camera (the default renderer takes the part of the ray inside the vehicle off that distance;
+this one does not, and a test holds it). The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
 Known differences from the default renderer, each for a later PR:

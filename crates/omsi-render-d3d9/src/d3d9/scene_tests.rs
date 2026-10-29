@@ -208,6 +208,50 @@ fn fog_covers_the_scene_with_its_colour() {
     assert!(all(&px, [64, 128, 191, 255], 1), "{:?}", &px[..4]);
 }
 
+/// The vehicle the camera is in (the frame's cab batches) is fogged by its full distance from
+/// the camera, like the world: there is no fog-free cab. Pinned so that a change to it is a
+/// decision (the default renderer takes the part of the ray inside the vehicle off the fogged
+/// distance; this renderer does not).
+#[test]
+fn the_cab_is_fogged_like_the_world() {
+    let Some(mut dev) = device() else { return };
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(0, &v, &i).unwrap();
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let mut l = light([0.25, 0.5, 0.75, 1.0]);
+    l.cam_pos = [0.0, 0.0, -1000.0, 0.0];
+    let cab = [batch(DrawKind::Opaque, 0, 0, 0..1)];
+    let materials = [uniform(0.0)];
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: l,
+        list: &[0],
+        models: &[IDENTITY],
+        params: &[VISIBLE, SECOND],
+        main: &[],
+        cab: &cab,
+        surface_bias: -24,
+        coronas: Default::default(),
+        lamps: Default::default(),
+    };
+    dev.draw_scene(&frame, |m| {
+        materials.get(m).map(|u| SceneMaterial {
+            texture: Some(0),
+            uniform: u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    let px = dev.end_frame().unwrap();
+    assert!(all(&px, [64, 128, 191, 255], 1), "{:?}", &px[..4]);
+}
+
 #[test]
 fn alpha_tested_materials_cut_at_128() {
     let Some(mut dev) = device() else { return };
