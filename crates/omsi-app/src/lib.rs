@@ -51,9 +51,7 @@ mod money;
 mod nav;
 mod new_ui;
 mod new_ui_add;
-mod new_ui_alt;
 mod new_ui_pages;
-mod new_ui_windows;
 #[cfg(windows)]
 mod openxr;
 mod placing;

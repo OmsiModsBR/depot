@@ -1,6 +1,6 @@
 use omsi_sim::SimClock;
 use openomsi_game::testing;
-use openomsi_game::testing::new_ui_windows::*;
+use openomsi_game::testing::ui::windows::*;
 use winit::keyboard::KeyCode;
 
 fn clock(y: i32, m: i32, d: i32, secs: f64) -> SimClock {
@@ -158,12 +158,23 @@ fn the_bars_windows_never_touch_the_games_pause() {
     // (only the Esc menu and the end-of-trip report pause the game: nothing of the bar,
     // its windows or the "Add vehicle" window writes the pause)
     for (name, src) in [
-        ("new_ui_alt.rs", include_str!("../../src/new_ui_alt.rs")),
         (
-            "new_ui_windows.rs",
-            include_str!("../../src/new_ui_windows.rs"),
+            "ui/domain/alt.rs",
+            include_str!("../../../src/ui/domain/alt.rs"),
         ),
-        ("new_ui_add.rs", include_str!("../../src/new_ui_add.rs")),
+        (
+            "ui/implementation/alt.rs",
+            include_str!("../../../src/ui/implementation/alt.rs"),
+        ),
+        (
+            "ui/domain/windows.rs",
+            include_str!("../../../src/ui/domain/windows.rs"),
+        ),
+        (
+            "ui/implementation/windows.rs",
+            include_str!("../../../src/ui/implementation/windows.rs"),
+        ),
+        ("new_ui_add.rs", include_str!("../../../src/new_ui_add.rs")),
     ] {
         for bad in ["paused =", "toggle_pause", "open_game_menu"] {
             assert!(!src.contains(bad), "{name} has {bad:?}");
@@ -213,7 +224,7 @@ fn every_window_says_which_button_opened_it() {
             "driver",
         ),
     ];
-    let bar: Vec<&str> = testing::new_ui_alt::buttons(&Default::default())
+    let bar: Vec<&str> = testing::ui::alt::buttons(&Default::default())
         .iter()
         .map(|b| b.id)
         .collect();

@@ -371,7 +371,7 @@ pub struct State {
     pub menu: Option<MenuFrame>,
     /// A page behind one of the menu's lines, while one is open.
     pub page: Option<crate::new_ui_pages::PageFrame>,
-    alt: Option<crate::new_ui_alt::AltFrame>,
+    alt: Option<crate::ui::AltFrame>,
     /// The "Add vehicle" window.
     add: Option<crate::new_ui_add::AddFrame>,
     /// The end-of-trip report.
@@ -396,7 +396,7 @@ pub struct State {
     /// (`preview::tag`), its size and RGBA.
     add_live: Option<(u64, u32, u32, Vec<u8>)>,
     /// The Alt bar's window open (reposition, date and time, weather...).
-    tool: Option<crate::new_ui_windows::ToolFrame>,
+    tool: Option<crate::ui::ToolFrame>,
     /// What clicks in it asked for, for the game to apply.
     tool_events: Vec<omsi_ui::alt_windows::Event>,
     /// The loading screen, while the first area of the map loads.
@@ -750,7 +750,7 @@ pub struct NewUi {
     pub slides_started: bool,
     pub bus_started: bool,
     map_picture_started: bool,
-    pub(crate) alt: crate::new_ui_alt::AltState,
+    pub(crate) alt: crate::ui::AltState,
     /// The "Add vehicle" window, while it is open.
     pub(crate) add: Option<crate::new_ui_add::AddWindow>,
     /// Keys the "Add vehicle" window's registration field took: their release is its too.
@@ -770,7 +770,7 @@ pub struct NewUi {
     #[cfg_attr(not(windows), allow(dead_code))]
     headset_dim: Option<omsi_render::TextureId>,
     /// The Alt bar's other windows.
-    pub(crate) tool: crate::new_ui_windows::Tools,
+    pub(crate) tool: crate::ui::Tools,
     /// The end-of-trip report, while it is open.
     pub(crate) report: Option<crate::ui::Report>,
     /// The trip whose report was shown last (line, tour, trip in the tour): it opens once.
@@ -913,9 +913,9 @@ impl NewUi {
     pub fn set(
         &self,
         menu: Option<MenuFrame>,
-        alt: Option<crate::new_ui_alt::AltFrame>,
+        alt: Option<crate::ui::AltFrame>,
         add: Option<crate::new_ui_add::AddFrame>,
-        tool: Option<crate::new_ui_windows::ToolFrame>,
+        tool: Option<crate::ui::ToolFrame>,
         report: Option<crate::ui::ReportFrame>,
         mouse: Vec2,
         area: Option<Area>,
