@@ -522,6 +522,17 @@ impl SceneCoronas<'_> {
     }
 }
 
+/// The smoke and particles of a picture, as the default renderer hands them to its smoke
+/// shader (`Scene::frame_smoke` of `omsi-render`): camera-facing squares of the game's smoke
+/// picture, alpha-blended over the scene, farthest first. Only OMSI's own `[smoke]` and
+/// `[particle_emitter]` particles: the game's tyre spray on a wet road is not among them.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SceneSmoke<'a> {
+    /// [`CORONA_FLOATS`] floats each, the last (the kind) 3: position and size; colour and
+    /// alpha; the cosine and sine of the spin; the ground it fades into and the z offset.
+    pub sprites: &'a [[f32; CORONA_FLOATS]],
+}
+
 /// One picture of the scene.
 #[derive(Debug, Clone, Copy)]
 pub struct SceneFrame<'a> {
@@ -542,6 +553,8 @@ pub struct SceneFrame<'a> {
     pub lamps: SceneLamps<'a>,
     /// The light coronas drawn over the scene.
     pub coronas: SceneCoronas<'a>,
+    /// The smoke and particles drawn over the world's batches.
+    pub smoke: SceneSmoke<'a>,
 }
 
 impl SceneFrame<'_> {
@@ -813,6 +826,7 @@ mod tests {
             surface_bias: -24,
             lamps: SceneLamps::default(),
             coronas: SceneCoronas::default(),
+            smoke: SceneSmoke::default(),
         };
         frame.validate().unwrap();
         let mut out = Vec::new();

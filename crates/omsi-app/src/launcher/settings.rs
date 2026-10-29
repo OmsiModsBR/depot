@@ -1010,6 +1010,37 @@ pub static OPTS: &[Opt] = &[
         "Windy trees",
         "Leaves sway in the wind",
     ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke",
+        "Smoke and particles",
+        "Exhaust, chimneys and the like",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke_user_only",
+        "Smoke of the player's vehicle only",
+        "Other vehicles and the scenery draw none",
+    ),
+    slide_typed(
+        GRAPHICS,
+        "Effects",
+        "smoke_max",
+        "Most particles per system",
+        "Each smoke system keeps at most this many",
+        (10.0, 100.0, 10.0),
+        count,
+        integer,
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke_in_mirrors",
+        "Smoke in mirrors",
+        "",
+    ),
     // Advanced graphics
     special(
         ADVANCED,

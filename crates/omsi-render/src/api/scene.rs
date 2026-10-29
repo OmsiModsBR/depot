@@ -30,6 +30,7 @@ impl Renderer {
             smoke: Vec::new(),
             smoke_buf: None,
             smoke_count: 0,
+            last_smoke: Vec::new(),
             corona_runs: Vec::new(),
             last_coronas: Vec::new(),
             draw_buf: None,

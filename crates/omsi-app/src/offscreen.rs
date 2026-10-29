@@ -61,6 +61,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     ))?;
     log::info!("adapter: {}", renderer.adapter_name);
     crate::lights::load_smoke_texture(&mut renderer, &args.root);
+    crate::lights::set_smoke_options(settings.smoke, settings.smoke_user_only, settings.smoke_max);
     crate::lights::set_corona_root(&args.root);
     let mut scene = renderer.new_scene();
     let (world, mut camera) = load_world(args, &renderer, &mut scene)?;
@@ -1179,9 +1180,18 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
                     lights::upload_corona_textures(&mut renderer);
                     world.update_light_map_atlas(&renderer, cam.position);
-                    lights::collect(&world, &mut scene, &daylight, cam.position, &vehicles);
+                    lights::collect(
+                        &world,
+                        &mut scene,
+                        &daylight,
+                        cam.position,
+                        &vehicles,
+                        usize::from(player.is_some()),
+                    );
                 }
-                spray.sprites(cam.position, &mut scene.smoke);
+                if lights::smoke_active() {
+                    spray.sprites(cam.position, &mut scene.smoke);
+                }
                 let rate = precip_of(&weather).1;
                 let mut lighting = weather_lighting(
                     &daylight,
@@ -2696,7 +2706,14 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
         lights::upload_corona_textures(&mut renderer);
         world.update_light_map_atlas(&renderer, camera.position);
-        lights::collect(&world, &mut scene, &daylight, camera.position, &vehicles);
+        lights::collect(
+            &world,
+            &mut scene,
+            &daylight,
+            camera.position,
+            &vehicles,
+            usize::from(player_ref.is_some()),
+        );
         let (kind, rate) = precip_of(&weather);
         let mut rn = rain::Rain::new();
         rn.set(kind, rate);
@@ -2723,7 +2740,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         }
         // the tyres' spray as the drive left it (OMSI_DRIVE_V0=S moves the bus without a
         // full engine-start sequence)
-        spray.sprites(camera.position, &mut scene.smoke);
+        if lights::smoke_active() {
+            spray.sprites(camera.position, &mut scene.smoke);
+        }
         log::info!(
             "spray: {} puffs; at the end {} tyres threw water, {} of them in a puddle",
             spray.len(),

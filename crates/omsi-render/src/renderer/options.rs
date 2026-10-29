@@ -50,6 +50,9 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    /// The smoke systems show in the mirrors' pictures (OMSI's option "no smoke in
+    /// reflections", off).
+    pub smoke_in_mirrors: bool,
 }
 
 impl Default for RenderOptions {
@@ -69,6 +72,7 @@ impl Default for RenderOptions {
             reflections: true,
             no_enhanced: false,
             ray_tracing: false,
+            smoke_in_mirrors: true,
         }
     }
 }

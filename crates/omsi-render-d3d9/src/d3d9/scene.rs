@@ -140,6 +140,8 @@ pub(super) struct SceneStore {
     pipeline: Option<ScenePipeline>,
     /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
     pub(super) coronas: super::coronas::CoronaStore,
+    /// The smoke and particles' pass (likewise kept with the renderer).
+    pub(super) smoke: super::smoke::SmokeStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
     unsupported: Option<String>,
     /// The per-frame instance records, and the dynamic buffer they go up in (with the
@@ -294,6 +296,8 @@ pub(super) struct SceneCopies {
     /// The lights' coronas' own pictures, under the renderer's picture numbers (they outlive
     /// a scene).
     pub(super) coronas: Vec<Option<TextureCopy>>,
+    /// The smoke particles' picture (it outlives a scene as well).
+    pub(super) smoke: Option<TextureCopy>,
     /// The tile light map atlas: its side and its pixels (RGBA).
     tile_map: Option<(u32, Vec<u8>)>,
 }
@@ -751,6 +755,7 @@ impl D3d9Device {
         // (the coronas' pictures stay: the renderer puts them up once, not per scene)
         self.scene.copies = SceneCopies {
             coronas: std::mem::take(&mut self.scene.copies.coronas),
+            smoke: self.scene.copies.smoke.take(),
             ..SceneCopies::default()
         };
     }
@@ -773,6 +778,9 @@ impl D3d9Device {
             if let (Some(kept), Ok(id)) = (kept, u16::try_from(id)) {
                 done = done.and(self.set_corona_texture(id, &kept.texture()));
             }
+        }
+        if let Some(kept) = copies.smoke {
+            done = done.and(self.set_smoke_texture(&kept.texture()));
         }
         if let Some((side, rgba)) = copies.tile_map {
             done = done.and(self.set_tile_light_map(side, side, (0, 0), &rgba));
@@ -920,6 +928,7 @@ impl D3d9Device {
             }
         }
         self.ensure_coronas();
+        self.ensure_smoke();
         Ok(())
     }
 
@@ -1299,6 +1308,15 @@ impl D3d9Device {
                 false
             }
         };
+        // (a frame whose smoke cannot be put up is drawn without it)
+        let smoke_ready = match self.upload_smoke(frame) {
+            Ok(()) => self.smoke_ready(frame),
+            Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
+            Err(e) => {
+                log::warn!("d3d9: the smoke could not be put up this frame: {e}");
+                false
+            }
+        };
         let d = &self.device;
         let pipeline = self.scene.pipeline.as_ref().expect("built above");
         let light = &frame.light;
@@ -1395,6 +1413,22 @@ impl D3d9Device {
         let mut current: (Option<DrawKind>, Option<bool>, Option<bool>, Option<usize>) =
             (None, None, None, None);
         let mut skipped = 0usize;
+        // the scene's shaders and blend after a pass of the smoke's or the coronas' own
+        let rebind = || -> Result<()> {
+            // SAFETY: plain calls on a live device; the pipeline belongs to it.
+            unsafe {
+                d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
+                d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
+                d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
+                d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                    .map_err(map_err)?;
+                d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                    .map_err(map_err)?;
+                d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
+                    .map_err(map_err)?;
+            }
+            Ok(())
+        };
         // the world's batches and its coronas, then the vehicle the camera is in and its own
         for (late, batches) in [(false, frame.main), (true, frame.cab)] {
             for b in batches {
@@ -1461,20 +1495,16 @@ impl D3d9Device {
                     }
                 }
             }
+            // the world's smoke, over its batches and under the vehicle the camera is in
+            if !late && smoke_ready {
+                self.draw_smoke(frame)?;
+                rebind()?;
+                // (the batches' states and material are bound again)
+                current = (None, None, None, None);
+            }
             if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
                 self.draw_coronas(frame, late)?;
-                // SAFETY: plain calls on a live device; the pipeline belongs to it.
-                unsafe {
-                    d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
-                    d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
-                    d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
-                    d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
-                        .map_err(map_err)?;
-                    d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
-                        .map_err(map_err)?;
-                    d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
-                        .map_err(map_err)?;
-                }
+                rebind()?;
                 // (the batches' states and material are bound again)
                 current = (None, None, None, None);
             }

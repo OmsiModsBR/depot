@@ -2526,7 +2526,14 @@ impl ApplicationHandler for App {
                         vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
                     }
                     let __tc = Instant::now();
-                    lights::collect(w, scene, &daylight, cam.position, &vehicles);
+                    lights::collect(
+                        w,
+                        scene,
+                        &daylight,
+                        cam.position,
+                        &vehicles,
+                        usize::from(self.player.is_some()),
+                    );
                     *self.profile.entry("lights.collect").or_default() +=
                         __tc.elapsed().as_secs_f64();
                     // the object editor's pick: a magenta glow over it
@@ -2628,7 +2635,9 @@ impl ApplicationHandler for App {
                                 wind * puddles::GROUND_WIND,
                                 &|x, y| puddles::water_at(x, y, w.wet_road_at(x, y, wetness)),
                             );
-                            self.spray.sprites(cam.position, &mut scene.smoke);
+                            if lights::smoke_active() {
+                                self.spray.sprites(cam.position, &mut scene.smoke);
+                            }
                             *self.profile.entry("lights.spray").or_default() +=
                                 __ts.elapsed().as_secs_f64();
                         }

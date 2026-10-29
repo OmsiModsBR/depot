@@ -95,6 +95,11 @@ pub enum MirrorEvent<'a> {
         id: u16,
         image: &'a omsi_texture::Image,
     },
+    /// The picture of a smoke particle (`Renderer::set_smoke_texture`): RGBA8, straight
+    /// alpha, sRGB colours; its alpha is the particle's mask.
+    SmokeTexture {
+        image: &'a omsi_texture::Image,
+    },
 }
 
 /// Receives the asset events; see [`MirrorEvent`].
@@ -281,6 +286,17 @@ impl crate::scene::Scene {
     /// one that reached the mirror as [`MirrorEvent::CoronaTexture`].
     pub fn frame_corona_runs(&self) -> &[(u16, u32, u32, bool)] {
         &self.corona_runs
+    }
+
+    /// The last frame's smoke particles, farthest first (they are blended over each other):
+    /// the sprites the default renderer draws with its smoke shader, in the same 20 floats as
+    /// [`Scene::frame_coronas`] with the kind (the last) 3: position and size; colour and
+    /// alpha; the cosine and sine of the particle's spin; the ground it fades into and the
+    /// z offset towards the eye. Only OMSI's `[smoke]` and `[particle_emitter]` particles: the
+    /// game's own tyre spray is left out. Empty in a mirror's picture when the options leave
+    /// the smoke out of mirrors. Only kept while an asset mirror is set.
+    pub fn frame_smoke(&self) -> &[[f32; 20]] {
+        &self.last_smoke
     }
 }
 

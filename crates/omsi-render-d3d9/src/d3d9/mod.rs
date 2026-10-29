@@ -12,6 +12,7 @@
 mod coronas;
 mod scene;
 pub mod shader;
+mod smoke;
 mod ui;
 
 use windows::Win32::Foundation::HWND;

@@ -116,6 +116,9 @@ pub struct SmokeParticle {
     /// World z of the ground under it (the road its vehicle stands on): it fades out
     /// towards it, and one wholly under it is left out. `None`: drawn as it is.
     pub ground: Option<f64>,
+    /// Tyre spray on a wet road, which the game adds (`[smoke]` systems are OMSI's): the
+    /// Direct3D 9 renderer, which draws only what OMSI 2 has, leaves it out.
+    pub spray: bool,
 }
 
 /// The light map atlas: tiles a side and pixels a tile.

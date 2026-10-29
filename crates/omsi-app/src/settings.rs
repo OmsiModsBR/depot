@@ -288,6 +288,15 @@ pub struct Settings {
     pub red_steer_spd: bool,
     /// The materials' reflection maps (`RenderOptions::reflections`).
     pub reflections: bool,
+    /// OMSI's "Smoke Systems" options: the `[smoke]` and `[particle_emitter]` particles of
+    /// vehicles and scenery are drawn at all.
+    pub smoke: bool,
+    /// Only the player's vehicle draws its particles.
+    pub smoke_user_only: bool,
+    /// The most particles one system keeps (1..=100, OMSI's own ceiling).
+    pub smoke_max: u32,
+    /// The particles show in the mirrors' pictures (`RenderOptions::smoke_in_mirrors`).
+    pub smoke_in_mirrors: bool,
     /// How bright an LED panel's dots burn (`Lighting::led_glow`): 0 (off) .. 15, 16 levels.
     pub led_glow: u8,
     /// How much of the mip chain an LED panel is held at (`Lighting::led_mips`): its own
@@ -558,6 +567,10 @@ impl Settings {
             old_steering: false,
             red_steer_spd: false,
             reflections: true,
+            smoke: true,
+            smoke_user_only: false,
+            smoke_max: 100,
+            smoke_in_mirrors: true,
             led_glow: 6,
             led_mips: 1.3,
             night_brightness: 0.0,
@@ -1026,6 +1039,16 @@ impl Settings {
                         .unwrap_or(s.pad_steer_smooth)
                 }
                 "reflections" | "envmap" => s.reflections = b(v),
+                "smoke" => s.smoke = b(v),
+                "smoke_user_only" => s.smoke_user_only = b(v),
+                "smoke_max" => {
+                    s.smoke_max = v
+                        .trim()
+                        .parse::<u32>()
+                        .map(|x| x.clamp(1, 100))
+                        .unwrap_or(s.smoke_max)
+                }
+                "smoke_in_mirrors" => s.smoke_in_mirrors = b(v),
                 "led_glow" => {
                     s.led_glow = v
                         .trim()
@@ -1538,6 +1561,7 @@ impl Settings {
             omsi_shadow_casters: self.shadow_casters == "omsi",
             shadow_blobs: self.shadow_blobs,
             reflections: self.reflections,
+            smoke_in_mirrors: self.smoke_in_mirrors,
             no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
             ray_tracing: self.ray_tracing()
                 || crate::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),

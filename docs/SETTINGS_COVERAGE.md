@@ -143,6 +143,10 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `seat_y` | yes | - | yes | yes, known difference (launcher>game) |
 | `seat_z` | yes | - | yes | yes, known difference (launcher>game) |
 | `shadow_blobs` | yes | - | yes | yes |
+| `smoke` | yes | - | yes | yes |
+| `smoke_in_mirrors` | yes | - | yes | yes |
+| `smoke_max` | yes | - | yes | yes |
+| `smoke_user_only` | yes | - | yes | yes |
 | `shadow_casters` | yes | yes | yes | yes |
 | `shadow_size` | yes | yes | yes | yes, known difference (launcher>game) |
 | `shadows` | yes | yes | yes | yes |
