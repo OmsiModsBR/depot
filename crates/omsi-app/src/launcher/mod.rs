@@ -23,6 +23,7 @@ pub(crate) mod mapview;
 pub mod mobile;
 #[cfg(feature = "lan")]
 mod multiplayer;
+mod omsi2_map;
 mod original;
 pub(crate) mod original_ui;
 pub(crate) mod pages;

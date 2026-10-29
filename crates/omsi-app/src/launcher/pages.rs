@@ -1352,12 +1352,13 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
     }
     let devices = pv.devices.get_or_insert_with(Vec::new);
     let mut body = body;
-    if !l
-        .state
-        .settings
-        .get("momentary_gears")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
+    if !l.state.omsi2_engine()
+        && !l
+            .state
+            .settings
+            .get("momentary_gears")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
         && crate::hpattern::has_held_bindings(devices)
     {
         let height = l.ui.paragraph("H-pattern gears are assigned. Enable return to neutral under Settings → Driving → Game controllers if your shifter has no neutral button.", Vec2::new(body.x + 12.0, body.y + 8.0), body.w - 24.0, 12.5, Weight::Regular, TEXT_DIM);
@@ -1666,8 +1667,9 @@ fn game_controllers(l: &mut Launcher, body: Rect) {
         }
     }
     // the game's own view actions (looking around while held, the cameras, the views)
+    let omsi2 = l.state.omsi2_engine();
     for a in PAD_GAME_ACTIONS {
-        if !actions.iter().any(|x| x == a) {
+        if (!omsi2 || super::omsi2_map::action_in_omsi2(a)) && !actions.iter().any(|x| x == a) {
             actions.insert(1, a.to_string());
         }
     }
