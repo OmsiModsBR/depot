@@ -47,6 +47,9 @@ pub struct SettingsView {
     pub sec: usize,
     pub query: String,
     pub changed_only: bool,
+    /// OMSI 2 mode's own settings (`~/.depot/omsi2/settings.json`), read when the page is
+    /// first drawn in that mode.
+    pub omsi2_saved: Option<serde_json::Map<String, Value>>,
 }
 
 /// How an option is changed.
@@ -1955,6 +1958,17 @@ pub fn default_of(key: &str) -> Option<Value> {
     })
 }
 
+/// The default of `key` where the page now is: the catalog's in OMSI 2 mode for the options
+/// OMSI 2 has, the Depot's otherwise.
+fn default_in(st: &Store, key: &str) -> Option<Value> {
+    if st.omsi2 {
+        if let Some(d) = super::omsi2_map::default_of(key) {
+            return Some(d);
+        }
+    }
+    default_of(key)
+}
+
 fn value_text(v: &Value) -> String {
     match v {
         Value::String(x) => x.clone(),
@@ -1979,7 +1993,7 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
         return false;
     }
     let v = st.get(o.key);
-    !v.is_null() && default_of(o.key).is_some_and(|d| !same(v, &d))
+    !v.is_null() && default_in(st, o.key).is_some_and(|d| !same(v, &d))
 }
 
 /// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
@@ -2014,13 +2028,15 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     if st.omsi2 && !super::omsi2_map::setting_in_omsi2(o.key, o.sec == INTERFACE) {
         return Shown::Hidden;
     }
-    if let Some(l) = api_limit(st.s, o.key).filter(|l| !l.is_row()) {
+    // (the Depot's graphics API limits are not OMSI 2's)
+    let depot_api = !st.omsi2;
+    if let Some(l) = api_limit(st.s, o.key).filter(|l| depot_api && !l.is_row()) {
         return match l.text() {
             Some(t) => Shown::Locked(t),
             None => Shown::Hidden,
         };
     }
-    let fixed = d3d9_fixes_vanilla(st.s);
+    let fixed = depot_api && d3d9_fixes_vanilla(st.s);
     let graphics = st.get("graphics").as_str().unwrap_or("");
     // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain;
     // Enhanced+ traces its shadows, occlusion and reflections: always on there)
@@ -2112,9 +2128,10 @@ pub fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
     match &o.kind {
         Kind::Pick(list) => {
             // (under DirectX9 an option may leave some choices out, see `api_limits`)
-            let limit = api_limit(st.s, o.key);
+            let limit = api_limit(st.s, o.key).filter(|_| !st.omsi2);
             list.iter()
                 .filter(|(v, _)| limit.is_none_or(|l| l.allows(v)))
+                .filter(|(v, _)| !st.omsi2 || super::omsi2_map::pick_allowed(o.key, v))
                 .map(|(v, t)| (v.to_string(), t.to_string()))
                 .collect()
         }
@@ -2166,7 +2183,7 @@ pub fn chosen(o: &Opt, st: &Store, options: &mut Vec<(String, String)>) -> usize
     }
     let mut cur = value_text(st.get(o.key));
     // (a saved value DirectX9 does not offer shows as the choice it takes, see `api_limits`)
-    if let Some(l) = api_limit(st.s, o.key) {
+    if let Some(l) = api_limit(st.s, o.key).filter(|_| !st.omsi2) {
         cur = l.fit(&cur);
     }
     // (anisotropy 0 is off, the same entry as 1)
@@ -2194,7 +2211,7 @@ fn choose(o: &Opt, st: &mut Store, value: &str) {
         return;
     }
     let like = if st.get(o.key).is_null() {
-        default_of(o.key).unwrap_or(Value::Null)
+        default_in(st, o.key).unwrap_or(Value::Null)
     } else {
         st.get(o.key).clone()
     };
@@ -2226,7 +2243,7 @@ fn choose(o: &Opt, st: &mut Store, value: &str) {
 
 /// Option `o` back to how it comes.
 pub fn reset(o: &Opt, st: &mut Store) {
-    if let Some(d) = default_of(o.key) {
+    if let Some(d) = default_in(st, o.key) {
         st.set(o.key, d);
         after(o.key, st);
     }
@@ -2370,8 +2387,21 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let narrow = body.w < 760.0;
     let view = &mut l.pages.set;
     let ui = &mut l.ui;
+    // (in OMSI 2 mode the options OMSI 2 has are shown from, and kept in, its own file: the
+    // page works on a copy of the settings with those laid over, taken apart again below)
+    let data = omsi_launcher_lib::data_dir();
+    let mut shown_settings = l.state.settings.clone();
+    if omsi2 {
+        let saved = view.omsi2_saved.get_or_insert_with(|| {
+            omsi_launcher_lib::original_engine::config::load_settings_in(&data)
+        });
+        super::omsi2_map::overlay(&mut shown_settings, saved);
+    } else {
+        view.omsi2_saved = None;
+    }
+    let before = shown_settings.clone();
     let mut st = Store {
-        s: &mut l.state.settings,
+        s: &mut shown_settings,
         start: &mut start,
         changed: false,
         start_changed: false,
@@ -2488,7 +2518,28 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     );
     // (the launcher speaks the chosen language at once)
     crate::ui_language(st.get("language").as_str().unwrap_or("ENG"));
-    let (changed, start_changed) = (st.changed, st.start_changed);
+    let (mut changed, start_changed) = (st.changed, st.start_changed);
+    if changed && omsi2 {
+        let saved = l.pages.set.omsi2_saved.get_or_insert_with(Default::default);
+        let (kept, own) = super::omsi2_map::store_back(&before, &shown_settings, saved);
+        if kept {
+            if let Err(e) =
+                omsi_launcher_lib::original_engine::config::save_settings_in(&data, saved)
+            {
+                l.state.set_status(
+                    omsi_ui::tr("OMSI 2 mode settings were not saved: %{error}")
+                        .replace("%{error}", &format!("{e:#}")),
+                    true,
+                );
+            }
+        }
+        changed = !own.is_empty();
+        for (k, v) in own {
+            l.state.settings[k] = v;
+        }
+    } else if changed {
+        l.state.settings = shown_settings;
+    }
     if changed {
         l.state.settings_dirty = 0.3;
     }
@@ -2778,7 +2829,7 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             keep,
             typed,
         } => {
-            let or = default_of(o.key)
+            let or = default_in(st, o.key)
                 .and_then(|d| d.as_f64())
                 .unwrap_or(*min as f64);
             let mut v = st.get(o.key).as_f64().unwrap_or(or) as f32;
@@ -3362,6 +3413,27 @@ pub fn reset_dialog(l: &mut Launcher) {
         Some("restart_alt"),
         ButtonKind::Danger,
     ) {
+        // (with OMSI 2 chosen the options on the page are its own: the Depot's stay as they are)
+        if l.state.omsi2_engine() {
+            let none = serde_json::Map::new();
+            match omsi_launcher_lib::original_engine::config::save_settings_in(
+                &omsi_launcher_lib::data_dir(),
+                &none,
+            ) {
+                Ok(()) => {
+                    l.pages.set.omsi2_saved = Some(none);
+                    l.state
+                        .set_status("Every setting is back to how it came.", false);
+                }
+                Err(e) => l.state.set_status(
+                    omsi_ui::tr("OMSI 2 mode settings were not reset: %{error}")
+                        .replace("%{error}", &format!("{e:#}")),
+                    true,
+                ),
+            }
+            l.pages.confirm_reset = false;
+            return;
+        }
         let language = l.state.settings.get("language").cloned();
         l.state.settings = core::settings_from_text(None);
         if let Some(lang) = language {
