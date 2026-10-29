@@ -180,15 +180,15 @@ Os ids `fix-N` são do backlog da auditoria, não nomes de branch. Prioridade P0
 - **Física de veículo primeiro.** fix-5 a fix-9 terminam antes dos itens da macro-refatoração geral (Trilha F).
 - **Física do tráfego IA na refatoração, sem mudar comportamento** (decisão de 16/10/2026). O código da IA é reorganizado na Trilha F com testes próprios que provam que ela se comporta igual no jogo. As compensações que só existem na IA (`ai_lift` em `vehicle.rs:337-355`, `ai_rest_offset` em `visuals.rs:197-204`, o limite de ±1,2 rad no ângulo de eixo em `vehicle/ai.rs:90-94`) mudam de lugar e ficam como estão; a troca de modelo da IA continua pausada.
 - **Sem compensar modelos.** Tirar uma compensação muda o comportamento de propósito: é um PR `fix/` com o delta previsto, e o modelo errado passa a aparecer como está.
-- **Nada se apaga.** Código que deixa de ser usado, como `repair_body_depth`, vai para trás de uma feature de Cargo desligada.
+- **Nada se apaga.** Código que deixa de ser usado, como `repair_body_depth`, vai para trás de uma feature de Cargo desligada. A exceção é o multiplayer, o servidor dedicado e os plugins, que o mantenedor decidiu remover em 29/10/2026 (ver a [A5](#a5-remoção-do-multiplayer-do-servidor-e-dos-plugins-nova-29102026)).
 
 ## Frente A: guarda-corpos e código desligado
 
-Esta frente é barata e destrava as outras: tira 23 mil linhas da compilação do jogo, sem apagar nenhuma, e deixa o resto do código formatado antes de qualquer movimentação grande.
+Esta frente é barata e destrava as outras: tira 23 mil linhas da compilação do jogo, sem apagar nenhuma, e deixa o resto do código formatado antes de qualquer movimentação grande. A A5, decidida em 29/10/2026, depois apaga essas linhas do repositório.
 
 ### A1. Multiplayer, servidor e plugins fora da compilação do jogo
 
-Decisão do mantenedor (10/10/2026): LAN, servidor dedicado, voz e plugins não saem do projeto, porque serão reaproveitados e readaptados mais tarde. Esta frente só os tira da compilação do jogo; nenhum arquivo é apagado.
+Decisão do mantenedor (10/10/2026): LAN, servidor dedicado, voz e plugins não saem do projeto, porque serão reaproveitados e readaptados mais tarde. Esta frente só os tira da compilação do jogo; nenhum arquivo é apagado. A decisão foi revista em 29/10/2026: nenhum código deles será reaproveitado, e a [A5](#a5-remoção-do-multiplayer-do-servidor-e-dos-plugins-nova-29102026) os remove do repositório.
 
 O PR #1 desligou essas funções no ponto de entrada (`lan::start` devolve `None`, `--server` termina com erro, `plugins::load()` devolve vazio), mas o código continua compilado e entrelaçado com o laço do jogo. Medido no main atual:
 
@@ -234,6 +234,28 @@ Os \~550 avisos se concentram em poucos lints (`chunks_exact` com tamanho consta
 ### A4. Lints do workspace
 
 Adicionar `[workspace.lints]` ao `Cargo.toml` raiz e `lints.workspace = true` em cada crate, com `clippy::unwrap_used = "warn"` só nos crates de formato, onde conteúdo de mod malformado não pode derrubar o processo. Nos outros crates, `unwrap` em invariantes internos é aceitável.
+
+### A5. Remoção do multiplayer, do servidor e dos plugins (nova, 29/10/2026)
+
+Decisão do mantenedor (29/10/2026): os crates desligados saem do repositório, porque nenhum código deles será reaproveitado. Isso substitui a decisão de 10/10/2026 da A1, que os guardava para readaptar depois. A regra "nada se apaga" continua valendo para o resto do código.
+
+Medido no `main` em 15ccfdba: são cerca de 24 mil linhas. Os dois crates somam 12,5 mil: `omsi-net` com 9.168 e `omsi-plugin` com 3.291, junto com o `omsi-plugin/demo` e o binário `omsi-plugin-host`. No `omsi-app` são 11,7 mil, em `lan.rs`, `lan_world.rs`, `lan_mods.rs`, `lan_off.rs`, `admin.rs`, `server.rs`, `voice.rs`, `online.rs`, `plugins.rs`, `plugin_ui.rs` e `launcher/multiplayer.rs`. Há ainda cerca de 300 pontos com `#[cfg(feature = "lan" | "server" | "plugins")]`, espalhados por uns 40 arquivos do app e pelo `omsi-launcher-core`. Os crates não podem sair sozinhos, porque esse código do app só compila com eles. Por isso a remoção leva junto as três features e tudo o que está atrás delas.
+
+O jogo de hoje é a configuração padrão, e nela esse código já não existe. Remover não muda o que o jogo faz. O que muda é a configuração `--all-features`, que perde os testes do código removido.
+
+Sequência, um PR `feat/` por passo:
+
+1. **Plugins.** Sai a feature `plugins`, junto com `plugins.rs`, `plugin_ui.rs`, os campos de plugin do `Online` e o `queue_event` vazio com os seus 14 pontos em `app_events.rs`. Também saem `omsi-plugin`, `omsi-plugin/demo` e o `omsi-plugin-host` (membros do workspace e testes do CI), além de `docs/PLUGINS.md`.
+2. **LAN e servidor no app.** Saem as features `lan` e `server` e os módulos `lan.rs`, `lan_world.rs`, `lan_mods.rs`, `lan_off.rs`, `admin.rs`, `server.rs`, `voice.rs`, `online.rs` e `launcher/multiplayer.rs`. Também saem o sub-struct `Online` e os ramos `#[cfg]`. As perguntas `is_lan_client()`/`is_lan_host()` devolvem sempre `false` no jogo, então somem com os ramos que guardavam. O estado de servidor sai de `run_offscreen`, e `--server`, `--lan-host` e `--lan-join` deixam de existir. `scripts/build-server.sh`, `scripts/server/` e `docs/SERVER.md` vão junto, assim como os testes de `tests/app/` atrás dessas features.
+3. **`omsi-net` e o launcher-core.** Sai a feature `lan` do `omsi-launcher-core` (`describe_join` e a consulta de servidores), e o `omsi-net` deixa o workspace. O passo do CI "omsi-net and omsi-plugin out of the game build" sai, e o job `--all-features` fica só com as features que sobrarem. Saem também a nota do `omsi-net` em `deny.toml` e em `docs/QUALITY.md` e as menções no README. O `docs/removed/MULTIPLAYER_DISABLED.md` vira `MULTIPLAYER_REMOVED.md`, apontando para os commits da remoção. O código fica recuperável pelo histórico do git, sem patch de restauração.
+
+Como provar que nada mudou no jogo, em cada passo:
+
+- A mesma lista de testes na configuração padrão, pelos nomes. Na `--all-features`, ela perde só os testes do código removido, listados no PR.
+- O mesmo `cargo tree -p omsi-app -e normal`.
+- `offscreen-traces`, golden, os traços da física e da IA e `omsi-check` iguais.
+
+**Quando:** depois da AP3 da Trilha App e antes da AP4. Assim a AP5 (HUD e listas, que têm ramos de LAN), a AP6 (`launcher/multiplayer.rs`, `state.rs` e `phone.rs`) e a AP7 (a pasta `online/`) não movem código que vai ser apagado. Os passos tocam muitos arquivos do app em trechos pequenos, como a A1. Cada um reserva a unidade na #61 e cede a qualquer PR `fix/` aberto nos mesmos arquivos.
 
 ## Frente B: um único passo de simulação
 
@@ -582,7 +604,7 @@ Medido no histórico do main (216 commits desde 07/10/2026, incluindo os PRs de 
 | `omsi-render` | 20,0 mil | 10 | baixo |
 | `omsi-audio`, `omsi-ui`, `omsi-geometry` | 8,5 mil | 3 a 8 cada | baixo |
 | Crates de formato (`omsi-cfg`, `-vehicle`, `-texture`, `-map`, `-content`, `-model`, `-scenery`, `-o3d`, `-script`, `-timetable`) | \~21 mil | 2 a 7 cada | baixo |
-| `omsi-net`, `omsi-plugin` | 12,5 mil | 3 e 4 | nenhum: desligados |
+| `omsi-net`, `omsi-plugin` | 12,5 mil | 3 e 4 | nenhum: desligados, saem do repositório na A5 |
 
 Dentro do `omsi-app`, os commits se concentram no laço de frame (`app_events.rs`, `app.rs`, `lib.rs`, `offscreen.rs`: 54), no gameplay (`humans.rs`, `traffic.rs`, `schedule.rs` e vizinhos: 52) e no `launcher/` (47). HUD e menus (23), mundo (21), entrada (20), LAN (19) e settings (11) são mornos.
 
@@ -722,7 +744,7 @@ O crate tem hoje 144,3 mil linhas em 155 arquivos, 109 deles na raiz de `src/`, 
 
 Em duas fases:
 
-1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `ui/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
+1. **Estrutura, já pode começar.** AP1, `cargo fmt -p omsi-app` com o `scripts/fmt-merge.sh`, o crate e os novos `omsi-launcher-ui`, `omsi-launcher-core` e `omsi-render-d3d9` na lista bloqueante; AP2, os testes para `tests/`, como na Trilha S; AP3, a nova interface em `ui/`, com os dados e os retângulos de clique do HUD separados do desenho em CPU; depois dela, a [A5](#a5-remoção-do-multiplayer-do-servidor-e-dos-plugins-nova-29102026), que remove o multiplayer, o servidor e os plugins; AP4, a saída gráfica em `output/`, com o backend escolhido num ponto só; AP5, o HUD e as listas do menu por assunto; AP6, o launcher para `omsi-launcher-ui` e `omsi-launcher-core`; AP7, as outras pastas por domínio, movendo arquivos inteiros.
 2. **Áreas quentes.** A Trilha 4, com o mesmo conteúdo e as mesmas janelas.
 
 Cada pasta de domínio criada na fase 1 já sai como pacote com `domain/`, `interface/` (entrada e saída) e `implementation/`. Decidido pelo mantenedor em 23/10/2026: os testes saem de `src/` (padrão do projeto), a trilha começa já pela AP1, o launcher vai para `omsi-launcher-ui` e `omsi-launcher-core`, e a pasta da nova interface se chama `ui/`.
@@ -777,7 +799,8 @@ Nenhuma destas decisões bloqueia a paridade nem a triagem. A recomendação vem
 | Clippy nos crates limpos | **Decidido (11/10/2026):** continua informativo por enquanto | — | — |
 | `omsi-html` na trilha 1 | **Decidido (11/10/2026):** sim | — | — |
 | Reserva das unidades | **Decidido (11/10/2026):** issue no GitHub, criada como a #61 | — | Todos os colaboradores acompanham o GitHub |
-| Multiplayer, servidor e plugins (A1) | **Decidido (10/10/2026):** ficam no repositório, fora da compilação do jogo | — | Serão reaproveitados e readaptados mais tarde |
+| Multiplayer, servidor e plugins (A1) | **Decidido (10/10/2026):** ficam no repositório, fora da compilação do jogo | — | Serão reaproveitados e readaptados mais tarde. **Revisto em 29/10/2026**, ver a linha da A5 |
+| Multiplayer, servidor e plugins (A5, 29/10/2026) | **Decidido:** os crates `omsi-net` e `omsi-plugin` e o código do app atrás de `lan`, `server` e `plugins` saem do repositório, depois da AP3 e antes da AP4 | Mantê-los fora da compilação, como na A1 | Nenhum código deles será reaproveitado |
 | Unidade de divisão da refatoração | Crate nos crates frios, grupo de módulos no `omsi-app` | Só por crate | O `omsi-app` tem 55% do código e metade dos commits |
 | Prioridade entre refatoração e correções | A refatoração cede | Janelas de congelamento longas | Paridade e triagem são as fases ativas do mapa |
 | Formatação (A2) | Por crate, com `scripts/fmt-merge.sh` para os quentes | Um commit único | O commit único quebra toda branch aberta |

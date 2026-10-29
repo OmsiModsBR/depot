@@ -8,7 +8,7 @@ O plano macro trata o `omsi-app` por frentes soltas (B, C2, C4, D1, E1 a E3, o p
 
 - **Refatoração não muda comportamento.** Cada PR prova isso com o traço de estado do offscreen (`offscreen-traces`), o golden no lavapipe, os traços da física e da IA quando o PR toca o passo do jogador ou do tráfego, a mesma lista de testes (`cargo test -p omsi-app -- --list`, comparando os nomes sem o caminho do módulo) e `cargo check -p omsi-app --all-features`. Qualquer diferença achada no caminho vira um PR `fix/` separado.
 - **A refatoração cede.** Correção nunca espera refatoração. Um PR desta trilha reserva a unidade na #61 e deixa de fora os arquivos com PR `fix/` aberto, ou espera.
-- **Nada se apaga.** Código que deixa de ser usado (o desenho em CPU do HUD, o launcher antigo) sai da compilação do jogo atrás de uma feature desligada, como o multiplayer na A1.
+- **Nada se apaga.** Código que deixa de ser usado (o desenho em CPU do HUD, o launcher antigo) sai da compilação do jogo atrás de uma feature desligada, como o multiplayer na A1. A exceção é o multiplayer, o servidor dedicado e os plugins. Por decisão de 29/10/2026 eles saem do repositório na [A5](MACRO_REFACTOR_DRAFT.md#a5-remoção-do-multiplayer-do-servidor-e-dos-plugins-nova-29102026), porque nenhum código deles será reaproveitado.
 - **O jogo não compensa modelos mal configurados.** Nenhum passo desta trilha acrescenta compensação; a retirada das heurísticas de material de veículo continua sendo `fix/` na C4.
 - **Redação.** Comentários e documentos descrevem comportamento observável, sem identificadores do executável original.
 
@@ -25,7 +25,7 @@ O crate tem 155 arquivos `.rs` e 144,3 mil linhas em `src/` (era 124,8 mil em 11
 | Launcher | 19.217 | 25 | `launcher/` (era 12,8 mil): `mod.rs`, `pages.rs`, `drive.rs`, `state.rs`, `settings.rs`, `timetable.rs`, `phone.rs`, `keyboard.rs`, `preview.rs`, `mapview.rs`, `setup.rs`, `tray.rs` e outros |
 | Núcleo e laço de frame | 12.843 | 23 | `app_events.rs` (3.865), `offscreen.rs` (3.203), `app.rs`, `lib.rs`, `startup.rs`, `cli.rs`, `android.rs` e utilitários |
 | Entrada | 12.459 | 19 | `controllers.rs` (2.816), `dinput.rs`, `touch.rs`, `input/`, `actions.rs`, `evdev_*`, `mac_*`, `headtrack.rs` |
-| Online e plugins, desligados | 10.707 | 11 | `lan.rs`, `lan_world.rs`, `plugin_ui.rs`, `voice.rs`, `lan_mods.rs`, `admin.rs` e os outros atrás de `lan`, `server` e `plugins` (A1) |
+| Online e plugins, desligados | 10.707 | 11 | `lan.rs`, `lan_world.rs`, `plugin_ui.rs`, `voice.rs`, `lan_mods.rs`, `admin.rs` e os outros atrás de `lan`, `server` e `plugins` (A1); saem do repositório na A5 |
 | HUD e menus antigos | 10.533 | 13 | `game_lists.rs` (3.189), `ui.rs` (2.431), `nav/`, `hud.rs`, `menu.rs` |
 | Nova interface | 6.801 | 7 | `new_ui.rs` (2.486), `new_ui_windows.rs`, `new_ui_alt.rs`, `new_ui_pages.rs`, `new_ui_report.rs`, `new_ui_add.rs`, `new_ui_loading.rs` |
 | Saída gráfica | 5.440 | 8 | `d3d9_output.rs`, `openxr.rs`, `vr_navigator.rs`, `mirror_hud.rs`, `camera_arm.rs`, `camera_util.rs`, `head_idle.rs`, `lights.rs` |
@@ -113,8 +113,6 @@ src/
   gameplay/             traffic/, schedule/, humans/, player/, on_foot, driver, duty, journey, career, money,
                         bus_service (o futuro omsi-gameplay da E2)
   settings/             como está, depois a tabela da D1
-  online/               lan, lan_world, lan_mods, voice, admin, server, plugins, plugin_ui e os *_off,
-                        atrás das mesmas features de hoje
   testing.rs            só com `test-support`, se a decisão sobre os testes for a da Trilha S
 
 tests/
@@ -136,12 +134,13 @@ Duas fases. A primeira é de estrutura, em arquivos mornos, e pode começar já.
 | AP1 | `feat/app-fmt` | (1) `scripts/fmt-merge.sh` (merge do commit anterior ao fmt, `cargo fmt` na própria branch, merge do commit de fmt com `-s ours`) e a configuração de git recomendada no CONTRIBUTING (`merge.conflictStyle = zdiff3`, `rerere.enabled = true`, `diff.renameLimit` alto); (2) `omsi-render-d3d9`, `omsi-launcher-core` e `omsi-launcher-ui` formatados e na lista bloqueante; (3) `cargo fmt -p omsi-app` sozinho, o crate na lista bloqueante e o passo informativo do workspace atualizado em `docs/QUALITY.md`; (4) `.git-blame-ignore-revs` com o hash do commit (3) | `fmt --check` bloqueante no `omsi-app` e nos três crates; testes, `offscreen-traces` e golden iguais |
 | AP2 | `feat/app-testes-*` | Os testes de `src/` para `tests/`, como na [convenção de testes](#convenção-de-testes); um PR por grupo de domínios (gameplay; mundo e cena; interface, HUD e launcher; entrada e o resto), porque são cerca de 19,6 mil linhas. O teste de 662 linhas da nova interface vira um teste por página | Nenhum teste em `src/`; a mesma lista de testes, pelos nomes; `cargo build -p omsi-app` sem a feature não tem `testing` |
 | AP3 | `feat/app-ui` | `ui/` com os sete `new_ui*.rs`, divididos por tela no pacote (`domain/` com o estado de cada tela, `interface/` com o que o frame chama e o que a interface pede ao jogo, `implementation/` com o desenho e o clique); `hud/frame.rs` com `Frame`, `MenuKind`, `DropdownView`, `Preview` e os retângulos de clique, tirados de `ui.rs`, para que a nova interface deixe de depender do desenho antigo | Nenhum `new_ui*.rs` na raiz; `ui/` não importa `hud::legacy` |
+| A5 | `feat/remover-plugins`, `feat/remover-lan`, `feat/remover-omsi-net` | A [A5](MACRO_REFACTOR_DRAFT.md#a5-remoção-do-multiplayer-do-servidor-e-dos-plugins-nova-29102026) do plano macro, em três PRs: (1) a feature `plugins`, `plugins.rs`, `plugin_ui.rs`, `omsi-plugin`, o `demo` e o `omsi-plugin-host`; (2) as features `lan` e `server`, os módulos de LAN, voz, administração e servidor, `online.rs`, `lan_off.rs`, `launcher/multiplayer.rs`, o sub-struct `Online` e os ramos `#[cfg]`; (3) a feature `lan` do `omsi-launcher-core`, o `omsi-net` e o passo do CI que o vigiava. | Nenhum `omsi-net` ou `omsi-plugin` no workspace e nenhuma feature `lan`, `server` ou `plugins`; a mesma lista de testes na configuração padrão; `offscreen-traces` e golden iguais |
 | AP4 | `feat/app-saida` | `output/` como pacote, com `d3d9_output.rs`, `openxr.rs`, `vr_navigator.rs`, `mirror_hud.rs` e a câmera em `implementation/`; um `Backend { Wgpu, D3d9 }` em `interface/output.rs`, decidido uma vez na abertura da janela, no lugar das checagens espalhadas por `app.rs`, `startup.rs`, `app_events.rs` e pelos menus | Menções ao Direct3D 9 fora de `output/` e das opções de configuração só por `Backend`; o job do Windows verde no PR (é ele que compila esse código) |
 | AP5 | `feat/app-hud` | `hud/` como pacote, com `ui.rs` dividido em texto, chat e avisos, informações e a lista de escolha; `game_lists.rs` dividido por assunto em `hud/lists/`; `nav/` dentro de `hud/` | Nenhum arquivo de `hud/` acima de 1.500 linhas |
 | AP6 | `feat/app-launcher-*` | Em passos: (a) a lógica de domínio que mora na interface do launcher (`Choice::to_duty`, `default_hof`, estação, escolha de viagem, gravação do horário, favoritos, aeroporto mais próximo) para `omsi-launcher-core`, com testes; (b) o jogo deixa de importar `launcher` (`weather_time.rs`, `game_lists.rs`, `server.rs`, `android.rs`); (c) as páginas para `omsi-launcher-ui`, uma por PR, cortando as importações de módulos do jogo; (d) o que sobrar em `omsi-app/src/launcher/` é a ligação com o processo do jogo | `launcher/` no app abaixo de 2 mil linhas; `omsi-launcher-ui` sem dependência do `omsi-app` |
-| AP7 | `feat/app-dominios` | As pastas `core/`, `input/`, `world/`, `weather/`, `gameplay/` e `online/`, um PR por pasta, cada uma já como pacote: os tipos vão para `domain/`, o que os outros domínios chamam para `interface/input.rs`, o que o domínio pede de fora para `interface/output.rs` e os procedimentos para `implementation/`. Os quatro arquivos gigantes (`scene.rs`, `traffic.rs`, `schedule.rs` e `humans.rs`) entram em `implementation/` com os tipos já separados em `domain/`; a divisão do resto deles fica para a fase 2 (C4 e E1). `online/` só ganha a hierarquia de pastas, sem reescrever o código desligado | Nenhum arquivo de código na raiz além de `lib.rs` e `main.rs`; cada pasta com as três partes |
+| AP7 | `feat/app-dominios` | As pastas `core/`, `input/`, `world/`, `weather/` e `gameplay/`, um PR por pasta, cada uma já como pacote: os tipos vão para `domain/`, o que os outros domínios chamam para `interface/input.rs`, o que o domínio pede de fora para `interface/output.rs` e os procedimentos para `implementation/`. Os quatro arquivos gigantes (`scene.rs`, `traffic.rs`, `schedule.rs` e `humans.rs`) entram em `implementation/` com os tipos já separados em `domain/`; a divisão do resto deles fica para a fase 2 (C4 e E1). Não há pasta `online/`: esse código sai na A5 | Nenhum arquivo de código na raiz além de `lib.rs` e `main.rs`; cada pasta com as três partes |
 
-AP1 vem primeiro, porque o rustfmt deixa os PRs de movimento legíveis e porque cada PR seguinte já nasce formatado. AP2 vem antes da divisão, pelo mesmo motivo da Trilha S: com os testes fora de `src/`, mover um arquivo deixa de levar os testes junto. AP3 a AP7 não dependem entre si e podem trocar de ordem conforme o que estiver aberto no repositório.
+AP1 vem primeiro, porque o rustfmt deixa os PRs de movimento legíveis e porque cada PR seguinte já nasce formatado. AP2 vem antes da divisão, pelo mesmo motivo da Trilha S: com os testes fora de `src/`, mover um arquivo deixa de levar os testes junto. A A5 vem logo depois da AP3, para que a AP5, a AP6 e a AP7 não movam código que vai ser apagado. Fora isso, AP4 a AP7 não dependem entre si e podem trocar de ordem conforme o que estiver aberto no repositório.
 
 Mudanças que não são só de estrutura ficam fora desta fase, como PRs próprios:
 
@@ -177,6 +176,10 @@ Tomadas pelo mantenedor em 23/10/2026:
 - **Destino do launcher:** `omsi-launcher-ui` para a interface e `omsi-launcher-core` para a lógica, sem crate novo.
 - **Nome da pasta da nova interface:** `ui/`, com o HUD antigo em `hud/legacy/` (antes `interface/`, trocado para evitar `interface/interface/`).
 - **Hierarquia dos pacotes:** cada domínio criado já sai reestruturado em `domain/`, `interface/` (entrada e saída) e `implementation/` (regra 3 dos princípios).
+
+Tomada pelo mantenedor em 29/10/2026:
+
+- **Crates desligados:** `omsi-net`, `omsi-plugin` e o código do app atrás de `lan`, `server` e `plugins` saem do repositório, porque nenhum código deles será reaproveitado. É a A5, entre a AP3 e a AP4.
 
 ## Critério de sucesso
 
