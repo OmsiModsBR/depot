@@ -699,7 +699,7 @@ impl App {
     /// Before each render: give the renderer the overlay and the frame it should draw.
     pub(crate) fn new_ui_update(&mut self) {
         let mirror = (!self.new_ui.installed())
-            .then(|| self.d3d9_ui_mirror())
+            .then(|| self.output.ui_mirror())
             .flatten();
         if let Some(r) = self.renderer.as_mut() {
             self.new_ui.install(r, mirror);
