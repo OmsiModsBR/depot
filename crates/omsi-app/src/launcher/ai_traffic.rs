@@ -363,6 +363,13 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         area.w,
         (area.bottom() - ty - 56.0).max(160.0),
     );
+    // the buses of the lines: the lines are those read, the fleet is the map's own file
+    if l.pages.diag.ai.edit.is_some() && l.pages.diag.ai.tab == 1 {
+        if let Some(t) = data.as_ref() {
+            super::ai_edit::bus_lines(l, body, t);
+            return;
+        }
+    }
     // the lists being edited are the map's own, read from its files
     if l.pages.diag.ai.edit.is_some() && matches!(l.pages.diag.ai.tab, 0 | 2) {
         if l.pages.diag.ai.tab == 0 {
