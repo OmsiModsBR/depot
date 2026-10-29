@@ -3353,18 +3353,6 @@ pub fn set_ai_destination(
     set_destination(v, hof, line, terminus, stops, false)
 }
 
-/// The same with terminus number `ti` of the depot file itself (its `AI_target_index`).
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub fn set_ai_destination_at(
-    v: &mut omsi_sim::VehicleInstance,
-    hof: &omsi_vehicle::Hof,
-    line: &str,
-    ti: usize,
-    stops: &[&str],
-) {
-    set_destination_at(v, hof, line, ti, stops, false)
-}
-
 /// The same for the player's bus, done the driver's way: a typing job
 /// (`omsi_sim::ibis::Typist`) that works the bus's own IBIS keys - or its ticket machine's
 /// - as a driver would, so that the IBIS script itself sets the displays, the stop list,
@@ -4519,53 +4507,6 @@ impl Schedule {
         n
     }
 
-    /// LAN play (host): the tours the other players drive now. A tour taken leaves the
-    /// timetable like the player's own (its bus on the road goes); one given up (the player
-    /// left, or took another duty) runs again from its next departure.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn set_lan_tours(&mut self, tours: HashSet<(String, String)>) {
-        if tours == self.lan_tours {
-            return;
-        }
-        let added: Vec<(String, String)> = tours.difference(&self.lan_tours).cloned().collect();
-        let removed: Vec<(String, String)> = self.lan_tours.difference(&tours).cloned().collect();
-        self.lan_tours = tours;
-        let of = |d: &Departure, t: &(String, String)| {
-            d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1)
-        };
-        for t in &removed {
-            let later: Vec<usize> = (0..self.departures.len())
-                .filter(|&i| {
-                    of(&self.departures[i], t)
-                        && self.departures[i].time > self.last_tod
-                        && !self.is_player_tour(i)
-                })
-                .collect();
-            for &i in &later {
-                self.departures[i].spawned = false;
-                self.carried_base.remove(&i);
-            }
-            log::info!("timetable: line {} tour {} is no LAN player's any more: its {} later departures run again", t.0, t.1, later.len());
-        }
-        if !added.is_empty() {
-            let mine: Vec<bool> = (0..self.departures.len())
-                .map(|i| self.is_player_tour(i))
-                .collect();
-            for (d, m) in self.departures.iter_mut().zip(&mine) {
-                if *m {
-                    d.spawned = true;
-                }
-            }
-            self.pending.retain(|i| !mine[*i]);
-            self.waiting.retain(|i| !mine[*i]);
-            self.retry_at.retain(|i, _| !mine[*i]);
-            self.purge_player_tour = true;
-            for t in &added {
-                log::info!("timetable: line {} tour {} left to a LAN player", t.0, t.1);
-            }
-        }
-    }
-
     /// Does a player drive departure `i` (we, or another LAN player)?
     fn is_player_tour(&self, i: usize) -> bool {
         if let Some(d) = self.departures.get(i) {
@@ -5258,14 +5199,6 @@ impl PlayerDuty {
     /// Whether the current trip changed since the last call (the IBIS wants the new one).
     pub fn take_trip_change(&mut self) -> bool {
         std::mem::take(&mut self.trip_changed)
-    }
-
-    /// The stops the bus passed without stopping since the last call: how many, the stop it
-    /// was due at and the one it is at now (numbers in the trip, from 1). Lua plugins get
-    /// it as the `stops_skipped` event.
-    #[cfg_attr(not(feature = "plugins"), allow(dead_code))]
-    pub fn take_skipped(&mut self) -> Option<(usize, usize, usize)> {
-        self.skipped.take()
     }
 
     /// How late the bus arrived at the stop it stands at (s; negative: early), None while it

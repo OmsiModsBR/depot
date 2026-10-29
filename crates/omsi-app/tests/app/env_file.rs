@@ -32,7 +32,6 @@ fn the_settable_switches_are_the_reviewed_ones() {
         "OMSI_NO_RT_GRADE",
         "OMSI_NO_CLOUDS",
         "OMSI_NO_ENHANCED",
-        "OMSI_NO_PLUGINS",
         "OMSI_MAX_FPS",
         "OMSI_TEXTURE_MEMORY",
         "OMSI_MUTE",

@@ -166,10 +166,6 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   write `head_tracking_bind=any` (or one interface's address) in `settings.cfg`.
   (Discord Rich Presence is disabled until Depot has its own Discord application, see
   [removed/DISCORD_DISABLED.md](removed/DISCORD_DISABLED.md).)
-  **Voice chat through GreenTeaSpeak** (on by default): in multiplayer, the other players
-  are heard from where they are, when GreenTeaSpeak 2 runs with the openOMSI plugin and the
-  server names a voice channel (see [SERVER.md](SERVER.md) and
-  `tools/greenteaspeak-plugin/README.md`).
 * **Controls** - `Inputs/keyboard.cfg`: click a key, press the new one; clashes are red. The
   keys are the game's with *Driving keys: Custom controls* (Settings → Driving); with a ready-made
   layout (W A S D, arrows) those keys drive and win over the list - the page says so, and

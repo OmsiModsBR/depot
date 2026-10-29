@@ -8785,56 +8785,6 @@ impl World {
         Some(p)
     }
 
-    /// The parking spaces whose cars have driven off (LAN host: the clients take the same
-    /// cars away).
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn departed_keys(&self) -> Vec<i64> {
-        let mut k: Vec<i64> = self.departed.lock().iter().copied().collect();
-        k.sort_unstable();
-        k
-    }
-
-    /// LAN client: the parked cars as the host has them - the spaces it lists empty, and
-    /// (when the list is `complete`) every other one taken again. A space on a tile not
-    /// loaded here yet is remembered: the tile comes up with it empty.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn mirror_departed(
-        &self,
-        renderer: &Renderer,
-        scene: &mut Scene,
-        keys: &[i64],
-        complete: bool,
-    ) {
-        let before = self.departed.lock().len();
-        for &k in keys {
-            if !self.departed.lock().contains(&k)
-                && self.depart_parked(renderer, scene, k).is_none()
-            {
-                self.departed.lock().insert(k);
-            }
-        }
-        if complete {
-            let back: Vec<i64> = self
-                .departed
-                .lock()
-                .iter()
-                .copied()
-                .filter(|k| !keys.contains(k))
-                .collect();
-            for k in back {
-                if !self.return_parked(renderer, scene, k) {
-                    self.departed.lock().remove(&k);
-                }
-            }
-        }
-        let after = self.departed.lock().len();
-        if after != before {
-            log::info!(
-                "LAN: parked cars as the host has them: {after} spaces empty (were {before})"
-            );
-        }
-    }
-
     /// Parked cars standing where `b` is (the player's bus just put down at a depot's entry
     /// point, over a parked bus): they go, as parked cars that drive off do.
     pub fn clear_parked_under(

@@ -255,8 +255,6 @@ then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
 ## Scripts and plugins
 
 - Script variables and string variables have no count limit.
-- Lua plugins can read and write script variables, fire triggers and react to game events:
-  see [Plugins](PLUGINS.md).
 
 ## Radio: a map's stations and a bus's display
 

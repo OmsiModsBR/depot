@@ -133,11 +133,6 @@ impl App {
             let mut none = None;
             crate::app::report_missing_content(&w, &mut none);
         }
-        // PluginFinalize, as OMSI calls it on the way out
-        #[cfg(feature = "plugins")]
-        if let Some(mut p) = self.plugins.take() {
-            p.finalize();
-        }
         if self.player.is_none() || self.career.seconds <= 0.0 {
             return;
         }
@@ -1062,13 +1057,6 @@ impl App {
             clock.time -= 86400.0;
             clock.day_of_year = clock.day_of_year % omsi_sim::clock::days_in_year(clock.year) + 1;
         }
-        #[cfg(feature = "lan")]
-        let client = self
-            .online
-            .lan
-            .as_ref()
-            .is_some_and(|l| l.role == omsi_net::Role::Client);
-        #[cfg(not(feature = "lan"))]
         let client = false;
         if !self.settings.time_sync || client {
             self.clock = clock;

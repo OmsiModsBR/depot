@@ -16,16 +16,8 @@ path = "src/lib.rs"
 name = "depot"
 path = "src/main.rs"
 
-# Off by default: code kept in the repository for later, out of the game's build
-# (docs/removed/MULTIPLAYER_DISABLED.md)
 [features]
-# the OMSI plugins (`plugins/*.opl`) and the Lua plugins' panels
-plugins = ["dep:omsi-plugin"]
 default = []
-# LAN play: the session, its voice chat, the admin commands and the host's mods
-lan = ["dep:omsi-net", "omsi-launcher-core/lan"]
-# the dedicated server (`--server`), which hosts a LAN session
-server = ["lan"]
 # what the tests in `tests/` reach of the crate's insides (`testing`); the crate's own
 # dev-dependency turns it on
 test-support = []
@@ -43,7 +35,6 @@ omsi-texture = { path = "../omsi-texture" }
 omsi-geometry = { path = "../omsi-geometry" }
 omsi-render = { path = "../omsi-render" }
 omsi-sim = { path = "../omsi-sim" }
-omsi-plugin = { path = "../omsi-plugin", optional = true }
 omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-content = { path = "../omsi-content" }
 omsi-timetable = { path = "../omsi-timetable" }
@@ -59,7 +50,6 @@ clap.workspace = true
 log.workspace = true
 env_logger.workspace = true
 rayon.workspace = true
-omsi-net = { path = "../omsi-net", optional = true }
 omsi-ui = { path = "../omsi-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-launcher-ui = { path = "../omsi-launcher-ui" }

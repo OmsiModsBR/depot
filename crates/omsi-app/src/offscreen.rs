@@ -10,8 +10,6 @@ use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
 use crate::humans;
-#[cfg(feature = "lan")]
-use crate::lan;
 use crate::lights;
 use crate::memory::texture_budget;
 use crate::money;
@@ -28,8 +26,6 @@ use crate::situation::{build_situation, start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
 use crate::startup::graphics_instance;
 use crate::traffic;
-#[cfg(feature = "lan")]
-use crate::traffic_link::lan_outlines;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{
     apply_weather, cloud_drift_at, initial_wetness, load_weather, precip_of, setup_sky,
@@ -43,12 +39,7 @@ use omsi_render::{Camera, Renderer};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub(crate) fn run_offscreen(
-    args: &Args,
-    out: &PathBuf,
-    #[cfg(feature = "lan")] mut lan_off: Option<omsi_net::LanSession>,
-    #[cfg(feature = "lan")] mut remotes_off: lan::LanGame,
-) -> Result<()> {
+pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     let (w, h) = args
         .size
         .split_once('x')
@@ -72,17 +63,9 @@ pub(crate) fn run_offscreen(
     crate::lights::load_smoke_texture(&mut renderer, &args.root);
     crate::lights::set_corona_root(&args.root);
     let mut scene = renderer.new_scene();
-    #[cfg(feature = "lan")]
-    let (world, mut camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || {
-        load_world(args, &renderer, &mut scene)
-    })?;
-    #[cfg(not(feature = "lan"))]
     let (world, mut camera) = load_world(args, &renderer, &mut scene)?;
     // the map's own route arrows, with OMSI 2's route arrows
     world.show_help_arrows(&renderer, &mut scene, settings.nav_arrows);
-    #[cfg(feature = "lan")]
-    let lan_seed = lan_off.as_ref().map(lan::population_seed);
-    #[cfg(not(feature = "lan"))]
     let lan_seed: Option<u64> = None;
     // (a player who joins another's game draws the host's traffic in it, whatever their own
     // count says: without it the host's cars had nowhere to go - "passengers, but no
@@ -113,17 +96,6 @@ pub(crate) fn run_offscreen(
         None
     };
     if let Some(s) = schedule.as_mut() {
-        #[cfg(feature = "lan")]
-        lan::answering_while(&mut lan_off, args.bus.as_deref(), || {
-            s.precache(
-                &world,
-                &renderer,
-                &mut scene,
-                traffic.as_mut(),
-                parse_time(&args.time),
-            )
-        });
-        #[cfg(not(feature = "lan"))]
         s.precache(
             &world,
             &renderer,
@@ -444,61 +416,7 @@ pub(crate) fn run_offscreen(
             }
         }
     }
-    // LAN in an offscreen run too, so that one game's view of another can be rendered
-    // (`OMSI_LAN_AUDIO=1`: with the other buses' sounds, heard at the camera - for the logs)
-    #[cfg(feature = "lan")]
-    let lan_audio = (lan_off.is_some() && omsi_cfg::flags::LAN_AUDIO.is_set())
-        .then(omsi_audio::AudioEngine::new);
-    #[cfg(feature = "lan")]
-    if let (Some(l), Some(p)) = (lan_off.as_mut(), player.as_mut()) {
-        lan::settle_spawn(
-            l,
-            &mut remotes_off,
-            p,
-            args,
-            &world,
-            traffic.as_ref().map(|t| &t.net),
-            lan::WELCOME_WAIT,
-        );
-    }
     let run_clock = start_clock(args);
-    // a dedicated server's administration and clock (see `admin`)
-    #[cfg(feature = "server")]
-    let mut srv_admin = crate::admin::ServerAdmin::default();
-    #[cfg(feature = "server")]
-    let mut srv_clock = 0.0f64;
-    // the METAR sync of a dedicated server: the report is downloaded in the background (at
-    // once, then every ten minutes) and its values are told to the players
-    #[cfg(feature = "server")]
-    let srv_metar: Option<String> = if server {
-        crate::server::SERVER_METAR.get().cloned().flatten()
-    } else {
-        None
-    };
-    #[cfg(feature = "server")]
-    let mut srv_metar_due = std::time::Instant::now();
-    #[cfg(feature = "server")]
-    let mut srv_metar_rx: Option<
-        std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>,
-    > = None;
-    // (the weather's name on the status page)
-    #[cfg(feature = "server")]
-    let mut srv_weather_name = if weather.path.to_string_lossy().starts_with("metar:") {
-        weather.name.clone()
-    } else {
-        weather
-            .path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default()
-    };
-    #[cfg(feature = "server")]
-    if let (true, Some((pw, speed))) = (server, crate::server::SERVER_ADMIN.get()) {
-        srv_admin.password = pw.clone();
-        if let Some(l) = lan_off.as_mut() {
-            l.clock_speed = *speed;
-        }
-    }
     let mut ground_gap = crate::ground_gap::GroundGap::from_env();
     if let Some(t) = traffic.as_ref() {
         crate::ground_gap::check_lanes(&world, t);
@@ -513,8 +431,6 @@ pub(crate) fn run_offscreen(
         0.0,
     ) * weather.wind.1
         * puddles::GROUND_WIND;
-    #[cfg(feature = "lan")]
-    let mut real_time = RealTime::default();
     // OMSI_STATE_TRACE=<file>: the state of every frame, for comparing two commits
     let mut state_trace = crate::state_trace::StateTrace::from_env();
     for i in 0..total_frames {
@@ -528,187 +444,6 @@ pub(crate) fn run_offscreen(
                 traffic.as_ref(),
                 duty.as_ref(),
             );
-        }
-        #[cfg(feature = "server")]
-        if server {
-            srv_clock += dt as f64 * lan_off.as_ref().map(|l| l.clock_speed).unwrap_or(1.0);
-            // a server on the real time (server.cfg): its clock reads this machine's
-            if i % 30 == 0 && crate::real_time::server_real() {
-                if let Some(n) = crate::real_time::now() {
-                    let have =
-                        (parse_time(&args.time) + srv_clock + srv_admin.shift).rem_euclid(86400.0);
-                    let off = (n.secs - have + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
-                    if off.abs() > 0.5 {
-                        srv_admin.shift += off;
-                    }
-                }
-            }
-            if let (Some(icao), Some(l)) = (srv_metar.as_ref(), lan_off.as_mut()) {
-                if srv_metar_rx.is_some() {
-                    let got = srv_metar_rx.as_ref().map(|rx| rx.try_recv());
-                    match got {
-                        Some(Ok(report)) => {
-                            srv_metar_rx = None;
-                            // (a failed download is tried again in a minute)
-                            let wait = if report.is_some() { 600 } else { 60 };
-                            srv_metar_due =
-                                std::time::Instant::now() + std::time::Duration::from_secs(wait);
-                            if let Some(w) = report {
-                                if let Some(wire) = crate::weather_setup::report_wire(&w) {
-                                    if wire != l.weather() {
-                                        log::info!("server: weather now the METAR report of {icao}: {wire}");
-                                        l.set_weather(&wire);
-                                    }
-                                    srv_weather_name = w.name.clone();
-                                }
-                            }
-                        }
-                        Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
-                            srv_metar_rx = None;
-                            srv_metar_due =
-                                std::time::Instant::now() + std::time::Duration::from_secs(60);
-                        }
-                        _ => {}
-                    }
-                } else if std::time::Instant::now() >= srv_metar_due {
-                    let (tx, rx) = std::sync::mpsc::channel();
-                    srv_metar_rx = Some(rx);
-                    let icao = icao.clone();
-                    std::thread::spawn(move || {
-                        let _ = tx.send(crate::weather_setup::try_metar(&icao));
-                    });
-                }
-            }
-            if let Some(l) = lan_off.as_mut() {
-                let positions = |id: u32| {
-                    remotes_off
-                        .remotes
-                        .get(&id)
-                        .map(|r| (r.vehicle().position, r.vehicle().heading))
-                };
-                srv_admin.prune(l);
-                for (from, text) in l.take_commands() {
-                    crate::admin::server_command(l, from, &text, &mut srv_admin, &positions);
-                }
-                // a tool on this machine (POST /admin, checked by the gateway): an admin of its own
-                for text in crate::lan::take_local_admin() {
-                    srv_admin.admins.insert(crate::admin::LOCAL_ADMIN);
-                    crate::admin::server_command(
-                        l,
-                        crate::admin::LOCAL_ADMIN,
-                        &format!("admin {text}"),
-                        &mut srv_admin,
-                        &positions,
-                    );
-                }
-                // an admin set the time of day: the shift that makes the clock read it
-                if let Some(want) = srv_admin.set_clock.take() {
-                    let now =
-                        (parse_time(&args.time) + srv_clock + srv_admin.shift).rem_euclid(86400.0);
-                    srv_admin.shift += (want - now + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
-                }
-                // an admin's traffic order: the density asked for, or every AI car off the road
-                match srv_admin.traffic.take() {
-                    Some(crate::admin::TrafficOrder::Density(n)) => {
-                        if let Some(t) = traffic.as_mut() {
-                            t.target = n;
-                            log::info!("server: traffic density now {n}");
-                        }
-                    }
-                    Some(crate::admin::TrafficOrder::Clear) => {
-                        if let Some(t) = traffic.as_mut() {
-                            let ids: Vec<u64> = t
-                                .cars
-                                .iter()
-                                .filter(|c| !c.is_bus())
-                                .map(|c| c.id)
-                                .collect();
-                            for id in &ids {
-                                t.remove_car(&world, &renderer, &mut scene, *id);
-                            }
-                            log::info!("server: {} AI vehicles taken off the road", ids.len());
-                        }
-                    }
-                    None => {}
-                }
-                if let Some(want) = srv_admin.set_weather.take() {
-                    // only an installed weather (the name came over the network)
-                    let found = omsi_cfg::read_dir_merged("Weather")
-                        .into_iter()
-                        .filter_map(|p| {
-                            p.file_name()
-                                .map(|n| format!("Weather/{}", n.to_string_lossy()))
-                        })
-                        .find(|f| f.eq_ignore_ascii_case(&want));
-                    match found {
-                        Some(f) => {
-                            log::info!("server: weather now {f}");
-                            l.set_weather(&f);
-                        }
-                        None => log::info!("server: weather {want} is not installed"),
-                    }
-                }
-                // (the weather follows the METAR report: no next weather for the admins)
-                if std::mem::take(&mut srv_admin.next_weather) && srv_metar.is_none() {
-                    let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
-                        .into_iter()
-                        .filter(|p| {
-                            p.extension()
-                                .map(|e| e.eq_ignore_ascii_case("owt"))
-                                .unwrap_or(false)
-                        })
-                        .filter_map(|p| {
-                            p.file_name()
-                                .map(|n| format!("Weather/{}", n.to_string_lossy()))
-                        })
-                        .collect();
-                    files.sort();
-                    files.dedup();
-                    if !files.is_empty() {
-                        let cur = l.weather().replace('\\', "/").to_ascii_lowercase();
-                        let k = files
-                            .iter()
-                            .position(|f| f.to_ascii_lowercase() == cur)
-                            .map(|k| (k + 1) % files.len())
-                            .unwrap_or(0);
-                        log::info!("server: weather now {}", files[k]);
-                        l.set_weather(&files[k]);
-                    }
-                }
-            }
-            if quit::requested().is_some() {
-                log::info!("server: stopping");
-                break;
-            }
-            if i % 30 == 0 {
-                if let Some(l) = lan_off.as_mut() {
-                    crate::server::enforce_vehicles(l);
-                    crate::server::tick_status(
-                        l,
-                        parse_time(&args.time) + srv_clock + srv_admin.shift,
-                        srv_weather_name.as_str(),
-                    );
-                    // the shared world, counted for GET /status
-                    let (cars, buses, dormant, parked) =
-                        traffic.as_ref().map(|t| t.counts()).unwrap_or_default();
-                    let (walking, waiting, aboard) =
-                        humans_off.as_ref().map(|h| h.counts()).unwrap_or_default();
-                    let target = traffic.as_ref().map(|t| t.target).unwrap_or(0);
-                    crate::lan::update_server_world(omsi_net::ws::WorldCounts {
-                        cars,
-                        buses,
-                        dormant,
-                        parked,
-                        walking,
-                        waiting,
-                        aboard,
-                        traffic: target,
-                    });
-                }
-            }
-            if lan_off.is_none() {
-                std::thread::sleep(real_time.wait(Instant::now(), dt));
-            }
         }
         if let Some(t) = traffic.as_mut() {
             // the camera the snapshots are taken with is the player's eye for the traffic
@@ -814,13 +549,6 @@ pub(crate) fn run_offscreen(
                         .as_ref()
                         .map(|p| traffic::vehicle_bodies(&p.vehicle))
                         .unwrap_or_default();
-                    #[cfg(feature = "lan")]
-                    t.keep_clear.extend(
-                        remotes_off
-                            .remotes
-                            .values()
-                            .flat_map(|r| traffic::vehicle_bodies(r.vehicle())),
-                    );
                     s.tick(
                         &world,
                         t,
@@ -831,9 +559,6 @@ pub(crate) fn run_offscreen(
                     );
                 }
             }
-            #[cfg(feature = "lan")]
-            let others = lan_outlines(&remotes_off);
-            #[cfg(not(feature = "lan"))]
             let others = Vec::new();
             t.others = others;
             t.others.extend(own_outlines(player.as_ref(), &[]));
@@ -1240,13 +965,6 @@ pub(crate) fn run_offscreen(
             // be thousands of metres away – fall outside the 600 m filter in
             // `populate_with` and are never seeded without this loop.
             if i % 60 == 0 {
-                #[cfg(feature = "lan")]
-                let remote_centers: Vec<glam::DVec3> = remotes_off
-                    .remotes
-                    .values()
-                    .map(|r| r.vehicle().position)
-                    .collect();
-                #[cfg(not(feature = "lan"))]
                 let remote_centers: Vec<glam::DVec3> = Vec::new();
                 let player_centers: Vec<glam::DVec3> = remote_centers
                     .into_iter()
@@ -1281,8 +999,6 @@ pub(crate) fn run_offscreen(
                 humans::Eye::of(&eye_cam, view_aspect)
                     .widened(triple_extent(&settings, &eye_cam, size.0, size.1)),
             );
-            #[cfg(feature = "lan")]
-            h.set_remote_buses(remotes_off.remotes.iter().map(|(id, r)| (*id, r.vehicle())));
             h.set_duty(duty.as_ref());
             h.set_player_next_stop(duty.as_ref().and_then(|d| d.trip().stops.get(d.next_stop)));
             let took = h.tick(
@@ -1358,64 +1074,6 @@ pub(crate) fn run_offscreen(
                 }
             }
         }
-        #[cfg(feature = "lan")]
-        if let Some(l) = lan_off.as_mut() {
-            let listener = if args.cam.is_some() {
-                Some(camera.position)
-            } else {
-                player.as_ref().map(|p| p.vehicle.position)
-            };
-            if let (Some(a), Some(at)) = (lan_audio.as_ref(), listener) {
-                a.set_listener(omsi_audio::Listener {
-                    position: at.as_vec3(),
-                    ..Default::default()
-                });
-            }
-            // a host tells the others its clock (a client here keeps the one it started with;
-            // a server's runs at its speed, moved by its admins)
-            let mut now = start_clock(args);
-            #[cfg(feature = "server")]
-            let server_clock = server.then(|| srv_clock + srv_admin.shift);
-            #[cfg(not(feature = "server"))]
-            let server_clock: Option<f64> = None;
-            match server_clock {
-                Some(c) => now.advance(c as f32),
-                None => now.advance(t_s + service_seconds as f32),
-            }
-            let clock = (l.role == omsi_net::Role::Host).then_some(&now);
-            let frame = lan::Frame {
-                audio: lan_audio.as_ref(),
-                listener,
-                muffled: false,
-                riders: humans_off.as_ref().map(|h| h.riding()).unwrap_or(0),
-                clock,
-                tour: duty.as_ref().map(|d| format!("{}/{}", d.line, d.tour)),
-                walker: None,
-                inside_of: None,
-                radio_keyed: false,
-            };
-            let updates = lan::tick(
-                l,
-                &mut remotes_off,
-                dt,
-                args,
-                player.as_mut(),
-                Some(&world),
-                Some(&renderer),
-                Some(&mut scene),
-                traffic.as_mut(),
-                humans_off.as_mut(),
-                None,
-                &frame,
-            );
-            for u in updates {
-                if let (lan::WorldUpdate::Tours(tours), Some(s)) = (u, schedule.as_mut()) {
-                    s.set_lan_tours(tours);
-                }
-            }
-            // the other games run in real time (see `RealTime`)
-            std::thread::sleep(real_time.wait(Instant::now(), dt));
-        }
         // the tyres' spray, frame by frame as the window throws it (the camera that matters
         // for its detail: the followed car's, else the player's bus)
         if spray_wet > 0.0 && !omsi_cfg::flags::NO_SPRAY.is_set() {
@@ -1435,13 +1093,6 @@ pub(crate) fn run_offscreen(
             if let Some(t) = traffic.as_ref() {
                 vehicles.extend(t.cars.iter().map(|c| (c.id.wrapping_add(1), &c.vehicle)));
             }
-            #[cfg(feature = "lan")]
-            vehicles.extend(
-                remotes_off
-                    .remotes
-                    .iter()
-                    .map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())),
-            );
             spray.frame(dt, &vehicles, eye, spray_wind, &|x, y| {
                 puddles::water_at(x, y, world.wet_road_at(x, y, spray_wet))
             });
@@ -1525,8 +1176,6 @@ pub(crate) fn run_offscreen(
                     if let Some(t) = traffic.as_ref() {
                         vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
                     }
-                    #[cfg(feature = "lan")]
-                    vehicles.extend(remotes_off.remotes.values().map(|r| r.vehicle()));
                     lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
                     lights::upload_corona_textures(&mut renderer);
                     world.update_light_map_atlas(&renderer, cam.position);
@@ -1713,13 +1362,6 @@ pub(crate) fn run_offscreen(
             let lane = &t.net.lanes[st.lane];
             log::info!("  lane {} (key {:?} len {:.1}) s={:.1} route_index {} of {} planned_next {:?} next stop {:?} light {:?}", st.lane, lane.key, lane.length(), st.s, st.route_index, st.route.len(), st.planned_next, c.next_stop(), st.planned_next.and_then(|n| t.net.lanes[n].traffic_light));
         }
-    }
-    #[cfg(feature = "server")]
-    if server {
-        if let Some(l) = lan_off.take() {
-            l.leave();
-        }
-        return Ok(());
     }
     let drive_spawn_z = spawn_z;
     if let Some(mut player) = player.take() {
@@ -3051,8 +2693,6 @@ pub(crate) fn run_offscreen(
         if let Some(t) = traffic.as_ref() {
             vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
         }
-        #[cfg(feature = "lan")]
-        vehicles.extend(remotes_off.remotes.values().map(|r| r.vehicle()));
         lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
         lights::upload_corona_textures(&mut renderer);
         world.update_light_map_atlas(&renderer, camera.position);
@@ -3157,10 +2797,6 @@ pub(crate) fn run_offscreen(
         if let Some(e) = duty_error.as_ref() {
             lines.push(format!("No duty: {e}"));
         }
-        #[cfg(feature = "lan")]
-        if let Some(l) = lan_off.as_ref() {
-            lines.extend(lan::hud_lines(l, &remotes_off, Some(p)));
-        }
         let viewport = settings.hud_viewport((w, h));
         let overlay_start = scene.overlays.len();
         hud.update(&renderer, &mut scene, &lines);
@@ -3202,12 +2838,6 @@ pub(crate) fn run_offscreen(
             let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
             let frame = nav::NavFrame {
                 traffic: traffic.as_ref(),
-                #[cfg(feature = "lan")]
-                players: lan_off
-                    .as_ref()
-                    .map(|l| lan::nav_players(&remotes_off, l.my_id))
-                    .unwrap_or_default(),
-                #[cfg(not(feature = "lan"))]
                 players: Vec::new(),
                 bus: p.vehicle.position,
                 heading: p.vehicle.heading,
@@ -3525,43 +3155,6 @@ pub(crate) fn run_offscreen(
     image::save_buffer(out, &pixels, w, h, image::ColorType::Rgba8)?;
     println!("wrote {}", out.display());
     Ok(())
-}
-
-/// The offscreen loop's fixed steps kept to the clock when other games take part (a LAN
-/// session, the dedicated server): a step of `dt` every `dt` on the wall, the step's own work
-/// included. A whole step slept after each frame's work made a dedicated server's frames
-/// 41 ms long on Gladbeck: its world ran at 80 % of the clock while its world frames were
-/// stamped with the clock, so the players saw its cars and people a fifth too slow, mostly
-/// guessed on past the last frame they had, and standing still for a moment again and again
-/// (#660); its clock and timetable fell behind the day as well.
-#[derive(Default)]
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub struct RealTime {
-    /// When the last step was to end (its wait ran until then).
-    end: Option<Instant>,
-}
-
-impl RealTime {
-    /// Further behind than this (a stall: a long load, the machine busy), the steps go on
-    /// from now rather than run back to back until they have caught up - the same quarter of
-    /// a second after which the session's stamps take the wall clock again
-    /// (`LanSession::tick`).
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    const BEHIND_MAX: std::time::Duration = std::time::Duration::from_millis(250);
-
-    /// How long to wait at `now`, at the end of a step of `dt` seconds.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn wait(&mut self, now: Instant, dt: f32) -> std::time::Duration {
-        let dt = std::time::Duration::from_secs_f32(dt);
-        let due = self.end.map(|e| e + dt).unwrap_or(now + dt);
-        let due = if now > due + Self::BEHIND_MAX {
-            now
-        } else {
-            due
-        };
-        self.end = Some(due);
-        due.saturating_duration_since(now)
-    }
 }
 
 /// The tyres as they are drawn: the lowest point of each wheel mesh and how far it is over

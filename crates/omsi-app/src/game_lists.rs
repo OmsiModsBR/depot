@@ -430,20 +430,10 @@ fn hof_label(p: &std::path::Path) -> String {
 /// The time speeds, traffic amounts and passenger shares the options step through.
 pub const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
 pub const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
-/// The most traffic anything may ask for: the menu's top step, the server's `traffic <n>`
-/// and server.cfg's `traffic` alike (#1327).
-#[cfg(feature = "server")]
-pub const TRAFFIC_MAX: usize = TRAFFIC[TRAFFIC.len() - 1];
 const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 const VOLUME: [f32; 6] = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0];
 /// The pedal strengths the options step through (see `settings::pedal_curve`).
 const PEDAL: [f32; 7] = [0.5, 0.7, 0.85, 1.0, 1.25, 1.5, 2.0];
-
-/// The next of `steps` after `now` (round to the first).
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub fn next_step<T: PartialOrd + Copy>(steps: &[T], now: T) -> T {
-    steps.iter().copied().find(|s| *s > now).unwrap_or(steps[0])
-}
 
 /// A list line that heads the lines under it: not chosen, not run.
 pub const HEADING: &str = "#";
@@ -2389,19 +2379,6 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         // clock runs at real time while it is on, at its time speed again after)
         "time_sync" => {
             app.settings.time_sync = on;
-            #[cfg(feature = "lan")]
-            if let Some(l) = app
-                .online
-                .lan
-                .as_mut()
-                .filter(|l| l.role == omsi_net::Role::Host)
-            {
-                l.clock_speed = if on {
-                    1.0
-                } else {
-                    app.settings.time_speed.clamp(1.0, 30.0)
-                };
-            }
             app.sync_real_time();
             Some(("time_sync", bit))
         }
@@ -3145,10 +3122,7 @@ fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("top", "Top of the screen"),
             ("bottom", "Bottom of the screen"),
         ],
-        "nav_view" => vec![
-            ("perspective", "Perspective"),
-            ("top", "Top view"),
-        ],
+        "nav_view" => vec![("perspective", "Perspective"), ("top", "Top view")],
         "nav_orientation" => vec![
             ("map", "As the map is drawn"),
             ("north", "North up"),

@@ -6,7 +6,7 @@
 //! Every text is rendered once into a small texture and kept while it is shown; the
 //! overlays are rectangles in physical pixels (`Scene::overlays`).
 
-use super::super::domain::{Frame, Hits, InfoTone, MenuKind, NoticeKind};
+use super::super::domain::{Frame, Hits, InfoTone, MenuKind};
 use crate::hud::interface::output::{Renderer, Scene, TextureId};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
 
@@ -320,8 +320,6 @@ pub fn render_text(font: &FontVec, text: &str, px: f32, color: [u8; 4]) -> omsi_
 /// How many rows the chat shows (a long line takes several), and how many lines it keeps to
 /// scroll back.
 const CHAT_SHOWN: usize = 8;
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub const CHAT_KEEP: usize = 200;
 
 /// The chat's own state: shown or hidden (V), the scroll position and whether the cursor is
 /// over it.
@@ -340,14 +338,6 @@ pub struct ChatWidget {
 impl ChatWidget {
     pub fn contains(&self, x: f32, y: f32) -> bool {
         x >= self.rect[0] && x <= self.rect[2] && y >= self.rect[1] && y <= self.rect[3]
-    }
-
-    /// The mouse wheel over the chat (or while typing) scrolls the history.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn wheel(&mut self, lines: usize, amount: f32) {
-        let max = lines.saturating_sub(CHAT_SHOWN);
-        let s = self.scroll as i32 + amount.round() as i32;
-        self.scroll = s.clamp(0, max as i32) as usize;
     }
 }
 
@@ -655,123 +645,6 @@ impl Ui {
         } else {
             self.chat.hovered = false;
             self.chat.rect = [0.0; 4];
-        }
-        // --- the server's notifications: cards over the navigator (under it when it is in a
-        // top corner; at the top middle without it), the newest nearest to it
-        if !f.notices.is_empty() {
-            let pad = 10.0 * s;
-            let stripe = 4.0 * s;
-            let gap = 6.0 * s;
-            let (x0, w, mut y, up) = match f.notice_anchor {
-                Some(a) => {
-                    let w = (a[2] - a[0]).max(300.0 * s).min(f.width - 16.0 * s);
-                    let x0 = if a[0] + w > f.width {
-                        f.width - w - 8.0 * s
-                    } else {
-                        a[0]
-                    }
-                    .max(8.0 * s);
-                    if a[1] > f.height * 0.5 {
-                        (x0, w, a[1] - gap, true)
-                    } else {
-                        (x0, w, a[3] + gap, false)
-                    }
-                }
-                None => {
-                    let w = (420.0 * s).min(f.width - 32.0 * s);
-                    ((f.width - w) * 0.5, w, 70.0 * s, false)
-                }
-            };
-            let title_px = (13.0 * s) as u32;
-            let px = (16.0 * s) as u32;
-            let lh = px as f32 * 1.3;
-            for n in f.notices.iter().rev() {
-                // (the text steps in quarters as it fades: a label is made for each colour)
-                let a = (n.alpha() * 4.0).ceil() / 4.0;
-                if a <= 0.0 {
-                    continue;
-                }
-                let (accent, title) = match n.kind {
-                    NoticeKind::Info => ([90, 160, 255], "Server"),
-                    NoticeKind::Warn => ([240, 170, 50], "Warning"),
-                    NoticeKind::Alert => ([235, 80, 70], "Alert"),
-                };
-                let rows = {
-                    let tc = &self.text;
-                    wrap_rows(&n.text, w - stripe - pad * 2.0, 0.0, &|t: &str| {
-                        tc.width_raw(t, px as f32)
-                    })
-                };
-                // (five rows at the most; a longer text says it goes on)
-                let mut rows: Vec<String> = rows.iter().map(|r| r.to_string()).collect();
-                if rows.len() > 5 {
-                    rows.truncate(5);
-                    rows[4].push('…');
-                }
-                let th = title_px as f32 * 1.35;
-                let h = pad + th + lh * rows.len() as f32 + pad * 0.7;
-                let top = if up { y - h } else { y };
-                // (a stack that would leave the window ends there)
-                if top < 0.0 || top + h > f.height {
-                    break;
-                }
-                let bg = self.text.solid(
-                    r,
-                    scene,
-                    [14, 16, 20, (225.0 * a * self.text.backdrop) as u8],
-                );
-                scene.overlays.push((bg, [x0, top, x0 + w, top + h]));
-                let bar = self.text.solid(
-                    r,
-                    scene,
-                    [accent[0], accent[1], accent[2], (255.0 * a) as u8],
-                );
-                scene.overlays.push((bar, [x0, top, x0 + stripe, top + h]));
-                // what is left of its time: a thin line along the bottom
-                let left = (n.left / n.total).clamp(0.0, 1.0);
-                let line = self.text.solid(
-                    r,
-                    scene,
-                    [accent[0], accent[1], accent[2], (150.0 * a) as u8],
-                );
-                scene.overlays.push((
-                    line,
-                    [
-                        x0 + stripe,
-                        top + h - 2.0 * s,
-                        x0 + stripe + (w - stripe) * left,
-                        top + h,
-                    ],
-                ));
-                let tx = x0 + stripe + pad;
-                let t = self.text.label(
-                    r,
-                    scene,
-                    title,
-                    title_px,
-                    [accent[0], accent[1], accent[2], (255.0 * a) as u8],
-                );
-                scene.overlays.push((
-                    t.tex,
-                    [
-                        tx,
-                        top + pad * 0.6,
-                        tx + t.w as f32,
-                        top + pad * 0.6 + t.h as f32,
-                    ],
-                ));
-                let mut ry = top + pad * 0.6 + th;
-                for row in &rows {
-                    let l = self
-                        .text
-                        .label(r, scene, row, px, [255, 255, 255, (240.0 * a) as u8]);
-                    scene
-                        .overlays
-                        .push((l.tex, [tx, ry, tx + l.w as f32, ry + l.h as f32]));
-                    ry += lh;
-                }
-                y = if up { top - gap } else { top + h + gap };
-            }
         }
         if let Some((fps, low)) = f.fps {
             let text = match low {
@@ -3152,14 +3025,6 @@ fn clip_left(tc: &TextCache, text: &str, px: f32, width: f32) -> String {
         t.remove(0);
     }
     t.into_iter().collect()
-}
-
-/// A chat line with its bad words starred out (rustrict: profanity, slurs and the usual
-/// ways of writing around a filter, without a word list to keep).
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub fn filter_chat(text: &str) -> String {
-    use rustrict::CensorStr;
-    text.censor()
 }
 
 /// Fit all VR page buttons above the separately reserved Back button.

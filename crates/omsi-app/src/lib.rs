@@ -11,8 +11,6 @@
 
 mod about;
 mod actions;
-#[cfg(feature = "lan")]
-mod admin;
 mod ambience;
 #[cfg(target_os = "android")]
 mod android;
@@ -34,10 +32,6 @@ mod hud;
 mod humans;
 mod journey;
 mod keys;
-#[cfg(feature = "lan")]
-mod lan;
-#[cfg(feature = "lan")]
-mod lan_world;
 mod launcher;
 mod lights;
 #[cfg(target_os = "macos")]
@@ -61,8 +55,6 @@ mod steam;
 mod touch;
 mod tr_fill;
 mod ui;
-#[cfg(feature = "lan")]
-mod voice;
 mod vr_navigator;
 
 mod condensation;
@@ -101,35 +93,18 @@ mod ground_gap;
 mod hpattern;
 mod input;
 mod input_script;
-#[cfg(feature = "lan")]
-mod lan_mods;
-#[cfg(not(feature = "lan"))]
 mod lan_off;
 mod launcher_link;
 mod memory;
 mod offscreen;
 mod on_foot;
-#[cfg(feature = "lan")]
-mod online;
 mod player;
-#[cfg(feature = "plugins")]
-mod plugin_ui;
-#[cfg(feature = "plugins")]
-mod plugins;
-#[cfg(not(feature = "plugins"))]
 mod plugins_off;
 mod route_arrows;
-#[cfg(feature = "server")]
-mod server;
-#[cfg(not(feature = "lan"))]
 use lan_off::{admin, lan};
 
-/// The dedicated server's settings (`server.cfg`).
-#[cfg(feature = "server")]
-use server::ServerCfg;
 /// The dedicated server's settings: a build without the `server` feature has none, so an
 /// `Option<ServerCfg>` is always None.
-#[cfg(not(feature = "server"))]
 pub(crate) enum ServerCfg {}
 mod services;
 mod situation;
@@ -274,9 +249,6 @@ pub fn run() -> Result<()> {
     if !close_app(app) {
         log::warn!("the graphics device did not close in order (the game had ended already)");
     }
-    // the host's mods of this session go with it
-    #[cfg(feature = "lan")]
-    lan_mods::clean_up();
     r?;
     Ok(())
 }
@@ -316,19 +288,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
         eprintln!("server: the dedicated server is no longer built or supported (see docs/removed/MULTIPLAYER_DISABLED.md)");
         std::process::exit(2);
     }
-    #[cfg(not(feature = "server"))]
     let server_cfg: Option<ServerCfg> = None;
-    #[cfg(feature = "server")]
-    let server_cfg = match args.server.clone() {
-        Some(p) => match server::prepare(&mut args, &p) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                eprintln!("server: {e:#}");
-                std::process::exit(2);
-            }
-        },
-        None => None,
-    };
     // the scripts' `random` differs from session to session (starting air pressure, part
     // lifetimes ...); OMSI_SEED=n repeats a session's numbers
     let seed = omsi_cfg::flags::SEED
@@ -413,28 +373,11 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
 /// The game for `args`, ready for its window; None when there is no window to open (a
 /// picture or a model was written instead).
 pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<Option<App>> {
-    #[cfg(feature = "lan")]
-    let _lan_status = lan::StatusFileGuard;
     // OMSI's tutorials: the lesson's own situation
     if let Some(n) = args.tutorial.filter(|n| (1..=4).contains(n)) {
         args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
     }
     apply_situation(&mut args)?;
-    // `openomsi`: the official server, wherever its tunnel is today (see omsi_net::official)
-    #[cfg(feature = "lan")]
-    if let Some(t) = args
-        .lan_join
-        .clone()
-        .filter(|t| omsi_net::official::is_alias(t))
-    {
-        match omsi_net::official::resolve_target(&t) {
-            Ok(url) => {
-                log::info!("LAN: the official server is at {url}");
-                args.lan_join = Some(url);
-            }
-            Err(e) => log::warn!("LAN: {e}"),
-        }
-    }
     // a duty starts at its trip, as in OMSI (not at the map's entry point); a joining
     // player's once the host's world is known (below): it was never placed at all, and
     // "Automatic" put it at the map's first entry point, the depot
@@ -486,83 +429,15 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         settings.classic() && !ENHANCED.load(std::sync::atomic::Ordering::Relaxed),
         std::sync::atomic::Ordering::Relaxed,
     );
-    // the LAN session (offscreen too, so that one game's view of another can be rendered);
-    // a joining player's world is the host's (taken over again when the window loads it)
-    #[cfg(feature = "lan")]
-    let mut lan = if args.export_glb.is_none() {
-        lan::start(&args)
-    } else {
-        None
-    };
-    // turned away at the door (banned, full, another version): no game to play there
-    #[cfg(feature = "lan")]
-    if lan.as_ref().and_then(lan::turned_away).is_some() {
-        log::info!("game ends");
-        return Ok(None);
-    }
-    // the host's mods: served by the host, fetched by a joining player before its world is
-    // made (see `lan_mods`)
-    #[cfg(feature = "lan")]
-    lan_mods::remove_stale();
-    #[cfg(feature = "lan")]
-    if let Some(l) = lan.as_mut() {
-        lan::share_mods(&mut args, l);
-        lan::take_host_map(&mut args, l);
-    }
-    #[cfg(feature = "server")]
-    if let (Some(cfg), Some(l)) = (server_cfg.as_ref(), lan.as_ref()) {
-        lan::open_public_gateway(l, server::info_of(cfg), cfg.web_port, cfg.tunnel);
-        lan::publish_vehicles(args.root.clone(), cfg.vehicles.clone());
-        if cfg.tunnel {
-            // the address to give the players, as soon as cloudflared says it
-            std::thread::spawn(|| {
-                for _ in 0..300 {
-                    if let Some(u) = lan::tunnel_url() {
-                        println!("\n  Server address for the players: {u}\n  (Multiplayer -> Servers -> Add)\n");
-                        return;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                }
-                println!("  No tunnel address (is cloudflared installed?): players join at this machine's address and the UDP port");
-            });
-        }
-    }
-    // a host's clock runs at its time speed (a server's: its server.cfg)
-    #[cfg(feature = "lan")]
-    if let (Some(l), None) = (lan.as_mut(), server_cfg.as_ref()) {
-        if l.role == omsi_net::Role::Host {
-            l.clock_speed = if settings.time_sync {
-                1.0
-            } else {
-                settings.time_speed.clamp(1.0, 30.0)
-            };
-        }
-    }
-    #[cfg(not(feature = "lan"))]
     let _ = server_cfg;
-    #[cfg(feature = "lan")]
-    let mut lan_game = lan::LanGame::default();
     if args.export_glb.is_none() && args.lan_join.is_some() {
-        #[cfg(feature = "lan")]
-        if let Some(t) = lan.as_ref().and_then(lan::host_time_now) {
-            args.time = t;
-        }
         place_on_duty(&mut args);
     }
     if let Some(out) = args.export_glb.clone() {
         return run_export(&args, &out).map(|_| None);
     }
     if let Some(out) = args.offscreen.clone() {
-        #[cfg(feature = "lan")]
-        if let Some(l) = lan.as_mut() {
-            lan::adopt_host_world(&mut args, l, &mut lan_game);
-        }
-        #[cfg(feature = "lan")]
-        let r = run_offscreen(&args, &out, lan, lan_game);
-        #[cfg(not(feature = "lan"))]
         let r = run_offscreen(&args, &out);
-        #[cfg(feature = "lan")]
-        lan_mods::clean_up();
         return r.map(|_| None);
     }
     let view = args.view.clone();
@@ -660,12 +535,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         dd_scroll_drag: None,
         pane_scroll_drag: None,
         pane_scroll: None,
-        #[cfg(feature = "plugins")]
-        plugin_keys: Vec::new(),
-        #[cfg(feature = "plugins")]
-        plugin_events: Vec::new(),
-        #[cfg(feature = "plugins")]
-        plugin_panels: Default::default(),
         clock_hold: 0.0,
         clock_jump: 0.0,
         seat_bus: String::new(),
@@ -739,11 +608,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         fps_t: Instant::now(),
         service_msg: clock_note.map(|m| (m, 10.0)),
         pumping: None,
-        notices: Vec::new(),
         // (a server counts its players by their own games, not itself)
         log_state: Default::default(),
-        #[cfg(feature = "plugins")]
-        plugins: None,
         career: Default::default(),
         journey: None,
         wetness: 0.0,
@@ -760,8 +626,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         metar_next: 0.0,
         cursor_kind: 0,
         settings,
-        #[cfg(feature = "lan")]
-        online: Default::default(),
         spikes: 0,
         worst_ms: 0.0,
         governor: (0.0, 0, 0.0),
@@ -773,19 +637,11 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         cpu_mark: None,
         touch: touch::Touch::new(),
     };
-    #[cfg(feature = "lan")]
-    {
-        app.online.lan = lan;
-        app.online.remotes = lan_game;
-    }
     // mouse steering as the player left it (the wheel eases to the cursor for a second)
     if app.settings.mouse_steering {
         app.mouse_drive = true;
         app.mouse_steer = (0.0, 1.0);
         app.center_cursor = true;
     }
-    // (the LAN status file stays while the game runs; `exiting` removes it)
-    #[cfg(feature = "lan")]
-    std::mem::forget(_lan_status);
     Ok(Some(app))
 }

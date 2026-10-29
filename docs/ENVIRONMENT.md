@@ -16,8 +16,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_GRAPHICS` | text | `omsi-app::settings` | yes | The renderer for one run: `vanilla`, `vanilla_plus` or `enhanced`. |
 | `OMSI_IBIS_BUDGET` | number | `omsi-sim::ibis` |  | How long (seconds, 10 by default) the IBIS may look for a way to type a duty in. |
 | `OMSI_INTEL_FULL_GPU` | switch | `omsi-render::api::renderer` |  | On an Intel Vulkan adapter on Windows, the settings asked for instead of the stable driver profile. |
-| `OMSI_LAN_IP` | text | `omsi-net::addrs` |  | The LAN address(es) to offer, separated by commas, spaces or semicolons. |
-| `OMSI_LAN_JOIN_TIMEOUT` | number | `omsi-net` |  | How long (seconds) a joining game waits for the host. |
 | `OMSI_LAUNCHER_SIZE` | text | `omsi-app::launcher` | yes | The launcher's window at this size (`WxH`), to look at the layout. |
 | `OMSI_MAX_FPS` | number | `omsi-app::app_events` | yes | The frame rate limit, in place of the setting. |
 | `OMSI_MOBILE` | switch | `omsi-app::ui` | yes | The phone's layout on a computer (the rail kept clear of a camera hole). |
@@ -30,7 +28,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_ENHANCED` | switch | `omsi-render::renderer::frame` | yes | The enhanced renderer's HDR picture left out. |
 | `OMSI_NO_ENVMAP` | switch | `omsi-app::scene` | yes | No environment maps (reflections) on vehicles and objects. |
 | `OMSI_NO_FXAA` | switch | `omsi-render::renderer::frame` | yes | No FXAA. |
-| `OMSI_NO_PLUGINS` | switch | `omsi-app::plugins` | yes | No plugins loaded. |
 | `OMSI_NO_RT` | switch | `omsi-render::api::renderer` | yes | No ray queries. |
 | `OMSI_NO_RT_GRADE` | switch | `omsi-render::passes::post` | yes | The ray-traced frame without its colour grade. |
 | `OMSI_NO_SHADOWS` | switch | `omsi-render::lighting::model` | yes | No shadows. |
@@ -50,14 +47,10 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 
 | Variable | Value | Read by | env.txt | What it does |
 | --- | --- | --- | --- | --- |
-| `OMSI_CLOUDFLARED` | path | `omsi-net::tunnel` |  | The `cloudflared` the LAN tunnel runs, in place of the one found or downloaded. |
 | `OMSI_CONTENT` | path | `omsi-launcher-core` |  | The folder the content is read from, in place of the one beside the game. |
 | `OMSI_CONTENT_ZIP` | path | `omsi-cfg::vfs` |  | Archives mounted as content roots, separated like `PATH`. |
 | `OMSI_LAUNCHER` | path | `omsi-app::launcher_link` |  | Another program opened as the launcher. |
-| `OMSI_OFFICIAL_KEY` | path | `omsi-app::lan` |  | The official server's signing key (a file): the server says where it is reached. |
-| `OMSI_PLUGIN_HOST32` | path | `omsi-plugin` |  | The 32-bit plugin host (`omsi-plugin-host32.exe`), in place of the one beside the game. |
 | `OMSI_ROOT` | path | `omsi-launcher-core` |  | The original OMSI 2 installation, read first when the content is looked for (also where the tests find the installed content). |
-| `OMSI_WINE` | path | `omsi-plugin` |  | The `wine` that runs the 32-bit plugin host outside Windows. |
 
 ## Diagnostics
 
@@ -70,7 +63,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_BENCH` | number | `omsi-app::offscreen` |  | Offscreen: draw the final picture this many more times and log the median times. |
 | `OMSI_BENCH_FRAMES` | switch | `omsi-app::offscreen` |  | Offscreen: log each frame of `OMSI_BENCH`. |
 | `OMSI_BLEND_AB` | switch | `omsi-app::offscreen` |  | Offscreen: the same moment also drawn with the blended draws in the old order. |
-| `OMSI_BRIDGE_ONLY` | switch | `omsi-net` |  | A joining game tries only what the rendezvous tells, not the code's own addresses. |
 | `OMSI_BUDGET_FROM` | text | `omsi-app::offscreen` |  | Offscreen: meet the texture budget from this place first (`x,y[,MB]`). |
 | `OMSI_CAM_VEHICLE` | text | `omsi-app::offscreen` |  | Offscreen: the camera at this place in the player's vehicle. |
 | `OMSI_CHECK_ENTRIES` | switch | `omsi-app::offscreen` |  | Offscreen: check that there is ground where a player is put down. |
@@ -116,7 +108,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_DEBUG_INTERIOR` | switch | `omsi-app::scene` |  | Log the vehicles' interior lamps and the meshes they light. |
 | `OMSI_DEBUG_JUNCTION` | switch | `omsi-app::traffic` |  | Log why a car at a junction waits. |
 | `OMSI_DEBUG_LAMPS` | switch | `omsi-app::scene` |  | Log the traffic lights and the crossings they belong to. |
-| `OMSI_DEBUG_LAN` | switch | `omsi-app::lan` |  | Log, every few seconds, what the game knows of every LAN player and the bytes sent. |
 | `OMSI_DEBUG_LANES` | text | `omsi-app::traffic` |  | Log these lanes (indices, or `at:x,y,r` for the street lanes near a point). |
 | `OMSI_DEBUG_LIGHT` | switch | `omsi-app::lights` |  | A test lamp over the camera, and a log of the static lights. |
 | `OMSI_DEBUG_LIGHTS` | text | `omsi-app::traffic` |  | Log the traffic lights of these crossings (indices, or `near`). |
@@ -164,7 +155,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_DEBUG_VARIANTS` | text | `omsi-app::scene` |  | Log the material of the variant meshes whose variable contains this text. |
 | `OMSI_DEBUG_VARS` | text | `omsi-app::offscreen` |  | Offscreen: log these variables of the player's bus at the end (`a,b`). |
 | `OMSI_DEBUG_VARS_EVERY` | number | `omsi-app::offscreen` |  | Offscreen: log `OMSI_DEBUG_VARS` every this many seconds of the drive. |
-| `OMSI_DEBUG_VAR_SYNC` | text | `omsi-app::lan` |  | Log what arrives for this vehicle variable from the other LAN players. |
 | `OMSI_DEBUG_VIEW_LAMPS` | switch | `omsi-render::renderer::frame` |  | Log how much of the view the lamps light. |
 | `OMSI_DEBUG_WALLS` | switch | `omsi-app::humans` |  | Log the people kept out of walls. |
 | `OMSI_DEBUG_WARP` | switch | `omsi-app::scene` |  | Log how far a crossing's mesh was moved to lie on the ground. |
@@ -195,7 +185,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_JOINT_ANGLE` | number | `omsi-app::offscreen` |  | Offscreen: the rear section held at this angle (degrees) to the front one. |
 | `OMSI_KEEP_ALLOCATOR` | switch | `omsi-app::startup` |  | No restart of the game with the allocator settings it wants (macOS). |
 | `OMSI_LANES_NEAR` | text | `omsi-app::offscreen` |  | Offscreen: list the driving lanes passing near this point (`x,y,r`). |
-| `OMSI_LAN_TRACE` | path | `omsi-app::lan_world` |  | Write the LAN world's poses to this file. |
 | `OMSI_LIST_ALIGNED` | switch | `omsi-app::scene` |  | Log the splines that align the terrain, with their mode. |
 | `OMSI_METER` | text | `omsi-render::lighting::exposure` |  | The exposure meter's settings, up to six comma-separated numbers. |
 | `OMSI_MIRROR_ENHANCED` | switch | `omsi-app::camera_util` |  | The mirrors drawn with the window's light in the enhanced renderer, not darkened at dusk. |
@@ -208,15 +197,12 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_ANIMPARENT` | switch | `omsi-sim::anim` |  | Every mesh on its own, without `[animparent]`, to compare. |
 | `OMSI_NO_ATTACH_FALLBACK` | switch | `omsi-app::scene` |  | Attachments with an index the parent does not have dropped, not placed on it. |
 | `OMSI_NO_BOUNDS_CACHE` | switch | `omsi-render::api::scene` |  | Every instance's bounds worked out again each frame. |
-| `OMSI_NO_BRIDGE` | switch | `omsi-net::bridge` |  | The LAN session leaves the internet alone (no rendezvous bridge). |
 | `OMSI_NO_BUNDLES` | switch | `omsi-render::renderer::encode` |  | The main pass encoded directly, without render bundles. |
 | `OMSI_NO_CULL` | switch | `omsi-render::passes::draw` | yes | One-sided faces drawn from both sides. |
 | `OMSI_NO_GLARE` | switch | `omsi-render::passes::fog_lamps` |  | No glare from the sun. |
 | `OMSI_NO_GLASS_PICTURE` | switch | `omsi-render::renderer::frame` |  | No rain drawn on the glass. |
 | `OMSI_NO_GROUND_PAINT` | switch | `omsi-app::scene` |  | No painted ground layers on the tiles. |
 | `OMSI_NO_GROUND_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The ground splines drawn one by one. |
-| `OMSI_NO_INTERP` | switch | `omsi-app::lan` |  | The other LAN players' buses drawn where they were last heard of, not interpolated. |
-| `OMSI_NO_LAN_MODS` | switch | `omsi-app::lan_mods` |  | A LAN host serves no mods and a joining game fetches none. |
 | `OMSI_NO_LIGHT_MAP` | switch | `omsi-app::scene` |  | The tiles' night light maps left out. |
 | `OMSI_NO_MAIN_SPLIT` | switch | `omsi-render::passes::main` |  | The main pass in one part, not split in two. |
 | `OMSI_NO_MATERIAL_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The splines batched by cell only, not by material. |
@@ -234,8 +220,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The splines drawn one by one. |
 | `OMSI_NO_SPLINE_HOLES` | switch | `omsi-app::scene` |  | No holes cut into the terrain by the splines. |
 | `OMSI_NO_SPRAY` | switch | `omsi-app::app_events` |  | No spray from the tyres on wet roads. |
-| `OMSI_NO_TUNNEL` | switch | `omsi-app::lan` |  | A LAN host opens no tunnel to the internet. |
-| `OMSI_NO_VAR_SYNC` | switch | `omsi-app::lan` |  | The vehicles' variables are not sent to the other LAN players. |
 | `OMSI_OLD_WORLD_GRID` | switch | `omsi-map` |  | The one tile size of 371.9 m for maps on world coordinates, to compare. |
 | `OMSI_ONLY_MESH` | text | `omsi-app::scene` |  | Draw only the vehicle meshes whose file names contain one of these parts (`a\|b`), and log their materials. |
 | `OMSI_ONLY_OBJECT` | text | `omsi-app::scene` |  | Draw only the scenery objects whose file name contains this text. |
@@ -275,7 +259,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_TRACE_AI` | path | `omsi-app::traffic` |  | Write every AI vehicle's state, frame by frame, to this CSV file. |
 | `OMSI_TRACE_AI_BUSES` | switch | `omsi-app::traffic` |  | `OMSI_TRACE_AI` writes the timetable buses only. |
 | `OMSI_TRACE_PAX` | path | `omsi-app::humans` |  | Write the passengers' steps to this file. |
-| `OMSI_TRACE_REMOTE` | path | `omsi-app::lan` |  | Write where each other LAN player's bus is drawn, every frame, to this CSV file. |
 | `OMSI_TRACE_STEER` | path | `omsi-app::app_events` |  | Write the mouse steering, frame by frame, to this CSV file. |
 | `OMSI_TRACE_VARS` | text | `omsi-app::offscreen` |  | Offscreen: log these variables every half second (`a,b,$c`; `$` reads a string). |
 | `OMSI_TRAFFIC_ALL_GROUPS` | switch | `omsi-app::traffic` |  | The vehicle groups the map keeps to some roads drive everywhere. |
@@ -292,7 +275,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | --- | --- | --- | --- | --- |
 | `OMSI_AUDIT_LINE` | text | `omsi-sim (examples)` |  | The line the `bus_audit` example types in (`5E`), in place of the one from the code. |
 | `OMSI_BACKGROUND` | switch | `omsi-app` |  | A test window that does not take the keyboard, and no dialog on a fatal error. |
-| `OMSI_CLOUDFLARED_OWN` | switch | `omsi-net::tunnel` |  | Only the game's own `cloudflared`, to test its download. |
 | `OMSI_DRIVE_PROFILE` | text | `omsi-app::offscreen` |  | Offscreen: hold the pedals and the wheel from each time on (`t throttle brake [steer]/ …`). |
 | `OMSI_DRIVE_V0` | number | `omsi-app::offscreen` |  | Offscreen: the bus's speed (km/h) on the first frame. |
 | `OMSI_FAKE_GPU_ERROR` | text | `omsi-render` |  | Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`, `lost-poll`, `oom`). |
@@ -301,7 +283,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_HIDE_WINDOW` | text | `omsi-app::app_events` |  | Treat the window as hidden between these seconds (`from,to`). |
 | `OMSI_INPUT` | text | `omsi-app::input_script` |  | Drive the window's handlers (mouse, keys, `look`, `turn`, `touch`) from this script (`t=3 move x,y; t=3.2 press; t=4 key F3; …`). |
 | `OMSI_LAN_AUDIO` | switch | `omsi-app::offscreen` |  | Offscreen: with LAN, the other buses' sounds heard at the camera (for the logs). |
-| `OMSI_LAN_SAY` | text | `omsi-app::lan` |  | Chat lines said at these seconds of the session (`30=Hallo;45=Tschüss`), for LAN tests. |
 | `OMSI_LAUNCHER_EXIT` | number | `omsi-app::launcher` |  | Close the launcher after this many seconds. |
 | `OMSI_LAUNCHER_INPUT` | text | `omsi-app::launcher` |  | Work the launcher from this script (`t=2 click 412,60; t=3 type 76; …`). |
 | `OMSI_LAUNCHER_PAGE` | text | `omsi-app::launcher` |  | Open the launcher at this page (`drive:2`, `settings:3`, `controls:1`, …). |
@@ -312,8 +293,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_RENDER_OCCLUDED` | switch | `omsi-app::app_events` |  | Draw even while the window is hidden. |
 | `OMSI_STATE_TRACE` | path | `omsi-app::state_trace` |  | Write the offscreen run's state, step by step, to this file (the B0 trace). |
 | `OMSI_TEST_CONTENT` | path | `omsi-o3d` |  | The installed content for the tests, when `OMSI_ROOT` is not set. |
-| `OMSI_TEST_WINE_DIR` | path | `omsi-plugin` |  | The folder with Wine for the plugin host's test. |
-| `OMSI_UI_PREVIEW` | path | `omsi-app::plugin_ui` |  | Write a picture of the plugins' panels to this file (`plugin_ui`'s preview test). |
 
 ## Set by the program itself
 

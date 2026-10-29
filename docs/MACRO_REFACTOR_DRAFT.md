@@ -243,19 +243,22 @@ Medido no `main` em 15ccfdba: são cerca de 24 mil linhas. Os dois crates somam 
 
 O jogo de hoje é a configuração padrão, e nela esse código já não existe. Remover não muda o que o jogo faz. O que muda é a configuração `--all-features`, que perde os testes do código removido.
 
-Sequência, um PR `feat/` por passo:
+Feita num PR só, a pedido do mantenedor (29/10/2026), na branch `feat/remover-crates-desligados`:
 
-1. **Plugins.** Sai a feature `plugins`, junto com `plugins.rs`, `plugin_ui.rs`, os campos de plugin do `Online` e o `queue_event` vazio com os seus 14 pontos em `app_events.rs`. Também saem `omsi-plugin`, `omsi-plugin/demo` e o `omsi-plugin-host` (membros do workspace e testes do CI), além de `docs/PLUGINS.md`.
-2. **LAN e servidor no app.** Saem as features `lan` e `server` e os módulos `lan.rs`, `lan_world.rs`, `lan_mods.rs`, `lan_off.rs`, `admin.rs`, `server.rs`, `voice.rs`, `online.rs` e `launcher/multiplayer.rs`. Também saem o sub-struct `Online` e os ramos `#[cfg]`. As perguntas `is_lan_client()`/`is_lan_host()` devolvem sempre `false` no jogo, então somem com os ramos que guardavam. O estado de servidor sai de `run_offscreen`, e `--server`, `--lan-host` e `--lan-join` deixam de existir. `scripts/build-server.sh`, `scripts/server/` e `docs/SERVER.md` vão junto, assim como os testes de `tests/app/` atrás dessas features.
-3. **`omsi-net` e o launcher-core.** Sai a feature `lan` do `omsi-launcher-core` (`describe_join` e a consulta de servidores), e o `omsi-net` deixa o workspace. O passo do CI "omsi-net and omsi-plugin out of the game build" sai, e o job `--all-features` fica só com as features que sobrarem. Saem também a nota do `omsi-net` em `deny.toml` e em `docs/QUALITY.md` e as menções no README. O `docs/removed/MULTIPLAYER_DISABLED.md` vira `MULTIPLAYER_REMOVED.md`, apontando para os commits da remoção. O código fica recuperável pelo histórico do git, sem patch de restauração.
+- Saem os dois crates (com o `demo` e o `omsi-plugin-host`), as features `lan`, `server` e `plugins` do `omsi-app` e a `lan` do `omsi-launcher-core`, com tudo o que estava atrás delas e os seus testes.
+- Sai também o que só esse código usava nos módulos compartilhados, achado pelo compilador quando as marcas `allow(dead_code)` "sem a feature" caíram. São as pessoas, o tráfego e os semáforos do host espelhados num cliente, os avisos do servidor sobre o navegador, o filtro do chat, o ritmo de tempo real do servidor dedicado e a lista de servidores do launcher.
+- Saem as variáveis `OMSI_*` que só esse código lia (o `docs/ENVIRONMENT.md` é gerado de novo), os dois passos do CI que vigiavam as features, `scripts/build-server.sh`, `scripts/server/`, `scripts/build-plugin-host.sh`, o plugin de voz do GreenTeaSpeak, `docs/SERVER.md` e `docs/PLUGINS.md`.
+- O registro fica em `docs/removed/MULTIPLAYER_REMOVED.md`. O código pode ser lido no histórico do git, sem patch de restauração.
 
-Como provar que nada mudou no jogo, em cada passo:
+Fica o que a configuração padrão compilava e rodava com dados vazios: os substitutos `lan_off` e `plugins_off`, as opções `--lan-host`, `--lan-join` e `--server` (recusadas ou ignoradas como antes, para que uma duty do launcher que as cite não falhe), a caixa do chat e os nomes sobre os ônibus no HUD, os campos de LAN da duty no launcher e a opção de voz. Tirá-los muda o que uma tela mostra ou o que a linha de comando aceita, então cada um é um PR `fix/` próprio.
 
-- A mesma lista de testes na configuração padrão, pelos nomes. Na `--all-features`, ela perde só os testes do código removido, listados no PR.
+Como provar que nada mudou no jogo:
+
+- A lista de testes na configuração padrão perde só os testes do código removido, listados no PR.
 - O mesmo `cargo tree -p omsi-app -e normal`.
 - `offscreen-traces`, golden, os traços da física e da IA e `omsi-check` iguais.
 
-**Quando:** depois da AP3 da Trilha App e antes da AP4. Assim a AP5 (HUD e listas, que têm ramos de LAN), a AP6 (`launcher/multiplayer.rs`, `state.rs` e `phone.rs`) e a AP7 (a pasta `online/`) não movem código que vai ser apagado. Os passos tocam muitos arquivos do app em trechos pequenos, como a A1. Cada um reserva a unidade na #61 e cede a qualquer PR `fix/` aberto nos mesmos arquivos.
+**Quando:** depois da AP3 da Trilha App e antes da AP4. Assim a AP5 (HUD e listas, que têm ramos de LAN), a AP6 (`launcher/multiplayer.rs`, `state.rs` e `phone.rs`) e a AP7 (a pasta `online/`) não movem código que vai ser apagado. O PR toca muitos arquivos do app em trechos pequenos, como a A1. Ele reserva a unidade na #61 e cede a qualquer PR `fix/` aberto nos mesmos arquivos.
 
 ## Frente B: um único passo de simulação
 

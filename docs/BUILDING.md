@@ -32,8 +32,6 @@ there.
 | Windows, from a Mac | `scripts/build-windows-cross.sh` (needs `brew install mingw-w64`) | `dist/windows/` |
 | Linux | `scripts/build-linux.sh` | `dist/linux/openomsi`, `openomsi-launcher`, `.desktop` file |
 | Android | `scripts/build-android.sh` | `dist/android/openOMSI-<version>.apk` |
-| Dedicated server | `scripts/build-server.sh [folder]` | `dist/server/` with `start.sh` |
-| 32-bit plugin host | `scripts/build-plugin-host.sh` | `dist/omsi-plugin-host32.exe` (see [PLUGINS.md](PLUGINS.md)) |
 
 Plain cargo works too: `cargo build --release -p omsi-app` builds `target/release/openomsi`.
 

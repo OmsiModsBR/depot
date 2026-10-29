@@ -19,13 +19,6 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
 /// Whether the session was started on a server (`--lan-join https://…`).
 /// Without LAN play the game joins nothing (`--lan-join` is ignored).
 pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
-    #[cfg(feature = "lan")]
-    return args
-        .lan_join
-        .as_deref()
-        .map(|t| omsi_net::ws::ws_url(t).is_some())
-        .unwrap_or(false);
-    #[cfg(not(feature = "lan"))]
     {
         let _ = args;
         false
@@ -631,51 +624,6 @@ impl crate::app::App {
             v.insert(before_quit, ("admin", "Administration..."));
         }
         v
-    }
-
-    /// Put the session's server code on the clipboard.
-    #[cfg(feature = "lan")]
-    pub(crate) fn copy_server_code(&mut self) {
-        // (the host's code; a player or a server's join code or address as it was entered)
-        let Some(code) = self
-            .online
-            .lan
-            .as_ref()
-            .and_then(|l| l.code())
-            .map(|c| c.encode())
-            .or_else(|| self.args.lan_join.clone())
-            .filter(|c| !c.trim().is_empty())
-        else {
-            self.service_msg = Some((
-                "No server code: not in a LAN session or on a server".into(),
-                3.0,
-            ));
-            return;
-        };
-        #[cfg(not(target_os = "android"))]
-        {
-            thread_local! {
-                // (kept alive: on X11 the text is gone when the clipboard is dropped)
-                static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
-            }
-            let ok = CLIPBOARD.with(|c| {
-                let mut c = c.borrow_mut();
-                if c.is_none() {
-                    *c = arboard::Clipboard::new().ok();
-                }
-                c.as_mut()
-                    .is_some_and(|cb| cb.set_text(code.clone()).is_ok())
-            });
-            self.service_msg = Some(if ok {
-                ("Server code copied".into(), 3.0)
-            } else {
-                (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
-            });
-        }
-        #[cfg(target_os = "android")]
-        {
-            self.service_msg = Some((format!("{}: {code}", omsi_ui::tr("Server code")), 8.0));
-        }
     }
 
     /// The ids of the game menu's lines that are greyed out and cannot be chosen now.

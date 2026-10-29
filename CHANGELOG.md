@@ -125,6 +125,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - With "DirectX9 (D3D9Ex)" selected, Graphics is Vanilla and fixed: the Vanilla/Vanilla+/Enhanced choice is not offered (Settings → Graphics in the launcher, the Graphics page in the game), since this mode draws the picture as OMSI 2 does. The saved choice stays in `settings.cfg` and is back when another graphics API is picked.
 
 ### Removed
+- LAN play, the dedicated server, voice chat and the plugins (OMSI plugin DLLs and Lua), switched off since the first Depot release, are removed from the repository: the `omsi-net` and `omsi-plugin` crates (with the plugin demo and `omsi-plugin-host`), the `lan`, `server` and `plugins` features of `omsi-app` and the `lan` feature of `omsi-launcher-core` with all the code behind them, the code in the shared modules that only they used (the host's people, traffic and light programs mirrored on a client, the server's notification cards, the launcher's saved-server list), `scripts/build-server.sh`, `scripts/server/`, `scripts/build-plugin-host.sh`, the GreenTeaSpeak voice plugin, `docs/SERVER.md` and `docs/PLUGINS.md`. None of it will be reused (`docs/removed/MULTIPLAYER_REMOVED.md`). The game's own build did not carry this code, so nothing changes in the game.
 - The `--physics simple` command-line option: the player's vehicle always runs on the rigid body, except on rails, where it keeps the simple model the track needs.
 
 ### Fixed

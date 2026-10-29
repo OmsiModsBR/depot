@@ -115,55 +115,6 @@ impl App {
         true
     }
 
-    /// The host's edits to the other players' games (`all`: every edit of the session,
-    /// sent again every ten seconds for the ones who joined since).
-    #[cfg(feature = "lan")]
-    pub(crate) fn editor_broadcast(&mut self, all: bool) {
-        let (Some(ed), Some(w)) = (self.editor.as_ref(), self.world.as_ref()) else {
-            if all {
-                // (edits stay after the editor is left: sent from the world's list)
-                if let (Some(w), Some(l)) = (self.world.as_ref(), self.online.lan.as_mut()) {
-                    if l.role == omsi_net::Role::Host {
-                        let lines =
-                            crate::editor::Editor::default().sync_lines(w, &self.args.root, true);
-                        let ids: Vec<u32> = l
-                            .peers()
-                            .map(|p| p.pose.id)
-                            .filter(|id| *id != l.my_id)
-                            .collect();
-                        for line in &lines {
-                            for id in &ids {
-                                l.command(*id, line);
-                            }
-                        }
-                    }
-                }
-            }
-            return;
-        };
-        let Some(l) = self.online.lan.as_mut() else {
-            return;
-        };
-        if l.role != omsi_net::Role::Host {
-            return;
-        }
-        let lines = ed.sync_lines(w, &self.args.root, all);
-        let ids: Vec<u32> = l
-            .peers()
-            .map(|p| p.pose.id)
-            .filter(|id| *id != l.my_id)
-            .collect();
-        for line in &lines {
-            if line.len() > omsi_net::MAX_CHAT {
-                log::warn!("object editor: '{line}' is too long to send");
-                continue;
-            }
-            for id in &ids {
-                l.command(*id, line);
-            }
-        }
-    }
-
     /// The mouse in the object editor: a click picks what is under the cursor (and starts
     /// dragging it), a drag moves it over the ground; true when the editor took it.
     pub(crate) fn editor_mouse(&mut self, pressed: bool) -> bool {

@@ -4,7 +4,6 @@ mod junction;
 mod junction_arrival;
 mod junction_scenarios;
 mod lane_permission;
-mod mirror_light;
 mod parked_lane;
 mod road_scale;
 mod signal_entry;

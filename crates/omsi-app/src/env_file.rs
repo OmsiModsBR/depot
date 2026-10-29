@@ -2,9 +2,9 @@
 //!
 //! The file sits on storage every app with the "all files" permission can write, so it must
 //! not be a way to inject arbitrary process environment: a path switch (`OMSI_ROOT`,
-//! `OMSI_CONTENT`, `OMSI_BIN`, ...), a script input (`OMSI_INPUT`), a server URL
-//! (`OMSI_PRESENCE_URL`) or a program to run (`OMSI_WINE`, `OMSI_CLOUDFLARED`) would turn a file
-//! write into a change of what the program reads, runs or talks to. Only the variables the
+//! `OMSI_CONTENT`, `OMSI_BIN`, ...), a script input (`OMSI_INPUT`) or a server URL
+//! (`OMSI_PRESENCE_URL`) would turn a file write into a change of what the program reads, runs
+//! or talks to. Only the variables the
 //! register marks `env_txt` ([`omsi_cfg::flags`]) - harmless rendering and diagnostic switches
 //! whose values are numbers or short words - are taken; anything else is reported in the log
 //! and skipped.

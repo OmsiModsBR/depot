@@ -2,6 +2,3 @@
 //! procedures on its objects.
 
 pub(crate) mod legacy;
-mod notice;
-
-pub use notice::push_notice;

@@ -124,12 +124,6 @@ flags! {
 
     // --- programs the game runs
 
-    /// The `cloudflared` the LAN tunnel runs, in place of the one found or downloaded.
-    CLOUDFLARED = "OMSI_CLOUDFLARED", Path, Path, "omsi-net::tunnel";
-    /// The 32-bit plugin host (`omsi-plugin-host32.exe`), in place of the one beside the game.
-    PLUGIN_HOST32 = "OMSI_PLUGIN_HOST32", Path, Path, "omsi-plugin";
-    /// The `wine` that runs the 32-bit plugin host outside Windows.
-    WINE = "OMSI_WINE", Path, Path, "omsi-plugin";
 
     // --- settings
 
@@ -139,10 +133,6 @@ flags! {
     RADIO_ALLOW_HTTP = "OMSI_RADIO_ALLOW_HTTP", Text, User, "omsi-audio::url_guard";
     /// How long (seconds, 10 by default) the IBIS may look for a way to type a duty in.
     IBIS_BUDGET = "OMSI_IBIS_BUDGET", Number, User, "omsi-sim::ibis";
-    /// The LAN address(es) to offer, separated by commas, spaces or semicolons.
-    LAN_IP = "OMSI_LAN_IP", Text, User, "omsi-net::addrs";
-    /// How long (seconds) a joining game waits for the host.
-    LAN_JOIN_TIMEOUT = "OMSI_LAN_JOIN_TIMEOUT", Number, User, "omsi-net";
 
     // --- diagnostics
 
@@ -173,10 +163,6 @@ flags! {
     OLD_WORLD_GRID = "OMSI_OLD_WORLD_GRID", Switch, Diagnostic, "omsi-map";
     /// The ground cut away under the roads, to compare.
     ROAD_CUT = "OMSI_ROAD_CUT", Switch, Diagnostic, "omsi-geometry";
-    /// The LAN session leaves the internet alone (no rendezvous bridge).
-    NO_BRIDGE = "OMSI_NO_BRIDGE", Switch, Diagnostic, "omsi-net::bridge";
-    /// A joining game tries only what the rendezvous tells, not the code's own addresses.
-    BRIDGE_ONLY = "OMSI_BRIDGE_ONLY", Switch, Diagnostic, "omsi-net";
 
     // --- omsi-app: settings of the world's picture and memory
 
@@ -708,12 +694,8 @@ flags! {
     /// Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`, `lost-poll`, `oom`).
     FAKE_GPU_ERROR = "OMSI_FAKE_GPU_ERROR", Text, Test, "omsi-render";
 
-    // --- omsi-app: LAN, the launcher and plugins
+    // --- omsi-app: the launcher
 
-    /// No plugins loaded.
-    NO_PLUGINS = "OMSI_NO_PLUGINS", Switch, User, "omsi-app::plugins", env_txt;
-    /// Write a picture of the plugins' panels to this file (`plugin_ui`'s preview test).
-    UI_PREVIEW = "OMSI_UI_PREVIEW", Path, Test, "omsi-app::plugin_ui";
     /// The launcher's window at this size (`WxH`), to look at the layout.
     LAUNCHER_SIZE = "OMSI_LAUNCHER_SIZE", Text, User, "omsi-app::launcher", env_txt;
     /// Open the launcher at this page (`drive:2`, `settings:3`, `controls:1`, …).
@@ -724,37 +706,13 @@ flags! {
     LAUNCHER_EXIT = "OMSI_LAUNCHER_EXIT", Number, Test, "omsi-app::launcher";
     /// Work the launcher from this script (`t=2 click 412,60; t=3 type 76; …`).
     LAUNCHER_INPUT = "OMSI_LAUNCHER_INPUT", Text, Test, "omsi-app::launcher";
-    /// Log, every few seconds, what the game knows of every LAN player and the bytes sent.
-    DEBUG_LAN = "OMSI_DEBUG_LAN", Switch, Diagnostic, "omsi-app::lan";
-    /// Log what arrives for this vehicle variable from the other LAN players.
-    DEBUG_VAR_SYNC = "OMSI_DEBUG_VAR_SYNC", Text, Diagnostic, "omsi-app::lan";
-    /// The vehicles' variables are not sent to the other LAN players.
-    NO_VAR_SYNC = "OMSI_NO_VAR_SYNC", Switch, Diagnostic, "omsi-app::lan";
-    /// The other LAN players' buses drawn where they were last heard of, not interpolated.
-    NO_INTERP = "OMSI_NO_INTERP", Switch, Diagnostic, "omsi-app::lan";
-    /// A LAN host opens no tunnel to the internet.
-    NO_TUNNEL = "OMSI_NO_TUNNEL", Switch, Diagnostic, "omsi-app::lan";
-    /// A LAN host serves no mods and a joining game fetches none.
-    NO_LAN_MODS = "OMSI_NO_LAN_MODS", Switch, Diagnostic, "omsi-app::lan_mods";
-    /// Chat lines said at these seconds of the session (`30=Hallo;45=Tschüss`), for LAN tests.
-    LAN_SAY = "OMSI_LAN_SAY", Text, Test, "omsi-app::lan";
-    /// Write where each other LAN player's bus is drawn, every frame, to this CSV file.
-    TRACE_REMOTE = "OMSI_TRACE_REMOTE", Path, Diagnostic, "omsi-app::lan";
-    /// Write the LAN world's poses to this file.
-    LAN_TRACE = "OMSI_LAN_TRACE", Path, Diagnostic, "omsi-app::lan_world";
-    /// The official server's signing key (a file): the server says where it is reached.
-    OFFICIAL_KEY = "OMSI_OFFICIAL_KEY", Path, Path, "omsi-app::lan";
 
     // --- tests and example programs
 
     /// The installed content for the tests, when `OMSI_ROOT` is not set.
     TEST_CONTENT = "OMSI_TEST_CONTENT", Path, Test, "omsi-o3d";
-    /// The folder with Wine for the plugin host's test.
-    TEST_WINE_DIR = "OMSI_TEST_WINE_DIR", Path, Test, "omsi-plugin";
     /// Where the physics traces test writes its traces.
     PHYSICS_TRACE_DIR = "OMSI_PHYSICS_TRACE_DIR", Path, Test, "omsi-sim";
-    /// Only the game's own `cloudflared`, to test its download.
-    CLOUDFLARED_OWN = "OMSI_CLOUDFLARED_OWN", Switch, Test, "omsi-net::tunnel";
     /// The original installation for the example programs of `omsi-sim`.
     ORIGINAL = "OMSI_ORIGINAL", Path, Test, "omsi-sim (examples)";
     /// The line the `bus_audit` example types in (`5E`), in place of the one from the code.

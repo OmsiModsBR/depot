@@ -84,10 +84,6 @@ impl App {
         if self.real_time_locked() {
             return 1.0;
         }
-        #[cfg(feature = "lan")]
-        if let Some(l) = self.online.lan.as_ref() {
-            return l.clock_speed;
-        }
         self.settings.time_speed.clamp(1.0, 30.0)
     }
 
@@ -152,13 +148,7 @@ impl App {
         let to = load_weather(&self.args);
         let name = to.name.clone();
         self.weather_blend = Some(crate::weather_cycle::Blend::new(from, to, secs));
-        if share {
-            // (a host: the others take it up with its next clock message)
-            #[cfg(feature = "lan")]
-            if let (Some(l), Some(f)) = (self.online.lan.as_mut(), file.as_ref()) {
-                l.set_weather(f);
-            }
-        }
+        let _ = share;
         log::info!("weather: going over to {file:?} ({name})");
         self.service_msg = Some((
             omsi_ui::tr("Weather: %{name}").replace("%{name}", &name),
@@ -367,30 +357,6 @@ impl App {
         std::thread::spawn(move || {
             let _ = tx.send(crate::weather_setup::try_metar(&icao));
         });
-    }
-
-    /// A host that started on `metar:<ICAO>` tells the players the report's values as soon as
-    /// they are there (they cannot download it by the station's name: only the host syncs).
-    #[cfg(feature = "lan")]
-    pub(crate) fn share_start_metar(&mut self) {
-        let Some(l) = self
-            .online
-            .lan
-            .as_mut()
-            .filter(|l| l.role == omsi_net::Role::Host)
-        else {
-            return;
-        };
-        if !l.weather().to_ascii_lowercase().starts_with("metar:") {
-            return;
-        }
-        if let Some(wire) = self
-            .weather
-            .as_ref()
-            .and_then(crate::weather_setup::report_wire)
-        {
-            l.set_weather(&wire);
-        }
     }
 
     /// Go over to the weather of a METAR report that came in.

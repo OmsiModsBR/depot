@@ -287,11 +287,6 @@ pub fn instance_descriptor(backends: Option<wgpu::Backends>) -> wgpu::InstanceDe
 /// Use the native supported API for both windowed and offscreen rendering.
 pub fn graphics_instance() -> wgpu::Instance {
     let descriptor = instance_descriptor(None);
-    #[cfg(feature = "server")]
-    if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
-        // the dedicated server draws nothing: wgpu's no-op device takes every call
-        return noop_instance();
-    }
     // (an interface whose only adapter is a software renderer - DirectX 12's "Microsoft
     // Basic Render Driver" on a chip without a DirectX 12 driver - comes after the others)
     let (mut software, mut last) = (None, None);
@@ -334,10 +329,6 @@ pub fn graphics_instance() -> wgpu::Instance {
 /// OMSI_BACKEND=d3d9): Windows only, and not with VR (OpenXR takes DirectX 12).
 pub(crate) fn d3d9_requested() -> bool {
     if !cfg!(windows) {
-        return false;
-    }
-    #[cfg(feature = "server")]
-    if crate::server::SERVER_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         return false;
     }
     let settings = crate::settings::Settings::load();

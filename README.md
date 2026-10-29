@@ -55,7 +55,6 @@ The current release is available on the
 | Platform | File |
 | --- | --- |
 | Windows x64 | `depot-0.2.52-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
-| Dedicated server | **discontinued** - no longer built on any architecture, see [docs/SERVER.md](docs/SERVER.md) |
 
 ARM64, Linux, macOS and Android packages are not included in Depot 0.2.52.
 Inherited platform support and build instructions do not imply published Depot packages.
@@ -146,8 +145,6 @@ Documentation is available locally. The pages live in [`docs/`](docs):
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
-| [Plugins](docs/PLUGINS.md) | Lua plugins (API and examples), OMSI plugin DLLs and the 32-bit plugin host |
-| [Dedicated server](docs/SERVER.md) | disabled (historical) |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.COMMIT` scheme and the CI |
 | [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |
 
@@ -159,7 +156,6 @@ scripts/build-macos.sh        # macOS   → dist/macos/depot.app
 scripts\build-windows.cmd     # Windows → dist\windows\depot.exe
 scripts/build-linux.sh        # Linux   → dist/linux/depot
 scripts/build-android.sh      # Android → dist/android/depot-<version>.apk
-scripts/build-server.sh       # server  → disabled (exits with an error)
 ```
 
 Needs the latest [Rust stable](https://rustup.rs) and the platform's C toolchain; details in
@@ -171,7 +167,7 @@ Needs the latest [Rust stable](https://rustup.rs) and the platform's C toolchain
 depot/
 ├── VERSION            MAJOR.MINOR of the next release (edited by hand)
 ├── crates/            the engine, one crate per subsystem of the original
-│   ├── omsi-app/        the game binary `depot` (window, launcher, HUD, server mode)
+│   ├── omsi-app/        the game binary `depot` (window, launcher, HUD)
 │   ├── omsi-launcher-core/  launcher data side + `depot-launcher` terminal tool
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)
@@ -179,7 +175,7 @@ depot/
 │   ├── omsi-map/ omsi-scenery/ omsi-timetable/ omsi-vehicle/ omsi-content/   content formats
 │   ├── omsi-sim/        vehicles, AI traffic, people, physics
 │   ├── omsi-render/     the wgpu renderer
-│   ├── omsi-audio/ omsi-net/ omsi-plugin/ omsi-ui/   sound, multiplayer, plugins, UI toolkit
+│   ├── omsi-audio/ omsi-ui/   sound, UI toolkit
 ├── tools/             developer tools: omsi-check (format coverage)
 ├── scripts/           build scripts for every platform, version.sh, packaging files
 ├── assets/            fonts, Material icons, app icons (assets/icons/app), Project Depot logos (assets/logos)

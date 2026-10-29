@@ -5,8 +5,6 @@ use crate::career;
 use crate::cli::{parse_time, Args};
 use crate::hud;
 use crate::humans;
-#[cfg(feature = "lan")]
-use crate::lan;
 use crate::memory::texture_budget;
 use crate::menu;
 use crate::money;
@@ -201,16 +199,6 @@ pub(crate) struct App {
     /// The keyboard chose the line of the menu last (the mouse moved since: false), so the
     /// chosen line is shown lit; with the mouse only the line under it is.
     pub(crate) menu_kbd: bool,
-    /// Keys pressed (true) and let go since the Lua plugins' last frame.
-    #[cfg(feature = "plugins")]
-    pub(crate) plugin_keys: Vec<(String, bool)>,
-    /// What happened since the Lua plugins' last frame: crashes, people knocked down,
-    /// stops skipped (see `plugins::queue_event`).
-    #[cfg(feature = "plugins")]
-    pub(crate) plugin_events: Vec<omsi_plugin::GameEvent>,
-    /// The Lua plugins' panels and notifications on the screen (`omsi.ui`).
-    #[cfg(feature = "plugins")]
-    pub(crate) plugin_panels: crate::plugin_ui::PluginPanels,
     /// Seconds Ctrl+Shift+Page Up/Down has been held (the clock runs faster the longer).
     pub(crate) clock_hold: f32,
     /// How far the clock was set since the timetable was last put out again (s; see
@@ -359,8 +347,6 @@ pub(crate) struct App {
     /// The fuel pump or the bus wash running (`run_service`): which, and the seconds the
     /// tank or the dirt has not changed (it ends after `SERVICE_SETTLE`).
     pub(crate) pumping: Option<(&'static str, f32)>,
-    /// The server's notifications on the screen (`notify`), oldest first.
-    pub(crate) notices: Vec<crate::hud::Notice>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::applog::LogState,
     /// The driver's personnel file and this session's statistics.
@@ -384,9 +370,6 @@ pub(crate) struct App {
     /// The mouse cursor currently shows the hand (it is over a switch).
     pub(crate) cursor_kind: u8,
     pub(crate) settings: settings::Settings,
-    /// The LAN session and everything of the other players (`online::Online`).
-    #[cfg(feature = "lan")]
-    pub(crate) online: crate::online::Online,
     /// Frames longer than 50 ms (stutters) and the worst frame, for the exit summary.
     pub(crate) spikes: u32,
     pub(crate) worst_ms: f32,
@@ -405,9 +388,6 @@ pub(crate) struct App {
     /// OMSI_PROFILE: process CPU seconds, time and frame count once the start-up is over,
     /// for the CPU time a frame costs (the wall time says little on a busy machine).
     pub(crate) cpu_mark: Option<(f64, Instant, u32)>,
-    /// The OMSI plugins (`plugins/*.opl`), loaded with the first frame.
-    #[cfg(feature = "plugins")]
-    pub(crate) plugins: Option<omsi_plugin::Plugins>,
     /// The on-screen controls of a phone (see `touch.rs`).
     pub(crate) touch: crate::touch::Touch,
 }
@@ -708,11 +688,6 @@ impl App {
 
     /// Load the map, vehicle and traffic according to `args`.
     pub(crate) fn load_world_now(&mut self, event_loop: &ActiveEventLoop) {
-        // a joining player loads the host's date, time, weather and season (after the menu)
-        #[cfg(feature = "lan")]
-        if let Some(l) = self.online.lan.as_mut() {
-            lan::adopt_host_world(&mut self.args, l, &mut self.online.remotes);
-        }
         let renderer = self.renderer.take().expect("renderer");
         #[cfg(windows)]
         if let Some(d) = self.d3d9.as_ref() {
@@ -941,10 +916,6 @@ impl App {
                 // (and a player who joins another's game sees the host's people)
                 if self.args.passengers || self.args.lan_join.is_some() {
                     let mut h = humans::Humans::new(&self.args.root);
-                    #[cfg(feature = "lan")]
-                    if let Some(lan) = self.online.lan.as_ref() {
-                        h.set_lan_seed(lan::population_seed(lan));
-                    }
                     h.exact_fare = self.settings.exact_fare;
                     h.boarding = self.settings.boarding.clone();
                     h.voices = match self.settings.pax_voices.as_str() {
@@ -983,10 +954,6 @@ impl App {
                         Ok(mut t) => {
                             t.lights_only = !populated;
                             t.no_timetable_buses = self.args.no_timetable_buses;
-                            #[cfg(feature = "lan")]
-                            if let Some(lan) = self.online.lan.as_ref() {
-                                t.set_lan_seed(lan::population_seed(lan));
-                            }
                             if self.args.traffic > 0 {
                                 t.precache_random(&w, &renderer, &mut scene);
                             }
@@ -1069,21 +1036,6 @@ impl App {
                     if let Some(n) = self.navigator.as_mut() {
                         n.add_lanes(std::mem::take(&mut *w.lanes.lock()));
                     }
-                }
-                #[cfg(feature = "lan")]
-                if let (Some(lan), Some(p)) = (self.online.lan.as_mut(), self.player.as_mut()) {
-                    lan::settle_spawn(
-                        lan,
-                        &mut self.online.remotes,
-                        p,
-                        &self.args,
-                        &w,
-                        self.traffic.as_ref().map(|t| &t.net),
-                        // (still loading: a moment's wait for the host's list puts the bus
-                        // where it is free at once - without it the bus stood inside another
-                        // player's for the first frames and then jumped out of it)
-                        std::time::Duration::from_millis(1500),
-                    );
                 }
                 self.world = Some(w);
             }
@@ -1227,17 +1179,6 @@ impl App {
     pub(crate) fn drive_streaming(&mut self) {
         let mut centers: Vec<DVec3> = self.camera.iter().map(|c| c.position).collect();
         centers.extend(self.player.iter().map(|p| p.vehicle.position));
-        // a LAN host simulates the world around every player: the ground and the roads there
-        #[cfg(feature = "lan")]
-        if self.is_lan_host() {
-            centers.extend(
-                self.online
-                    .remotes
-                    .remotes
-                    .values()
-                    .map(|r| r.vehicle().position),
-            );
-        }
         let (Some(streamer), Some(w), Some(r), Some(scene)) = (
             self.streamer.as_mut(),
             self.world.as_ref(),

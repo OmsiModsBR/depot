@@ -3914,30 +3914,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .map(|x| x.clamp(0.0, 100.0))
                     .unwrap_or(100.0))
             }
-            "nav_arrows"
-            | "nav_ai"
-            | "nav_follow_view"
-            | "nav_surface"
-            | "nav_light"
-            | "nav_contours"
-            | "get_up"
-            | "time_sync"
-            | "metar_sync"
-            | "ui_scale_window"
-            | "notes"
-            | "reflections"
-            | "steering_linear"
-            | "old_steering"
-            | "red_steer_spd"
-            | "ff_invert"
-            | "ff_enabled"
-            | "brake_hold"
-            | "auto_clutch"
-            | "momentary_gears"
-            | "auto_shift"
-            | "mouse_steering"
-            | "mouse_right_off"
-            | "mouse_smooth"
+            "nav_arrows" | "nav_ai" | "nav_follow_view" | "nav_surface" | "nav_light"
+            | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window"
+            | "notes" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd"
+            | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears"
+            | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth"
             | "blinker_cancel" => v[&k] = json!(b(val)),
             "nav_view" => v[&k] = json!(if val == "top" { "top" } else { "perspective" }),
             "nav_orientation" => {
@@ -5028,8 +5009,6 @@ fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
             a.extend(["--lan-host".into(), "0".into()]);
         } else if let Some(target) = lan.strip_prefix("join:") {
             let target = target.trim();
-            #[cfg(feature = "lan")]
-            omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
             a.extend([
                 "--lan-join".into(),
                 if target.is_empty() {
@@ -5110,10 +5089,7 @@ pub fn launch(d: &Duty) -> Result<Launched> {
 
 /// What a LAN join field means (or what is wrong with it), and the sessions hosted here.
 pub fn check_join(text: &str) -> Value {
-    #[cfg(feature = "lan")]
-    let described = omsi_net::describe_join(text);
     // (built without LAN play: nothing to join, and the game ignores `--lan-join`)
-    #[cfg(not(feature = "lan"))]
     let described: Result<String, String> = {
         let _ = text;
         Err("LAN play is not in this build".to_string())
