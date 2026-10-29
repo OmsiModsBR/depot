@@ -14,12 +14,11 @@
 //! clicks and the wheel over it are handed to the overlay ([`WinInput`]) and what they asked
 //! for comes back as [`Event`]s the game applies before the next frame.
 
+use super::super::domain::win_input::WinInput;
 use super::super::domain::windows::{
     quick_times, DestForm, KeyAnswer, TimeForm, ToolFrame, ToolWindow, TourForm,
 };
-use super::super::interface::output::{
-    game_lists, scale_for, App, ListKind, Move, PlayerDuty, WinInput,
-};
+use super::super::interface::output::{game_lists, scale_for, App, ListKind, Move, PlayerDuty};
 use glam::Vec2;
 use omsi_sim::SimClock;
 use omsi_ui::alt_windows::{self as aw, Event, View};

@@ -174,7 +174,14 @@ fn the_bars_windows_never_touch_the_games_pause() {
             "ui/implementation/windows.rs",
             include_str!("../../../src/ui/implementation/windows.rs"),
         ),
-        ("new_ui_add.rs", include_str!("../../../src/new_ui_add.rs")),
+        (
+            "ui/domain/add.rs",
+            include_str!("../../../src/ui/domain/add.rs"),
+        ),
+        (
+            "ui/implementation/add.rs",
+            include_str!("../../../src/ui/implementation/add.rs"),
+        ),
     ] {
         for bad in ["paused =", "toggle_pause", "open_game_menu"] {
             assert!(!src.contains(bad), "{name} has {bad:?}");
