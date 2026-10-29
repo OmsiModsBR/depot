@@ -38,6 +38,8 @@ pub enum Event {
     Installed(Result<String, String>),
     Removed(Result<RemovePlan, String>),
     Latest(Result<ReleaseInfo, String>),
+    /// The answer of a start: the running game, or why there is none.
+    Started(Result<oe::session::Running, oe::start::StartError>),
 }
 
 /// Where the install dialog is.
@@ -79,6 +81,10 @@ pub struct Original {
     /// The newest release seen by "Check for updates" (Diagnostics).
     pub latest: Option<Result<ReleaseInfo, String>>,
     pub checking: bool,
+    /// A start is being planned and made.
+    pub starting: bool,
+    /// The original game this launcher started, while it runs.
+    pub run: Option<oe::session::Running>,
 }
 
 impl Default for Original {
@@ -93,6 +99,8 @@ impl Default for Original {
             attempt: 0,
             latest: None,
             checking: false,
+            starting: false,
+            run: None,
         }
     }
 }
@@ -134,6 +142,65 @@ impl State {
     /// The original OMSI 2 is the engine games start with: the pages show what it has.
     pub fn omsi2_engine(&self) -> bool {
         self.original.engine(&self.config.original_engine) == Engine::Omsi2
+    }
+
+    /// The world a duty starts in: its map and the start point, as OMSI 2 presents them.
+    pub fn world_of(d: &core::Duty) -> oe::launch::World {
+        oe::launch::World::New {
+            map: d.map.clone(),
+            entrypoint: d.entry.unwrap_or(0).max(0) as u32,
+        }
+    }
+
+    /// Starts the original game for `d`: the launch is built, OmsiLaunch plans it and, when
+    /// it can run, starts it (all off the UI thread). Only the map and the start point are
+    /// sent; the rest of the duty is the Depot game's.
+    pub fn launch_original(&mut self, d: &core::Duty) {
+        let root = std::path::PathBuf::from(&self.config.root);
+        let data = core::data_dir();
+        let world = Self::world_of(d);
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |t| t.as_millis())
+        );
+        self.original.starting = true;
+        self.set_status("Starting the game…", false);
+        self.spawn(move || {
+            let settings = oe::config::load_settings_in(&data);
+            let modules = oe::config::load_modules_in(&data);
+            let runner = oe::runner::ProcessRunner;
+            let r = match oe::client::Client::in_root(&runner, &root) {
+                Ok(client) => {
+                    oe::start::start(&client, &data, &root, &id, &world, &settings, &modules)
+                }
+                Err(e) => Err(oe::start::StartError::Invalid(e)),
+            };
+            Msg::Original(Event::Started(r))
+        });
+    }
+
+    /// Sees whether the original game has ended (every frame; cheap).
+    pub fn engine_poll(&mut self) {
+        let Some(run) = self.original.run.as_mut() else {
+            return;
+        };
+        let Some(outcome) = run.poll() else { return };
+        self.original.run = None;
+        if let oe::session::Outcome::Failed {
+            code,
+            message,
+            fix: _,
+        } = outcome
+        {
+            core::log_to_file(&format!(
+                "ERROR OMSI 2 session ended with code {code:?}: {message}"
+            ));
+            self.set_status(omsi_ui::tr(message), true);
+        }
+        self.engine_refresh(true);
     }
 
     /// Reads what is installed (in the background); at most every few seconds.
@@ -299,6 +366,32 @@ impl State {
             Event::Status(s) => {
                 self.original.status = Some(*s);
             }
+            Event::Started(r) => {
+                self.original.starting = false;
+                match r {
+                    Ok(run) => {
+                        core::log_to_file(&format!("OMSI 2 started (process {})", run.pid()));
+                        self.original.run = Some(run);
+                    }
+                    Err(oe::start::StartError::NotRunnable(problems)) => {
+                        for p in &problems {
+                            core::log_to_file(&format!("ERROR OMSI 2 start refused: {}", p.code));
+                        }
+                        let message = problems.first().map_or("", |p| p.message);
+                        self.set_status(omsi_ui::tr(message), true);
+                    }
+                    Err(oe::start::StartError::Spawn(e)) => {
+                        core::log_to_file(&format!("ERROR OMSI 2 could not be started: {e}"));
+                        let (message, _) = oe::errors::explain("OL_E_PROCESS_START_FAILED");
+                        self.set_status(omsi_ui::tr(message), true);
+                    }
+                    Err(oe::start::StartError::Invalid(e)) => self.set_status(
+                        omsi_ui::tr("OMSI 2 mode could not prepare the start: %{error}")
+                            .replace("%{error}", &e),
+                        true,
+                    ),
+                }
+            }
             Event::Offer(n, r) => {
                 // (a lookup the player cancelled meanwhile is dropped)
                 if n == self.original.attempt && matches!(self.original.flow, Flow::Looking) {
@@ -423,4 +516,34 @@ fn fetch_package(
     let plan =
         oe::install::plan_install(root, &core::data_dir(), &zip).map_err(|e| format!("{e:#}"))?;
     Ok((Arc::new(zip), plan))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_duty_becomes_the_map_and_the_start_point() {
+        let d = core::Duty {
+            map: "maps/Grundorf M/global.cfg".into(),
+            entry: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(
+            State::world_of(&d),
+            oe::launch::World::New {
+                map: "maps/Grundorf M/global.cfg".into(),
+                entrypoint: 3
+            }
+        );
+        // no start point chosen (or a negative one) is the first
+        let d = core::Duty {
+            entry: Some(-1),
+            ..Default::default()
+        };
+        assert!(matches!(
+            State::world_of(&d),
+            oe::launch::World::New { entrypoint: 0, .. }
+        ));
+    }
 }

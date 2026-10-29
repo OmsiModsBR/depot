@@ -217,6 +217,9 @@ pub struct Launcher {
     /// game: its process and when it started (a later process with the same number is
     /// another), and the minute the tray's menu last showed.
     tucked: Option<(u32, u64, u64)>,
+    /// The window is minimized while the original OMSI 2 runs (OmsiLaunch has its own tray
+    /// icon; the Depot adds none); it comes back when that game ends.
+    original_away: bool,
     tray: Option<tray::Tray>,
     /// The player came back to the launcher's window while a game runs (clicked it, Alt+Tab):
     /// it is drawn and answers again until the game has the focus back. Before, it stood
@@ -321,6 +324,7 @@ impl Launcher {
             focused: true,
             occluded: false,
             tucked: None,
+            original_away: false,
             tray: None,
             awake_in_game: false,
             last_input: Instant::now(),
@@ -968,6 +972,18 @@ impl Launcher {
             return;
         }
         let Some(w) = self.window.clone() else { return };
+        let original = self.state.original.run.is_some();
+        if original && !self.original_away {
+            self.original_away = true;
+            if can_restore(&w) {
+                w.set_minimized(true);
+            }
+        } else if !original && self.original_away {
+            self.original_away = false;
+            w.set_visible(true);
+            w.set_minimized(false);
+            w.focus_window();
+        }
         let game = |l: &Launcher, pid: u32, started: u64| {
             l.state
                 .instances
