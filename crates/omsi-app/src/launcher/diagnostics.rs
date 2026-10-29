@@ -36,7 +36,12 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     match l.pages.diag.tab {
         1 => super::integrity::draw(l, below),
         2 => super::ai_traffic::draw(l, below),
-        _ => overview(l, below),
+        _ => {
+            // (the status at the right of the tabs, where the bar has room)
+            let at = tabs_r.right() + 16.0;
+            status_strip(l, Rect::new(at, bar.y, (bar.right() - at).max(0.0), bar.h));
+            overview(l, below)
+        }
     }
 }
 
@@ -51,6 +56,64 @@ fn overview(l: &mut Launcher, area: Rect) {
     let y2 = y + 316.0;
     let rest = (area.bottom() - y2 - 24.0).max(200.0);
     log_card(l, Rect::new(area.x, y2, area.w, rest));
+}
+
+/// What the launcher watches, side by side in the bar of the tabs: the game, the OMSI 2 folder and the preview
+/// helper (the pills that were at the foot of every page). The dot is green when the thing is
+/// as it should be, amber when the folder is missing, and none while there is nothing to say.
+fn status_strip(l: &mut Launcher, r: Rect) {
+    if r.w < 360.0 {
+        return;
+    }
+    let games = l.state.instances.iter().any(|i| i.running);
+    let root_ok = l.root_ok();
+    let helper = l.preview.live;
+    let rows: [(&str, &str, Option<omsi_ui::Color>); 3] = [
+        (
+            "o-play",
+            if games {
+                "Game: running"
+            } else {
+                "Game: not running"
+            },
+            games.then_some(OK),
+        ),
+        (
+            "o-folder",
+            if root_ok {
+                "OMSI 2 folder: read"
+            } else {
+                "OMSI 2 folder: not chosen"
+            },
+            Some(if root_ok { OK } else { WARN }),
+        ),
+        (
+            "o-package",
+            if helper {
+                "Preview helper: running, stops when the page closes"
+            } else {
+                "Preview helper: stopped"
+            },
+            helper.then_some(OK),
+        ),
+    ];
+    let col = r.w / 3.0;
+    for (i, (icon, text, dot)) in rows.into_iter().enumerate() {
+        let x = r.x + col * i as f32;
+        let cy = r.center().y;
+        l.ui.icon(icon, Vec2::new(x + 10.0, cy), 16.0, MUTED);
+        if let Some(c) = dot {
+            l.ui.p().circle(Vec2::new(x + 30.0, cy), 3.0, c);
+        }
+        l.ui.text_in_tip(
+            text,
+            Rect::new(x + 40.0, cy - 12.0, col - 48.0, 24.0),
+            12.5,
+            Weight::Regular,
+            FG,
+            omsi_ui::paint::Align::Left,
+        );
+    }
 }
 
 /// A label and its value on one line of a card, `y` its middle.
