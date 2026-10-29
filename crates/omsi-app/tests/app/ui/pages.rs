@@ -5,7 +5,7 @@ use openomsi_game::testing;
 use openomsi_game::testing::game_lists::{row, ListKind};
 use openomsi_game::testing::hud::MenuKind;
 use openomsi_game::testing::hud::{DropdownView, Preview};
-use openomsi_game::testing::new_ui::{Area, MenuFrameInternals};
+use openomsi_game::testing::ui::menu::{Area, MenuFrameInternals};
 use openomsi_game::testing::ui::pages::*;
 
 #[test]
@@ -235,7 +235,7 @@ fn on_a_triple_screen_the_page_is_clicked_where_the_centre_screen_shows_it() {
     let mut one = testing::hud::Ui::new().unwrap();
     p.write_hits(&mut one.hits, Area::whole((1920, 1080)));
     let mut three = testing::hud::Ui::new().unwrap();
-    let area = testing::new_ui::menu_area(true, false, (5760, 1080));
+    let area = testing::ui::menu::menu_area(true, false, (5760, 1080));
     p.write_hits(&mut three.hits, area);
     let moved = |r: &[f32; 4]| [r[0] + 1920.0, r[1], r[2] + 1920.0, r[3]];
     for (a, b) in [
@@ -258,7 +258,7 @@ fn on_a_triple_screen_the_page_is_clicked_where_the_centre_screen_shows_it() {
     let mut vr = testing::hud::Ui::new().unwrap();
     p.write_hits(
         &mut vr.hits,
-        testing::new_ui::menu_area(true, true, (1920, 1080)),
+        testing::ui::menu::menu_area(true, true, (1920, 1080)),
     );
     assert_eq!(vr.hits.menu_rects, one.hits.menu_rects);
 }

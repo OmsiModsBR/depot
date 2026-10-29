@@ -4,7 +4,8 @@ use glam::Vec2;
 use omsi_ui::pause_menu;
 use omsi_ui::pause_menu::Kind;
 use openomsi_game::testing;
-use openomsi_game::testing::new_ui::*;
+use openomsi_game::testing::ui::menu::*;
+use openomsi_game::testing::ui::overlay::*;
 use openomsi_game::testing::ui::report::ReportFrameInternals;
 use std::sync::{Arc, Mutex};
 

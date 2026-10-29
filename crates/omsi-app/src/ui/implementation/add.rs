@@ -17,8 +17,9 @@
 //! applies before the next frame.
 
 use super::super::domain::add::{AddFrame, AddWindow, Picture, PLACING};
+use super::super::domain::menu::scale_for;
 use super::super::domain::win_input::WinInput;
-use super::super::interface::output::{scale_for, App};
+use super::super::interface::output::App;
 use glam::Vec2;
 use omsi_ui::ingame::{self, AddVehicle, AddVehicleEvent, Preview};
 use omsi_ui::widgets::Ui;

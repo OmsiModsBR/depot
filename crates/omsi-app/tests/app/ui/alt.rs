@@ -1,8 +1,8 @@
 use glam::Vec2;
 use omsi_ui::alt_bar;
 use omsi_ui::alt_bar::{Hit, COLUMNS};
-use openomsi_game::testing::new_ui::scale_for;
 use openomsi_game::testing::ui::alt::*;
+use openomsi_game::testing::ui::menu::scale_for;
 use winit::keyboard::KeyCode;
 
 fn all_on() -> AltCtx {

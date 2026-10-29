@@ -325,31 +325,6 @@ pub mod nav {
         pub use crate::nav::lines::*;
     }
 }
-pub mod new_ui {
-    pub use crate::new_ui::*;
-    use omsi_ui::pause_menu::Kind;
-
-    /// A menu's column as a test reads it.
-    pub trait MenuFrameInternals {
-        /// The line marked as the page shown, if any.
-        fn current(&self) -> Option<&str>;
-        /// What the bar over the page says: the title, the subtitle and the state ("paused").
-        fn bar(&self) -> (&str, &str, &str);
-    }
-
-    impl MenuFrameInternals for MenuFrame {
-        fn current(&self) -> Option<&str> {
-            self.sections
-                .iter()
-                .flat_map(|s| s.items.iter())
-                .find(|i| i.kind == Kind::Current)
-                .map(|i| i.id.as_str())
-        }
-        fn bar(&self) -> (&str, &str, &str) {
-            (&self.title, &self.subtitle, self.state)
-        }
-    }
-}
 pub mod offscreen {
     pub use crate::offscreen::*;
 }
@@ -539,15 +514,45 @@ pub mod ui {
         pub use crate::ui::domain::loading::*;
         pub use crate::ui::implementation::loading::*;
     }
+    pub mod menu {
+        pub use crate::ui::domain::menu::*;
+        pub use crate::ui::implementation::menu::*;
+        use omsi_ui::pause_menu::Kind;
+
+        /// A menu's column as a test reads it.
+        pub trait MenuFrameInternals {
+            /// The line marked as the page shown, if any.
+            fn current(&self) -> Option<&str>;
+            /// What the bar over the page says: the title, the subtitle and the state ("paused").
+            fn bar(&self) -> (&str, &str, &str);
+        }
+
+        impl MenuFrameInternals for MenuFrame {
+            fn current(&self) -> Option<&str> {
+                self.sections
+                    .iter()
+                    .flat_map(|s| s.items.iter())
+                    .find(|i| i.kind == Kind::Current)
+                    .map(|i| i.id.as_str())
+            }
+            fn bar(&self) -> (&str, &str, &str) {
+                (&self.title, &self.subtitle, self.state)
+            }
+        }
+    }
+    pub mod overlay {
+        pub use crate::ui::domain::overlay::*;
+        pub use crate::ui::implementation::overlay::*;
+    }
     pub mod pages {
         use crate::hud::{Frame, MenuKind};
-        use crate::new_ui::MenuFrame;
+        use crate::ui::domain::menu::MenuFrame;
         pub use crate::ui::domain::pages::*;
         pub use crate::ui::implementation::pages::*;
 
         /// The Esc menu's column of a session with every line (tests).
         pub fn test_column(paused: bool) -> MenuFrame {
-            crate::new_ui::menu_frame(
+            crate::ui::domain::menu::menu_frame(
                 &crate::input::menus::GAME_MENU,
                 Some(0),
                 &|_| false,

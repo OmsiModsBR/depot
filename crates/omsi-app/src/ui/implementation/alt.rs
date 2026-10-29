@@ -5,7 +5,7 @@
 //! tab (and the tab unfolds it); Alt shows it unfolded again. The bar has the original's fifteen buttons, in its
 //! order, five by three. It never pauses the game and never opens the Esc menu: every button
 //! runs an action the game already has, directly, or opens a small window of its own for it
-//! (`new_ui_windows`), and a button for something the game does not have yet is drawn dim
+//! (`ui::implementation::windows`), and a button for something the game does not have yet is drawn dim
 //! with the reason. While one of its windows is open the other buttons wait, except for the
 //! wash and refuel menu, which leaves the bar free as the original's does. While the Esc
 //! menu is open the bar is hidden.
@@ -19,7 +19,8 @@ use super::super::domain::alt::{
     buttons, corner, origin, pressable, step_focus, wait_for, AltCtx, AltFrame, Nav, OwnedGlyph,
     OPEN,
 };
-use super::super::interface::output::{scale_for, App};
+use super::super::domain::menu::scale_for;
+use super::super::interface::output::App;
 use glam::Vec2;
 use omsi_ui::alt_bar::{self, Button, Glyph, Hit, State as BarState};
 use omsi_ui::widgets::Ui;
