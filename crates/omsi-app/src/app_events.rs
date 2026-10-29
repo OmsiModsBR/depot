@@ -2550,7 +2550,7 @@ impl ApplicationHandler for App {
                     }
                     if let Some(wt) = &self.weather {
                         let (kind, rate) = precip_of(wt);
-                        self.rain.set(kind, rate);
+                        self.rain.set(kind, rate, self.settings.dx9_snowfall());
                         // [wind] direction (deg) speed (m/s)
                         let wind = Vec3::new(
                             wt.wind.0.to_radians().sin() * wt.wind.1,
