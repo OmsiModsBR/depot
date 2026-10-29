@@ -2540,58 +2540,62 @@ impl Launcher {
         }
     }
 
-    /// The foot of the page (on a computer): what runs and what was read, as chips, as the new
-    /// look has them; returns where the message line can start.
+    /// The foot of the page (on a computer): nothing while all is well. A problem or a game
+    /// running shows as one line, Windows 11's InfoBar in small: the OMSI 2 folder not chosen
+    /// (with the button that fixes it) or the game running. The preview helper is no status:
+    /// the picture it draws says so itself (`preview_badge`). Returns where the message line
+    /// can start.
     fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
         let games = self.state.instances.iter().filter(|i| i.running).count();
-        let root_ok = self.root_ok();
-        // (each chip's dot says how it stands at a glance: green when all is well, amber when
-        // something is missing; none while there is nothing to say - a game not running)
-        let chips = [
+        let (tone, icon, text, action) = if !self.root_ok() {
             (
-                if games == 0 {
-                    "Game: not running".to_string()
-                } else {
-                    "Game: running".to_string()
-                },
-                (games > 0).then_some(OK),
-            ),
-            (
-                (if root_ok {
-                    "OMSI 2 folder: read"
-                } else {
-                    "OMSI 2 folder: not chosen"
-                })
-                .to_string(),
-                Some(if root_ok { OK } else { WARN }),
-            ),
-            (
-                (if self.preview.live {
-                    "Preview helper: running, stops when the page closes"
-                } else {
-                    "Preview helper: stopped"
-                })
-                .to_string(),
-                self.preview.live.then_some(OK),
-            ),
-        ];
-        let mut at = x;
-        for (t, dot_c) in chips {
-            // (a chip with a dot leads with it, the words after it)
-            let dot = if dot_c.is_some() { 12.0 } else { 0.0 };
-            let w = self.ui.width(&t, 12.0, Weight::Regular) + 22.0 + dot;
-            let r = Rect::new(at, cy - 12.0, w, 24.0);
-            self.ui.p().rounded(r, 12.0, PANEL);
-            self.ui.p().rounded_border(r, 12.0, 1.0, EDGE);
-            if let Some(c) = dot_c {
-                self.ui.p().circle(Vec2::new(r.x + 14.0, cy), 3.0, c);
+                WARN,
+                "warning",
+                "OMSI 2 folder: not chosen",
+                Some("Open Setup"),
+            )
+        } else if games > 0 {
+            (accent(), "info", "Game: running", None)
+        } else {
+            return x;
+        };
+        let button_w = action.map_or(0.0, |a| self.ui.width(a, 12.0, Weight::Medium) + 24.0);
+        let w = 36.0 + self.ui.width(text, 12.5, Weight::Regular) + 14.0 + button_w + 6.0;
+        let r = Rect::new(x, cy - 16.0, w, 32.0);
+        let a = self.ui.appear(
+            omsi_ui::widgets::id_of("status:bar"),
+            omsi_ui::theme::MOTION_NORMAL,
+        );
+        self.ui.solid(r);
+        self.ui.p().rounded(
+            r,
+            omsi_ui::theme::corner(RADIUS),
+            omsi_ui::theme::surface(PANEL.mix(tone, 0.12)),
+        );
+        self.ui
+            .p()
+            .rounded_border(r, omsi_ui::theme::corner(RADIUS), 1.0, tone.alpha(0.35));
+        self.ui.push_fade(a);
+        self.ui.icon(icon, Vec2::new(r.x + 18.0, cy), 16.0, tone);
+        self.ui.text_in(
+            text,
+            Rect::new(r.x + 36.0, r.y, w - 36.0 - button_w, r.h),
+            12.5,
+            Weight::Medium,
+            TEXT,
+            Align::Left,
+        );
+        if let Some(label) = action {
+            let b = Rect::new(r.right() - button_w - 4.0, r.y + 4.0, button_w, 24.0);
+            if self
+                .ui
+                .button("status:action", b, label, None, ui::ButtonKind::Normal)
+            {
+                self.go(Page::Setup);
             }
-            let tx = Rect::new(r.x + dot, r.y, w - dot, 24.0);
-            self.ui
-                .text_in(&t, tx, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
-            at += w + 10.0;
         }
-        at + 6.0
+        self.ui.pop_fade();
+        r.right() + 12.0
     }
 
     fn status_bar(&mut self) {
