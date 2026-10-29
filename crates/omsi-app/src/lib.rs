@@ -50,7 +50,6 @@ mod mirror_hud;
 mod money;
 mod nav;
 mod new_ui;
-mod new_ui_pages;
 #[cfg(windows)]
 mod openxr;
 mod placing;

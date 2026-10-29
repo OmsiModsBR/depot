@@ -1,7 +1,7 @@
 //! Where the parts of the game menu and the information bar were drawn this frame, in
 //! physical pixels: what the mouse, the touch screen and the keyboard test against. The
-//! old drawing (`hud::implementation::legacy`) and the new menu pages (`new_ui_pages`) both
-//! write them.
+//! old drawing (`hud::implementation::legacy`) and the new menu pages
+//! (`ui::implementation::pages`) both write them.
 
 pub struct Hits {
     /// Where the game menu's lines were drawn this frame (physical pixels), for the mouse.

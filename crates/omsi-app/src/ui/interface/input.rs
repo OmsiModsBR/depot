@@ -8,6 +8,7 @@ pub use super::super::domain::add::{picture_key, AddFrame, AddWindow};
 pub use super::super::domain::alt::{AltFrame, AltState};
 pub(crate) use super::super::domain::loading::MAX_SLIDES;
 pub use super::super::domain::loading::{bus_card, recent, CardText, Decoded, LoadingFrame};
+pub use super::super::domain::pages::{page_frame, showing, PageFrame, Showing};
 pub use super::super::domain::report::ReportFrame;
 pub(crate) use super::super::domain::report::{Report, Watch};
 pub(crate) use super::super::domain::win_input::WinInput;

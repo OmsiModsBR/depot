@@ -2925,7 +2925,7 @@ impl ApplicationHandler for App {
                 }
                 *self.profile.entry("scripted").or_default() += __t.elapsed().as_secs_f64();
                 // (an open list is drawn by the new interface beside the Esc menu's column: made
-                // below from the HUD's frame, `new_ui_pages`; the menu's top level is the new
+                // below from the HUD's frame, `ui::domain::pages`; the menu's top level is the new
                 // interface's own)
                 let mut page_column = self.new_pages_active().then(|| self.new_menu_frame());
                 let menu_area = self.new_ui_area();
@@ -3470,7 +3470,7 @@ impl ApplicationHandler for App {
                         // (the new interface draws the open list: the HUD draws none, and the
                         // rectangles its mouse code hit-tests are the new page's)
                         let page = page_column.take().and_then(|c| {
-                            crate::new_ui_pages::page_frame(&frame, self.list_kind.as_ref(), c)
+                            crate::ui::page_frame(&frame, self.list_kind.as_ref(), c)
                         });
                         if page.is_some() {
                             frame.menu = None;
