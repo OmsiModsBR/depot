@@ -1898,6 +1898,8 @@ pub struct Store<'a> {
     pub start: &'a mut Value,
     pub changed: bool,
     pub start_changed: bool,
+    /// The original OMSI 2 is the engine: only what it has is shown.
+    pub omsi2: bool,
 }
 
 impl Store<'_> {
@@ -2009,6 +2011,9 @@ pub enum Shown {
 }
 
 pub fn shown(o: &Opt, st: &Store) -> Shown {
+    if st.omsi2 && !super::omsi2_map::setting_in_omsi2(o.key, o.sec == INTERFACE) {
+        return Shown::Hidden;
+    }
     if let Some(l) = api_limit(st.s, o.key).filter(|l| !l.is_row()) {
         return match l.text() {
             Some(t) => Shown::Locked(t),
@@ -2296,7 +2301,7 @@ thread_local! {
 }
 
 /// The cards of what is listed, in the order of the table (a search: "Section · Group").
-fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool) -> Vec<Card<'a>> {
+fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card<'a>> {
     let mut out: Vec<Card> = Vec::new();
     for o in opts {
         if !mixed && matches!(o.kind, Kind::Api) {
@@ -2329,7 +2334,12 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool) -> Vec<Card<'a>> {
             INTERFACE => &["preview"],
             _ => &[],
         };
-        out.extend(own.iter().map(|n| Card::Own(n)));
+        // (the Depot's own radio stations, plug-ins and profiles are not OMSI 2's)
+        out.extend(
+            own.iter()
+                .filter(|n| !omsi2 || !matches!(**n, "radio" | "plugins" | "profiles"))
+                .map(|n| Card::Own(n)),
+        );
     }
     out
 }
@@ -2354,6 +2364,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     };
     let body = l.page_title_with(area, UiPage::Settings.title(), (place, title, line));
     let root = std::path::PathBuf::from(&l.state.config.root);
+    let omsi2 = l.state.omsi2_engine();
     let mut start = start_values(&l.state.choice);
     let mut out = Outside::default();
     let narrow = body.w < 760.0;
@@ -2364,6 +2375,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
         start: &mut start,
         changed: false,
         start_changed: false,
+        omsi2,
     };
     // the bar: the search, all or the changed ones, how many are changed, the presets
     let bar_h = 34.0;
@@ -2516,7 +2528,7 @@ pub fn section_body(
     let id = format!("set-page-{sec}-{mixed}");
     ui.scroll_area(&id, content, &mut |ui, v| {
         let w = v.w - 8.0;
-        let list = cards(opts, sec, mixed);
+        let list = cards(opts, sec, mixed, st.omsi2);
         if list.is_empty() {
             let text = if mixed {
                 "Nothing matches. A search looks through every section."

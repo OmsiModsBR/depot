@@ -214,6 +214,7 @@ fn frame(
         start,
         changed: false,
         start_changed: false,
+        omsi2: false,
     };
     let opts = listed(sec, query, false, &st);
     section_body(
@@ -288,6 +289,7 @@ fn every_shown_option_has_its_control() {
             start: &mut start,
             changed: false,
             start_changed: false,
+            omsi2: false,
         };
         for o in OPTS
             .iter()
@@ -369,6 +371,7 @@ fn directx9_offers_only_the_choices_it_allows() {
         start: &mut start,
         changed: false,
         start_changed: false,
+        omsi2: false,
     };
     for (key, want, now) in [
         ("mirror_size", vec!["0", "128", "256", "512"], "128"),
@@ -415,6 +418,7 @@ fn a_search_finds_options_in_any_section() {
         start: &mut start,
         changed: false,
         start_changed: false,
+        omsi2: false,
     };
     let found: Vec<&str> = listed(GENERAL, "doppler", false, &st)
         .iter()
@@ -484,6 +488,7 @@ fn the_interface_options_are_searched_counted_and_reset() {
         start: &mut start,
         changed: false,
         start_changed: false,
+        omsi2: false,
     };
     let keys = |q: &str, st: &Store| {
         listed(0, q, false, st)
@@ -502,6 +507,7 @@ fn the_interface_options_are_searched_counted_and_reset() {
         start: &mut start,
         changed: false,
         start_changed: false,
+        omsi2: false,
     };
     let changed_keys: Vec<&str> = listed(0, "", true, &st).iter().map(|o| o.key).collect();
     assert!(
@@ -549,4 +555,35 @@ fn the_devices_lead_to_the_keys_and_the_controllers_and_reset_asks_first() {
     let before = s.clone();
     assert!(click(PRESETS, "s-reset", &mut s, &mut start).0.reset);
     assert_eq!(s, before);
+}
+
+/// With the original OMSI 2 as the engine only what it has is listed; the Depot's own options
+/// stay out of sight and come back with the Depot engine.
+#[test]
+fn the_original_omsi2_lists_only_what_it_has() {
+    let (mut s, mut start) = (all_rows(), start());
+    let mut st = Store {
+        s: &mut s,
+        start: &mut start,
+        changed: false,
+        start_changed: false,
+        omsi2: true,
+    };
+    for (key, want) in [
+        ("max_fps", Shown::Row),
+        ("collision_vehicles", Shown::Row),
+        ("auto_clutch", Shown::Row),
+        ("language", Shown::Row),
+        ("ui_accent", Shown::Row),
+        ("vr", Shown::Hidden),
+        ("msaa", Shown::Hidden),
+        ("head_tracking", Shown::Hidden),
+        ("show_fps", Shown::Hidden),
+    ] {
+        let o = OPTS.iter().find(|o| o.key == key).unwrap();
+        assert_eq!(shown(o, &st), want, "{key}");
+    }
+    st.omsi2 = false;
+    let o = OPTS.iter().find(|o| o.key == "show_fps").unwrap();
+    assert_eq!(shown(o, &st), Shown::Row);
 }

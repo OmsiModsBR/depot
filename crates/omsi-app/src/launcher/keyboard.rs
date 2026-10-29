@@ -533,12 +533,16 @@ pub fn draw(l: &mut Launcher, body: Rect) {
     let label = |a: &str| action_text(names, a);
     let original = l.pages.kb.original.clone().flatten();
     let factory = l.pages.kb.factory.clone();
-    let all = rows(
+    let mut all = rows(
         &l.state.keybindings,
         original.as_ref(),
         factory.as_ref(),
         &label,
     );
+    // (the original OMSI 2 has no action of the Depot's own: VR, chat, the any-bus doors)
+    if l.state.omsi2_engine() {
+        all.retain(|r| super::omsi2_map::action_in_omsi2(&r.action));
+    }
     // (as many as a reload would change: the original's actions the Depot lacks count too)
     let changed = original
         .as_ref()
@@ -1737,6 +1741,9 @@ fn add_dialog(
         .into_iter()
         .filter(|(a, _)| !bound.contains(a))
         .collect();
+    if l.state.omsi2_engine() {
+        list.retain(|(a, _)| super::omsi2_map::action_in_omsi2(a));
+    }
     if !q.is_empty() {
         list.retain(|(a, label)| a.to_lowercase().contains(&q) || matches(label, &q));
     }
