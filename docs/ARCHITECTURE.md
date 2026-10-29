@@ -25,7 +25,6 @@ state.
 | vehicle runtime                        | `omsi-sim`                    | scripts, animations, dynamic materials, keyboard/mouse input, IBIS typing, coupled parts |
 | AI (`mc_path`, `mc_pathrule`), humans, physics (ODE) | `omsi-sim` | `traffic` + `ai` (rules, light programs, following, passing), `human` + `crowd` (poses, queues, avoidance), `physics` (wheels, collisions) |
 | Optionen and the start dialogs         | `omsi-app::launcher` + `omsi-launcher-core` | the game binary without arguments, a process of its own (wgpu, `omsi-ui`, no game renderer; the bus preview is drawn by a `--preview-helper` process): profile, bus, map, duty, weather, settings, mods, running games (the Tauri launcher is gone since round 9) |
-| - (no original counterpart)            | `omsi-net`, `omsi-app::lan`   | LAN play: UDP session, bit-packed vehicle states, chat |
 
 ## Threading
 
@@ -42,9 +41,6 @@ state.
   thread only puts it into the scene.
 * People are posed and skinned in parallel (`par_iter_mut` over those due this frame, at a
   rate that falls with distance and with what the camera sees).
-* The LAN socket lives in `omsi-net` on its own thread; the game's side of it is a stage of
-  its own in `OMSI_PROFILE` ("lan": loading a joining player's bus used to be counted as
-  the people's time).
 * Ending the game from outside (`omsi-app::quit`): the signal handler only sets an atomic,
   a watcher thread wakes the event loop, and the ordinary shutdown path runs.
 * AI vehicle scripts run in parallel (rayon `par_iter_mut` over the cars' `VehicleInstance`s
@@ -488,7 +484,7 @@ windows. Each was traced to a general cause, most of them read off OMSI:
 
 ### Round 8 (Sept 23 2026): plugins, lamps, culling, script robustness
 
-* **Plugins** (`crates/omsi-plugin`, `docs/PLUGINS.md`) - `plugins/*.opl` and their DLLs,
+* **Plugins** (`crates/omsi-plugin`, removed since: see `docs/removed/MULTIPLAYER_REMOVED.md`) - `plugins/*.opl` and their DLLs,
   driven as OMSI drives them (the original reads, the original loads, the original
   calls every frame: system variables, vehicle variables, UTF-16 string buffers, trigger
   edges as key down/up). A library the process can load runs in-process; OMSI's 32-bit

@@ -2,8 +2,6 @@
 
 use crate::app::App;
 use crate::humans;
-#[cfg(feature = "lan")]
-use crate::lan;
 use crate::player::Player;
 use crate::scene::World;
 use crate::traffic;
@@ -71,15 +69,6 @@ pub(crate) fn own_outlines(
         add(&q.vehicle, 0xFFFE_0000 - (i as u32) * 16, true);
     }
     out
-}
-
-/// The LAN players' buses as obstacles for the AI traffic (their speed as last sent).
-#[cfg(feature = "lan")]
-pub(crate) fn lan_outlines(game: &lan::LanGame) -> Vec<(u32, traffic::PlayerBox)> {
-    game.remotes
-        .iter()
-        .map(|(id, r)| (*id, vehicle_outline(r.vehicle(), r.last.speed_kmh / 3.6)))
-        .collect()
 }
 
 /// What the traffic needs to know every frame besides the time: where the player looks

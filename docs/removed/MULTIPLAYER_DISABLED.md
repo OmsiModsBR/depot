@@ -1,5 +1,7 @@
 # Multiplayer, servidor dedicado e plugins desativados (cliente)
 
+> Removidos do repositório em 29/10/2026: ver [MULTIPLAYER_REMOVED.md](MULTIPLAYER_REMOVED.md). Este registro fica como histórico.
+
 Data: 2026-10-10. Decisão de Leo (OmsiModsBR Team). Nenhum commit feito junto com esta alteração.
 Esta alteração vem depois da remoção do contador Worker ([PRESENCE_WORKER.md](PRESENCE_WORKER.md)); o diff abaixo é só o desta etapa.
 

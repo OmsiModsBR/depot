@@ -122,22 +122,6 @@ fn sixteen_x_anisotropy_can_be_chosen_in_the_game_menu() {
 }
 
 #[test]
-fn steps_wrap_round() {
-    assert_eq!(
-        testing::game_lists::next_step(&testing::game_lists::SPEEDS, 1.0),
-        2.0
-    );
-    assert_eq!(
-        testing::game_lists::next_step(&testing::game_lists::SPEEDS, 15.0),
-        1.0
-    );
-    assert_eq!(
-        testing::game_lists::next_step(&testing::game_lists::TRAFFIC, 35),
-        50
-    );
-}
-
-#[test]
 fn lines_sort_as_numbers() {
     let mut v = vec!["13N", "5", "137", "N30", "92"];
     v.sort_by(|a, b| testing::game_lists::natural(a, b));

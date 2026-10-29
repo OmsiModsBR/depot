@@ -1068,26 +1068,6 @@ fn paint_line(l: &Launcher) -> String {
 
 /// The chosen day and weather in one line.
 fn start_line(l: &Launcher) -> String {
-    // on a server: its clock and its weather, whatever this machine has chosen
-    #[cfg(feature = "lan")]
-    if let Some(i) = l
-        .state
-        .joined_server
-        .as_ref()
-        .and_then(|a| l.state.server_info.get(a))
-        .and_then(|x| x.1.as_ref().ok())
-    {
-        let weather = if i.weather.is_empty() {
-            omsi_ui::tr("the map's (the server's)").into_owned()
-        } else {
-            format!("{} {}", i.weather, omsi_ui::tr("(the server's)"))
-        };
-        return format!(
-            "{} {} · {weather}",
-            i.time,
-            omsi_ui::tr("(the server's clock)")
-        );
-    }
     let weather = match l.state.choice.weather.strip_prefix("metar:") {
         Some(code) => omsi_ui::tr("at %{code}").replace("%{code}", &code),
         None if l.state.choice.weather == "cycle" => omsi_ui::tr("Weather cycle").into_owned(),
@@ -2102,85 +2082,13 @@ fn trip_duration(first: f64, last: f64) -> String {
     }
 }
 
-/// The name of the server the Drive page is joined to (see the Multiplayer page).
-#[cfg(feature = "lan")]
-fn joined_server_name(l: &Launcher) -> Option<String> {
-    let a = l.state.joined_server.as_ref()?;
-    let entry = l.state.servers.iter().find(|s| &s.address == a);
-    let info = l.state.server_info.get(a).and_then(|x| x.1.as_ref().ok());
-    Some(
-        entry
-            .map(|e| e.name.clone())
-            .filter(|n| !n.is_empty())
-            .or_else(|| info.map(|i| i.name.clone()))
-            .unwrap_or_else(|| a.clone()),
-    )
-}
-
 /// Without LAN play the Drive page is never joined to a server.
-#[cfg(not(feature = "lan"))]
 fn joined_server_name(_l: &Launcher) -> Option<String> {
     None
 }
 
 fn step_time(l: &mut Launcher, r: Rect) {
     let mut y = r.y;
-    #[cfg(feature = "lan")]
-    if let Some(name) = joined_server_name(l) {
-        // the server's world: nothing to choose here
-        let info = l
-            .state
-            .joined_server
-            .as_ref()
-            .and_then(|a| l.state.server_info.get(a))
-            .and_then(|x| x.1.as_ref().ok())
-            .cloned();
-        l.ui.heading(
-            Rect::new(r.x, y, r.w, 28.0),
-            &omsi_ui::tr("Set by %{name}").replace("%{name}", &name),
-            Some("lock"),
-        );
-        y += 36.0;
-        let rows = [
-            (
-                "Time",
-                info.as_ref().map(|i| i.time.clone()).unwrap_or_default(),
-            ),
-            (
-                "Weather",
-                info.as_ref()
-                    .map(|i| {
-                        if i.weather.is_empty() {
-                            "the map's".to_string()
-                        } else {
-                            i.weather.clone()
-                        }
-                    })
-                    .unwrap_or_default(),
-            ),
-        ];
-        for (k, v) in rows {
-            l.ui.text_in(
-                k,
-                Rect::new(r.x, y, 110.0, 22.0),
-                13.0,
-                Weight::Regular,
-                TEXT_DIM,
-                Align::Left,
-            );
-            l.ui.text_in(
-                &v,
-                Rect::new(r.x + 110.0, y, r.w - 110.0, 22.0),
-                13.0,
-                Weight::Regular,
-                TEXT,
-                Align::Left,
-            );
-            y += 26.0;
-        }
-        l.ui.paragraph("On a server the map, the time, the date and the weather are the same for everybody: the server keeps the world's clock. You choose your bus and your duty.", Vec2::new(r.x, y + 8.0), r.w, 12.5, Weight::Regular, TEXT_DIM);
-        return;
-    }
     let col = (r.w - 12.0) * 0.5;
     l.ui.label(Rect::new(r.x, y, col, 20.0), "Time");
     l.ui.label(Rect::new(r.x + col + 12.0, y, col, 20.0), "Date");

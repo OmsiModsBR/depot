@@ -3,8 +3,6 @@
 
 mod about;
 mod actions;
-#[cfg(feature = "lan")]
-mod admin;
 mod api_limits;
 mod app;
 mod app_events;
@@ -36,12 +34,6 @@ mod humans;
 mod input;
 mod journey;
 mod keys;
-#[cfg(feature = "lan")]
-mod lan;
-#[cfg(feature = "lan")]
-mod lan_mods;
-#[cfg(feature = "lan")]
-mod lan_world;
 mod launcher;
 mod lights;
 mod line_times;
@@ -51,15 +43,10 @@ mod map_surface;
 mod mirror_hud;
 mod money;
 mod nav;
-mod offscreen;
 mod on_foot;
 #[cfg(windows)]
 mod openxr;
 mod player;
-#[cfg(feature = "plugins")]
-mod plugin_ui;
-#[cfg(feature = "plugins")]
-mod plugins;
 mod puddles;
 #[cfg(unix)]
 mod quit;
@@ -69,8 +56,6 @@ mod scene;
 mod schedule;
 mod schedule_paper;
 mod screenshot_name;
-#[cfg(feature = "server")]
-mod server;
 mod services;
 mod settings;
 mod situation;
@@ -81,8 +66,6 @@ mod tr_fill;
 mod traffic;
 mod tutorial;
 mod ui;
-#[cfg(feature = "lan")]
-mod voice;
 mod vr_navigator;
 mod weather_cycle;
 mod weather_model;

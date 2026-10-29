@@ -21,8 +21,6 @@ pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
-#[cfg(feature = "lan")]
-mod multiplayer;
 mod omsi2_map;
 mod original;
 pub(crate) mod original_ui;
@@ -167,8 +165,6 @@ pub struct Launcher {
     logo: Option<(usize, f32)>,
     /// The graphics adapter the launcher draws with (shown on Diagnostics).
     adapter: String,
-    #[cfg(feature = "lan")]
-    pub mp: multiplayer::MultiplayerView,
     /// Server icons in the interface pipeline (by server address), and those decoded but
     /// not yet uploaded.
     pub icons: std::collections::HashMap<String, usize>,
@@ -279,8 +275,6 @@ impl Launcher {
             maps: Default::default(),
             logo: None,
             adapter: String::new(),
-            #[cfg(feature = "lan")]
-            mp: multiplayer::MultiplayerView::default(),
             icons: Default::default(),
             icons_pending: Vec::new(),
             last: Instant::now(),
@@ -1803,9 +1797,6 @@ impl Launcher {
                 Page::Vehicles => self.vehicles_page(content),
                 Page::Maps => self.maps_page(content),
                 Page::Diagnostics => diagnostics::draw(self, content),
-                #[cfg(feature = "lan")]
-                Page::Multiplayer => multiplayer::draw(self, content),
-                #[cfg(not(feature = "lan"))]
                 Page::Multiplayer => {}
                 Page::Profile => pages::profile(self, content),
                 Page::Settings => settings::settings(self, content),

@@ -1,7 +1,7 @@
 //! Everything the interface draws in a frame, as the game hands it over: the [`Frame`] and
 //! its parts (the chat, the open menu's kind, a list's timetable, a drop-down).
 
-use super::{InfoBar, Notice};
+use super::InfoBar;
 
 /// What the chat widget needs from the session each frame.
 pub struct ChatView<'a> {
@@ -99,11 +99,6 @@ pub struct Frame<'a> {
     pub tutorial: Option<(&'a str, &'a str, Option<&'a std::path::Path>, usize, usize)>,
     /// Name tags: a screen position (the point above a bus), the name and a second line.
     pub tags: Vec<((f32, f32), String, String, f32)>,
-    /// The server's notifications, oldest first.
-    pub notices: &'a [Notice],
-    /// Where the navigator is on the screen (the notifications stand over it, or under it
-    /// in a top corner); none: they go to the top middle.
-    pub notice_anchor: Option<[f32; 4]>,
     /// What kind of menu the lines belong to.
     pub menu_kind: MenuKind,
     /// The open list's title and the small line above it (the line a tour list is of).

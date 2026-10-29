@@ -50,9 +50,6 @@ pub enum Sheet {
     Start,
     /// The selected duty's roadbook and IBIS hint.
     Roadbook,
-    /// Saved dedicated servers.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    Servers,
 }
 
 /// The pages More opens.
@@ -102,13 +99,6 @@ pub struct PhoneView {
     /// A page of More that is open.
     pub page: Option<Page>,
     pub filter: String,
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub code: String,
-    /// Fields of the phone's saved-server manager.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub server_addr: String,
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub server_name: String,
 }
 
 /// The whole launcher on a phone (instead of the rail and the desktop pages).
@@ -125,10 +115,7 @@ pub fn draw(l: &mut Launcher) {
         (Tab::More, Some(p)) => embedded(l, p, body, true),
         (Tab::More, None) => more(l, body),
         (Tab::Mods, _) => embedded(l, Page::Mods, body, false),
-        #[cfg(feature = "lan")]
-        (Tab::Online, _) => online(l, body),
         // (the Online tab is hidden without LAN play)
-        #[cfg(not(feature = "lan"))]
         (Tab::Online, _) => {}
         (Tab::Play, _) => play(l, body),
     }
@@ -434,39 +421,6 @@ fn play(l: &mut Launcher, body: Rect) {
             open(l, Sheet::Livery);
         }
     }
-    // on a server: which (and the way back to driving alone)
-    #[cfg(feature = "lan")]
-    if let Some(sn) = l.state.joined_server.clone() {
-        let title = l
-            .state
-            .server_info
-            .get(&sn)
-            .and_then(|x| x.1.as_ref().ok())
-            .map(|i| i.name.clone())
-            .unwrap_or(sn);
-        let b = Rect::new(
-            pr.x + 10.0,
-            pr.y + 10.0,
-            (l.ui.width(&title, 12.5, Weight::Bold) + 70.0).min(pr.w - 20.0),
-            34.0,
-        );
-        l.ui.p().rounded(b, 17.0, Color::rgba(0, 0, 0, 0.6));
-        l.ui.icon("dns", Vec2::new(b.x + 18.0, b.center().y), 15.0, OK);
-        l.ui.text_in(
-            &title,
-            Rect::new(b.x + 32.0, b.y, b.w - 64.0, b.h),
-            12.5,
-            Weight::Bold,
-            OK,
-            Align::Left,
-        );
-        let x = Rect::new(b.right() - 32.0, b.y, 32.0, b.h);
-        let (_, _, leave) = l.ui.interact(id_of("p-leave"), x);
-        l.ui.icon("close", x.center(), 16.0, TEXT);
-        if leave {
-            l.state.leave_server();
-        }
-    }
     // the duty as four cards, the start under them
     let start_h = 54.0;
     let n = 5.0;
@@ -681,7 +635,6 @@ fn sheet(l: &mut Launcher, s: Sheet, full: Rect) {
         Sheet::Time => "Time and weather",
         Sheet::Start => "Start options",
         Sheet::Roadbook => "Roadbook and IBIS",
-        Sheet::Servers => "Saved servers",
     };
     let search = matches!(s, Sheet::Map | Sheet::Bus | Sheet::Duty);
     let barr = Rect::new(full.x, full.y, full.w, BAR_H);
@@ -701,10 +654,6 @@ fn sheet(l: &mut Launcher, s: Sheet, full: Rect) {
         Sheet::Time => time_sheet(l, list),
         Sheet::Start => start_sheet(l, list),
         Sheet::Roadbook => roadbook_sheet(l, list),
-        #[cfg(feature = "lan")]
-        Sheet::Servers => servers_sheet(l, list),
-        #[cfg(not(feature = "lan"))]
-        Sheet::Servers => false,
     };
     // (the bar drawn last: the list scrolls under it)
     if bar(l, barr, title, search) || back {
@@ -1280,168 +1229,6 @@ fn roadbook_sheet(l: &mut Launcher, r: Rect) -> bool {
         l,
         Rect::new(r.x + 8.0, r.bottom() - ibis_h, r.w - 16.0, ibis_h),
     );
-    false
-}
-
-#[cfg(feature = "lan")]
-fn servers_sheet(l: &mut Launcher, r: Rect) -> bool {
-    let inner = r.pad(10.0, 8.0);
-    let row = Rect::new(inner.x, inner.y, inner.w, ROW);
-    let add_w = 112.0;
-    let name_w = (inner.w * 0.28).clamp(120.0, 220.0);
-    let addr_w = (inner.w - name_w - add_w - 16.0).max(150.0);
-
-    l.ui.text_input(
-        "pserver-addr",
-        Rect::new(row.x, row.y, addr_w, row.h),
-        &mut l.phone.server_addr,
-        "Server address",
-        Some("dns"),
-    );
-    l.ui.text_input(
-        "pserver-name",
-        Rect::new(row.x + addr_w + 8.0, row.y, name_w, row.h),
-        &mut l.phone.server_name,
-        "Name",
-        None,
-    );
-    if l.ui.button(
-        "pserver-add",
-        Rect::new(row.right() - add_w, row.y, add_w, row.h),
-        "Add",
-        Some("add"),
-        ButtonKind::Primary,
-    ) {
-        let addr = l.phone.server_addr.trim().to_string();
-        if addr.is_empty() {
-            l.state.set_status("Type the server's address first", true);
-        } else if l
-            .state
-            .servers
-            .iter()
-            .any(|s| s.address.eq_ignore_ascii_case(&addr))
-        {
-            l.state
-                .set_status("That server is in the list already", true);
-        } else {
-            l.state.servers.push(super::state::ServerEntry {
-                name: l.phone.server_name.trim().to_string(),
-                address: addr.clone(),
-            });
-            l.state.save_servers();
-            l.state.ask_server(&addr, 0.0);
-            l.phone.server_addr.clear();
-            l.phone.server_name.clear();
-        }
-    }
-
-    let controls = Rect::new(inner.x, row.bottom() + 8.0, inner.w, 38.0);
-    if l.ui.button(
-        "pserver-refresh",
-        Rect::new(controls.x, controls.y, 132.0, controls.h),
-        "Refresh",
-        Some("refresh"),
-        ButtonKind::Normal,
-    ) {
-        let addresses: Vec<String> = l.state.servers.iter().map(|s| s.address.clone()).collect();
-        for address in addresses {
-            l.state.ask_server(&address, 0.0);
-        }
-    }
-
-    let entries: Vec<super::state::ServerEntry> = l
-        .state
-        .servers
-        .iter()
-        .filter(|s| !omsi_net::official::is_alias(&s.address))
-        .cloned()
-        .collect();
-    for entry in &entries {
-        l.state.ask_server(&entry.address, 15.0);
-    }
-    let list = Rect::new(
-        inner.x,
-        controls.bottom() + 8.0,
-        inner.w,
-        inner.bottom() - controls.bottom() - 8.0,
-    );
-    let mut join_addr: Option<String> = None;
-    let mut remove_addr: Option<String> = None;
-    l.ui.scroll_area("pserver-list", list, &mut |ui, v| {
-        if entries.is_empty() {
-            ui.text_in(
-                "No saved servers yet.",
-                Rect::new(v.x + 12.0, v.y, v.w - 24.0, 40.0),
-                13.0,
-                Weight::Regular,
-                TEXT_DIM,
-                Align::Left,
-            );
-        }
-        for (k, entry) in entries.iter().enumerate() {
-            let rr = Rect::new(v.x, v.y + k as f32 * (ROW_H + 8.0), v.w - 8.0, ROW_H);
-            ui.p().rounded(rr, 10.0, FIELD);
-            let info = l.state.server_info.get(&entry.address).map(|x| x.1.clone());
-            let name = if !entry.name.is_empty() {
-                entry.name.clone()
-            } else {
-                info.as_ref()
-                    .and_then(|x| x.as_ref().ok())
-                    .map(|x| x.name.clone())
-                    .unwrap_or_else(|| entry.address.clone())
-            };
-            let sub = match info {
-                Some(Ok(i)) => format!("{} / {} players · {}", i.players, i.max_players, i.motd),
-                Some(Err(e)) => format!("Can't reach it: {e}"),
-                None => "Asking…".into(),
-            };
-            ui.text_in(
-                &name,
-                Rect::new(rr.x + 14.0, rr.y + 7.0, rr.w - 190.0, 21.0),
-                14.0,
-                Weight::Bold,
-                TEXT,
-                Align::Left,
-            );
-            ui.text_in(
-                &sub,
-                Rect::new(rr.x + 14.0, rr.y + 31.0, rr.w - 190.0, 18.0),
-                11.5,
-                Weight::Regular,
-                TEXT_DIM,
-                Align::Left,
-            );
-            if ui.button(
-                &format!("pserver-join-{k}"),
-                Rect::new(rr.right() - 142.0, rr.y + 12.0, 92.0, 38.0),
-                "Join",
-                Some("login"),
-                ButtonKind::Primary,
-            ) {
-                join_addr = Some(entry.address.clone());
-            }
-            if ui.icon_button(
-                &format!("pserver-del-{k}"),
-                Vec2::new(rr.right() - 24.0, rr.center().y),
-                16.0,
-                "delete",
-                "Remove server",
-            ) {
-                remove_addr = Some(entry.address.clone());
-            }
-        }
-        entries.len().max(1) as f32 * (ROW_H + 8.0)
-    });
-    if let Some(addr) = remove_addr {
-        if let Some(k) = l.state.servers.iter().position(|s| s.address == addr) {
-            l.state.servers.remove(k);
-            l.state.save_servers();
-        }
-    }
-    if let Some(addr) = join_addr {
-        join(l, &addr);
-        return l.state.joined_server.as_deref() == Some(addr.as_str());
-    }
     false
 }
 
@@ -2030,260 +1817,6 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
     done
 }
 
-#[cfg(feature = "lan")]
-fn online(l: &mut Launcher, body: Rect) {
-    let inner = body.pad(12.0, 12.0);
-    // (multiplayer is disabled in this version: nothing to join, nothing is asked)
-    if true {
-        l.ui.paragraph(
-            "Multiplayer is disabled while its structure is redone. Single-player is unaffected.",
-            Vec2::new(inner.x, inner.y),
-            inner.w,
-            14.0,
-            Weight::Regular,
-            TEXT,
-        );
-        return;
-    }
-    let official = omsi_net::official::ALIAS;
-    l.state.ask_server(official, 15.0);
-    // the official server, first and large
-    let card = Rect::new(inner.x, inner.y, inner.w, 104.0);
-    l.ui.p().rounded(card, 16.0, FIELD);
-    l.ui.p()
-        .rounded(Rect::new(card.x, card.y, 5.0, card.h), 2.5, accent());
-    let ir = Rect::new(card.x + 18.0, card.y + 18.0, 68.0, 68.0);
-    match l.icons.get(official) {
-        Some(tex) => l.ui.image(ir, *tex, 12.0),
-        None => {
-            l.ui.p().rounded(ir, 12.0, SELECTED);
-            l.ui.icon("public", ir.center(), 32.0, accent());
-        }
-    }
-    let info = l.state.server_info.get(official).map(|x| x.1.clone());
-    if let Some(Ok(i)) = info.as_ref() {
-        if !i.icon.is_empty()
-            && !l.icons.contains_key(official)
-            && !l.icons_pending.iter().any(|p| p.0 == official)
-        {
-            if let Ok(img) = image::load_from_memory(&i.icon) {
-                l.icons_pending.push((official.to_string(), img.to_rgba8()));
-            }
-        }
-    }
-    let tx = ir.right() + 16.0;
-    let tw = card.right() - tx - 170.0;
-    l.ui.text_in(
-        omsi_net::official::NAME,
-        Rect::new(tx, card.y + 14.0, tw, 24.0),
-        17.0,
-        Weight::Bold,
-        TEXT,
-        Align::Left,
-    );
-    let (line1, line2, c) = match info.as_ref() {
-        Some(Ok(i)) => {
-            let map = std::path::Path::new(&i.map.replace('\\', "/"))
-                .parent()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            (
-                format!("{} / {} players online · {map}", i.players, i.max_players),
-                i.motd.clone(),
-                OK,
-            )
-        }
-        Some(Err(e)) => (e.clone(), String::new(), DANGER),
-        None => ("Looking for the server…".into(), String::new(), TEXT_DIM),
-    };
-    l.ui.text_in(
-        &line1,
-        Rect::new(tx, card.y + 42.0, tw, 18.0),
-        13.0,
-        Weight::Medium,
-        c,
-        Align::Left,
-    );
-    l.ui.text_in(
-        &line2,
-        Rect::new(tx, card.y + 62.0, tw, 30.0),
-        12.0,
-        Weight::Regular,
-        TEXT_DIM,
-        Align::Left,
-    );
-    let joined = l.state.joined_server.as_deref() == Some(official);
-    let jb = Rect::new(card.right() - 156.0, card.y + 26.0, 140.0, 52.0);
-    if joined {
-        if l.ui
-            .button("po-leave", jb, "Leave", Some("logout"), ButtonKind::Danger)
-        {
-            l.state.leave_server();
-        }
-    } else if l.ui.button(
-        "po-join",
-        jb,
-        "Join",
-        Some("play_arrow"),
-        ButtonKind::Primary,
-    ) {
-        join(l, official);
-    }
-    // a friend's game by its code, and hosting one's own
-    let row = Rect::new(inner.x, card.bottom() + 14.0, inner.w, 52.0);
-    let code_w = row.w - 150.0 - 12.0;
-    l.ui.text_input(
-        "po-code",
-        Rect::new(row.x, row.y, code_w, row.h),
-        &mut l.phone.code,
-        "A friend's code or a server address",
-        Some("key"),
-    );
-    if l.ui.button(
-        "po-code-join",
-        Rect::new(row.right() - 150.0, row.y, 150.0, row.h),
-        "Join",
-        Some("login"),
-        ButtonKind::Normal,
-    ) {
-        let c = l.phone.code.trim().to_string();
-        if c.is_empty() {
-            l.state.set_status(
-                "Type the code your friend's game shows (or a server's address)",
-                true,
-            );
-        } else if omsi_net::ws::ws_url(&c).is_some()
-            || omsi_net::official::is_alias(&c)
-            || l.state.server_info.get(&c).is_some_and(|i| i.1.is_ok())
-        {
-            join(l, &c);
-        } else {
-            // a session code or a friend's address (a server's too: asked meanwhile, and
-            // joined through its web gateway once it has answered): joined when the game starts
-            if !omsi_net::looks_like_code(&c) {
-                l.state.ask_server(&c, 5.0);
-            }
-            l.state.choice.lan_mode = "join".into();
-            l.state.choice.lan_addr = c;
-            l.state.joined_server = None;
-            l.state.touched();
-            l.phone.tab = Tab::Play;
-            l.state
-                .set_status("Choose your bus and press Start to join your friend", false);
-        }
-    }
-    let mut host = l.state.choice.lan_mode == "host";
-    let hr = Rect::new(inner.x, row.bottom() + 12.0, inner.w, 44.0);
-    l.ui.p().rounded(hr, 12.0, FIELD);
-    l.ui.text_in(
-        "Host my next game",
-        Rect::new(hr.x + 16.0, hr.y, hr.w - 120.0, hr.h),
-        14.0,
-        Weight::Medium,
-        TEXT,
-        Align::Left,
-    );
-    if l.ui.toggle(
-        "po-host",
-        Rect::new(hr.right() - 70.0, hr.y + 8.0, 56.0, 28.0),
-        &mut host,
-        "",
-    ) {
-        l.state.choice.lan_mode = if host { "host".into() } else { "off".into() };
-        l.state.joined_server = None;
-        l.state.touched();
-        if host {
-            l.state.set_status(
-                "Your next game is hosted: its code shows in the game for your friends",
-                false,
-            );
-        }
-    }
-    // the other servers of the list, plus the phone-native manager for adding/removing them.
-    let manage = Rect::new(inner.x, hr.bottom() + 10.0, inner.w, 38.0);
-    if l.ui.button(
-        "po-manage-servers",
-        manage,
-        "Manage saved servers",
-        Some("dns"),
-        ButtonKind::Normal,
-    ) {
-        open(l, Sheet::Servers);
-    }
-    let others: Vec<super::state::ServerEntry> = l
-        .state
-        .servers
-        .iter()
-        .filter(|s| !omsi_net::official::is_alias(&s.address))
-        .cloned()
-        .collect();
-    let list = Rect::new(
-        inner.x,
-        manage.bottom() + 8.0,
-        inner.w,
-        inner.bottom() - manage.bottom() - 8.0,
-    );
-    for e in &others {
-        l.state.ask_server(&e.address, 15.0);
-    }
-    let mut pick = None;
-    let rows: Vec<(String, String, String)> = others
-        .iter()
-        .map(|e| {
-            let info = l.state.server_info.get(&e.address).map(|x| x.1.clone());
-            let name = if !e.name.is_empty() {
-                e.name.clone()
-            } else {
-                info.as_ref()
-                    .and_then(|i| i.as_ref().ok())
-                    .map(|i| i.name.clone())
-                    .unwrap_or_else(|| e.address.clone())
-            };
-            let sub = match info {
-                Some(Ok(i)) => format!("{} / {} players · {}", i.players, i.max_players, i.motd),
-                Some(Err(err)) => format!("Can't reach it: {err}"),
-                None => "Asking…".into(),
-            };
-            (e.address.clone(), name, sub)
-        })
-        .collect();
-    if list.h > 40.0 {
-        l.ui.scroll_area("po-servers", list, &mut |ui, v| {
-            if rows.is_empty() {
-                ui.text_in(
-                    "No saved servers yet. Add one with Manage saved servers above.",
-                    Rect::new(v.x + 8.0, v.y, v.w - 16.0, 30.0),
-                    12.0,
-                    Weight::Regular,
-                    TEXT_FAINT,
-                    Align::Left,
-                );
-            }
-            for (k, (addr, name, sub)) in rows.iter().enumerate() {
-                let rr = Rect::new(v.x, v.y + k as f32 * (ROW_H + 6.0), v.w - 8.0, ROW_H);
-                if big_row(ui, &format!("psv-{k}"), rr, name, sub, false, None) {
-                    pick = Some(addr.clone());
-                }
-            }
-            rows.len().max(1) as f32 * (ROW_H + 6.0)
-        });
-    }
-    if let Some(a) = pick {
-        join(l, &a);
-    }
-}
-
-#[cfg(feature = "lan")]
-fn join(l: &mut Launcher, address: &str) {
-    l.state.ask_server(address, 5.0);
-    l.state.join_server(address, super::state::JoinProto::Auto);
-    if l.state.joined_server.as_deref() == Some(address) {
-        l.phone.tab = Tab::Play;
-        l.go(Page::Drive);
-    }
-}
-
 fn more(l: &mut Launcher, body: Rect) {
     let inner = body.pad(12.0, 12.0);
     let cols = if inner.w > 700.0 { 4 } else { 2 };
@@ -2355,9 +1888,6 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         // (the phone chooses the bus and the map in its sheets, see `Sheet`)
         Page::Vehicles | Page::Maps => super::drive::draw(l, content),
         Page::Diagnostics => super::diagnostics::draw(l, content),
-        #[cfg(feature = "lan")]
-        Page::Multiplayer => super::multiplayer::draw(l, content),
-        #[cfg(not(feature = "lan"))]
         Page::Multiplayer => {}
         Page::Profile => super::pages::profile(l, content),
         Page::Settings => super::settings::settings(l, content),

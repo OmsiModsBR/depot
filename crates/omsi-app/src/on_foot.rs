@@ -19,8 +19,6 @@ use winit::keyboard::KeyCode;
 
 /// The local player's avatar key (other players' walkers are `REMOTE_KEY + id`).
 pub(crate) const AVATAR_KEY: u32 = 0;
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub(crate) const REMOTE_KEY: u32 = 1_000_000;
 
 /// Walking and running pace (m/s), how quickly the walker gets to it (1/s), jump speed.
 pub const WALK: f64 = 1.45;
@@ -318,10 +316,6 @@ impl App {
             for c in &t.cars {
                 add(&c.vehicle);
             }
-        }
-        #[cfg(feature = "lan")]
-        for rm in self.online.remotes.remotes.values() {
-            add(rm.vehicle());
         }
         boxes
     }
@@ -1487,165 +1481,5 @@ impl App {
     pub(crate) fn foot_bus(&self) -> Option<BusId> {
         let f = self.on_foot.as_ref()?;
         f.seat.map(|s| s.0).or(f.inside.map(|i| i.0))
-    }
-
-    /// The pose other players see of this one on foot (None at the wheel).
-    #[cfg(feature = "lan")]
-    pub(crate) fn walker_pose(&self) -> Option<omsi_net::Walker> {
-        let f = self.on_foot.as_ref()?;
-        // aboard a player's bus (ours or another's): where in it, so that the others draw
-        // us in that bus as it drives
-        let my_id = self
-            .online
-            .lan
-            .as_ref()
-            .map(|l| l.my_id)
-            .filter(|i| *i != 0);
-        let owner = |b: BusId| match b {
-            BusId::Player => my_id,
-            BusId::Ai(x) => crate::humans::remote_bus_player(x),
-        };
-        let aboard = match (f.seat, f.inside) {
-            (Some((b, k)), _) => owner(b).map(|o| omsi_net::Aboard {
-                owner: o,
-                local: self
-                    .humans
-                    .as_ref()
-                    .and_then(|h| h.seat_stand(b, k))
-                    .map(|l| l.to_array())
-                    .unwrap_or_default(),
-                seat: Some(k as u16),
-            }),
-            (None, Some((b, l))) => owner(b).map(|o| omsi_net::Aboard {
-                owner: o,
-                local: l.to_array(),
-                seat: None,
-            }),
-            _ => None,
-        };
-        // (the way it goes, which is not where the body faces when it steps sideways)
-        let course = if f.vel.length() > 0.05 {
-            f.vel.x.atan2(f.vel.y).to_degrees() as f32
-        } else {
-            f.heading as f32
-        };
-        Some(omsi_net::Walker {
-            x: f.pos.x,
-            y: f.pos.y,
-            z: f.pos.z + f.lift,
-            heading: f.heading as f32,
-            speed: f.vel.length() as f32,
-            course,
-            seated: f.seat.is_some(),
-            aboard,
-        })
-    }
-
-    /// Other players on foot: their avatars.
-    #[cfg(feature = "lan")]
-    pub(crate) fn sync_remote_walkers(&mut self) {
-        let walkers: Vec<(u32, Option<omsi_net::Walker>, String)> = self
-            .online
-            .remotes
-            .remotes
-            .iter()
-            .map(|(id, r)| (*id, r.last.walker, r.last.figure.clone()))
-            .collect();
-        if walkers.iter().all(|w| w.1.is_none()) && self.online.remote_walkers.is_empty() {
-            return;
-        }
-        if walkers.iter().any(|w| w.1.is_some()) && self.humans.is_none() {
-            let mut h = Humans::new(&self.args.root);
-            h.avatar_only = true;
-            self.humans = Some(h);
-        }
-        let (Some(h), Some(w), Some(r), Some(scene)) = (
-            self.humans.as_mut(),
-            self.world.as_ref(),
-            self.renderer.as_ref(),
-            self.scene.as_mut(),
-        ) else {
-            return;
-        };
-        let my_id = self.online.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
-        let mut now = Vec::new();
-        for (id, wk, figure) in walkers {
-            let Some(wk) = wk else { continue };
-            // (the way it goes: an older game sends none, then its facing)
-            let hh = (if wk.course.is_finite() {
-                wk.course
-            } else {
-                wk.heading
-            } as f64)
-                .to_radians();
-            // the player's own figure, as their game draws them (a random passenger's
-            // otherwise), else one fixed by their id
-            let kind = omsi_content::remote_path::human_path(&figure)
-                .map(|rel| omsi_cfg::resolve_path(&self.args.root, &rel))
-                .filter(|p| omsi_cfg::vfs::exists(p))
-                .and_then(|p| crate::driver::cached_type(&p))
-                .map(|t| h.type_index(t) as u64)
-                .unwrap_or(id as u64 * 13 + 5);
-            // aboard a player's bus (ours, or a third player's): in that bus's frame as it
-            // is drawn here, on its seat or its floor
-            let aboard = wk.aboard.and_then(|a| {
-                let bus = if a.owner == my_id {
-                    BusId::Player
-                } else {
-                    BusId::Ai(crate::humans::remote_bus_id(a.owner))
-                };
-                let (at, bh) = h.cabin_world(bus, glam::Vec3::from(a.local))?;
-                Some((bus, a.seat, at, bh))
-            });
-            let cmd = match aboard {
-                Some((bus, Some(k), at, _)) => AvatarCmd {
-                    pos: at,
-                    heading: wk.heading as f64,
-                    vel: DVec2::ZERO,
-                    lift: 0.0,
-                    seat: Some((bus, k as usize)),
-                    floor: Some(at.z),
-                    aboard: None,
-                },
-                Some((bus, None, at, _)) => AvatarCmd {
-                    pos: at,
-                    heading: wk.heading as f64,
-                    vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64,
-                    lift: 0.0,
-                    seat: None,
-                    floor: Some(at.z),
-                    aboard: wk.aboard.map(|a| (bus, glam::Vec3::from(a.local))),
-                },
-                // (sitting in a bus that is not a player's: not drawn - its seat is not known)
-                None if wk.seated => continue,
-                None => AvatarCmd {
-                    pos: DVec3::new(wk.x, wk.y, wk.z),
-                    heading: wk.heading as f64,
-                    vel: DVec2::new(hh.sin(), hh.cos()) * wk.speed as f64,
-                    lift: 0.0,
-                    seat: None,
-                    floor: w
-                        .walk_height(wk.x, wk.y)
-                        .filter(|g| wk.z > g + 0.25)
-                        .map(|_| wk.z),
-                    aboard: None,
-                },
-            };
-            h.avatar(REMOTE_KEY + id, w, r, scene, cmd, kind);
-            if !self.online.remote_walkers.contains(&id) {
-                log::info!(
-                    "LAN: player {id} got up and walks at ({:.1}, {:.1})",
-                    wk.x,
-                    wk.y
-                );
-            }
-            now.push(id);
-        }
-        for id in std::mem::take(&mut self.online.remote_walkers) {
-            if !now.contains(&id) {
-                h.avatar_remove(REMOTE_KEY + id);
-            }
-        }
-        self.online.remote_walkers = now;
     }
 }

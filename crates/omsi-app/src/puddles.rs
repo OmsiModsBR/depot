@@ -298,10 +298,6 @@ pub fn road_wetness(wetness: f32, snow: bool) -> f32 {
     }
 }
 
-/// The key of a LAN player's vehicle (`| id`) beside the AI's (their ids + 1) and the
-/// player's own (0).
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub const REMOTE_KEY: u64 = 1 << 40;
 /// The weather's wind at the height of the spray, in the lee of the street and the traffic.
 pub const GROUND_WIND: f32 = 0.4;
 

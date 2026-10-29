@@ -152,54 +152,6 @@ impl Editor {
         Some(self.describe(world))
     }
 
-    /// What the other players' games need to show the object being edited as it is now
-    /// (`all`: every object edited or added this session): LAN commands, see
-    /// `App::editor_broadcast`.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn sync_lines(&self, world: &World, root: &Path, all: bool) -> Vec<String> {
-        let mut out = Vec::new();
-        let edits = world.object_edits.lock();
-        let line = |id: i64, e: &ObjectEdit| {
-            format!(
-                "objedit {id} {:.3} {:.3} {:.3} {:.2} {}",
-                e.moved.x, e.moved.y, e.moved.z, e.turned, e.deleted as u8
-            )
-        };
-        if all {
-            for (id, e) in edits.iter() {
-                out.push(line(*id, e));
-            }
-        } else if let (None, Some(id)) = (self.editing_added, self.selected) {
-            if let Some(e) = edits.get(&id) {
-                out.push(line(id, e));
-            }
-        }
-        let added_line = |a: &Added| {
-            let rel = a
-                .sco
-                .strip_prefix(root)
-                .unwrap_or(&a.sco)
-                .to_string_lossy()
-                .replace('\\', "/");
-            let p = a.base + a.moved;
-            format!(
-                "objadd {} {:.2} {:.2} {:.2} {:.1} {} {rel}",
-                a.id,
-                p.x,
-                p.y,
-                p.z,
-                a.base_heading + a.turned,
-                a.deleted as u8
-            )
-        };
-        if all {
-            out.extend(self.added.iter().map(added_line));
-        } else if let Some(a) = self.editing_added.and_then(|k| self.added.get(k)) {
-            out.push(added_line(a));
-        }
-        out
-    }
-
     /// Change the selected object; returns what to say.
     pub fn apply(
         &mut self,

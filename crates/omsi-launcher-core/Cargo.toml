@@ -30,11 +30,6 @@ omsi-vehicle = { path = "../omsi-vehicle" }
 omsi-timetable = { path = "../omsi-timetable" }
 omsi-content = { path = "../omsi-content" }
 omsi-model = { path = "../omsi-model" }
-omsi-net = { path = "../omsi-net", optional = true }
-
-[features]
-# checking a LAN join code or address (`describe_join`)
-lan = ["dep:omsi-net"]
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

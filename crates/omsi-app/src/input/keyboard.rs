@@ -2,8 +2,6 @@
 
 use crate::app::App;
 use crate::keys;
-#[cfg(feature = "lan")]
-use crate::lan;
 use crate::player::{digit_of, fallback_action};
 use crate::situation::apply_situation;
 use crate::startup::shift_held_now;
@@ -280,43 +278,6 @@ impl App {
         }
         if let PhysicalKey::Code(code) = event_key {
             let pressed = pressed;
-            // LAN chat: its keys (`chat_open`, '/' or '`', and `chat_toggle`, V, in keyboard.cfg's
-            // [game]: the player can move them, #130) open the line and show or hide the
-            // chat, and while the line is open the keys are its own
-            #[cfg(feature = "lan")]
-            if let Some(l) = self.online.lan.as_mut() {
-                let held =
-                    |a: KeyCode, b: KeyCode| self.keys.contains(&a) || self.keys.contains(&b);
-                let chord = omsi_content::input::chord(
-                    held(KeyCode::ShiftLeft, KeyCode::ShiftRight),
-                    held(KeyCode::ControlLeft, KeyCode::ControlRight),
-                    held(KeyCode::AltLeft, KeyCode::AltRight),
-                );
-                let bound = if held(KeyCode::SuperLeft, KeyCode::SuperRight) {
-                    None
-                } else {
-                    keys::dik_code(code).and_then(|scan| {
-                        self.game_keys
-                            .iter()
-                            .find(|b| {
-                                b.scan_code == scan
-                                    && b.matches(chord)
-                                    && b.action.to_ascii_lowercase().starts_with("chat_")
-                            })
-                            .map(|b| b.action.clone())
-                    })
-                };
-                if lan::chat_key(
-                    l,
-                    &mut self.online.remotes,
-                    code,
-                    pressed,
-                    repeat,
-                    bound.as_deref(),
-                ) {
-                    return;
-                }
-            }
             if pressed && !repeat {
                 self.keys.insert(code);
             } else if !pressed {

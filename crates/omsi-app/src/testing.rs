@@ -61,10 +61,6 @@ pub mod about {
 pub mod actions {
     pub use crate::actions::*;
 }
-#[cfg(feature = "lan")]
-pub mod admin {
-    pub use crate::admin::*;
-}
 pub mod api_limits {
     pub use crate::api_limits::*;
 }
@@ -175,7 +171,6 @@ pub mod hud {
     pub use crate::hud::domain::*;
     pub use crate::hud::implementation::legacy::oft::*;
     pub use crate::hud::implementation::legacy::*;
-    pub use crate::hud::implementation::*;
 }
 pub mod humans {
     pub use crate::humans::*;
@@ -200,18 +195,6 @@ pub mod journey {
 }
 pub mod keys {
     pub use crate::keys::*;
-}
-#[cfg(feature = "lan")]
-pub mod lan {
-    pub use crate::lan::*;
-}
-#[cfg(feature = "lan")]
-pub mod lan_mods {
-    pub use crate::lan_mods::*;
-}
-#[cfg(feature = "lan")]
-pub mod lan_world {
-    pub use crate::lan_world::*;
 }
 pub mod launcher {
     pub use crate::launcher::*;
@@ -325,9 +308,6 @@ pub mod nav {
         pub use crate::nav::lines::*;
     }
 }
-pub mod offscreen {
-    pub use crate::offscreen::*;
-}
 pub mod on_foot {
     pub use crate::on_foot::*;
 }
@@ -337,14 +317,6 @@ pub mod openxr {
 }
 pub mod player {
     pub use crate::player::*;
-}
-#[cfg(feature = "plugins")]
-pub mod plugin_ui {
-    pub use crate::plugin_ui::*;
-}
-#[cfg(feature = "plugins")]
-pub mod plugins {
-    pub use crate::plugins::*;
 }
 pub mod puddles {
     pub use crate::puddles::*;
@@ -378,10 +350,6 @@ pub mod schedule_paper {
 }
 pub mod screenshot_name {
     pub use crate::screenshot_name::*;
-}
-#[cfg(feature = "server")]
-pub mod server {
-    pub use crate::server::*;
 }
 pub mod services {
     pub use crate::services::*;
@@ -584,8 +552,6 @@ pub mod ui {
                 info_room: None,
                 tutorial: None,
                 tags: Vec::new(),
-                notices: &[],
-                notice_anchor: None,
                 menu_kind: kind,
                 menu_head: Some(("Options".into(), String::new())),
                 menu_preview: None,
@@ -631,10 +597,6 @@ pub mod ui {
     pub mod windows {
         pub use crate::ui::domain::windows::*;
     }
-}
-#[cfg(feature = "lan")]
-pub mod voice {
-    pub use crate::voice::*;
 }
 pub mod vr_navigator {
     pub use crate::vr_navigator::*;

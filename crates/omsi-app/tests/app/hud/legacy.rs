@@ -34,63 +34,6 @@ fn the_frame_rate_dot_follows_the_rate() {
 }
 
 #[test]
-fn a_server_notice_is_read_and_fades() {
-    let (id, n) = Notice::parse("a1b2 5 warn Service 15/5: departure at 06:07 | depot").unwrap();
-    assert_eq!(id, "a1b2");
-    assert_eq!(
-        (n.kind, n.text.as_str(), n.total, n.left),
-        (
-            NoticeKind::Warn,
-            "Service 15/5: departure at 06:07 | depot",
-            5.0,
-            5.0
-        )
-    );
-    // seconds held to 2 .. 30, an unknown kind is information
-    assert_eq!(Notice::parse("x 0.5 info hi").unwrap().1.total, 2.0);
-    assert_eq!(
-        Notice::parse("x 600 whatever hi").unwrap().1,
-        Notice {
-            kind: NoticeKind::Info,
-            text: "hi".into(),
-            left: 30.0,
-            total: 30.0
-        }
-    );
-    // no text, no seconds, nothing: not a notice
-    for bad in [
-        "",
-        "x",
-        "x 5",
-        "x 5 info",
-        "x 5 info   ",
-        "x five info hi",
-        "x NaN info hi",
-    ] {
-        assert!(Notice::parse(bad).is_none(), "{bad}");
-    }
-    // fades in, stays, fades out
-    let mut n = Notice::parse("x 5 alert hi").unwrap().1;
-    assert_eq!(n.alpha(), 0.0);
-    n.left = 4.0;
-    assert_eq!(n.alpha(), 1.0);
-    n.left = 0.25;
-    assert!((n.alpha() - 0.5).abs() < 1e-6);
-    // three at most: the oldest goes
-    let mut list = Vec::new();
-    for k in 0..5 {
-        push_notice(
-            &mut list,
-            Notice::parse(&format!("{k} 5 info n{k}")).unwrap().1,
-        );
-    }
-    assert_eq!(
-        list.iter().map(|n| n.text.as_str()).collect::<Vec<_>>(),
-        ["n2", "n3", "n4"]
-    );
-}
-
-#[test]
 fn centre_hud_moves_menu_controls_and_chat_hitboxes_together() {
     let mut ui = Ui::new().unwrap();
     ui.hits.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
@@ -293,16 +236,4 @@ fn destinations_split_into_code_and_name() {
     );
     assert_eq!(testing::hud::code_and_name("Route number: 5..."), None);
     assert_eq!(testing::hud::code_and_name("Line 76  (1 tours)"), None);
-}
-
-#[test]
-fn chat_filter_stars_out_swearing() {
-    assert_ne!(
-        filter_chat("you are a fucking idiot"),
-        "you are a fucking idiot"
-    );
-    assert_eq!(
-        filter_chat("next stop Rathaus Spandau"),
-        "next stop Rathaus Spandau"
-    );
 }

@@ -1215,7 +1215,7 @@ fn leaving_the_terminal_of_a_circular_line_skips_no_stop() {
     ] {
         drive(&mut duty, &mut bus, (x, 0.0), 90.0, t);
     }
-    assert_eq!(duty.take_skipped(), None);
+    assert_eq!(duty.skipped.take(), None);
     assert_eq!(duty.next_stop, 1);
     assert!(!duty.done);
 }
@@ -1239,7 +1239,7 @@ fn a_skipped_stop_far_from_the_one_just_left_is_still_caught_up() {
     ] {
         drive(&mut duty, &mut bus, (x, 0.0), 90.0, t);
     }
-    assert_eq!(duty.take_skipped(), Some((1, 2, 3)));
+    assert_eq!(duty.skipped.take(), Some((1, 2, 3)));
     assert_eq!(duty.next_stop, 2);
 }
 
@@ -1861,16 +1861,16 @@ fn stops_passed_without_stopping_are_told_once() {
     d.advance(glam::DVec3::new(0.0, 0.0, 0.0), 0.0);
     d.advance(glam::DVec3::new(60.0, 0.0, 0.0), 30.0);
     assert_eq!(d.next_stop, 1);
-    assert_eq!(d.take_skipped(), None, "leaving a stop served skips none");
+    assert_eq!(d.skipped.take(), None, "leaving a stop served skips none");
     // the bus turns up at stop 4 (numbered from 1) heading on: stops 2 and 3 were passed
     d.advance(glam::DVec3::new(1000.0, 0.0, 0.0), 90.0);
     assert_eq!(d.next_stop, 3);
     assert_eq!(
-        d.take_skipped(),
+        d.skipped.take(),
         Some((2, 2, 4)),
         "two stops, due at 2, now at 4"
     );
-    assert_eq!(d.take_skipped(), None, "told once");
+    assert_eq!(d.skipped.take(), None, "told once");
 }
 
 #[test]

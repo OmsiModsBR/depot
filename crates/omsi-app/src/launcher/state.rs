@@ -68,80 +68,9 @@ pub enum Msg {
     Installed(Result<core::install::Progress, String>),
     /// A job of the original OMSI 2 mode (`original.rs`).
     Original(super::original::Event),
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    Join(serde_json::Value),
-    #[cfg(feature = "lan")]
-    Server {
-        address: String,
-        info: Result<omsi_net::ws::ServerInfo, String>,
-    },
     /// A background job stopped on an error of its own (a panic): whatever it was loading
     /// is not coming.
     Crashed(String),
-}
-
-/// A server in the Multiplayer page's list (`~/.depot/servers.json`), as the player
-/// added it: its address (`https://….trycloudflare.com`, `http://host:port`) and a name of
-/// their own (empty: the server's).
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-#[serde(default)]
-pub struct ServerEntry {
-    pub name: String,
-    pub address: String,
-}
-
-/// How the Multiplayer page joins a server.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(not(feature = "lan"), allow(dead_code))]
-pub enum JoinProto {
-    /// The web gateway where the server answered, else UDP.
-    #[default]
-    Auto,
-    /// Straight to the game port over UDP (no status needed).
-    Udp,
-    /// Through the server's web gateway (a WebSocket).
-    WebSocket,
-}
-
-/// A code host's status page (its gateway is the session's port + 10).
-#[cfg(feature = "lan")]
-fn host_status(code: &str) -> Result<omsi_net::ws::ServerInfo, String> {
-    let c = omsi_net::SessionCode::decode(code)?;
-    for a in c.addrs().into_iter().take(3) {
-        if let Ok(i) = omsi_net::ws::query(
-            &format!("http://{}:{}", a.ip(), a.port().saturating_add(10)),
-            false,
-        ) {
-            return Ok(i);
-        }
-    }
-    match omsi_net::bridge::lookup_tunnel(c.session) {
-        Some(url) => omsi_net::ws::query(&url, false),
-        None => Err("the host did not answer".into()),
-    }
-}
-
-/// The list as saved, with the official server first when it is not in it.
-#[cfg_attr(not(feature = "lan"), allow(unused_mut))]
-fn with_official(mut list: Vec<ServerEntry>) -> Vec<ServerEntry> {
-    #[cfg(feature = "lan")]
-    if !list
-        .iter()
-        .any(|s| omsi_net::official::is_alias(&s.address))
-    {
-        list.insert(
-            0,
-            ServerEntry {
-                name: omsi_net::official::NAME.into(),
-                address: omsi_net::official::ALIAS.into(),
-            },
-        );
-    }
-    list
-}
-
-fn servers_path() -> std::path::PathBuf {
-    core::data_dir().join("servers.json")
 }
 
 /// The duty as it is remembered between launches (`~/.depot/launcher-duty.json`).
@@ -410,8 +339,6 @@ pub struct State {
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,
     pub cmdline: String,
     pub join: (bool, String),
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub join_checked: String,
     pub logs: std::collections::HashMap<u32, Vec<String>>,
     pub open_logs: std::collections::HashSet<u32>,
     pub stopping: std::collections::HashSet<u32>,
@@ -421,15 +348,7 @@ pub struct State {
     stamp: Option<String>,
     poll_t: f32,
     polling: bool,
-    /// Multiplayer: the saved servers, what each said last (and when it was asked), and the
-    /// one the Drive page is joined to now (its address).
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub servers: Vec<ServerEntry>,
-    #[cfg(feature = "lan")]
-    pub server_info:
-        std::collections::HashMap<String, (Instant, Result<omsi_net::ws::ServerInfo, String>)>,
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub server_asked: std::collections::HashMap<String, Instant>,
+    /// Multiplayer: the server the Drive page is joined to now (its address).
     pub joined_server: Option<String>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -499,7 +418,6 @@ impl State {
             ibis: None,
             cmdline: String::new(),
             join: (true, String::new()),
-            join_checked: "\u{0}".into(),
             logs: Default::default(),
             open_logs: Default::default(),
             stopping: Default::default(),
@@ -508,15 +426,6 @@ impl State {
             stamp: None,
             poll_t: 0.0,
             polling: false,
-            servers: with_official(
-                std::fs::read(servers_path())
-                    .ok()
-                    .and_then(|b| serde_json::from_slice(&b).ok())
-                    .unwrap_or_default(),
-            ),
-            #[cfg(feature = "lan")]
-            server_info: Default::default(),
-            server_asked: Default::default(),
             joined_server: None,
             tx,
             rx,
@@ -806,177 +715,12 @@ impl State {
         });
     }
 
-    #[cfg(feature = "lan")]
-    pub fn check_join(&mut self) {
-        // (multiplayer is disabled: nothing is looked up)
-        if true {
-            return;
-        }
-        if self.join_checked == self.choice.lan_addr {
-            return;
-        }
-        self.join_checked = self.choice.lan_addr.clone();
-        let t = self.choice.lan_addr.clone();
-        self.spawn(move || Msg::Join(core::check_join(&t)));
-        // the host's status (its buses): at the code's addresses, else through its tunnel
-        if omsi_net::looks_like_code(&self.choice.lan_addr) {
-            let code = self.choice.lan_addr.clone();
-            self.spawn(move || Msg::Server {
-                info: host_status(&code),
-                address: code,
-            });
-        }
-    }
-
-    /// The buses the host or server offers (None: any, it has not said).
-    #[cfg(feature = "lan")]
-    pub fn host_vehicles(&self) -> Option<Vec<String>> {
-        if self.choice.lan_mode != "join" {
-            return None;
-        }
-        let key = self
-            .joined_server
-            .clone()
-            .unwrap_or_else(|| self.choice.lan_addr.clone());
-        let list = self
-            .server_info
-            .get(&key)?
-            .1
-            .as_ref()
-            .ok()?
-            .vehicles
-            .clone();
-        (!list.is_empty()).then_some(list)
-    }
-
     /// Without LAN play no host is looked up.
-    #[cfg(not(feature = "lan"))]
     pub fn check_join(&mut self) {}
 
     /// Without LAN play no host or server limits the buses.
-    #[cfg(not(feature = "lan"))]
     pub fn host_vehicles(&self) -> Option<Vec<String>> {
         None
-    }
-
-    /// Keep the server list on disk.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn save_servers(&self) {
-        let _ = std::fs::create_dir_all(core::data_dir());
-        let _ = std::fs::write(
-            servers_path(),
-            serde_json::to_vec_pretty(&self.servers).unwrap_or_default(),
-        );
-    }
-
-    /// Ask a server about itself (its status and icon), at most every `every` seconds.
-    #[cfg(feature = "lan")]
-    pub fn ask_server(&mut self, address: &str, every: f32) {
-        // (multiplayer is disabled: no server is asked, nothing goes on the network)
-        if true {
-            return;
-        }
-        if self
-            .server_asked
-            .get(address)
-            .map(|t| t.elapsed().as_secs_f32() < every)
-            .unwrap_or(false)
-        {
-            return;
-        }
-        self.server_asked
-            .insert(address.to_string(), Instant::now());
-        let a = address.to_string();
-        self.spawn(move || Msg::Server {
-            info: omsi_net::ws::query(&a, true),
-            address: a,
-        });
-    }
-
-    /// The Drive page joins `address`: the server's map is the map, the session is joined.
-    /// `proto` says how: over UDP straight to the game port, over the server's web gateway
-    /// (a WebSocket), or `Auto` (the web gateway where the server answered, else UDP).
-    #[cfg(feature = "lan")]
-    pub fn join_server(&mut self, address: &str, proto: JoinProto) {
-        let info = self
-            .server_info
-            .get(address)
-            .cloned()
-            .and_then(|(_, r)| r.ok());
-        let is_web =
-            omsi_net::ws::ws_url(address).is_some() || omsi_net::official::is_alias(address);
-        let proto = match (proto, &info) {
-            (JoinProto::Auto, Some(_)) => JoinProto::WebSocket,
-            (JoinProto::Auto, None) if !is_web => JoinProto::Udp,
-            (p, _) => p,
-        };
-        let lan_addr = match proto {
-            JoinProto::Udp => {
-                if is_web {
-                    self.set_status(
-                        "UDP needs the game's address (host or host:port), not a web link",
-                        true,
-                    );
-                    return;
-                }
-                address.to_string()
-            }
-            _ => {
-                let Some(info) = info.as_ref() else {
-                    self.set_status(
-                        "The server has not answered yet (is its address right? is it running?)",
-                        true,
-                    );
-                    return;
-                };
-                // (a server added by its bare address is joined where it answered: its web gateway)
-                if !is_web && !info.reached_at.is_empty() {
-                    info.reached_at.clone()
-                } else {
-                    address.to_string()
-                }
-            }
-        };
-        if let Some(info) = info.as_ref() {
-            // A map not installed here comes with the server's mods when the game joins
-            // (`lan_mods`), so this is a notice, not a refusal.
-            // The Drive page needs a map of this installation chosen, so the choice stays
-            // as it is then: `duty()` starts the game on the server's map anyway.
-            if !self.maps.is_empty()
-                && !self
-                    .maps
-                    .iter()
-                    .any(|m| m.file.eq_ignore_ascii_case(&info.map))
-            {
-                self.set_status(omsi_ui::tr("The server plays %{map}, which is not installed here: it is fetched from the server on joining.").replace("%{map}", &info.map), false);
-            } else {
-                self.choice.map = info.map.clone();
-            }
-        }
-        self.choice.lan_mode = "join".into();
-        self.choice.lan_addr = lan_addr;
-        self.joined_server = Some(address.to_string());
-        let name = info
-            .as_ref()
-            .map(|i| i.name.clone())
-            .unwrap_or_else(|| address.to_string());
-        self.join = (
-            true,
-            omsi_ui::tr("the server %{name}").replace("%{name}", &name),
-        );
-        self.join_checked = address.to_string();
-        self.touched();
-        let how = if proto == JoinProto::Udp {
-            omsi_ui::tr(" over UDP").into_owned()
-        } else {
-            String::new()
-        };
-        self.set_status(
-            omsi_ui::tr("Joined %{name}%{how} - choose your bus and duty, then Start the duty")
-                .replace("%{name}", &name)
-                .replace("%{how}", &how),
-            false,
-        );
     }
 
     /// Back to playing alone (the Drive page's "Leave Server").
@@ -1084,21 +828,6 @@ impl State {
         // comes before the map is loaded: through a tunnel it came later, the game started
         // on the map chosen here, and the players never met ("the host drives on X10 Berlin,
         // you on Berlin-Spandau"). A map not installed here comes with the host's mods.
-        #[cfg(feature = "lan")]
-        let host_map = (c.lan_mode == "join")
-            .then(|| {
-                self.joined_server
-                    .clone()
-                    .unwrap_or_else(|| c.lan_addr.clone())
-            })
-            .and_then(|k| {
-                self.server_info
-                    .get(&k)
-                    .and_then(|x| x.1.as_ref().ok())
-                    .map(|i| i.map.trim().replace('\\', "/"))
-            })
-            .filter(|m| m.to_ascii_lowercase().contains("maps/"));
-        #[cfg(not(feature = "lan"))]
         let host_map: Option<String> = None;
         core::Duty {
             map: host_map.unwrap_or_else(|| c.map.clone()),
@@ -1343,39 +1072,6 @@ impl State {
                         .replace("%{error}", &why.to_string()),
                     true,
                 );
-            }
-            #[cfg(feature = "lan")]
-            Msg::Server { address, info } => {
-                // the host of the code typed in: its map is the one the duty is chosen on
-                // (installed here: the line, tour and entry point of another map go)
-                if self.choice.lan_mode == "join"
-                    && self.joined_server.is_none()
-                    && address == self.choice.lan_addr
-                {
-                    if let Ok(i) = &info {
-                        let theirs = i.map.trim().replace('\\', "/");
-                        if let Some((file, name)) = self
-                            .maps
-                            .iter()
-                            .find(|m| m.file.eq_ignore_ascii_case(&theirs))
-                            .map(|m| (m.file.clone(), m.name.clone()))
-                        {
-                            if !self.choice.map.eq_ignore_ascii_case(&file) {
-                                self.choice.map = file;
-                                self.choice.line = None;
-                                self.choice.tour = None;
-                                self.choice.entry = 0;
-                                self.touched();
-                                self.set_status(
-                                    omsi_ui::tr("The host drives on %{map}: that map is chosen")
-                                        .replace("%{map}", &name),
-                                    false,
-                                );
-                            }
-                        }
-                    }
-                }
-                self.server_info.insert(address, (Instant::now(), info));
             }
             Msg::ContentEarly { maps, weathers } => {
                 if !self.content_first {
@@ -1747,15 +1443,6 @@ impl State {
             }
             Msg::Installed(Err(e)) => self.set_status(e, true),
             Msg::Original(e) => self.engine_event(e),
-            Msg::Join(v) => {
-                let ok = v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
-                let text = v
-                    .get("text")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                self.join = (ok, text);
-            }
         }
     }
 
@@ -2083,31 +1770,7 @@ pub fn root_problem(root: &str) -> String {
     }
 }
 
-/// The server's message when a game ended because its server sent it away or turned it away
-/// (`lan::LEFT_SERVER` in the log of this run); None for any other end.
-#[cfg(feature = "lan")]
-pub fn disconnect_of(log: &std::path::Path) -> Option<String> {
-    let text = std::fs::read(log).ok()?;
-    let text = String::from_utf8_lossy(&text[text.len().saturating_sub(64 * 1024)..]).to_string();
-    let all: Vec<&str> = text.lines().collect();
-    let run = &all[all
-        .iter()
-        .rposition(|l| l.contains("starting the game:"))
-        .unwrap_or(0)..];
-    let line = run
-        .iter()
-        .rev()
-        .find(|l| l.contains(crate::lan::LEFT_SERVER))?;
-    let why = line.split_once(crate::lan::LEFT_SERVER)?.1.trim();
-    Some(if why.is_empty() {
-        "sent away by the host".to_string()
-    } else {
-        why.chars().take(300).collect()
-    })
-}
-
 /// Without LAN play no server sends a game away.
-#[cfg(not(feature = "lan"))]
 pub fn disconnect_of(_log: &std::path::Path) -> Option<String> {
     None
 }

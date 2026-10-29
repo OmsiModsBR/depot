@@ -155,12 +155,6 @@ impl Navigator {
         self.city.open
     }
 
-    /// Where the small navigator is on the screen, when it is shown.
-    pub fn screen_rect(&self) -> Option<[f32; 4]> {
-        let r = self.panel_rect;
-        (self.enabled && !self.city.open && r[2] > r[0]).then_some(r)
-    }
-
     /// The point (physical pixels) is on the small navigator.
     pub fn over_panel(&self, x: f32, y: f32) -> bool {
         let r = self.panel_rect;

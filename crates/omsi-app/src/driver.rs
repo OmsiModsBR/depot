@@ -404,25 +404,6 @@ impl DriverFigure {
         Self::new_with(world, renderer, scene, v, ty)
     }
 
-    /// The driver as another game has them (LAN): the figure it names by its `.hum` file
-    /// (relative to the installation), else one of the map's as `new` picks.
-    #[cfg_attr(not(feature = "lan"), allow(dead_code))]
-    pub fn new_named(
-        world: &crate::scene::World,
-        renderer: &Renderer,
-        scene: &mut Scene,
-        v: &VehicleInstance,
-        hum: &str,
-        pick: u64,
-    ) -> Option<DriverFigure> {
-        let named = omsi_content::remote_path::human_path(hum)
-            .map(|rel| omsi_cfg::resolve_path(&world.root, &rel))
-            .filter(|p| omsi_cfg::vfs::exists(p))
-            .and_then(|p| cached_type(&p));
-        let ty = named.or_else(|| driver_type(world, pick))?;
-        Self::new_with(world, renderer, scene, v, ty)
-    }
-
     fn new_with(
         world: &crate::scene::World,
         renderer: &Renderer,

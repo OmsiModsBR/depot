@@ -73,8 +73,6 @@ use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
 use crate::humans;
-#[cfg(feature = "lan")]
-use crate::lan;
 use crate::lights;
 use crate::nav;
 use crate::player::Player;
@@ -82,8 +80,6 @@ use crate::puddles;
 use crate::quit;
 use crate::startup::process_cpu_seconds;
 use crate::traffic;
-#[cfg(feature = "lan")]
-use crate::traffic_link::lan_outlines;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{
     apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
@@ -222,46 +218,6 @@ impl ApplicationHandler for App {
                             self.route_edit_text(text);
                             return;
                         }
-                    }
-                }
-                // '/' opens the chat's input box wherever the keyboard has it (the key
-                // itself is then swallowed by the chat) - but not Numpad ÷, OMSI's stock
-                // front door key (keyboard.cfg `bus_doorfront0 181`)
-                // (only while `chat_open` is on its own key: one the player moved it to is
-                // the only one, #130)
-                #[cfg(feature = "lan")]
-                if event.state == ElementState::Pressed
-                    && event.text.as_deref() == Some("/")
-                    && event.physical_key != PhysicalKey::Code(KeyCode::NumpadDivide)
-                    && self.game_keys.iter().any(|b| {
-                        b.action.eq_ignore_ascii_case("chat_open")
-                            && b.scan_code == 53
-                            && b.chord() == 0
-                    })
-                    && self.in_lan_session()
-                    && !lan::chat_open(&self.online.remotes)
-                {
-                    self.online.remotes.chat.open();
-                    if let PhysicalKey::Code(code) = event.physical_key {
-                        lan::chat_swallow(&mut self.online.remotes, code);
-                    }
-                    return;
-                }
-                // what is typed into an open LAN chat line (the key itself goes on to on_key)
-                #[cfg(feature = "lan")]
-                if let (Some(text), true, true) = (
-                    event.text.as_deref(),
-                    event.state == ElementState::Pressed,
-                    lan::chat_open(&self.online.remotes),
-                ) {
-                    lan::chat_type(&mut self.online.remotes, text);
-                }
-                // (the Lua plugins' `key` event; a key held down repeats nothing)
-                #[cfg(feature = "plugins")]
-                if let (PhysicalKey::Code(code), false) = (event.physical_key, event.repeat) {
-                    if self.plugin_keys.len() < 64 {
-                        self.plugin_keys
-                            .push((format!("{code:?}"), event.state == ElementState::Pressed));
                     }
                 }
                 // a phone's back key is Escape (the game menu, out of the city map ...)
@@ -494,17 +450,6 @@ impl ApplicationHandler for App {
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
                     || (self.view == "foot"
                         && self.foot_bus() == Some(crate::humans::BusId::Player));
-                // standing or sitting in another player's bus: that bus is drawn and heard
-                // from inside (its interior meshes, not the outside ones over them)
-                #[cfg(feature = "lan")]
-                {
-                    self.online.inside_remote = match self.foot_bus() {
-                        Some(crate::humans::BusId::Ai(x)) if self.view == "foot" => {
-                            crate::humans::remote_bus_player(x)
-                        }
-                        _ => None,
-                    };
-                }
                 let now = Instant::now();
                 let raw_dt = (now - self.last).as_secs_f32();
                 self.log_frame(raw_dt);
@@ -680,16 +625,6 @@ impl ApplicationHandler for App {
                     return;
                 }
                 if !self.drive_start(event_loop) {
-                    // the session goes on while the map loads: a big map's first area took
-                    // longer than the host waits for a silent player
-                    #[cfg(feature = "lan")]
-                    if let Some(l) = self.online.lan.as_mut() {
-                        let planned = omsi_net::Pose {
-                            bus: self.args.bus.clone().unwrap_or_default().replace('\\', "/"),
-                            ..Default::default()
-                        };
-                        l.keepalive(dt, &planned);
-                    }
                     return;
                 }
                 let __t = Instant::now();
@@ -758,14 +693,6 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map(|p| traffic::vehicle_bodies(&p.vehicle))
                             .unwrap_or_default();
-                        #[cfg(feature = "lan")]
-                        t.keep_clear.extend(
-                            self.online
-                                .remotes
-                                .remotes
-                                .values()
-                                .flat_map(|r| traffic::vehicle_bodies(r.vehicle())),
-                        );
                         if let Some(s) = self.schedule.as_mut() {
                             let window = if self.first_populate {
                                 20.0 * 60.0
@@ -802,9 +729,6 @@ impl ApplicationHandler for App {
                     t.night = daylight.brightness < 0.75 || gloomy;
                     t.daylight = Some(daylight);
                     let __t2 = Instant::now();
-                    #[cfg(feature = "lan")]
-                    let others = lan_outlines(&self.online.remotes);
-                    #[cfg(not(feature = "lan"))]
                     let others = Vec::new();
                     t.others = others;
                     t.others
@@ -927,9 +851,6 @@ impl ApplicationHandler for App {
                 let vr_on = self.vr.is_some();
                 #[cfg(not(windows))]
                 let vr_on = false;
-                #[cfg(feature = "plugins")]
-                let plugin_focus = crate::plugin_ui::focused(&self.plugins);
-                #[cfg(not(feature = "plugins"))]
                 let plugin_focus = false;
                 let needs_mouse = self.mouse_drive
                     || self.game_menu.is_some()
@@ -1926,15 +1847,6 @@ impl ApplicationHandler for App {
                             .widened(sight),
                         );
                     }
-                    // (the other LAN players' buses, for their riders to sit in)
-                    #[cfg(feature = "lan")]
-                    h.set_remote_buses(
-                        self.online
-                            .remotes
-                            .remotes
-                            .iter()
-                            .map(|(id, r)| (*id, r.vehicle())),
-                    );
                     // (and the vehicles the player placed and left, with their riders)
                     h.set_placed_buses(self.placed.iter().map(|q| (q.uid, &q.vehicle)));
                     h.set_player_next_stop(
@@ -2074,15 +1986,6 @@ impl ApplicationHandler for App {
                     let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36
                         && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
                     finished = Some((candidate, p.vehicle.position, doors));
-                    #[cfg(feature = "plugins")]
-                    if let Some((count, due_at, at)) = d.take_skipped() {
-                        use omsi_plugin::InfoValue::Num;
-                        crate::plugins::queue_event(
-                            &mut self.plugin_events,
-                            "stops_skipped",
-                            vec![Num(count as f64), Num(due_at as f64), Num(at as f64)],
-                        );
-                    }
                     if d.take_trip_change() && p.duty_typed {
                         let (trip, stop) = d.trip_for_ibis();
                         p.set_duty_destination(trip, stop);
@@ -2115,15 +2018,6 @@ impl ApplicationHandler for App {
                                 .replace("%{energy}", &format!("{:.0}", crash / 1000.0)),
                             6.0,
                         ));
-                        #[cfg(feature = "plugins")]
-                        {
-                            use omsi_plugin::InfoValue::Num;
-                            let args = vec![
-                                Num(crash as f64 / 1000.0),
-                                Num(p.vehicle.motion().velocity_kmh().abs() as f64),
-                            ];
-                            crate::plugins::queue_event(&mut self.plugin_events, "crash", args);
-                        }
                     }
                 }
                 if !self.paused {
@@ -2163,66 +2057,6 @@ impl ApplicationHandler for App {
                 if let Some(steam) = self.steam.as_ref() {
                     steam.client.run_callbacks();
                 }
-                // the plugins' frame, with the bus's scripts done
-                #[cfg(feature = "plugins")]
-                {
-                    let plugins = self.plugins.get_or_insert_with(crate::plugins::load);
-                    if !plugins.is_empty() && !self.paused {
-                        let info = crate::plugins::game_info(self);
-                        let keys = std::mem::take(&mut self.plugin_keys);
-                        let events = std::mem::take(&mut self.plugin_events);
-                        let plugins = self.plugins.as_mut().unwrap();
-                        // the vehicles around it: the AI traffic and the other players' buses
-                        let mut others: Vec<(u64, &'static str, &mut omsi_sim::VehicleInstance)> =
-                            Vec::new();
-                        if let Some(t) = self.traffic.as_mut() {
-                            others.extend(t.cars.iter_mut().map(|c| (c.id, "ai", &mut c.vehicle)));
-                        }
-                        #[cfg(feature = "lan")]
-                        others.extend(
-                            self.online.remotes.remotes.iter_mut().map(|(id, r)| {
-                                ((1u64 << 48) | *id as u64, "player", r.vehicle_mut())
-                            }),
-                        );
-                        let mut io = crate::plugins::Io {
-                            vehicle: self.player.as_mut().map(|p| &mut p.vehicle),
-                            others,
-                            dt,
-                            message: None,
-                            info,
-                            commands: Vec::new(),
-                            keys,
-                            events,
-                        };
-                        plugins.frame(&mut io);
-                        let commands = std::mem::take(&mut io.commands);
-                        if let Some(m) = io.message {
-                            self.service_msg = Some(m);
-                        }
-                        // what the plugins asked the game to do: lines of the game menu
-                        for c in commands {
-                            if let Some(k) = self.game_menu_items().iter().position(|m| m.0 == c) {
-                                let was = self.game_menu;
-                                self.menu_prev_pause = self.paused;
-                                self.menu_choose(event_loop, k);
-                                // (an action leaves the menu as it found it)
-                                if self.chooser.is_none() && was.is_none() {
-                                    self.game_menu = None;
-                                }
-                            } else {
-                                // (a line of the vehicle or world pages)
-                                self.menu_prev_pause = self.paused;
-                                self.page_action(&c);
-                            }
-                        }
-                    } else {
-                        self.plugin_keys.clear();
-                        // (while the game is paused they wait for the next frame)
-                        if self.plugins.as_ref().is_none_or(|p| p.is_empty()) {
-                            self.plugin_events.clear();
-                        }
-                    }
-                }
                 // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
                 if let (Some(p), Some(list)) =
                     (self.player.as_ref(), omsi_cfg::flags::WATCH_VARS.text())
@@ -2256,12 +2090,6 @@ impl ApplicationHandler for App {
                     if hurt > 0 {
                         self.career.crashes[1] += hurt as i32;
                         self.service_msg = Some(("Pedestrian knocked down!".into(), 6.0));
-                        #[cfg(feature = "plugins")]
-                        crate::plugins::queue_event(
-                            &mut self.plugin_events,
-                            "pedestrian",
-                            vec![omsi_plugin::InfoValue::Num(hurt as f64)],
-                        );
                     }
                 }
                 // looking around and zooming work in every view, not only the free camera
@@ -2697,8 +2525,6 @@ impl ApplicationHandler for App {
                     if let Some(t) = self.traffic.as_ref() {
                         vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
                     }
-                    #[cfg(feature = "lan")]
-                    vehicles.extend(self.online.remotes.remotes.values().map(|r| r.vehicle()));
                     let __tc = Instant::now();
                     lights::collect(w, scene, &daylight, cam.position, &vehicles);
                     *self.profile.entry("lights.collect").or_default() +=
@@ -2740,14 +2566,6 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map(|p| boxed(&p.vehicle))
                             .unwrap_or_default();
-                        #[cfg(feature = "lan")]
-                        buses.extend(
-                            self.online
-                                .remotes
-                                .remotes
-                                .values()
-                                .flat_map(|rv| boxed(rv.vehicle())),
-                        );
                         if let Some(t) = self.traffic.as_ref() {
                             buses.extend(
                                 t.cars
@@ -2803,14 +2621,6 @@ impl ApplicationHandler for App {
                                     t.cars.iter().map(|c| (c.id.wrapping_add(1), &c.vehicle)),
                                 );
                             }
-                            #[cfg(feature = "lan")]
-                            vehicles.extend(
-                                self.online
-                                    .remotes
-                                    .remotes
-                                    .iter()
-                                    .map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())),
-                            );
                             self.spray.frame(
                                 if self.paused { 0.0 } else { dt },
                                 &vehicles,
@@ -2996,19 +2806,6 @@ impl ApplicationHandler for App {
                         }
                     }
                     self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
-                    for n in self.notices.iter_mut() {
-                        n.left -= dt;
-                    }
-                    self.notices.retain(|n| n.left > 0.0);
-                    #[cfg(feature = "lan")]
-                    if let Some(lan) = self.online.lan.as_ref() {
-                        lines.extend(lan::hud_lines(
-                            lan,
-                            &self.online.remotes,
-                            self.player.as_ref(),
-                        ));
-                        lines.extend(self.online.voice.as_ref().and_then(|v| v.hud_line()));
-                    }
                     if let Some(h) = self.humans.as_ref() {
                         if let Some(hint) = h.hint() {
                             lines.push(hint);
@@ -3035,11 +2832,6 @@ impl ApplicationHandler for App {
                                     .replace("%{owed}", &format!("{owed:.2}")),
                             );
                         }
-                    }
-                    // (the cursor no longer works the cab: how to have it back)
-                    #[cfg(feature = "plugins")]
-                    if crate::plugin_ui::focused(&self.plugins) {
-                        lines.push(crate::plugin_ui::FOCUS_NOTE.into());
                     }
                     let __t = Instant::now();
                     // (the frame's overlays start empty; the notes are the interface's, in
@@ -3135,14 +2927,6 @@ impl ApplicationHandler for App {
                             |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
                         let frame = nav::NavFrame {
                             traffic: self.traffic.as_ref(),
-                            #[cfg(feature = "lan")]
-                            players: self
-                                .online
-                                .lan
-                                .as_ref()
-                                .map(|l| crate::lan::nav_players(&self.online.remotes, l.my_id))
-                                .unwrap_or_default(),
-                            #[cfg(not(feature = "lan"))]
                             players: Vec::new(),
                             bus: at,
                             heading,
@@ -3208,39 +2992,7 @@ impl ApplicationHandler for App {
                     }
                     // the Lua plugins' panels (`omsi.ui`): over the picture and the navigator,
                     // under the game's own interface; not under its menus, nor in VR
-                    #[cfg(feature = "plugins")]
-                    let plugin_focus = crate::plugin_ui::focused(&self.plugins);
-                    #[cfg(not(feature = "plugins"))]
                     let plugin_focus = false;
-                    #[cfg(feature = "plugins")]
-                    if let Some(plugin_ui) = self.plugins.as_ref().map(|p| p.ui.clone()) {
-                        let dpi = self
-                            .window
-                            .as_ref()
-                            .map_or(1.0, |w| w.scale_factor() as f32);
-                        let settings = &self.settings;
-                        let size = hud::size_factor(
-                            hud[3],
-                            dpi,
-                            settings.ui_scale,
-                            settings.ui_scale_window,
-                        );
-                        let map_open = self.navigator.as_ref().is_some_and(|n| n.map_open());
-                        let frame = crate::plugin_ui::PanelsFrame {
-                            hud,
-                            scale: dpi * size,
-                            hidden: vr_active
-                                || self.game_menu.is_some()
-                                || self.chooser.is_some()
-                                || map_open,
-                            cursor: self.cursor,
-                            dt,
-                            backdrop: hud::backdrop(settings.ui_opacity),
-                            navigator: self.navigator.as_ref().and_then(|n| n.screen_rect()),
-                        };
-                        let mut state = plugin_ui.borrow_mut();
-                        self.plugin_panels.frame(r, scene, &mut state, &frame);
-                    }
                     if let (Some(ui), Some(s)) = (self.ui.as_mut(), self.surface.as_ref()) {
                         let scale = self
                             .window
@@ -3248,66 +3000,9 @@ impl ApplicationHandler for App {
                             .map(|w| w.scale_factor() as f32)
                             .unwrap_or(1.0);
                         let (w, h) = (hud[2], hud[3]);
-                        #[cfg(feature = "lan")]
-                        {
-                            self.online.remotes.chat.disabled = !self.settings.chat;
-                        }
-                        #[cfg(not(feature = "lan"))]
                         let chat: Option<hud::ChatView> = None;
-                        #[cfg(feature = "lan")]
-                        let chat = (self.online.lan.is_some() && self.settings.chat).then(|| {
-                            hud::ChatView {
-                                lines: &self.online.remotes.chat.lines,
-                                typing: self.online.remotes.chat.typing.as_deref(),
-                                error: self.online.remotes.chat.error(),
-                            }
-                        });
-                        #[cfg(feature = "lan")]
-                        {
-                            ui.chat.hidden = self.online.remotes.chat.hidden;
-                        }
-                        #[cfg(not(feature = "lan"))]
-                        let mut tags: Vec<(
-                            (f32, f32),
-                            String,
-                            String,
-                            f32,
-                        )> = Vec::new();
-                        #[cfg(not(feature = "lan"))]
+                        let mut tags: Vec<((f32, f32), String, String, f32)> = Vec::new();
                         let _ = s;
-                        #[cfg(feature = "lan")]
-                        let mut tags = if self.settings.name_tags {
-                            let voice = self.online.voice.as_ref();
-                            let speaks =
-                                |name: &str, id: u32| voice.is_some_and(|v| v.speaks(name, id));
-                            let on_radio =
-                                |name: &str, id: u32| voice.is_some_and(|v| v.on_radio(name, id));
-                            let rig = (self.settings.triple.enabled
-                                && !self.settings.vr_requested())
-                            .then(|| {
-                                self.settings.triple.zoomed(
-                                    s.config.width,
-                                    s.config.height,
-                                    self.view_zoom.get(&self.view).copied().unwrap_or(1.0),
-                                )
-                            });
-                            self.camera
-                                .as_ref()
-                                .map(|c| {
-                                    lan::name_tags(
-                                        &self.online.remotes,
-                                        c,
-                                        s.config.width as f32,
-                                        h,
-                                        rig.as_ref(),
-                                        &speaks,
-                                        &on_radio,
-                                    )
-                                })
-                                .unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
                         for (pos, _, _, _) in &mut tags {
                             pos.0 -= hud[0];
                         }
@@ -3464,8 +3159,6 @@ impl ApplicationHandler for App {
                             chat,
                             chat_size: self.settings.chat_size,
                             tags,
-                            notices: &self.notices,
-                            notice_anchor: self.navigator.as_ref().and_then(|n| n.screen_rect()),
                         };
                         // (the new interface draws the open list: the HUD draws none, and the
                         // rectangles its mouse code hit-tests are the new page's)
@@ -3499,13 +3192,6 @@ impl ApplicationHandler for App {
                     None => lights::lighting_from(&daylight, 50000.0),
                 };
                 lighting.wetness = omsi_cfg::flags::WETNESS.number().unwrap_or(self.wetness);
-                #[cfg(feature = "lan")]
-                let remote_inside = self
-                    .online
-                    .inside_remote
-                    .and_then(|id| self.online.remotes.remotes.get(&id))
-                    .map(|rv| rv.vehicle());
-                #[cfg(not(feature = "lan"))]
                 let remote_inside: Option<&omsi_sim::VehicleInstance> = None;
                 lighting.inside = match remote_inside {
                     // (in another player's bus: its box is the one the camera is in)
@@ -4207,21 +3893,7 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(not(feature = "lan"))]
         let _ = event_loop;
-        // the server sent us away (kick, ban): the game ends, the launcher says why
-        #[cfg(feature = "lan")]
-        if self
-            .online
-            .lan
-            .as_ref()
-            .and_then(crate::lan::turned_away)
-            .is_some()
-        {
-            self.finish_session();
-            crate::platform::exit(event_loop);
-            return;
-        }
         crate::game_lists::flush_settings(false);
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -4243,20 +3915,6 @@ impl ApplicationHandler for App {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         crate::game_lists::flush_settings(true);
         self.finish_session();
-        #[cfg(feature = "lan")]
-        if let Some(lan) = self.online.lan.take() {
-            // dropping the session says goodbye (BYE) to the host or the players
-            drop(lan);
-            log::info!("LAN: left the session");
-        }
-        // the tunnel's cloudflared and the WebSocket gateway go with the game (kept in a
-        // static, which Rust never drops: cloudflared outlived every session, holding the
-        // port and a public tunnel open)
-        #[cfg(feature = "lan")]
-        crate::lan::close_public_gateway();
-        // and the launcher's LAN status file goes (Cmd+Q never returns to main's guard)
-        #[cfg(feature = "lan")]
-        drop(lan::StatusFileGuard);
         log::info!("game ends");
     }
 }
@@ -4324,29 +3982,6 @@ impl App {
         if let Some(n) = self.navigator.as_mut().filter(|n| n.map_open()) {
             n.map_wheel(amount, self.cursor.0, self.cursor.1);
             return;
-        }
-        // the wheel over the chat (or while typing) scrolls its history
-        #[cfg(feature = "lan")]
-        if let Some(ui) = self.ui.as_mut() {
-            if self.online.lan.is_some()
-                && (ui.chat.hovered || lan::chat_open(&self.online.remotes))
-            {
-                // Ctrl + the wheel makes the chat larger or smaller (kept for the next game)
-                if self.keys.contains(&KeyCode::ControlLeft)
-                    || self.keys.contains(&KeyCode::ControlRight)
-                {
-                    let to =
-                        ((self.settings.chat_size + amount.signum() * 0.1) * 10.0).round() / 10.0;
-                    self.settings.chat_size = to.clamp(0.5, 3.0);
-                    crate::game_lists::remember_setting(
-                        "chat_size",
-                        &self.settings.chat_size.to_string(),
-                    );
-                    return;
-                }
-                ui.chat.wheel(self.online.remotes.chat.lines.len(), amount);
-                return;
-            }
         }
         // The wheel over a cockpit switch turns it: the same <event>_drag the
         // original fires while the mouse is dragged, with the notch as the
