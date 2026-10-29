@@ -2,7 +2,8 @@
 //! their controls, the tabs, the timetable pane, the open drop-down), made from the HUD's
 //! frame of the open list, and what the new interface draws of the game menu.
 
-use super::super::interface::output::{Frame, ListKind, MenuFrame, MenuKind};
+use super::super::interface::output::{Frame, ListKind, MenuKind};
+use super::menu::MenuFrame;
 use omsi_ui::menu_page::Back;
 
 /// What a row has at its right, owned (see `menu_page::Control`).

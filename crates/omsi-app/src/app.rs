@@ -176,8 +176,8 @@ pub(crate) struct App {
     pub(crate) paused: bool,
     /// The game menu (Escape, OMSI's `open_mainmenue`): the chosen line of it.
     pub(crate) game_menu: Option<usize>,
-    /// The new interface's side of the overlay (`new_ui`): the Esc menu and the Alt bar.
-    pub(crate) new_ui: crate::new_ui::NewUi,
+    /// The new interface's side of the overlay (`ui::NewUi`): the Esc menu and the Alt bar.
+    pub(crate) new_ui: crate::ui::NewUi,
     /// The first line of the game menu (or chooser) shown, when a finger has scrolled it
     /// (in lines, fractional while dragged); `None`: the chosen line is kept in view.
     pub(crate) menu_top: Option<f32>,

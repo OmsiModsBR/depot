@@ -11,10 +11,11 @@
 //! `menu_rects`, `menu_ctl`, `menu_side`, `dd_rects` ...), so nothing of how the pages work
 //! changes. On a triple screen the page stands on the centre screen with the column, and the
 //! rectangles are where it is drawn there; the headset shows the window's picture of it (see
-//! `new_ui`).
+//! `ui::implementation::overlay`).
 
+use super::super::domain::menu::Area;
 use super::super::domain::pages::{showing, Before, Ctl, PageFrame, Showing};
-use super::super::interface::output::{Area, Hits};
+use super::super::interface::output::Hits;
 use glam::Vec2;
 use omsi_ui::menu_page::{self, Control, Dropdown, Layout, Lead, Page, Pane, Row};
 use omsi_ui::pause_menu;

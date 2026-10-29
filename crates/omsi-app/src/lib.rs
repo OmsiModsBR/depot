@@ -49,7 +49,6 @@ mod menu;
 mod mirror_hud;
 mod money;
 mod nav;
-mod new_ui;
 #[cfg(windows)]
 mod openxr;
 mod placing;

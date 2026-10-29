@@ -51,7 +51,6 @@ mod map_surface;
 mod mirror_hud;
 mod money;
 mod nav;
-mod new_ui;
 mod offscreen;
 mod on_foot;
 #[cfg(windows)]
