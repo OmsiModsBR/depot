@@ -27,8 +27,8 @@ pub use backend::{
 };
 pub use caps::{Caps, ShaderModel};
 pub use scene::{
-    DrawKind, SceneBatch, SceneClouds, SceneCoronas, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
-    SceneSky, SceneTexture, TexAddress, TexFormat,
+    DrawKind, SceneBatch, SceneClouds, SceneCoronas, SceneFrame, SceneLamps, SceneLight,
+    SceneMaterial, SceneSky, SceneTexture, TexAddress, TexFormat,
 };
 pub use ui::{UiDraw, UiFrame, UiLayer, UiOverlay, UI_VERTEX_FLOATS};
 
