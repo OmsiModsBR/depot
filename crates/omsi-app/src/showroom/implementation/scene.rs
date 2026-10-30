@@ -1,20 +1,18 @@
-//! The launcher's bus preview: the chosen bus drawn by the game's own renderer - its
-//! model, paint and materials - on the plain (Vanilla+) path without the costly passes,
-//! under the light of the chosen time and weather, into a picture the launcher shows
-//! in a card. It is drawn again only when something changed (another bus, paint, light,
-//! the preview turned by the mouse), never every frame.
+//! The showroom itself: the chosen bus drawn by the game's own renderer - its model, paint
+//! and materials - on the plain (Vanilla+) path without the costly passes, under the light
+//! of the chosen time and weather. It is drawn again only when something changed (another
+//! bus, paint, light, the preview turned by the mouse), never every frame.
 //!
 //! A bus is read on a worker (its type, its scripts run to their resting state, its
 //! textures and meshes put on the GPU ahead) and then placed into a scene of its own with
 //! a fresh `World` (whose caches belong to one scene); the old scene goes when the new one
 //! is ready, so the picture never goes blank while switching.
 
-use crate::core::cli::Args;
-use crate::player;
-use crate::scene;
-use crate::situation::start_clock;
-use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
-use crate::weather_setup::{load_weather, setup_sky, weather_lighting};
+use super::super::domain::look::Look;
+use super::super::interface::output::{
+    load_coupled_parts, load_weather, paint_scheme, player, player_bus_path, scene, setup_sky,
+    start_clock, weather_lighting, Args,
+};
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use glam::DVec3;
@@ -22,19 +20,6 @@ use omsi_render::{Camera, Lighting, Renderer, Scene};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
-
-/// What the showroom shows.
-#[derive(Clone, PartialEq, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct Look {
-    pub root: PathBuf,
-    pub map: String,
-    pub bus: String,
-    pub paint: String,
-    pub weather: String,
-    /// Minutes of the day, and the date.
-    pub time: i32,
-    pub date: String,
-}
 
 struct Ready {
     look: Look,
@@ -99,13 +84,13 @@ fn placing_mark() -> PathBuf {
     omsi_launcher_lib::data_dir().join(name)
 }
 
-/// The mark file called `name` taken away (a helper's own, see `preview::Link`).
+/// The mark file called `name` taken away (a helper's own, see `Link`).
 pub fn clear_mark(name: &str) {
     let _ = std::fs::remove_file(omsi_launcher_lib::data_dir().join(name));
 }
 
 /// The mark taken away (the helper reading the bus was ended by the launcher, see
-/// `preview::Link`).
+/// `Link`).
 pub fn clear_placing_mark() {
     let _ = std::fs::remove_file(placing_mark());
 }
@@ -724,4 +709,17 @@ fn add_floor(renderer: &Renderer, scene: &mut Scene) {
         glam::Mat4::IDENTITY,
         vec![mat],
     );
+}
+
+/// The preview helper's renderer (see `helper`): a bus on a floor needs none of the game's
+/// costly passes - no ambient occlusion, a small shadow map, 4x MSAA for the edges whatever
+/// the game uses.
+pub(super) fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
+    omsi_render::RenderOptions {
+        msaa: 4,
+        ssao: false,
+        shadow_size: 1024,
+        render_scale: 1.0,
+        ..settings.render_options()
+    }
 }

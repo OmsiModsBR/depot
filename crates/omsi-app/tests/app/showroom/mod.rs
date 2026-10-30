@@ -1,4 +1,4 @@
-use openomsi_game::testing::launcher::preview::*;
+use openomsi_game::testing::showroom::*;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::time::Instant;

@@ -239,7 +239,7 @@ fn log_card(l: &mut Launcher, r: Rect) {
         r,
         r.y + 144.0,
         "Preview helper",
-        &super::preview::helper_log().to_string_lossy(),
+        &crate::showroom::helper_log().to_string_lossy(),
     );
     // (the next games started from here write what they load and every failure)
     let mut detailed = l

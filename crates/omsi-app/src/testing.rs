@@ -262,17 +262,11 @@ pub mod launcher {
     pub mod prerender {
         pub use crate::launcher::prerender::*;
     }
-    pub mod preview {
-        pub use crate::launcher::preview::*;
-    }
     pub mod settings {
         pub use crate::launcher::settings::*;
     }
     pub mod setup {
         pub use crate::launcher::setup::*;
-    }
-    pub mod showroom {
-        pub use crate::launcher::showroom::*;
     }
     pub mod start {
         pub use crate::launcher::start::*;
@@ -460,6 +454,11 @@ pub mod settings {
     pub mod bus_seats {
         pub use crate::settings::bus_seats::*;
     }
+}
+pub mod showroom {
+    pub use crate::showroom::domain::message::*;
+    pub use crate::showroom::implementation::{link::*, scene::*, wire::*};
+    pub use crate::showroom::*;
 }
 pub mod situation {
     pub use crate::situation::*;
