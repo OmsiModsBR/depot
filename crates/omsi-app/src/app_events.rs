@@ -74,7 +74,7 @@ use crate::hud;
 use crate::humans;
 use crate::lights;
 use crate::nav;
-use crate::output::{render_mirrors, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
+use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
@@ -131,10 +131,7 @@ impl ApplicationHandler for App {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
                     s.resize(r, size.width, size.height);
                 }
-                #[cfg(windows)]
-                if let Some(d) = self.d3d9.as_ref() {
-                    d.resize(size.width, size.height);
-                }
+                self.output.resize(size.width, size.height);
                 // (minimised, Windows makes the window 0 x 0)
                 let hidden = size.width == 0 || size.height == 0;
                 if hidden && !self.window_hidden {
@@ -440,11 +437,11 @@ impl ApplicationHandler for App {
                 {
                     surface.set_vsync(renderer, desktop_vsync);
                 }
-                #[cfg(windows)]
-                if let Some(d) = self.d3d9.as_ref() {
-                    d.set_vsync(desktop_vsync);
-                    d.set_quality(self.settings.msaa, u32::from(self.settings.anisotropy));
-                }
+                self.output.set_vsync_and_quality(
+                    desktop_vsync,
+                    self.settings.msaa,
+                    u32::from(self.settings.anisotropy),
+                );
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
@@ -621,7 +618,7 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                    self.d3d9_present();
+                    self.output.present();
                     return;
                 }
                 if !self.drive_start(event_loop) {
@@ -2550,7 +2547,7 @@ impl ApplicationHandler for App {
                     }
                     if let Some(wt) = &self.weather {
                         let (kind, rate) = precip_of(wt);
-                        self.rain.set(kind, rate);
+                        self.rain.set(kind, rate, self.settings.dx9_snowfall());
                         // [wind] direction (deg) speed (m/s)
                         let wind = Vec3::new(
                             wt.wind.0.to_radians().sin() * wt.wind.1,
@@ -3424,11 +3421,10 @@ impl ApplicationHandler for App {
                             let vr_active = false;
                             // (DirectX9 draws one mirror a frame at most: each is a scene pass of
                             // its own for a device that is bound by its draw calls)
-                            #[cfg(windows)]
-                            let d3d9_drawing = self.d3d9.is_some();
-                            #[cfg(not(windows))]
-                            let d3d9_drawing = false;
-                            let mirrors_per_frame = if d3d9_drawing { 1 } else { 2 };
+                            let mirrors_per_frame = match self.output.backend() {
+                                Backend::D3d9 => 1,
+                                Backend::Wgpu => 2,
+                            };
                             let rate = {
                                 if vr_active {
                                     // Preserve the user's total redraw budget. A negative
@@ -3669,11 +3665,8 @@ impl ApplicationHandler for App {
                                 let _ = r.wait_gpu(None);
                             }
                         }
-                        // ("DirectX9 (D3D9Ex)": its device shows the picture)
-                        #[cfg(windows)]
-                        if let Some(d) = self.d3d9.as_ref() {
-                            d.present();
-                        }
+                        // (`Backend::D3d9`: the output's device shows the picture)
+                        self.output.present();
                         *self.profile.entry("present").or_default() += __t.elapsed().as_secs_f64();
                     } else {
                         // Nothing to draw into (a hidden window): the simulation goes on at
