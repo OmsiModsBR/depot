@@ -442,7 +442,7 @@ impl Launcher {
             }
             // (profile:drive: the chosen drive's details over Profile)
             if p.split(':').nth(1) == Some("drive") {
-                app.pages.drive_details = true;
+                app.pages.profile.drive_details = true;
             }
             if let Some(step) = p.split(':').nth(1).and_then(|s| s.parse::<usize>().ok()) {
                 // (the Drive page's second part is which of its three steps: drive:2 the map)
@@ -1670,7 +1670,7 @@ impl Launcher {
         // (a window of the Maps page's start lies over the page, as a dialog does)
         let window = !mobile && self.page == Page::Maps && self.start.popup.is_some();
         // (and a drive's details over Profile)
-        let drive = !mobile && self.page == Page::Profile && self.pages.drive_details;
+        let drive = !mobile && self.page == Page::Profile && self.pages.profile.drive_details;
         // (and the keyboard's Reload and Add a control over Controls)
         let keys = !mobile
             && self.page == Page::Controls
@@ -1765,7 +1765,15 @@ impl Launcher {
                 Page::Maps => self.maps_page(content),
                 Page::Diagnostics => diagnostics::draw(self, content),
                 Page::Multiplayer => {}
-                Page::Profile => pages::profile(self, content),
+                Page::Profile => window::profile(
+                    &mut window::Frame {
+                        ui: &mut self.ui,
+                        state: &mut self.state,
+                        drop_hover: self.pages.drop_hover,
+                    },
+                    &mut self.pages.profile,
+                    content,
+                ),
                 Page::Settings => settings::settings(self, content),
                 Page::Controls => pages::controls(self, content),
                 Page::Mods => window::mods(
@@ -1832,7 +1840,14 @@ impl Launcher {
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
-                pages::drive_dialog(self);
+                window::drive_dialog(
+                    &mut window::Frame {
+                        ui: &mut self.ui,
+                        state: &mut self.state,
+                        drop_hover: self.pages.drop_hover,
+                    },
+                    &mut self.pages.profile,
+                );
             } else if self.browser.is_none() && keys {
                 keyboard::dialog(self);
             } else if self.browser.is_none() && diag {
