@@ -2,7 +2,7 @@
 //! game's renderer on it. Opening the game's renderer meant compiling every scene, sky,
 //! shadow and post pass before the window showed anything (most of a minute on a slow
 //! driver); the interface needs one pipeline. The bus preview is drawn by a helper process
-//! of its own (see `preview`), so nothing 3D waits in front of the launcher's window.
+//! of its own (see `crate::showroom`), so nothing 3D waits in front of the launcher's window.
 
 use anyhow::{anyhow, Result};
 use std::sync::{Arc, Mutex};

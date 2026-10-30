@@ -33,7 +33,7 @@ pub struct State {
     /// in the GPU then).
     pub(in crate::ui) add_open: bool,
     /// The live 3D view's latest frame, not yet in the GPU: which vehicle and paint it shows
-    /// (`preview::tag`), its size and RGBA.
+    /// (`showroom::tag`), its size and RGBA.
     pub(in crate::ui) add_live: Option<(u64, u32, u32, Vec<u8>)>,
     /// The Alt bar's window open (reposition, date and time, weather...).
     pub(in crate::ui) tool: Option<crate::ui::ToolFrame>,

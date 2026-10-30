@@ -4,7 +4,7 @@
 //! It is a program of its own (the game binary started without a session), drawn with wgpu
 //! on a plain device of its own (see `gfx`): none of the game's renderer is opened for it,
 //! so the window is there at once. The chosen bus stands in a picture kept from an earlier
-//! time and drawn live by a helper process while a page shows it (see `preview`), and the
+//! time and drawn live by a helper process while a page shows it (see `crate::showroom`), and the
 //! interface - flat and dark, every control custom - is drawn with `omsi-ui` straight
 //! onto the window. A session is a process of its own as well (see `state`). The data side (content
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
@@ -27,10 +27,8 @@ pub(crate) mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
-pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
-pub(crate) mod showroom;
 pub(crate) mod start;
 pub(crate) mod state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -43,6 +41,7 @@ pub(crate) mod timetable_plan;
 pub(crate) mod tray;
 pub(crate) mod ui;
 
+use crate::showroom;
 use glam::Vec2;
 use omsi_launcher_lib as core;
 use omsi_launcher_ui::picture::MapPicture;
@@ -152,7 +151,7 @@ pub struct Launcher {
     gpu: Option<omsi_ui::Gpu>,
     ui: Ui,
     state: state::State,
-    preview: preview::Preview,
+    preview: showroom::Preview,
     page: Page,
     page_anim: f32,
     pub drive: drive::DriveView,
@@ -266,7 +265,7 @@ impl Launcher {
             gpu: None,
             ui: Ui::new(),
             state: state::State::new(),
-            preview: preview::Preview::new(),
+            preview: showroom::Preview::new(),
             page: Page::Drive,
             page_anim: 1.0,
             drive: drive::DriveView::default(),
@@ -466,7 +465,7 @@ impl Launcher {
     fn drop_gpu(&mut self) {
         self.gpu = None;
         self.preview_tex = None;
-        self.preview = preview::Preview::new();
+        self.preview = showroom::Preview::new();
         // (the helper drawing pictures ahead of time is not left up for the game)
         self.prerender.suspend();
         self.map_tex = None;
@@ -2437,13 +2436,13 @@ impl Launcher {
         let again = progress != self.prerender_seen;
         self.prerender_seen = progress;
         for look in looks {
-            let key = preview::kept_key(&look, shape);
+            let key = showroom::kept_key(&look, shape);
             if again {
                 self.thumbs.retry(&key);
             }
             let (bus, paint) = (look.bus.clone(), look.paint.clone());
             self.thumbs
-                .want(&key, move || preview::kept_picture(&look, shape));
+                .want(&key, move || showroom::kept_picture(&look, shape));
             self.vehicles
                 .set_paint_thumb(&bus, &paint, self.thumbs.get(&key));
         }
@@ -2741,18 +2740,6 @@ impl Launcher {
         } else {
             omsi_launcher_ui::kit::subheading(ui, r, title);
         }
-    }
-}
-
-/// The preview helper's renderer (see `preview`): a bus on a floor needs none of the game's costly passes - no
-/// ambient occlusion, a small shadow map, 4x MSAA for the edges whatever the game uses.
-fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
-    omsi_render::RenderOptions {
-        msaa: 4,
-        ssao: false,
-        shadow_size: 1024,
-        render_scale: 1.0,
-        ..settings.render_options()
     }
 }
 

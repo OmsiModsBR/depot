@@ -41,7 +41,7 @@ pub struct AddFrame {
     /// Which picture the window shows (see [`picture_key`]).
     pub picture: Option<u64>,
     /// The live 3D view, while it is on: the vehicle and paint it should show
-    /// (`preview::tag`), and whether it could not be shown.
+    /// (`showroom::tag`), and whether it could not be shown.
     pub live: Option<(u64, bool)>,
 }
 

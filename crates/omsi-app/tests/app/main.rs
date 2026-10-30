@@ -51,6 +51,7 @@ mod schedule_paper;
 mod screenshot_name;
 mod services;
 mod settings;
+mod showroom;
 mod situation;
 mod tiles;
 mod touch;

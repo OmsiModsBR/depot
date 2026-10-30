@@ -11,7 +11,6 @@ mod mapview;
 mod original_ui;
 mod pages;
 mod prerender;
-mod preview;
 mod settings;
 mod setup;
 mod start;
