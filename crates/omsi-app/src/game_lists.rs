@@ -1576,7 +1576,12 @@ fn limit_or(
     name: &str,
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
-    limit_row(app.d3d9_active(), key, name, normal)
+    limit_row(
+        app.output.backend() == crate::output::Backend::D3d9,
+        key,
+        name,
+        normal,
+    )
 }
 
 /// `limit_or` with the API given (so a test can ask without a running game).
@@ -2229,6 +2234,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "reflections" => s.reflections,
         "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
+        "dx9_snow" => s.dx9_snow,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
         "texture_compression" => s.texture_compression,
@@ -2510,6 +2516,10 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         "windy_trees" => {
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
+        }
+        "dx9_snow" => {
+            app.settings.dx9_snow = on;
+            Some(("dx9_snow", bit))
         }
         "fullscreen" => {
             app.settings.fullscreen = on;
@@ -3422,6 +3432,8 @@ fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
         limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
+        // (DirectX9 only: the other APIs draw their own snowfall)
+        app.d3d9_active().then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
     ]
         .into_iter()
         .flatten()

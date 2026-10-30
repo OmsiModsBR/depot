@@ -58,7 +58,7 @@ impl App {
         total: usize,
     ) {
         let mirror = (!self.new_ui.installed())
-            .then(|| self.d3d9_ui_mirror())
+            .then(|| self.output.ui_mirror())
             .flatten();
         self.new_ui.install(renderer, mirror);
         let map_folder = folder(&self.args.map);

@@ -30,7 +30,7 @@ pub use caps::{Caps, ShaderModel};
 pub use glass_rain::SceneRain;
 pub use scene::{
     DrawKind, SceneBatch, SceneCoronas, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
-    SceneTexture, TexAddress, TexFormat,
+    SceneSky, SceneTexture, TexAddress, TexFormat,
 };
 pub use ui::{UiDraw, UiFrame, UiLayer, UiOverlay, UI_VERTEX_FLOATS};
 

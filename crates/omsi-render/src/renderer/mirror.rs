@@ -192,6 +192,9 @@ pub struct FramePlan {
     /// How hard it rains (0..1; none while it snows): what a second renderer gathers
     /// raindrops on glass by.
     pub rain: f32,
+    /// The sky dome's light: x the sun's azimuth (radians, clockwise from north), yzw the
+    /// weights of the day, twilight and night pictures ([`crate::Scene::sky_textures`]).
+    pub sky: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -233,6 +236,7 @@ pub(crate) fn plan_of(
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         rain: (f.lighting.rain - f.lighting.snowfall).clamp(0.0, 1.0),
+        sky: cu.sky,
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists
@@ -250,6 +254,12 @@ pub(crate) fn plan_of(
 }
 
 impl crate::scene::Scene {
+    /// The sky dome's day, twilight and night pictures (`envir.cfg`'s `[sky_textures]`), once
+    /// the game has set them.
+    pub fn sky_textures(&self) -> Option<[TextureId; 3]> {
+        self.sky_textures
+    }
+
     /// The lights of the last frame as this renderer's shaders read them, four vectors each:
     /// xyz the position (render-origin relative) and the radius (0: a light only the
     /// enhanced path draws), rgb the colour and the intensity, the spot's direction and the

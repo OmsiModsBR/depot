@@ -13,6 +13,7 @@ mod coronas;
 mod glass_rain;
 mod scene;
 pub mod shader;
+mod sky;
 mod ui;
 
 use windows::Win32::Foundation::HWND;
