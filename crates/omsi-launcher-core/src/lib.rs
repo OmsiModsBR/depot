@@ -14,6 +14,7 @@ pub mod install;
 pub mod instances;
 pub mod original_engine;
 pub mod screenshots;
+pub mod start;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
