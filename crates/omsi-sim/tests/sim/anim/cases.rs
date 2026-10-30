@@ -31,11 +31,11 @@ fn parents_compose_down_the_chain() {
 #[test]
 fn parents_found_by_mesh_ident() {
     let desk = MeshDef {
-        mesh_ident: Some("zahltisch".into()),
+        mesh_ident: Some("Zahltisch".into()),
         ..Default::default()
     };
     let key = MeshDef {
-        anim_parent: Some("Zahltisch ".into()),
+        anim_parent: Some("Zahltisch".into()),
         ..Default::default()
     };
     let lost = MeshDef {
@@ -43,10 +43,10 @@ fn parents_found_by_mesh_ident() {
         ..Default::default()
     };
     let mut a = vec![animator(None), animator(None), animator(None)];
-    link_parents(&mut a, &[&key, &desk, &lost]);
+    link_parents(&mut a, &[&desk, &key, &lost]);
     assert_eq!(
         a.iter().map(|a| a.parent).collect::<Vec<_>>(),
-        vec![Some(1), None, None]
+        vec![None, Some(0), None]
     );
     // two door variants with the same arm names: each leaf hangs on the arm before it
     let arm_a = MeshDef {
@@ -76,4 +76,35 @@ fn parents_found_by_mesh_ident() {
         a.iter().map(|a| a.parent).collect::<Vec<_>>(),
         vec![None, Some(0), None, Some(2)]
     );
+}
+
+#[test]
+fn a_badly_named_parent_is_not_mended() {
+    let desk = MeshDef {
+        mesh_ident: Some("Zahltisch".into()),
+        ..Default::default()
+    };
+    // another case
+    let other_case = MeshDef {
+        anim_parent: Some("zahltisch".into()),
+        ..Default::default()
+    };
+    // a space the ident does not have
+    let spaced = MeshDef {
+        anim_parent: Some(" Zahltisch".into()),
+        ..Default::default()
+    };
+    // the parent is only listed after the child
+    let early = MeshDef {
+        anim_parent: Some("Zahltisch".into()),
+        ..Default::default()
+    };
+    let mut a = vec![
+        animator(None),
+        animator(None),
+        animator(None),
+        animator(None),
+    ];
+    link_parents(&mut a, &[&early, &desk, &other_case, &spaced]);
+    assert!(a.iter().all(|a| a.parent.is_none()));
 }
