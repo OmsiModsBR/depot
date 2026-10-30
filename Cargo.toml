@@ -11,6 +11,7 @@ members = [
     "crates/omsi-timetable",
     "crates/omsi-content",
     "crates/omsi-integrity",
+    "crates/omsi-devtools-proto",
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
