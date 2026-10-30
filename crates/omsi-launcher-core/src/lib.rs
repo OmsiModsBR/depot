@@ -14,6 +14,7 @@ pub mod install;
 pub mod instances;
 pub mod original_engine;
 pub mod screenshots;
+pub mod settings;
 pub mod start;
 pub mod timetable;
 

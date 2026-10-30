@@ -8,6 +8,7 @@ use super::ui::{id_of, matches, ButtonKind, Ui};
 use super::{Launcher, Page};
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
 use omsi_launcher_ui::Page as UiPage;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
@@ -411,19 +412,6 @@ const SEASONS: &[(&str, &str)] = &[
     ("summer", "Summer"),
     ("autumn", "Autumn"),
     ("winter", "Winter"),
-];
-
-/// The window sizes the settings offer (`resolution`).
-pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[
-    ("auto", "Automatic"),
-    ("1280x720", "1280 x 720"),
-    ("1280x800", "1280 x 800 (Steam Deck)"),
-    ("1366x768", "1366 x 768"),
-    ("1600x900", "1600 x 900"),
-    ("1920x1080", "1920 x 1080"),
-    ("1920x1200", "1920 x 1200"),
-    ("2560x1440", "2560 x 1440"),
-    ("3840x2160", "3840 x 2160"),
 ];
 
 /// The Online options (chat, chat size, other players' names, voice chat), kept apart and
@@ -2056,16 +2044,6 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
     }
     let v = st.get(o.key);
     !v.is_null() && default_in(st, o.key).is_some_and(|d| !same(v, &d))
-}
-
-/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
-/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-pub(crate) fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    // (the environment read last: the page asks this for every option, every frame)
-    cfg!(windows)
-        && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
-        && !s.get("vr").and_then(Value::as_bool).unwrap_or(false)
-        && !omsi_cfg::flags::OPENXR.is_set()
 }
 
 /// The limit the chosen graphics API puts on the option `key` (see `api_limits`).

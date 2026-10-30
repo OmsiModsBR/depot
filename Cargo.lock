@@ -2862,6 +2862,7 @@ dependencies = [
  "glam",
  "image",
  "log",
+ "omsi-cfg",
  "omsi-launcher-core",
  "omsi-ui",
  "pollster",
