@@ -80,7 +80,7 @@ The cause of the 25/10 session is not measured yet: the same stretch still has t
 
 ## PR order and how to measure
 
-One PR at a time, each with a before and after measurement in the same saved situation (TopbusPB, MSAA 8x, traffic 120, `OMSI_PROFILE=1`).
+The two cursor steps (1 and 2) went out together in one PR, `fix/cursor-desempenho`. One PR at a time, each with a before and after measurement in the same saved situation (TopbusPB, MSAA 8x, traffic 120, `OMSI_PROFILE=1`).
 
 | order | branch | what changes | how to prove it |
 | --- | --- | --- | --- |
