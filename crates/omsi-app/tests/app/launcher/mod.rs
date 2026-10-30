@@ -17,7 +17,6 @@ mod setup;
 mod start;
 mod state;
 mod thumbs;
-mod timetable;
 mod timetable_plan;
 mod tray;
 mod ui;

@@ -15,6 +15,7 @@ pub mod instances;
 pub mod original_engine;
 pub mod screenshots;
 pub mod start;
+pub mod timetable;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
