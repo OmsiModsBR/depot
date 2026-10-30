@@ -116,6 +116,7 @@ fn draw(
         surface_bias: -24,
         lamps: Default::default(),
         coronas: Default::default(),
+        sky: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -266,6 +267,7 @@ fn depth_is_reversed_nearer_is_greater() {
         surface_bias: -24,
         lamps: Default::default(),
         coronas: Default::default(),
+        sky: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -385,6 +387,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         surface_bias: 0,
         lamps: Default::default(),
         coronas: Default::default(),
+        sky: Default::default(),
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -559,6 +562,7 @@ fn draw_lamps(
         surface_bias: -24,
         lamps,
         coronas: Default::default(),
+        sky: Default::default(),
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -726,6 +730,7 @@ fn texture_addressing_follows_the_material() {
             surface_bias: -24,
             lamps: Default::default(),
             coronas: Default::default(),
+            sky: Default::default(),
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -1028,6 +1033,7 @@ fn quad_frame<'a>(
         surface_bias: -24,
         lamps: Default::default(),
         coronas: Default::default(),
+        sky: Default::default(),
     }
 }
 
@@ -1175,6 +1181,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         surface_bias: -24,
         lamps: Default::default(),
         coronas: Default::default(),
+        sky: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -1290,6 +1297,7 @@ fn draw_coronas(
         surface_bias: -24,
         lamps: Default::default(),
         coronas: crate::scene::SceneCoronas { sprites, runs },
+        sky: Default::default(),
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1429,7 +1437,157 @@ fn a_corona_run_outside_the_sprites_is_refused() {
             sprites: &[sprite],
             runs: &[(0, 0, 2, false)],
         },
+        sky: Default::default(),
     };
     let r = dev.draw_scene(&frame, |_| None);
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
+}
+
+/// A camera looking along +y at the horizon, x to the right, z up, with a view of about
+/// 11 degrees: every pixel lies within the dome (it reaches 8.6 degrees below the horizon).
+const LOOK_NORTH: [[f32; 4]; 4] = [
+    [10., 0., 0., 0.],
+    [0., 0., 0., 1.],
+    [0., 10., 0., 0.],
+    [0., 0., 0., 0.],
+];
+
+fn srgb_decode(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn srgb_encode(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// Draws a frame with nothing but the sky (pictures 0, 1 and 2) and returns its pixels.
+fn draw_sky(
+    dev: &mut D3d9Device,
+    params: [f32; 4],
+    fog: [f32; 4],
+    textures: Option<[usize; 3]>,
+) -> Vec<u8> {
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 1.0, 1.0],
+    })
+    .unwrap();
+    let frame = SceneFrame {
+        view_proj: LOOK_NORTH,
+        light: light(fog),
+        list: &[],
+        models: &[],
+        params: &[],
+        main: &[],
+        cab: &[],
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: Default::default(),
+        sky: crate::scene::SceneSky { textures, params },
+    };
+    dev.draw_scene(&frame, |_| None).unwrap();
+    dev.end_frame().unwrap()
+}
+
+#[test]
+fn the_sky_shows_the_day_picture_behind_the_view() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [200, 100, 50, 255]);
+    rgba(&mut dev, 1, [0, 0, 0, 255]);
+    rgba(&mut dev, 2, [0, 0, 0, 255]);
+    let px = draw_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], [0.0; 4], Some([0, 1, 2]));
+    assert!(all(&px, [200, 100, 50, 255], 2), "{:?}", &px[..4]);
+}
+
+#[test]
+fn the_sky_blends_the_pictures_by_their_weights() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [0, 0, 0, 255]);
+    rgba(&mut dev, 1, [0, 0, 0, 255]);
+    rgba(&mut dev, 2, [100, 100, 100, 255]);
+    // the night picture counts for 0.6 of its light, blended in linear light
+    let want = (srgb_encode(srgb_decode(100.0 / 255.0) * 0.6) * 255.0).round() as u8;
+    let px = draw_sky(&mut dev, [0.0, 0.0, 0.0, 1.0], [0.0; 4], Some([0, 1, 2]));
+    assert!(
+        all(&px, [want, want, want, 255], 2),
+        "{:?} want {want}",
+        &px[..4]
+    );
+    // the twilight picture counts for 0.8
+    rgba(&mut dev, 1, [100, 100, 100, 255]);
+    let want = (srgb_encode(srgb_decode(100.0 / 255.0) * 0.8) * 255.0).round() as u8;
+    let px = draw_sky(&mut dev, [0.0, 0.0, 1.0, 0.0], [0.0; 4], Some([0, 1, 2]));
+    assert!(
+        all(&px, [want, want, want, 255], 2),
+        "{:?} want {want}",
+        &px[..4]
+    );
+}
+
+#[test]
+fn the_fog_covers_the_horizon_of_the_sky() {
+    let Some(mut dev) = device() else { return };
+    for id in 0..3 {
+        rgba(&mut dev, id, [200, 100, 50, 255]);
+    }
+    // a thick fog: at and below the horizon (the view's lower half) the sky is the fog's
+    // colour exactly, so the far geometry fades into it without a seam
+    let fog = [128.0 / 255.0, 192.0 / 255.0, 64.0 / 255.0, 1.0];
+    let px = draw_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], fog, Some([0, 1, 2]));
+    let low = &px[(W * H * 2) as usize..];
+    assert!(all(low, [128, 192, 64, 255], 2), "{:?}", &low[..4]);
+}
+
+#[test]
+fn without_its_pictures_the_sky_leaves_the_clear_colour() {
+    let Some(mut dev) = device() else { return };
+    let px = draw_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], [0.0; 4], None);
+    assert!(all(&px, [0, 0, 255, 255], 0), "{:?}", &px[..4]);
+    // pictures that were never put up are the same
+    let px = draw_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], [0.0; 4], Some([7, 8, 9]));
+    assert!(all(&px, [0, 0, 255, 255], 0), "{:?}", &px[..4]);
+}
+
+#[test]
+fn the_scene_is_drawn_over_the_sky() {
+    let Some(mut dev) = device() else { return };
+    for id in 0..3 {
+        rgba(&mut dev, id, [200, 100, 50, 255]);
+    }
+    rgba(&mut dev, 5, [10, 220, 30, 255]);
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(3, &v, &i).unwrap();
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 1.0, 1.0],
+    })
+    .unwrap();
+    let batches = [batch(DrawKind::Opaque, 3, 0, 0..1)];
+    let params = [VISIBLE, SECOND];
+    let mut frame = quad_frame(&batches, &[IDENTITY], &params, &[0]);
+    frame.sky = crate::scene::SceneSky {
+        textures: Some([0, 1, 2]),
+        params: [0.0, 1.0, 0.0, 0.0],
+    };
+    let u = uniform(0.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(5),
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    let px = dev.end_frame().unwrap();
+    assert!(all(&px, [10, 220, 30, 255], 1), "{:?}", &px[..4]);
 }
