@@ -153,7 +153,7 @@ pub(super) struct SceneStore {
     lamps: Lamps,
     tile_map: Option<TileMap>,
     /// The depth surface scene targets are drawn with, and its size (the largest asked).
-    target_depth: Option<(u32, u32, IDirect3DSurface9)>,
+    pub(super) target_depth: Option<(u32, u32, IDirect3DSurface9)>,
 }
 
 /// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
@@ -1033,7 +1033,7 @@ impl D3d9Device {
                         .CreateDepthStencilSurface(
                             w,
                             h,
-                            D3DFMT_D24X8,
+                            self.depth_format,
                             D3DMULTISAMPLE_NONE,
                             0,
                             true,
