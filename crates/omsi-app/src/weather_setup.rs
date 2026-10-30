@@ -381,6 +381,15 @@ pub(crate) fn setup_sky(
         .map(|w| w.clouds.0.trim().to_string())
         .unwrap_or_default();
     let typed = cloud_texture(&args.root, &kind);
+    // "DirectX9 (D3D9Ex)" draws the weather's cloud type itself, from its picture (nothing
+    // else is made of it there: no cloud field)
+    let picture = if crate::output::Backend::wanted() == crate::output::Backend::D3d9 {
+        typed.as_ref().map(cloud_picture)
+    } else {
+        None
+    };
+    let picture = picture.map(|img| renderer.add_texture(scene, &img, true));
+    renderer.set_sky_cloud_picture(scene, picture);
     let cover = typed.or_else(|| {
         omsi_texture::decode_file(&omsi_cfg::resolve_path(&args.root, "Texture\\clouds.tga")).ok()
     });
@@ -553,6 +562,20 @@ fn cloud_texture(root: &Path, kind: &str) -> Option<omsi_texture::Image> {
     Some(img)
 }
 
+/// A cloud type's picture as "DirectX9 (D3D9Ex)" draws it: white, the cover (what
+/// [`cloud_texture`] made of its alpha or brightness) in the alpha channel.
+fn cloud_picture(cover: &omsi_texture::Image) -> omsi_texture::Image {
+    let mut img = cover.clone();
+    for px in img.rgba.chunks_mut(4) {
+        px[3] = px[0];
+        px[0] = 255;
+        px[1] = 255;
+        px[2] = 255;
+    }
+    img.has_alpha = true;
+    img
+}
+
 /// Cloud cover of a weather file: `[clouds] type density`, type -1 = clear, density up to
 /// ~300 (Cumulus 3) - mapped to 0..1; the cover drifts with the wind.
 pub(crate) fn clouds_of(w: &omsi_content::weather::Weather, drift: [f32; 2]) -> (f32, [f32; 2]) {
@@ -627,6 +650,7 @@ pub(crate) fn weather_lighting(
     let (density, offset) = clouds_of(w, cloud_drift);
     lighting.cloud_density = density;
     lighting.cloud_offset = offset;
+    lighting.cloud_height = w.clouds.1;
     let model_sky = *crate::weather_model::CURRENT
         .lock()
         .unwrap_or_else(|e| e.into_inner());

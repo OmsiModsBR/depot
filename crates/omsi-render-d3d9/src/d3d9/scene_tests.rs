@@ -1439,15 +1439,31 @@ fn draw_sky(
     fog: [f32; 4],
     textures: Option<[usize; 3]>,
 ) -> Vec<u8> {
+    let sky = crate::scene::SceneSky {
+        textures,
+        params,
+        clouds: Default::default(),
+    };
+    draw_sky_with(dev, sky, LOOK_NORTH, light(fog), (W, H))
+}
+
+/// Draws a frame with nothing but `sky`, seen through `view_proj`, and returns its pixels.
+fn draw_sky_with(
+    dev: &mut D3d9Device,
+    sky: crate::scene::SceneSky,
+    view_proj: [[f32; 4]; 4],
+    light: SceneLight,
+    (width, height): (u32, u32),
+) -> Vec<u8> {
     dev.begin_frame(&FrameDesc {
-        width: W,
-        height: H,
+        width,
+        height,
         clear_rgba: [0.0, 0.0, 1.0, 1.0],
     })
     .unwrap();
     let frame = SceneFrame {
-        view_proj: LOOK_NORTH,
-        light: light(fog),
+        view_proj,
+        light,
         list: &[],
         models: &[],
         params: &[],
@@ -1456,7 +1472,7 @@ fn draw_sky(
         surface_bias: -24,
         lamps: Default::default(),
         coronas: Default::default(),
-        sky: crate::scene::SceneSky { textures, params },
+        sky,
     };
     dev.draw_scene(&frame, |_| None).unwrap();
     dev.end_frame().unwrap()
@@ -1480,11 +1496,13 @@ fn the_sky_blends_the_pictures_by_their_weights() {
     rgba(&mut dev, 2, [100, 100, 100, 255]);
     // the night picture counts for 0.6 of its light, blended in linear light
     let want = (srgb_encode(srgb_decode(100.0 / 255.0) * 0.6) * 255.0).round() as u8;
+    // (the lower half of the view lies below the horizon, where the night's stars are not)
     let px = draw_sky(&mut dev, [0.0, 0.0, 0.0, 1.0], [0.0; 4], Some([0, 1, 2]));
+    let low = &px[(W * H * 2) as usize..];
     assert!(
-        all(&px, [want, want, want, 255], 2),
+        all(low, [want, want, want, 255], 2),
         "{:?} want {want}",
-        &px[..4]
+        &low[..4]
     );
     // the twilight picture counts for 0.8
     rgba(&mut dev, 1, [100, 100, 100, 255]);
@@ -1542,6 +1560,7 @@ fn the_scene_is_drawn_over_the_sky() {
     frame.sky = crate::scene::SceneSky {
         textures: Some([0, 1, 2]),
         params: [0.0, 1.0, 0.0, 0.0],
+        ..Default::default()
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1554,4 +1573,119 @@ fn the_scene_is_drawn_over_the_sky() {
     .unwrap();
     let px = dev.end_frame().unwrap();
     assert!(all(&px, [10, 220, 30, 255], 1), "{:?}", &px[..4]);
+}
+
+/// The camera looking at the zenith with a view of about 11 degrees, x to the right.
+const LOOK_UP: [[f32; 4]; 4] = [
+    [10., 0., 0., 0.],
+    [0., 10., 0., 0.],
+    [0., 0., 0., 1.],
+    [0., 0., 0., 0.],
+];
+
+/// A sky of one dark picture, the weights of `params`, and the clouds of `clouds`.
+fn dark_sky(
+    dev: &mut D3d9Device,
+    params: [f32; 4],
+    clouds: crate::scene::SceneClouds,
+) -> crate::scene::SceneSky {
+    for id in 0..3 {
+        rgba(dev, id, [0, 0, 0, 255]);
+    }
+    crate::scene::SceneSky {
+        textures: Some([0, 1, 2]),
+        params,
+        clouds,
+    }
+}
+
+#[test]
+fn the_clouds_cover_the_sky_above_the_horizon_only() {
+    let Some(mut dev) = device() else { return };
+    // a picture with full cover
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    let clouds = crate::scene::SceneClouds {
+        texture: Some(4),
+        params: [0.5, 0.0, 0.0, 1500.0],
+    };
+    let sky = dark_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], clouds);
+    let px = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
+    // the top row lies above the horizon: lit cloud over the black sky
+    assert!(px[..4].iter().take(3).all(|&c| c > 100), "{:?}", &px[..4]);
+    // the lower half lies below it: the sky alone
+    let low = &px[(W * H * 2) as usize..];
+    assert!(all(low, [0, 0, 0, 255], 2), "{:?}", &low[..4]);
+}
+
+#[test]
+fn no_cloud_without_a_cover_a_picture_or_a_shape() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    rgba(&mut dev, 5, [255, 255, 255, 0]);
+    let on = |texture, cover| crate::scene::SceneClouds {
+        texture,
+        params: [cover, 0.0, 0.0, 1500.0],
+    };
+    for clouds in [
+        // clear weather
+        on(Some(4), 0.0),
+        // a picture that was never put up, none at all, and one without clouds in it
+        on(Some(9), 0.5),
+        on(None, 0.5),
+        on(Some(5), 0.5),
+    ] {
+        let sky = dark_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], clouds);
+        let px = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
+        assert!(all(&px, [0, 0, 0, 255], 2), "{clouds:?}: {:?}", &px[..4]);
+    }
+}
+
+#[test]
+fn clouds_at_night_are_hardly_lighter_than_the_night_sky() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    let clouds = crate::scene::SceneClouds {
+        texture: Some(4),
+        params: [0.5, 0.0, 0.0, 1500.0],
+    };
+    // no ambient light, no sun, a night sky picture
+    let mut l = light([0.0; 4]);
+    l.ambient = [0.0; 4];
+    l.sun_dir = [0.0, 0.0, -1.0, 0.0];
+    let mut sky = dark_sky(&mut dev, [0.0, 0.0, 0.0, 1.0], clouds);
+    rgba(&mut dev, 2, [60, 60, 90, 255]);
+    let clear = {
+        sky.clouds.texture = None;
+        draw_sky_with(&mut dev, sky, LOOK_NORTH, l, (W, H))
+    };
+    sky.clouds = clouds;
+    let px = draw_sky_with(&mut dev, sky, LOOK_NORTH, l, (W, H));
+    // the top row: the sky's colour times 1.12 at most, in linear light
+    for (a, b) in px[..4].iter().zip(&clear[..4]).take(3) {
+        assert!(*a >= *b && *a <= b + 25, "cloud {a} sky {b}");
+    }
+}
+
+#[test]
+fn the_stars_show_at_night_and_not_by_day() {
+    let Some(mut dev) = device() else { return };
+    let size = (128, 128);
+    let by = |dev: &mut D3d9Device, params: [f32; 4]| {
+        let sky = dark_sky(dev, params, Default::default());
+        draw_sky_with(dev, sky, LOOK_UP, light([0.0; 4]), size)
+    };
+    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
+    // by day, and at dusk (the night weight under a third), none
+    assert_eq!(lit(&by(&mut dev, [0.0, 1.0, 0.0, 0.0])), 0);
+    assert_eq!(lit(&by(&mut dev, [0.0, 0.0, 0.8, 0.2])), 0);
+    // at night a sprinkling of points: some, and far from the whole picture
+    let night = by(&mut dev, [0.0, 0.0, 0.0, 1.0]);
+    let n = lit(&night);
+    println!("{n} star pixels of {}", size.0 * size.1);
+    assert!(
+        (5..size.0 as usize * size.1 as usize / 20).contains(&n),
+        "{n}"
+    );
+    // and they stay put from one frame to the next
+    assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
 }

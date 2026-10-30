@@ -177,6 +177,8 @@ pub struct Scene {
     pub(crate) sky_bind_group: Option<wgpu::BindGroup>,
     /// The sky's day, twilight and night pictures, as set by `Renderer::set_sky_textures`.
     pub(crate) sky_textures: Option<[TextureId; 3]>,
+    /// The picture of the weather's cloud type, as set by `Renderer::set_sky_cloud_picture`.
+    pub(crate) sky_cloud_picture: Option<TextureId>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the

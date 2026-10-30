@@ -531,6 +531,19 @@ pub struct SceneSky {
     /// x the sun's azimuth (radians, clockwise from north), yzw the weights of the day,
     /// twilight and night pictures.
     pub params: [f32; 4],
+    /// The weather's clouds over the dome.
+    pub clouds: SceneClouds,
+}
+
+/// The weather's clouds: one layer of the weather's cloud type, drawn over the sky dome.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SceneClouds {
+    /// The cloud type's picture as a scene texture id (white, the clouds in its alpha); none
+    /// draws no clouds.
+    pub texture: Option<usize>,
+    /// x the cover (0 none .. 1 closed; 0 draws no clouds), yz the drift with the wind in
+    /// fractions of the picture's tile, w the layer's base height in metres.
+    pub params: [f32; 4],
 }
 
 /// One picture of the scene.

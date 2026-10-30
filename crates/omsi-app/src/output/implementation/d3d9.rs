@@ -22,9 +22,9 @@ use omsi_render::{
 };
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneCoronas, SceneFrame,
-    SceneLamps, SceneLight, SceneMaterial, SceneSky, SceneTexture, TexAddress, TexFormat, UiDraw,
-    UiFrame, UiLayer, UiOverlay,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneClouds, SceneCoronas,
+    SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneSky, SceneTexture, TexAddress,
+    TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -212,6 +212,10 @@ impl Inner {
             sky: SceneSky {
                 textures: scene.sky_textures(),
                 params: plan.sky,
+                clouds: SceneClouds {
+                    texture: scene.sky_cloud_picture(),
+                    params: plan.clouds,
+                },
             },
         };
         let material = |id: usize| {

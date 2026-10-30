@@ -37,6 +37,7 @@ impl Renderer {
             shadow_bind_group: None,
             sky_bind_group: None,
             sky_textures: None,
+            sky_cloud_picture: None,
             overlays: Vec::new(),
             premultiplied: Default::default(),
             transposed: Default::default(),
