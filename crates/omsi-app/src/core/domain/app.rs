@@ -145,8 +145,11 @@ pub(crate) struct App {
     pub(crate) vr_zoom_active: bool,
     /// The cockpit switch the cursor is over, shown in the HUD.
     pub(crate) hover: Option<String>,
-    /// The part under the cursor when it is not a switch, so the HUD can say so.
+    /// The part under the cursor when it is not a switch, for an `OMSI_INPUT` script's `log`
+    /// (looked for only while a script runs).
     pub(crate) hover_part: Option<String>,
+    /// What the last look under the cursor took, for the profiler's `player.hover.*` stages.
+    pub(crate) hover_split: crate::player::HoverSplit,
     /// A `[mouseevent]` mesh is under the cursor (named in `hover` or not): the hand cursor.
     pub(crate) hover_hand: bool,
     /// The idle head sway waiting where it is while the cursor is on a control

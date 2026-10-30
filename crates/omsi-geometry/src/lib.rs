@@ -2409,8 +2409,13 @@ pub fn ray_near_sphere(origin: Vec3, dir: Vec3, c: Vec3, r: f32) -> bool {
 }
 
 pub fn ray_mesh(origin: Vec3, dir: Vec3, mesh: &MeshData, transform: &Mat4) -> Option<f32> {
+    ray_mesh_inv(origin, dir, mesh, &transform.inverse())
+}
+
+/// [`ray_mesh`] with the transform's inverse already worked out, for many rays at one mesh
+/// (the cursor's rings): the same `t`, bit for bit.
+pub fn ray_mesh_inv(origin: Vec3, dir: Vec3, mesh: &MeshData, inv: &Mat4) -> Option<f32> {
     // transform the ray into mesh space (cheaper than transforming every vertex)
-    let inv = transform.inverse();
     let o = inv.transform_point3(origin);
     let d = inv.transform_vector3(dir);
     let scale = d.length();
@@ -2442,7 +2447,17 @@ pub fn cone_triangles(
     mesh: &MeshData,
     transform: &Mat4,
 ) -> Vec<u32> {
-    let inv = transform.inverse();
+    cone_triangles_inv(origin, axis, tan_half, mesh, &transform.inverse())
+}
+
+/// [`cone_triangles`] with the transform's inverse already worked out.
+pub fn cone_triangles_inv(
+    origin: Vec3,
+    axis: Vec3,
+    tan_half: f32,
+    mesh: &MeshData,
+    inv: &Mat4,
+) -> Vec<u32> {
     let o = inv.transform_point3(origin);
     let a = inv.transform_vector3(axis).normalize_or_zero();
     let mut out = Vec::new();
@@ -2478,7 +2493,18 @@ pub fn ray_triangles(
     transform: &Mat4,
     tris: &[u32],
 ) -> Option<f32> {
-    let inv = transform.inverse();
+    ray_triangles_inv(origin, dir, mesh, &transform.inverse(), tris)
+}
+
+/// [`ray_triangles`] with the transform's inverse already worked out: the same `t`, bit for
+/// bit.
+pub fn ray_triangles_inv(
+    origin: Vec3,
+    dir: Vec3,
+    mesh: &MeshData,
+    inv: &Mat4,
+    tris: &[u32],
+) -> Option<f32> {
     let o = inv.transform_point3(origin);
     let d = inv.transform_vector3(dir);
     let scale = d.length();

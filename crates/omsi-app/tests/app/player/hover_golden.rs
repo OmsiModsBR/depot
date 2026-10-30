@@ -5,7 +5,7 @@
 //! writes the recording, every later run compares with it. `OMSI_HOVER_BUSES` (paths under
 //! `OMSI_ROOT`, separated by `;`) replaces the buses tried.
 
-use openomsi_game::testing::player::hovered_part_in;
+use openomsi_game::testing::player::hovered_part_split;
 use openomsi_game::testing::spawn::load_coupled_parts;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -44,7 +44,11 @@ fn record(root: &Path, rel: &str, out: &mut String) {
                 let dir = rot
                     .transform_vector3(glam::Vec3::new(sy * cp, cy * cp, sp))
                     .normalize();
-                let (found, hand) = hovered_part_in(&vehicle, eye, dir, SPREAD, true);
+                let ((found, hand), _) = hovered_part_split(&vehicle, eye, dir, SPREAD, true, true);
+                // in a drive no part that is no switch is named, and nothing else changes
+                let drive = hovered_part_split(&vehicle, eye, dir, SPREAD, true, false).0;
+                let unnamed = found.clone().filter(|f| f.1);
+                assert_eq!(drive, (unnamed, hand), "{rel} camera {c} at {yaw},{pitch}");
                 if found.is_some() || hand {
                     writeln!(out, "{rel}\t{c}\t{yaw}\t{pitch}\t{found:?}\t{hand}").unwrap();
                 }

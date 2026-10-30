@@ -1116,7 +1116,7 @@ impl App {
                 vr.set_cursor_surface(surface.as_ref().and_then(|s| s.0), surface.map(|s| s.1));
             }
         }
-        let found = match (
+        let (found, split) = match (
             self.player.as_ref(),
             self.camera.as_ref(),
             self.surface.as_ref(),
@@ -1130,11 +1130,26 @@ impl App {
             {
                 let (o, d, spread) =
                     self.cockpit_cursor_ray(cam, (s.config.width, s.config.height));
-                p.hovered_part(o, d, spread)
+                // (a part that is no switch is named only for an `OMSI_INPUT` script's `log`:
+                // in a drive it was a ray through every mesh of the bus for nothing)
+                p.hovered_part(o, d, spread, !self.input_script.is_empty())
             }
             // (in another player's bus nothing is offered: its switches are the driver's)
-            _ => (None, false),
+            _ => ((None, false), Default::default()),
         };
+        self.hover_split = split;
+        let took = split.pick + split.trailer + split.blocker + split.body;
+        if took > 0.01 && omsi_cfg::flags::PROFILE.is_set() {
+            log::info!(
+                "hover: {:.1} ms (pick {:.1}, coupled parts {:.1}, blockers {:.1}, part name {:.1}), {} triangles tested",
+                took * 1000.0,
+                split.pick * 1000.0,
+                split.trailer * 1000.0,
+                split.blocker * 1000.0,
+                split.body * 1000.0,
+                split.triangles
+            );
+        }
         let (found, hand) = found;
         self.hover_hand = hand;
         match found {

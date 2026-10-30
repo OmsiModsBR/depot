@@ -2208,14 +2208,23 @@ impl Player {
         (nearest, nearest_control)
     }
 
-    /// The part of the bus under a ray, switch or not: see [`hovered_part_in`].
+    /// The part of the bus under a ray, switch or not, and what the look took: see
+    /// [`hovered_part_split`].
     pub(crate) fn hovered_part(
         &self,
         origin: DVec3,
         dir: Vec3,
         spread: f32,
-    ) -> (Option<(String, bool)>, bool) {
-        hovered_part_in(&self.vehicle, origin, dir, spread, self.view_inside)
+        body_names: bool,
+    ) -> ((Option<(String, bool)>, bool), HoverSplit) {
+        hovered_part_split(
+            &self.vehicle,
+            origin,
+            dir,
+            spread,
+            self.view_inside,
+            body_names,
+        )
     }
 
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
@@ -3002,19 +3011,120 @@ pub(crate) fn sync_vehicle_transforms(
     vehicle.trailers = trailers;
 }
 
+/// What one look under the cursor took, for the profiler: seconds in the switch pick of the
+/// bus, of its coupled parts, along the rays for what stands in front of a switch, and for
+/// the name of a part that is no switch; and how many triangles were tested.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct HoverSplit {
+    pub pick: f64,
+    pub trailer: f64,
+    pub blocker: f64,
+    pub body: f64,
+    pub triangles: u64,
+}
+
+/// One look under the cursor: each mesh's posed transform and its inverse (part 0 the bus,
+/// then its coupled parts), the rings of rays round the cursor's, and how far along each ring
+/// ray the nearest other mesh is once traced. The switch pick of the bus and that of its
+/// coupled parts cast the same rays, and up to 25 rays went through every mesh, each time
+/// posing it and inverting its transform again.
+struct Look<'a> {
+    vehicle: &'a omsi_sim::VehicleInstance,
+    posed: Vec<Vec<(glam::Mat4, glam::Mat4)>>,
+    origin: DVec3,
+    dir: Vec3,
+    spread: f32,
+    inside: bool,
+    rings: Vec<Vec<Vec3>>,
+    blockers: Vec<Vec<Option<f32>>>,
+    split: HoverSplit,
+}
+
+impl<'a> Look<'a> {
+    fn new(
+        vehicle: &'a omsi_sim::VehicleInstance,
+        origin: DVec3,
+        dir: Vec3,
+        spread: f32,
+        inside: bool,
+    ) -> Self {
+        let pose = |n: usize, xf: &dyn Fn(usize) -> glam::Mat4| -> Vec<(glam::Mat4, glam::Mat4)> {
+            (0..n)
+                .map(|i| {
+                    let m = xf(i);
+                    (m, m.inverse())
+                })
+                .collect()
+        };
+        let mut posed = vec![pose(vehicle.ty.meshes.len(), &|i| {
+            vehicle.mesh_local_transform(i)
+        })];
+        for t in &vehicle.trailers {
+            posed.push(pose(t.ty.meshes.len(), &|i| t.mesh_local_transform(i)));
+        }
+        let rings = cursor_rings(dir, spread);
+        let blockers = rings.iter().map(|r| vec![None; r.len()]).collect();
+        Look {
+            vehicle,
+            posed,
+            origin,
+            dir,
+            spread,
+            inside,
+            rings,
+            blockers,
+            split: HoverSplit::default(),
+        }
+    }
+}
+
+/// The rays of a forgiving pick: the cursor's own, then two rings round it (8 and 16 rays,
+/// `spread` and twice that off it).
+fn cursor_rings(dir: Vec3, spread: f32) -> Vec<Vec<Vec3>> {
+    let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
+    let up = dir.cross(right).normalize_or_zero();
+    let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];
+    if spread > 0.0 {
+        for ring in 1..=2 {
+            let r = spread * ring as f32;
+            let n = 8 * ring;
+            rings.push(
+                (0..n)
+                    .map(|k| {
+                        let a = k as f32 / n as f32 * std::f32::consts::TAU;
+                        (dir + right * (a.cos() * r) + up * (a.sin() * r)).normalize()
+                    })
+                    .collect(),
+            );
+        }
+    }
+    rings
+}
+
 /// The part of the bus under a ray, switch or not: `(name, operable)`. Without this the
 /// HUD stayed empty over everything that is not a switch, and there was no way to tell
 /// "this is not a control" from "the cursor is not hitting anything".
 /// The flag beside it: a `[mouseevent]` mesh is under the ray, named or not - OMSI
-/// shows the hand cursor over any of them.
-pub fn hovered_part_in(
+/// shows the hand cursor over any of them. Beside it, what the look took.
+///
+/// Without `body_names` a part that is no switch is not named: that is a ray through every
+/// visible mesh of the bus, and only the `log` command of an `OMSI_INPUT` script reads it.
+pub fn hovered_part_split(
     vehicle: &omsi_sim::VehicleInstance,
     origin: DVec3,
     dir: Vec3,
     spread: f32,
     inside: bool,
-) -> (Option<(String, bool)>, bool) {
-    if let Some(i) = pick_in(vehicle, origin, dir, spread, inside) {
+    body_names: bool,
+) -> ((Option<(String, bool)>, bool), HoverSplit) {
+    let mut look = Look::new(vehicle, origin, dir, spread, inside);
+    let found = hovered_in_look(&mut look, body_names);
+    (found, look.split)
+}
+
+fn hovered_in_look(look: &mut Look, body_names: bool) -> (Option<(String, bool)>, bool) {
+    let vehicle = look.vehicle;
+    if let Some(i) = pick_main(look) {
         let def = &vehicle.ty.model.meshes[vehicle.ty.meshes[i].def_index];
         if let Some(ev) = def.mouse_event.clone() {
             // a whole panel that can be dragged into place (the VDV dashboard's
@@ -3032,33 +3142,37 @@ pub fn hovered_part_in(
             return (Some((ev, true)), true);
         }
     }
-    if let Some((ti, i)) = pick_trailer_in(vehicle, origin, dir, spread, inside) {
+    if let Some((ti, i)) = pick_trailers(look) {
         let trailer = &vehicle.trailers[ti];
         let def = &trailer.ty.model.meshes[trailer.ty.meshes[i].def_index];
         if let Some(ev) = def.mouse_event.clone() {
             return (Some((ev, true)), true);
         }
     }
-    (hovered_body_part_in(vehicle, origin, dir), false)
+    if !body_names {
+        return (None, false);
+    }
+    let t = Instant::now();
+    let part = hovered_body_part_in(look);
+    look.split.body += t.elapsed().as_secs_f64();
+    (part, false)
 }
 
 /// The mesh of the bus under a ray when it is no switch, by its file's name.
-fn hovered_body_part_in(
-    vehicle: &omsi_sim::VehicleInstance,
-    origin: DVec3,
-    dir: Vec3,
-) -> Option<(String, bool)> {
-    let o = (origin - vehicle.position).as_vec3();
+fn hovered_body_part_in(look: &mut Look) -> Option<(String, bool)> {
+    let vehicle = look.vehicle;
+    let (dir, o) = (look.dir, (look.origin - vehicle.position).as_vec3());
     let mut best: Option<(f32, usize)> = None;
     for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
         if !vehicle.mesh_props[i].visible {
             continue;
         }
-        let xf = vehicle.mesh_local_transform(i);
-        if !ray_may_hit(&vehicle.ty, i, &xf, o, dir, 0.0) {
+        let (xf, inv) = &look.posed[0][i];
+        if !ray_may_hit(&vehicle.ty, i, xf, o, dir, 0.0) {
             continue;
         }
-        if let Some(t) = omsi_geometry::ray_mesh(o, dir, &vm.data, &xf) {
+        look.split.triangles += (vm.data.indices.len() / 3) as u64;
+        if let Some(t) = omsi_geometry::ray_mesh_inv(o, dir, &vm.data, inv) {
             if best.map(|(bt, _)| t < bt).unwrap_or(true) {
                 best = Some((t, i));
             }
@@ -3080,56 +3194,47 @@ pub(crate) fn pick_in(
     spread: f32,
     inside: bool,
 ) -> Option<usize> {
-    let o = (origin - vehicle.position).as_vec3();
-    let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
-    let up = dir.cross(right).normalize_or_zero();
-    let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];
-    if spread > 0.0 {
-        for ring in 1..=2 {
-            let r = spread * ring as f32;
-            let n = 8 * ring;
-            rings.push(
-                (0..n)
-                    .map(|k| {
-                        let a = k as f32 / n as f32 * std::f32::consts::TAU;
-                        (dir + right * (a.cos() * r) + up * (a.sin() * r)).normalize()
-                    })
-                    .collect(),
-            );
-        }
-    }
+    pick_main(&mut Look::new(vehicle, origin, dir, spread, inside))
+}
+
+/// The switch of the bus itself under the look's rays (see `Player::pick`).
+fn pick_main(look: &mut Look) -> Option<usize> {
+    let started = Instant::now();
+    let blocked_before = look.split.blocker;
+    let vehicle = look.vehicle;
+    let (dir, spread, inside) = (look.dir, look.spread, look.inside);
+    let o = (look.origin - vehicle.position).as_vec3();
     // The same broad-phase applies to every ring. A large cockpit can contain
     // hundreds of meshes; calculating their posed transforms three times made
     // hovering over its controls needlessly expensive.
-    let candidates: Vec<(usize, glam::Mat4, Vec<u32>)> = vehicle
-        .ty
-        .meshes
-        .iter()
-        .enumerate()
-        .filter_map(|(i, vm)| {
-            let def = &vehicle.ty.model.meshes[vm.def_index];
-            if def.mouse_event.is_none()
-                || !vehicle.mesh_props[i].visible
-                || !drawn_from(def.viewpoint, inside)
-            {
-                return None;
-            }
-            let xf = vehicle.mesh_local_transform(i);
-            if !ray_may_hit(&vehicle.ty, i, &xf, o, dir, spread * 2.2) {
-                return None;
-            }
-            let tris = omsi_geometry::cone_triangles(o, dir, spread * 2.0 + 1e-4, &vm.data, &xf);
-            (!tris.is_empty()).then_some((i, xf, tris))
-        })
-        .collect();
-    for dirs in &rings {
+    let mut candidates: Vec<(usize, glam::Mat4, glam::Mat4, Vec<u32>)> = Vec::new();
+    for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
+        let def = &vehicle.ty.model.meshes[vm.def_index];
+        if def.mouse_event.is_none()
+            || !vehicle.mesh_props[i].visible
+            || !drawn_from(def.viewpoint, inside)
+        {
+            continue;
+        }
+        let (xf, inv) = look.posed[0][i];
+        if !ray_may_hit(&vehicle.ty, i, &xf, o, dir, spread * 2.2) {
+            continue;
+        }
+        look.split.triangles += (vm.data.indices.len() / 3) as u64;
+        let tris = omsi_geometry::cone_triangles_inv(o, dir, spread * 2.0 + 1e-4, &vm.data, &inv);
+        if !tris.is_empty() {
+            candidates.push((i, xf, inv, tris));
+        }
+    }
+    let mut found = None;
+    for ring in 0..look.rings.len() {
         // Collect every hit in this ring, then among surfaces within a depth band of the
         // nearest prefer the mesh whose centre the ray aims at. Aachen ibox D10/D11/D12 are
         // tilted, overlap by ~6 mm, and sit ~16 mm apart along Z — a 2 mm depth-only pick
         // let backspace (D10) steal digit 0 (D11) whenever both boxes were hit.
         let mut hits: Vec<(f32, f32, usize, usize)> = Vec::new();
-        for (i, xf, tris) in &candidates {
-            let (i, xf) = (*i, *xf);
+        for (i, xf, inv, tris) in &candidates {
+            let i = *i;
             let vm = &vehicle.ty.meshes[i];
             let lateral = vehicle
                 .ty
@@ -3141,19 +3246,20 @@ pub(crate) fn pick_in(
                     (p - dir * along).length_squared()
                 })
                 .unwrap_or(0.0);
-            for (k, d) in dirs.iter().enumerate() {
-                if let Some(t) = omsi_geometry::ray_triangles(o, *d, &vm.data, &xf, tris) {
+            for (k, d) in look.rings[ring].iter().enumerate() {
+                look.split.triangles += tris.len() as u64;
+                if let Some(t) = omsi_geometry::ray_triangles_inv(o, *d, &vm.data, inv, tris) {
                     hits.push((t, lateral, i, k));
                 }
             }
         }
-        if let Some(i) =
-            best_unblocked_hit(hits, |k| nearest_blocker(vehicle, origin, dirs[k], inside))
-        {
-            return Some(i);
+        if let Some(i) = best_unblocked_hit(hits, |k| ring_blocker(look, ring, k)) {
+            found = Some(i);
+            break;
         }
     }
-    None
+    look.split.pick += started.elapsed().as_secs_f64() - (look.split.blocker - blocked_before);
+    found
 }
 
 /// Depth band (m) inside which overlapping cockpit `[mouseevent]` meshes are disambiguated
@@ -3188,20 +3294,32 @@ pub fn drawn_from(viewpoint: i32, inside: bool) -> bool {
 /// switch lying on its panel, or a ring ray grazing the panel at its edge, stays reachable.
 pub(crate) const MOUSEEVENT_BLOCK_MARGIN: f32 = 0.005;
 
-/// How far along a ray from `origin` the nearest mesh without a mouse event is, on the bus or
-/// any coupled part, of those drawn from this camera (infinite: none). Switches standing in
-/// front of each other are settled by [`best_mouseevent_hit`]; this is what else is in the way.
-fn nearest_blocker(
-    vehicle: &omsi_sim::VehicleInstance,
-    origin: DVec3,
-    dir: Vec3,
-    inside: bool,
-) -> f32 {
+/// How far along ray `k` of ring `ring` the nearest mesh without a mouse event is (see
+/// [`nearest_blocker`]), traced once per look.
+fn ring_blocker(look: &mut Look, ring: usize, k: usize) -> f32 {
+    if let Some(b) = look.blockers[ring][k] {
+        return b;
+    }
+    let t = Instant::now();
+    let b = nearest_blocker(look, look.rings[ring][k]);
+    look.split.blocker += t.elapsed().as_secs_f64();
+    look.blockers[ring][k] = Some(b);
+    b
+}
+
+/// How far along a ray from the look's origin the nearest mesh without a mouse event is, on
+/// the bus or any coupled part, of those drawn from this camera (infinite: none). Switches
+/// standing in front of each other are settled by [`best_mouseevent_hit`]; this is what else
+/// is in the way.
+fn nearest_blocker(look: &mut Look, dir: Vec3) -> f32 {
+    let vehicle = look.vehicle;
+    let (origin, inside) = (look.origin, look.inside);
     let mut nearest = f32::INFINITY;
+    let mut triangles = 0u64;
     let mut part = |ty: &omsi_sim::VehicleType,
                     props: &[omsi_sim::vehicle::MeshProps],
                     position: DVec3,
-                    xf: &dyn Fn(usize) -> glam::Mat4| {
+                    posed: &[(glam::Mat4, glam::Mat4)]| {
         let o = (origin - position).as_vec3();
         for (i, vm) in ty.meshes.iter().enumerate() {
             let def = &ty.model.meshes[vm.def_index];
@@ -3209,25 +3327,28 @@ fn nearest_blocker(
             {
                 continue;
             }
-            let transform = xf(i);
-            if !ray_may_hit(ty, i, &transform, o, dir, 0.0) {
+            let (transform, inv) = &posed[i];
+            if !ray_may_hit(ty, i, transform, o, dir, 0.0) {
                 continue;
             }
-            if let Some(t) = omsi_geometry::ray_mesh(o, dir, &vm.data, &transform) {
+            triangles += (vm.data.indices.len() / 3) as u64;
+            if let Some(t) = omsi_geometry::ray_mesh_inv(o, dir, &vm.data, inv) {
                 if t > 0.02 && t < nearest {
                     nearest = t;
                 }
             }
         }
     };
-    part(&vehicle.ty, &vehicle.mesh_props, vehicle.position, &|i| {
-        vehicle.mesh_local_transform(i)
-    });
-    for t in &vehicle.trailers {
-        part(&t.ty, &t.mesh_props, t.position, &|i| {
-            t.mesh_local_transform(i)
-        });
+    part(
+        &vehicle.ty,
+        &vehicle.mesh_props,
+        vehicle.position,
+        &look.posed[0],
+    );
+    for (n, t) in vehicle.trailers.iter().enumerate() {
+        part(&t.ty, &t.mesh_props, t.position, &look.posed[n + 1]);
     }
+    look.split.triangles += triangles;
     nearest
 }
 
@@ -3333,57 +3454,44 @@ pub(crate) fn pick_trailer_in(
     spread: f32,
     inside: bool,
 ) -> Option<(usize, usize)> {
-    let right = Vec3::new(-dir.y, dir.x, 0.0).normalize_or_zero();
-    let up = dir.cross(right).normalize_or_zero();
-    let mut rings: Vec<Vec<Vec3>> = vec![vec![dir]];
-    if spread > 0.0 {
-        for ring in 1..=2 {
-            let r = spread * ring as f32;
-            let n = 8 * ring;
-            rings.push(
-                (0..n)
-                    .map(|k| {
-                        let a = k as f32 / n as f32 * std::f32::consts::TAU;
-                        (dir + right * (a.cos() * r) + up * (a.sin() * r)).normalize()
-                    })
-                    .collect(),
-            );
+    pick_trailers(&mut Look::new(vehicle, origin, dir, spread, inside))
+}
+
+/// The switch of a coupled part under the look's rays: (part, mesh).
+fn pick_trailers(look: &mut Look) -> Option<(usize, usize)> {
+    let started = Instant::now();
+    let blocked_before = look.split.blocker;
+    let vehicle = look.vehicle;
+    let (origin, dir, spread, inside) = (look.origin, look.dir, look.spread, look.inside);
+    let mut candidates: Vec<(usize, usize, glam::Mat4, glam::Mat4, Vec<u32>)> = Vec::new();
+    for (ti, trailer) in vehicle.trailers.iter().enumerate() {
+        let o = (origin - trailer.position).as_vec3();
+        for (i, vm) in trailer.ty.meshes.iter().enumerate() {
+            let def = &trailer.ty.model.meshes[vm.def_index];
+            if def.mouse_event.is_none()
+                || !trailer.mesh_props[i].visible
+                || !drawn_from(def.viewpoint, inside)
+            {
+                continue;
+            }
+            let (xf, inv) = look.posed[ti + 1][i];
+            if !ray_may_hit(&trailer.ty, i, &xf, o, dir, spread * 2.2) {
+                continue;
+            }
+            look.split.triangles += (vm.data.indices.len() / 3) as u64;
+            let tris =
+                omsi_geometry::cone_triangles_inv(o, dir, spread * 2.0 + 1e-4, &vm.data, &inv);
+            if !tris.is_empty() {
+                candidates.push((ti, i, xf, inv, tris));
+            }
         }
     }
-    let candidates: Vec<(usize, usize, glam::Mat4, Vec<u32>)> = vehicle
-        .trailers
-        .iter()
-        .enumerate()
-        .flat_map(|(ti, trailer)| {
-            let o = (origin - trailer.position).as_vec3();
-            trailer
-                .ty
-                .meshes
-                .iter()
-                .enumerate()
-                .filter_map(move |(i, vm)| {
-                    let def = &trailer.ty.model.meshes[vm.def_index];
-                    if def.mouse_event.is_none()
-                        || !trailer.mesh_props[i].visible
-                        || !drawn_from(def.viewpoint, inside)
-                    {
-                        return None;
-                    }
-                    let xf = trailer.mesh_local_transform(i);
-                    if !ray_may_hit(&trailer.ty, i, &xf, o, dir, spread * 2.2) {
-                        return None;
-                    }
-                    let tris =
-                        omsi_geometry::cone_triangles(o, dir, spread * 2.0 + 1e-4, &vm.data, &xf);
-                    (!tris.is_empty()).then_some((ti, i, xf, tris))
-                })
-        })
-        .collect();
-    for dirs in &rings {
+    let mut found = None;
+    for ring in 0..look.rings.len() {
         let mut hits: Vec<(f32, f32, usize, usize)> = Vec::new();
         let mut id_of: Vec<(usize, usize)> = Vec::new();
-        for (ti, i, xf, tris) in &candidates {
-            let (ti, i, xf) = (*ti, *i, *xf);
+        for (ti, i, xf, inv, tris) in &candidates {
+            let (ti, i) = (*ti, *i);
             let trailer = &vehicle.trailers[ti];
             let o = (origin - trailer.position).as_vec3();
             let vm = &trailer.ty.meshes[i];
@@ -3397,21 +3505,22 @@ pub(crate) fn pick_trailer_in(
                     (p - dir * along).length_squared()
                 })
                 .unwrap_or(0.0);
-            for (k, d) in dirs.iter().enumerate() {
-                if let Some(t) = omsi_geometry::ray_triangles(o, *d, &vm.data, &xf, tris) {
+            for (k, d) in look.rings[ring].iter().enumerate() {
+                look.split.triangles += tris.len() as u64;
+                if let Some(t) = omsi_geometry::ray_triangles_inv(o, *d, &vm.data, inv, tris) {
                     let id = id_of.len();
                     id_of.push((ti, i));
                     hits.push((t, lateral, id, k));
                 }
             }
         }
-        if let Some(id) =
-            best_unblocked_hit(hits, |k| nearest_blocker(vehicle, origin, dirs[k], inside))
-        {
-            return Some(id_of[id]);
+        if let Some(id) = best_unblocked_hit(hits, |k| ring_blocker(look, ring, k)) {
+            found = Some(id_of[id]);
+            break;
         }
     }
-    None
+    look.split.trailer += started.elapsed().as_secs_f64() - (look.split.blocker - blocked_before);
+    found
 }
 
 /// Mouse steering switched off: the wheel stays where the mouse left it and the keys go on
