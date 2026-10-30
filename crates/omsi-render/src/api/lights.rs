@@ -90,6 +90,9 @@ impl Renderer {
     /// The picture of a smoke particle: the game's `Texture/rauch.tga` (OMSI's default
     /// for every `[smoke]`), alpha as its mask.
     pub fn set_smoke_texture(&mut self, img: &omsi_texture::Image) {
+        if self.mirroring() {
+            self.mirror(MirrorEvent::SmokeTexture { image: img });
+        }
         let t = upload_texture(&self.device, &self.queue, img, true);
         self.sprites.smoke_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("smoke"),

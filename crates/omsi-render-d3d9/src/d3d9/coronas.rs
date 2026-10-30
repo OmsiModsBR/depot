@@ -77,28 +77,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<CoronaPipeline> {
         "ps_main",
         shader::Stage::Pixel,
     )?;
-    let element = |stream: u16, offset: u16, ty: D3DDECLTYPE, index: u8| D3DVERTEXELEMENT9 {
-        Stream: stream,
-        Offset: offset,
-        Type: ty.0 as u8,
-        Method: D3DDECLMETHOD_DEFAULT.0 as u8,
-        Usage: D3DDECLUSAGE_TEXCOORD.0 as u8,
-        UsageIndex: index,
-    };
-    // stream 0 the quad's corners, stream 1 one record per sprite: five vectors
-    let mut elements = vec![element(0, 0, D3DDECLTYPE_FLOAT2, 0)];
-    for k in 0..5u8 {
-        elements.push(element(1, k as u16 * 16, D3DDECLTYPE_FLOAT4, k + 1));
-    }
-    // D3DDECL_END()
-    elements.push(D3DVERTEXELEMENT9 {
-        Stream: 0xFF,
-        Offset: 0,
-        Type: D3DDECLTYPE_UNUSED.0 as u8,
-        Method: 0,
-        Usage: 0,
-        UsageIndex: 0,
-    });
+    let elements = sprite_elements();
     let glow = make_texture(
         device,
         &SceneTexture {
@@ -109,46 +88,9 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<CoronaPipeline> {
             make_mips: false,
         },
     )?;
-    // SAFETY: out-parameters are live locals; the locked ranges are exactly the sizes the
-    // buffers were created with; the bytecode and element arrays outlive the calls.
+    let (quad, quad_indices) = unit_quad(device)?;
+    // SAFETY: the element array and the bytecode outlive the calls.
     unsafe {
-        let corners: [f32; 8] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
-        let mut quad = None;
-        device
-            .CreateVertexBuffer(
-                std::mem::size_of_val(&corners) as u32,
-                D3DUSAGE_WRITEONLY as u32,
-                0,
-                D3DPOOL_DEFAULT,
-                &mut quad,
-                std::ptr::null_mut(),
-            )
-            .map_err(map_err)?;
-        let quad = some(quad, "corona quad")?;
-        super::write_buffer(&quad, &corners)?;
-        let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
-        let mut ib = None;
-        device
-            .CreateIndexBuffer(
-                std::mem::size_of_val(&indices) as u32,
-                D3DUSAGE_WRITEONLY as u32,
-                D3DFMT_INDEX16,
-                D3DPOOL_DEFAULT,
-                &mut ib,
-                std::ptr::null_mut(),
-            )
-            .map_err(map_err)?;
-        let quad_indices = some(ib, "corona indices")?;
-        let mut p = std::ptr::null_mut();
-        quad_indices
-            .Lock(0, std::mem::size_of_val(&indices) as u32, &mut p, 0)
-            .map_err(map_err)?;
-        std::ptr::copy_nonoverlapping(
-            indices.as_ptr() as *const u8,
-            p as *mut u8,
-            std::mem::size_of_val(&indices),
-        );
-        quad_indices.Unlock().map_err(map_err)?;
         Ok(CoronaPipeline {
             glow,
             quad,
@@ -164,6 +106,132 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<CoronaPipeline> {
                 .map_err(map_err)?,
         })
     }
+}
+
+/// The declaration of a sprite pass: stream 0 the quad's corners, stream 1 one record per
+/// sprite (five vectors, `TEXCOORD1` to `TEXCOORD5`).
+pub(super) fn sprite_elements() -> Vec<D3DVERTEXELEMENT9> {
+    let element = |stream: u16, offset: u16, ty: D3DDECLTYPE, index: u8| D3DVERTEXELEMENT9 {
+        Stream: stream,
+        Offset: offset,
+        Type: ty.0 as u8,
+        Method: D3DDECLMETHOD_DEFAULT.0 as u8,
+        Usage: D3DDECLUSAGE_TEXCOORD.0 as u8,
+        UsageIndex: index,
+    };
+    let mut elements = vec![element(0, 0, D3DDECLTYPE_FLOAT2, 0)];
+    for k in 0..5u8 {
+        elements.push(element(1, k as u16 * 16, D3DDECLTYPE_FLOAT4, k + 1));
+    }
+    // D3DDECL_END()
+    elements.push(D3DVERTEXELEMENT9 {
+        Stream: 0xFF,
+        Offset: 0,
+        Type: D3DDECLTYPE_UNUSED.0 as u8,
+        Method: 0,
+        Usage: 0,
+        UsageIndex: 0,
+    });
+    elements
+}
+
+/// The unit quad every sprite is an instance of, and its indices.
+pub(super) fn unit_quad(
+    device: &IDirect3DDevice9Ex,
+) -> Result<(IDirect3DVertexBuffer9, IDirect3DIndexBuffer9)> {
+    // SAFETY: out-parameters are live locals; the locked ranges are exactly the sizes the
+    // buffers were created with.
+    unsafe {
+        let corners: [f32; 8] = [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0];
+        let mut quad = None;
+        device
+            .CreateVertexBuffer(
+                std::mem::size_of_val(&corners) as u32,
+                D3DUSAGE_WRITEONLY as u32,
+                0,
+                D3DPOOL_DEFAULT,
+                &mut quad,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+        let quad = some(quad, "sprite quad")?;
+        super::write_buffer(&quad, &corners)?;
+        let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
+        let mut ib = None;
+        device
+            .CreateIndexBuffer(
+                std::mem::size_of_val(&indices) as u32,
+                D3DUSAGE_WRITEONLY as u32,
+                D3DFMT_INDEX16,
+                D3DPOOL_DEFAULT,
+                &mut ib,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+        let quad_indices = some(ib, "sprite indices")?;
+        let mut p = std::ptr::null_mut();
+        quad_indices
+            .Lock(0, std::mem::size_of_val(&indices) as u32, &mut p, 0)
+            .map_err(map_err)?;
+        std::ptr::copy_nonoverlapping(
+            indices.as_ptr() as *const u8,
+            p as *mut u8,
+            std::mem::size_of_val(&indices),
+        );
+        quad_indices.Unlock().map_err(map_err)?;
+        Ok((quad, quad_indices))
+    }
+}
+
+/// Puts `sprites` up in the dynamic buffer in `slot` (made, or made larger, when the list does
+/// not fit it), written whole each frame.
+pub(super) fn write_sprites(
+    device: &IDirect3DDevice9Ex,
+    slot: &mut Option<(IDirect3DVertexBuffer9, usize)>,
+    sprites: &[[f32; CORONA_FLOATS]],
+    what: &'static str,
+) -> Result<()> {
+    let bytes = u32::try_from(sprites.len())
+        .ok()
+        .and_then(|n| n.checked_mul(RECORD))
+        .ok_or_else(|| BackendError::InvalidArgument(format!("{} {what}", sprites.len())))?;
+    if slot.as_ref().is_none_or(|b| b.1 < sprites.len()) {
+        let capacity = sprites.len().next_power_of_two().max(256);
+        let capacity_bytes = u32::try_from(capacity)
+            .ok()
+            .and_then(|n| n.checked_mul(RECORD))
+            .ok_or_else(|| BackendError::InvalidArgument(format!("{capacity} {what}")))?;
+        let mut vb = None;
+        // SAFETY: the out-parameter is a live local.
+        unsafe {
+            device
+                .CreateVertexBuffer(
+                    capacity_bytes,
+                    (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) as u32,
+                    0,
+                    D3DPOOL_DEFAULT,
+                    &mut vb,
+                    std::ptr::null_mut(),
+                )
+                .map_err(map_err)?;
+        }
+        *slot = Some((some(vb, what)?, capacity));
+    }
+    if let Some((vb, _)) = slot {
+        // SAFETY: the buffer holds at least `bytes`, locked with DISCARD and written whole.
+        unsafe {
+            let mut p = std::ptr::null_mut();
+            vb.Lock(0, bytes, &mut p, D3DLOCK_DISCARD as u32)
+                .map_err(map_err)?;
+            std::ptr::copy_nonoverlapping(
+                sprites.as_ptr() as *const u8,
+                p as *mut u8,
+                bytes as usize,
+            );
+            vb.Unlock().map_err(map_err)?;
+        }
+    }
+    Ok(())
 }
 
 impl D3d9Device {
@@ -213,53 +281,12 @@ impl D3d9Device {
         if sprites.is_empty() || self.scene.coronas.pipeline.is_none() {
             return Ok(());
         }
-        let bytes = u32::try_from(sprites.len())
-            .ok()
-            .and_then(|n| n.checked_mul(RECORD))
-            .ok_or_else(|| BackendError::InvalidArgument(format!("{} coronas", sprites.len())))?;
-        if self
-            .scene
-            .coronas
-            .buffer
-            .as_ref()
-            .is_none_or(|b| b.1 < sprites.len())
-        {
-            let capacity = sprites.len().next_power_of_two().max(256);
-            let capacity_bytes = u32::try_from(capacity)
-                .ok()
-                .and_then(|n| n.checked_mul(RECORD))
-                .ok_or_else(|| BackendError::InvalidArgument(format!("{capacity} coronas")))?;
-            let mut vb = None;
-            // SAFETY: the out-parameter is a live local.
-            unsafe {
-                self.device
-                    .CreateVertexBuffer(
-                        capacity_bytes,
-                        (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) as u32,
-                        0,
-                        D3DPOOL_DEFAULT,
-                        &mut vb,
-                        std::ptr::null_mut(),
-                    )
-                    .map_err(map_err)?;
-            }
-            self.scene.coronas.buffer = Some((some(vb, "corona buffer")?, capacity));
-        }
-        if let Some((vb, _)) = &self.scene.coronas.buffer {
-            // SAFETY: the buffer holds at least `bytes`, locked with DISCARD and written whole.
-            unsafe {
-                let mut p = std::ptr::null_mut();
-                vb.Lock(0, bytes, &mut p, D3DLOCK_DISCARD as u32)
-                    .map_err(map_err)?;
-                std::ptr::copy_nonoverlapping(
-                    sprites.as_ptr() as *const u8,
-                    p as *mut u8,
-                    bytes as usize,
-                );
-                vb.Unlock().map_err(map_err)?;
-            }
-        }
-        Ok(())
+        write_sprites(
+            &self.device,
+            &mut self.scene.coronas.buffer,
+            sprites,
+            "coronas",
+        )
     }
 
     /// Draws the frame's coronas of the vehicle the camera is in (`late`) or of the rest of

@@ -117,6 +117,7 @@ fn draw(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -268,6 +269,7 @@ fn depth_is_reversed_nearer_is_greater() {
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -388,6 +390,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -563,6 +566,7 @@ fn draw_lamps(
         lamps,
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -731,6 +735,7 @@ fn texture_addressing_follows_the_material() {
             lamps: Default::default(),
             coronas: Default::default(),
             sky: Default::default(),
+            smoke: Default::default(),
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -1034,6 +1039,7 @@ fn quad_frame<'a>(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     }
 }
 
@@ -1182,6 +1188,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -1298,6 +1305,7 @@ fn draw_coronas(
         lamps: Default::default(),
         coronas: crate::scene::SceneCoronas { sprites, runs },
         sky: Default::default(),
+        smoke: Default::default(),
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1438,6 +1446,7 @@ fn a_corona_run_outside_the_sprites_is_refused() {
             runs: &[(0, 0, 2, false)],
         },
         sky: Default::default(),
+        smoke: Default::default(),
     };
     let r = dev.draw_scene(&frame, |_| None);
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
@@ -1493,6 +1502,7 @@ fn draw_sky(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: crate::scene::SceneSky { textures, params },
+        smoke: Default::default(),
     };
     dev.draw_scene(&frame, |_| None).unwrap();
     dev.end_frame().unwrap()
@@ -1590,4 +1600,162 @@ fn the_scene_is_drawn_over_the_sky() {
     .unwrap();
     let px = dev.end_frame().unwrap();
     assert!(all(&px, [10, 220, 30, 255], 1), "{:?}", &px[..4]);
+}
+
+// ---- smoke and particles ----
+
+/// A white smoke puff over the whole target, facing the camera, at clip depth `z`, of the
+/// alpha `alpha`, with no ground to fade into.
+fn smoke_puff(z: f32, alpha: f32) -> [f32; crate::scene::CORONA_FLOATS] {
+    [
+        0.0, 0.0, z, 10.0, // position, size
+        1.0, 1.0, 1.0, alpha, // colour, alpha
+        1.0, 0.0, 0.0, 0.0, // not turned: the cosine and sine of its spin
+        0.0, 0.0, 0.0, 0.0, // no ground, no z offset
+        0.0, 0.0, 0.0, 3.0, // (the default renderer's kind: smoke)
+    ]
+}
+
+fn smoke_light() -> SceneLight {
+    SceneLight {
+        cam_pos: [0.0, 0.0, -1.0, 0.0],
+        // (half the light: a white puff shows grey)
+        ambient: [0.5, 0.5, 0.5, 0.0],
+        sky_color: [0.0, 0.0, 0.0, 1.0],
+        cam_right: [1.0, 0.0, 0.0, 0.0],
+        ..Default::default()
+    }
+}
+
+fn put_up_smoke_picture(dev: &mut D3d9Device) {
+    let white = vec![[255u8, 255, 255, 255].repeat(4)];
+    dev.set_smoke_texture(&SceneTexture {
+        width: 2,
+        height: 2,
+        format: TexFormat::Rgba8,
+        levels: &white,
+        make_mips: true,
+    })
+    .unwrap();
+}
+
+/// Draws a blue quad of mesh 0 at depth `quad_z` as the world (`late` false) or as the
+/// vehicle the camera is in, and the `sprites` of smoke over a black clear.
+fn draw_smoke(
+    dev: &mut D3d9Device,
+    quad_z: Option<f32>,
+    late_quad: bool,
+    sprites: &[[f32; crate::scene::CORONA_FLOATS]],
+) -> Vec<u8> {
+    if let Some(z) = quad_z {
+        let (v, i) = quad(z);
+        dev.set_scene_mesh(0, &v, &i).unwrap();
+        rgba(dev, 0, [0, 0, 255, 255]);
+    }
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let blue = [batch(DrawKind::Opaque, 0, 0, 0..1)];
+    let (main, cab): (&[SceneBatch], &[SceneBatch]) = match (quad_z, late_quad) {
+        (None, _) => (&[], &[]),
+        (Some(_), false) => (&blue, &[]),
+        (Some(_), true) => (&[], &blue),
+    };
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: smoke_light(),
+        list: &[0],
+        models: &[IDENTITY],
+        params: &[VISIBLE, SECOND],
+        main,
+        cab,
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: Default::default(),
+        sky: Default::default(),
+        smoke: crate::scene::SceneSmoke { sprites },
+    };
+    let u = uniform(0.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(0),
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    dev.end_frame().unwrap()
+}
+
+#[test]
+fn smoke_is_blended_over_the_scene_by_its_alpha_and_the_light() {
+    let Some(mut dev) = device() else { return };
+    put_up_smoke_picture(&mut dev);
+    let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 1.0)]);
+    // a grey: the white picture and the colour, dimmed by the light (an ambient of 0.5)
+    let full = px[0];
+    assert!(
+        px.chunks_exact(4)
+            .all(|p| p[0] == full && p[1] == full && p[2] == full),
+        "{:?}",
+        &px[..8]
+    );
+    assert!((100..=200).contains(&full), "{full}");
+    // half the alpha lets half the black through
+    let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 0.5)]);
+    assert!(px[0] > 20 && px[0] < full, "{} of {full}", px[0]);
+    // none, or no alpha, draws nothing
+    let px = draw_smoke(&mut dev, None, false, &[]);
+    assert!(all(&px, [0, 0, 0, 255], 0));
+    let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 0.0)]);
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+}
+
+#[test]
+fn smoke_behind_a_surface_is_hidden_and_in_front_of_one_does_not_hide_it() {
+    let Some(mut dev) = device() else { return };
+    put_up_smoke_picture(&mut dev);
+    // (the wall as the scene's light shows it, with no smoke)
+    let wall = draw_smoke(&mut dev, Some(0.9), false, &[]);
+    assert!(wall[2] > 100 && wall[0] == 0, "{:?}", &wall[..4]);
+    // a wall nearer than the smoke hides it
+    let px = draw_smoke(&mut dev, Some(0.9), false, &[smoke_puff(0.5, 1.0)]);
+    assert_eq!(px, wall);
+    // a wall behind it: the smoke is over the wall
+    let px = draw_smoke(&mut dev, Some(0.2), false, &[smoke_puff(0.5, 0.5)]);
+    assert!(px[0] > 20 && px[2] > wall[2], "{:?}", &px[..4]);
+    // the vehicle the camera is in is drawn after the world's smoke, and covers it
+    let px = draw_smoke(&mut dev, Some(0.2), true, &[smoke_puff(0.5, 1.0)]);
+    assert_eq!(px, wall);
+}
+
+#[test]
+fn smoke_fades_out_into_the_ground_it_lies_on() {
+    let Some(mut dev) = device() else { return };
+    put_up_smoke_picture(&mut dev);
+    let mut puff = smoke_puff(0.5, 1.0);
+    // the ground is at the puff's own height: nothing of it is above the ground
+    puff[12..16].copy_from_slice(&[0.5, 1.0, 0.0, 0.25]);
+    let px = draw_smoke(&mut dev, None, false, &[puff]);
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+    // half a unit above a ground whose fade is a quarter high: not faded at all
+    puff[12] = 0.0;
+    let px = draw_smoke(&mut dev, None, false, &[puff]);
+    assert!(px[0] > 100, "{:?}", &px[..4]);
+}
+
+#[test]
+fn smoke_without_its_picture_is_not_drawn_and_the_picture_outlives_a_scene() {
+    let Some(mut dev) = device() else { return };
+    let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 1.0)]);
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+    put_up_smoke_picture(&mut dev);
+    // the picture belongs to the renderer: it survives a new scene and a device opened again
+    dev.clear_scene();
+    dev.recover().unwrap();
+    let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 1.0)]);
+    assert!(px[0] > 100, "{:?}", &px[..4]);
 }

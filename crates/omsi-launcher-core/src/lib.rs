@@ -3208,6 +3208,10 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("shadow_casters", json!("all")),
         ("shadow_blobs", json!(true)),
         ("reflections", json!(true)),
+        ("smoke", json!(true)),
+        ("smoke_user_only", json!(false)),
+        ("smoke_max", json!(100)),
+        ("smoke_in_mirrors", json!(true)),
         ("mouse_sens", json!(1.0)),
         ("graphics_api", json!("auto")),
         ("ctrl_off", json!("")),
@@ -3563,6 +3567,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .parse::<f64>()
                     .map(|x| x.clamp(0.0, 1000.0) as i64)
                     .unwrap_or(200))
+            }
+            "smoke_max" => {
+                v[&k] = json!(val
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map(|x| x.clamp(1.0, 100.0) as i64)
+                    .unwrap_or(100))
             }
             "drive_keys" | "navigator_corner" | "boarding" | "render_scale" | "pax_voices"
                 if k != "navigator_corner"
@@ -3923,10 +3935,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             "nav_arrows" | "nav_ai" | "nav_follow_view" | "nav_surface" | "nav_light"
             | "nav_contours" | "get_up" | "time_sync" | "metar_sync" | "ui_scale_window"
-            | "notes" | "reflections" | "steering_linear" | "old_steering" | "red_steer_spd"
-            | "ff_invert" | "ff_enabled" | "brake_hold" | "auto_clutch" | "momentary_gears"
-            | "auto_shift" | "mouse_steering" | "mouse_right_off" | "mouse_smooth"
-            | "blinker_cancel" => v[&k] = json!(b(val)),
+            | "notes" | "reflections" | "smoke" | "smoke_user_only" | "smoke_in_mirrors"
+            | "steering_linear" | "old_steering" | "red_steer_spd" | "ff_invert" | "ff_enabled"
+            | "brake_hold" | "auto_clutch" | "momentary_gears" | "auto_shift"
+            | "mouse_steering" | "mouse_right_off" | "mouse_smooth" | "blinker_cancel" => {
+                v[&k] = json!(b(val))
+            }
             "nav_view" => v[&k] = json!(if val == "top" { "top" } else { "perspective" }),
             "nav_orientation" => {
                 v[&k] = json!(if matches!(val, "north" | "heading") {
@@ -4335,6 +4349,14 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("hands_in_cab", false),
         b("alt_view", true),
         b("precision_zoom", false),
+    );
+    // OMSI's "Smoke Systems": active, the player's vehicle only, particles a system, mirrors
+    let text = format!(
+        "{text}smoke={}\nsmoke_user_only={}\nsmoke_max={}\nsmoke_in_mirrors={}\n",
+        b("smoke", true),
+        b("smoke_user_only", false),
+        n("smoke_max", 100).clamp(1, 100),
+        b("smoke_in_mirrors", true),
     );
     let text = format!(
         "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",

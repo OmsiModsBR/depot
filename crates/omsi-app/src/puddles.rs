@@ -727,6 +727,7 @@ impl Spray {
                 size,
                 color,
                 alpha: alpha * strength,
+                spray: true,
                 ..Default::default()
             });
         }

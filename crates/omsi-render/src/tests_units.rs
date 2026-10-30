@@ -1063,6 +1063,7 @@ fn mirror_and_plan_describe_what_is_drawn() {
             MirrorEvent::MoveTexture { from, into } => format!("move texture {from} {into}"),
             MirrorEvent::LightMapTile { slot, .. } => format!("light map {slot:?}"),
             MirrorEvent::CoronaTexture { id, .. } => format!("corona picture {id}"),
+            MirrorEvent::SmokeTexture { .. } => "smoke picture".to_string(),
         });
     })));
     let plans: Arc<Mutex<Vec<(FramePlan, usize)>>> = Arc::default();
@@ -1221,4 +1222,58 @@ fn mirror_carries_the_coronas() {
     // (the one that is not lit is left out; the rest are sorted by picture)
     assert_eq!(frames[0].0, 3);
     assert_eq!(frames[0].1, vec![(0, 0, 1, false), (7, 1, 2, false)]);
+}
+
+/// A second renderer gets the frame's smoke - OMSI's particles, farthest first, without the
+/// game's own tyre spray - and the smoke picture as it goes up; a mirror's picture shows none
+/// when the options say so.
+#[test]
+fn mirror_carries_the_smoke_of_omsi_without_the_spray() {
+    use std::sync::{Arc, Mutex};
+    let _serial = MIRROR_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut renderer = noop_renderer();
+    let widths: Arc<Mutex<Vec<u32>>> = Arc::default();
+    let seen = widths.clone();
+    renderer.set_asset_mirror(Some(Box::new(move |e: MirrorEvent<'_>| {
+        if let MirrorEvent::SmokeTexture { image } = e {
+            seen.lock().unwrap().push(image.width);
+        }
+    })));
+    renderer.set_smoke_texture(&omsi_texture::Image {
+        width: 4,
+        height: 4,
+        rgba: vec![255; 64],
+        has_alpha: true,
+    });
+    assert_eq!(*widths.lock().unwrap(), vec![4]);
+
+    let mut scene = renderer.new_scene();
+    let eye = DVec3::ZERO;
+    let puff = |y: f64, spray: bool| SmokeParticle {
+        position: DVec3::new(0.0, y, 0.0),
+        size: 1.0,
+        color: [1.0; 3],
+        alpha: 0.5,
+        spray,
+        ..Default::default()
+    };
+    scene.smoke = vec![puff(5.0, false), puff(20.0, false), puff(10.0, true)];
+    renderer.prepare_smoke(&mut scene, eye, false);
+    // all three are drawn by the default renderer; the second renderer gets the two of OMSI,
+    // the farthest (20 m) first
+    assert_eq!(scene.smoke_count, 3);
+    let list = scene.frame_smoke();
+    assert_eq!(list.len(), 2);
+    assert_eq!((list[0][1], list[1][1]), (20.0, 5.0));
+    assert_eq!(list[0][19], 3.0, "the smoke kind");
+
+    // a mirror shows the smoke unless the options leave it out
+    renderer.prepare_smoke(&mut scene, eye, true);
+    assert_eq!((scene.smoke_count, scene.frame_smoke().len()), (3, 2));
+    renderer.options.smoke_in_mirrors = false;
+    renderer.prepare_smoke(&mut scene, eye, true);
+    assert_eq!((scene.smoke_count, scene.frame_smoke().len()), (0, 0));
+    // (the window's own picture keeps its smoke)
+    renderer.prepare_smoke(&mut scene, eye, false);
+    assert_eq!((scene.smoke_count, scene.frame_smoke().len()), (3, 2));
 }

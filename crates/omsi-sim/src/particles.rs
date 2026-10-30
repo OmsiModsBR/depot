@@ -22,6 +22,20 @@ use std::sync::RwLock;
 
 /// Particles an emitter keeps at most (OMSI's 100).
 pub const MAX_PER_EMITTER: usize = 100;
+/// The most particles a system keeps while the game runs (the option "most particles per
+/// system", at most [`MAX_PER_EMITTER`]).
+static MAX_ALLOWED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(MAX_PER_EMITTER);
+
+/// Sets the most particles one system keeps (1 to [`MAX_PER_EMITTER`]); a system already
+/// over it keeps its particles until they die and sends no new ones.
+pub fn set_max_per_emitter(n: usize) {
+    MAX_ALLOWED.store(
+        n.clamp(1, MAX_PER_EMITTER),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
 /// How many times a second a particle's brake factor slows it (OMSI keeps
 /// 20 ln(brake), of a brake no lower than 0.1).
 const BRAKE_RATE: f32 = 20.0;
@@ -264,7 +278,9 @@ impl ParticleSet {
                 }
             }
             for (at, d, floor) in spawn {
-                if self.emitters[i].particles.len() >= MAX_PER_EMITTER {
+                if self.emitters[i].particles.len()
+                    >= MAX_ALLOWED.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     break;
                 }
                 let mut p = self.new_particle(&def, at, d.normalize_or_zero(), value);

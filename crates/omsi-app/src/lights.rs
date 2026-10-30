@@ -402,14 +402,37 @@ struct NearLights {
 
 static NEAR_LIGHTS: std::sync::Mutex<Option<NearLights>> = std::sync::Mutex::new(None);
 
-/// Fill the scene's lights for this frame.
+/// OMSI's "Smoke Systems" options as the scene is gathered: bit 0 the particles are drawn at
+/// all, bit 1 only the player's vehicle draws its own.
+static SMOKE_OPTIONS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0b01);
+
+/// Sets the smoke options (see [`omsi_sim::particles::set_max_per_emitter`] for the cap, which
+/// `max` sets here too).
+pub fn set_smoke_options(active: bool, user_only: bool, max: u32) {
+    SMOKE_OPTIONS.store(
+        u8::from(active) | u8::from(user_only) << 1,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    omsi_sim::particles::set_max_per_emitter(max as usize);
+}
+
+/// Whether the particles are drawn at all (the game's tyre spray is held back with them).
+pub fn smoke_active() -> bool {
+    SMOKE_OPTIONS.load(std::sync::atomic::Ordering::Relaxed) & 1 != 0
+}
+
+/// Fill the scene's lights for this frame. `players`: how many of the first `vehicles` are the
+/// player's (0 or 1; the smoke option "only the user vehicle" draws just their particles).
 pub fn collect(
     world: &World,
     scene: &mut Scene,
     daylight: &Daylight,
     camera_pos: DVec3,
     vehicles: &[&VehicleInstance],
+    players: usize,
 ) {
+    let options = SMOKE_OPTIONS.load(std::sync::atomic::Ordering::Relaxed);
+    let (smoke_on, user_only) = (options & 1 != 0, options & 2 != 0);
     scene.lights.clear();
     scene.coronas.clear();
     scene.smoke.clear();
@@ -487,7 +510,7 @@ pub fn collect(
     }
     for list in world.particle_objects.lock().values() {
         for po in list {
-            if (po.pos - camera_pos).length() < 1500.0 {
+            if smoke_on && !user_only && (po.pos - camera_pos).length() < 1500.0 {
                 particle_sprites(&po.set, &mut scene.smoke, &mut scene.coronas);
             }
         }
@@ -497,8 +520,11 @@ pub fn collect(
             log::info!("smoke: {} particles from objects, first at ({:.1}, {:.1}, {:.1}) size {:.2} alpha {:.2}", scene.smoke.len(), p.position.x, p.position.y, p.position.z, p.size, p.alpha);
         }
     }
-    for v in vehicles {
+    for (i, v) in vehicles.iter().enumerate() {
         vehicle_lights(v, &mut scene.coronas, &mut scene.lights, night);
+        if !smoke_on || (user_only && i >= players) {
+            continue;
+        }
         particle_sprites(&v.particles, &mut scene.smoke, &mut scene.coronas);
         for t in &v.trailers {
             particle_sprites(&t.particles, &mut scene.smoke, &mut scene.coronas);
@@ -618,6 +644,7 @@ pub fn particle_sprites(
                 z_offset: SMOKE_Z_OFFSET,
                 // (to fade into, where OMSI lets the road cut it off)
                 ground: p.ground.is_finite().then_some(p.ground),
+                spray: false,
             });
         }
     }
