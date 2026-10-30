@@ -1768,11 +1768,19 @@ impl Launcher {
                 Page::Profile => pages::profile(self, content),
                 Page::Settings => settings::settings(self, content),
                 Page::Controls => pages::controls(self, content),
-                Page::Mods => pages::mods(self, content),
+                Page::Mods => window::mods(
+                    &mut window::Frame {
+                        ui: &mut self.ui,
+                        state: &mut self.state,
+                        drop_hover: self.pages.drop_hover,
+                    },
+                    content,
+                ),
                 Page::Tutorials => window::tutorials(
                     &mut window::Frame {
                         ui: &mut self.ui,
                         state: &mut self.state,
+                        drop_hover: self.pages.drop_hover,
                     },
                     content,
                 ),
