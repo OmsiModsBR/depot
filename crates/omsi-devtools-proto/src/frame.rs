@@ -11,6 +11,8 @@ pub enum FrameError {
     Incomplete,
     #[error("frame holds a message that cannot be read")]
     Malformed,
+    #[error("frame has {0} bytes left over after its message")]
+    TrailingBytes(usize),
 }
 
 /// Message as a length-prefixed record: `u32` little endian length, then the payload.
@@ -38,6 +40,11 @@ pub fn decode<T: DeserializeOwned>(buf: &[u8]) -> Result<(T, usize), FrameError>
         return Err(FrameError::TooLong(len));
     }
     let payload = buf.get(4..4 + len).ok_or(FrameError::Incomplete)?;
-    let msg = postcard::from_bytes(payload).map_err(|_| FrameError::Malformed)?;
+    // A frame holds exactly one message; bytes after it mean the two sides disagree on the
+    // format, so refuse instead of ignoring them.
+    let (msg, rest) = postcard::take_from_bytes(payload).map_err(|_| FrameError::Malformed)?;
+    if !rest.is_empty() {
+        return Err(FrameError::TrailingBytes(rest.len()));
+    }
     Ok((msg, 4 + len))
 }

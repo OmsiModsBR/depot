@@ -15,4 +15,6 @@ pub use message::{
     Command, Event, EventKind, Hello, PhysicsSnapshot, Snapshot, ToGame, ToLauncher, VarValue,
     WheelSnapshot, PROTOCOL_VERSION,
 };
-pub use validate::{check_hello, validate_command, CommandError};
+pub use validate::{
+    check_hello, validate_command, CommandError, HelloError, MAX_SUBSCRIPTION, MAX_TEXT,
+};
