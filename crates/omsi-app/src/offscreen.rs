@@ -2,15 +2,16 @@
 
 use crate::actions::dump_display_textures;
 use crate::career;
-use crate::cli::{parse_time, parse_triggers, Args};
+use crate::core::cli::{parse_time, parse_triggers, Args};
+use crate::core::memory::texture_budget;
+use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
+use crate::hud::nav;
 use crate::humans;
 use crate::lights;
-use crate::memory::texture_budget;
 use crate::money;
-use crate::nav;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
@@ -24,7 +25,6 @@ use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
-use crate::startup::graphics_instance;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{
@@ -61,6 +61,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     ))?;
     log::info!("adapter: {}", renderer.adapter_name);
     crate::lights::load_smoke_texture(&mut renderer, &args.root);
+    crate::lights::set_smoke_options(settings.smoke, settings.smoke_user_only, settings.smoke_max);
     crate::lights::set_corona_root(&args.root);
     let mut scene = renderer.new_scene();
     let (world, mut camera) = load_world(args, &renderer, &mut scene)?;
@@ -1179,9 +1180,18 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
                     lights::upload_corona_textures(&mut renderer);
                     world.update_light_map_atlas(&renderer, cam.position);
-                    lights::collect(&world, &mut scene, &daylight, cam.position, &vehicles);
+                    lights::collect(
+                        &world,
+                        &mut scene,
+                        &daylight,
+                        cam.position,
+                        &vehicles,
+                        usize::from(player.is_some()),
+                    );
                 }
-                spray.sprites(cam.position, &mut scene.smoke);
+                if lights::smoke_active() {
+                    spray.sprites(cam.position, &mut scene.smoke);
+                }
                 let rate = precip_of(&weather).1;
                 let mut lighting = weather_lighting(
                     &daylight,
@@ -2696,7 +2706,14 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         lights::set_cone_strength(weather.fog.0, precip_of(&weather).1, daylight.night);
         lights::upload_corona_textures(&mut renderer);
         world.update_light_map_atlas(&renderer, camera.position);
-        lights::collect(&world, &mut scene, &daylight, camera.position, &vehicles);
+        lights::collect(
+            &world,
+            &mut scene,
+            &daylight,
+            camera.position,
+            &vehicles,
+            usize::from(player_ref.is_some()),
+        );
         let (kind, rate) = precip_of(&weather);
         let mut rn = rain::Rain::new();
         // (the offscreen picture is the default renderer's, which draws its own snowfall)
@@ -2724,7 +2741,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         }
         // the tyres' spray as the drive left it (OMSI_DRIVE_V0=S moves the bus without a
         // full engine-start sequence)
-        spray.sprites(camera.position, &mut scene.smoke);
+        if lights::smoke_active() {
+            spray.sprites(camera.position, &mut scene.smoke);
+        }
         log::info!(
             "spray: {} puffs; at the end {} tyres threw water, {} of them in a puddle",
             spray.len(),

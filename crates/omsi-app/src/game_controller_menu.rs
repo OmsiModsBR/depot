@@ -1,8 +1,8 @@
 //! In-game controller configuration. Edits are saved before installing mappings on the
 //! existing controller; opening this UI never creates another hardware connection.
-use crate::app::App;
 use crate::controllers::{DeviceCfg, Func};
-use crate::game_lists::{ListKind, Move, HEADING};
+use crate::core::app::App;
+use crate::hud::lists::{ListKind, Move, HEADING};
 
 pub fn is_controller_list(kind: Option<&ListKind>) -> bool {
     matches!(
@@ -41,7 +41,7 @@ fn event_names(app: &App, device: &DeviceCfg) -> Vec<(String, String)> {
         .iter()
         .flat_map(|d| d.buttons.iter().map(|b| b.0.clone()))
         .chain(device.buttons.iter().map(|b| b.0.clone()))
-        .chain(crate::game_lists::keyboard_actions(app))
+        .chain(crate::hud::lists::keyboard_actions(app))
         .chain(
             app.player
                 .as_ref()
@@ -95,7 +95,7 @@ fn event_names(app: &App, device: &DeviceCfg) -> Vec<(String, String)> {
 }
 
 fn row(name: &str, value: &str, desc: &str, action: String) -> (String, String) {
-    (crate::game_lists::row(name, 'a', value, desc, None), action)
+    (crate::hud::lists::row(name, 'a', value, desc, None), action)
 }
 
 const DEVICE_TABS: [&str; 4] = ["Device", "Axes and pedals", "Buttons", "Force feedback"];
@@ -160,7 +160,7 @@ pub fn axis_rows(d: &DeviceCfg, live: Option<&crate::controllers::Connected>) ->
                 .and_then(|c| c.axes.iter().find(|(k, _)| *k == a))
                 .map(|(_, v)| format!(" · {v:+.2}"))
                 .unwrap_or_default();
-            crate::game_lists::opens(
+            crate::hud::lists::opens(
                 &format!("{label}: {function}{value}"),
                 "Choose the function, direction and response curve of this axis",
                 &format!("edit_axis {a}"),
@@ -173,12 +173,12 @@ pub fn axis_rows(d: &DeviceCfg, live: Option<&crate::controllers::Connected>) ->
 /// available through physical capture or the separate button-number list.
 pub fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows {
     let mut out = vec![
-        crate::game_lists::opens(
+        crate::hud::lists::opens(
             "Press a button to assign it…",
             "Capture a button on this device",
             "capture_button",
         ),
-        crate::game_lists::opens(
+        crate::hud::lists::opens(
             "Choose a button by number…",
             "Includes unassigned buttons and hat directions",
             "button_numbers",
@@ -205,7 +205,7 @@ pub fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows
         } else {
             "Choose its action or switch behaviour"
         };
-        out.push(crate::game_lists::opens(
+        out.push(crate::hud::lists::opens(
             &format!("{}: {label}", button_label(b)),
             desc,
             &format!("button {b}"),
@@ -213,7 +213,7 @@ pub fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows
     }
     if out.len() == 3 {
         out.push((
-            crate::game_lists::row(
+            crate::hud::lists::row(
                 "No buttons assigned",
                 'i',
                 "",
@@ -256,7 +256,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
     match kind {
         ListKind::ControllerDevices(tab) => match (*tab).min(COMMON_TABS.len() - 1) {
             0 => {
-                out.push(crate::game_lists::button(
+                out.push(crate::hud::lists::button(
                     "Reload saved controllers",
                     "Reload",
                     "Apply saved mappings to the connected devices",
@@ -267,7 +267,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     let name = index(&devices, &c.name)
                         .map(|i| &devices[i].name)
                         .unwrap_or(&c.name);
-                    out.push(crate::game_lists::opens(
+                    out.push(crate::hud::lists::opens(
                         name,
                         "Configure this wheel, pedals or gamepad",
                         &format!("controller {name}"),
@@ -275,7 +275,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 }
                 if connected.is_empty() {
                     out.push((
-                        crate::game_lists::row(
+                        crate::hud::lists::row(
                             "No controller connected",
                             'i',
                             "",
@@ -296,7 +296,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 if !offline.is_empty() {
                     out.push(("Saved devices (disconnected)".into(), HEADING.into()));
                     for d in offline {
-                        out.push(crate::game_lists::opens(
+                        out.push(crate::hud::lists::opens(
                             &d.name,
                             "Edit the saved configuration",
                             &format!("controller {}", d.name),
@@ -307,24 +307,24 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             1 => {
                 out.push(("Steering".into(), HEADING.into()));
                 out.extend([
-                    crate::game_lists::slider_row(app, "ctrl_deadzone", "Dead zone", "Ignore movement around the centre or at pedal rest", &|v| format!("{:.0} %", v * 100.0)),
-                    crate::game_lists::switch_row(app, "arrows_switch_cams", "Arrows switch the cameras", "With a wheel, Left/Right change the interior camera as without one, instead of turning the head"),
-                    crate::game_lists::switch_row(app, "pad_steer_linear", "Stick steers like a wheel", "The wheel where the stick points, as far at any speed: for a wheel the system calls an Xbox controller"),
-                    crate::game_lists::slider_row(app, "pad_steer_smooth", "Stick steering smoothing", "Evens out a gamepad stick's small shakes (off: the stick as it reads)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
-                    crate::game_lists::slider_row(app, "wheel_range", "Wheel rotation", "Your wheel's rotation from lock to lock", &|v| format!("{v:.0}°")),
-                    crate::game_lists::slider_row(app, "wheel_lock", "Full lock at", "Rotation for the bus's full lock", &|v| if v < 45.0 { "OMSI".into() } else { format!("{v:.0}°") }),
+                    crate::hud::lists::slider_row(app, "ctrl_deadzone", "Dead zone", "Ignore movement around the centre or at pedal rest", &|v| format!("{:.0} %", v * 100.0)),
+                    crate::hud::lists::switch_row(app, "arrows_switch_cams", "Arrows switch the cameras", "With a wheel, Left/Right change the interior camera as without one, instead of turning the head"),
+                    crate::hud::lists::switch_row(app, "pad_steer_linear", "Stick steers like a wheel", "The wheel where the stick points, as far at any speed: for a wheel the system calls an Xbox controller"),
+                    crate::hud::lists::slider_row(app, "pad_steer_smooth", "Stick steering smoothing", "Evens out a gamepad stick's small shakes (off: the stick as it reads)", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{v:.0} ms") }),
+                    crate::hud::lists::slider_row(app, "wheel_range", "Wheel rotation", "Your wheel's rotation from lock to lock", &|v| format!("{v:.0}°")),
+                    crate::hud::lists::slider_row(app, "wheel_lock", "Full lock at", "Rotation for the bus's full lock", &|v| if v < 45.0 { "OMSI".into() } else { format!("{v:.0}°") }),
                 ].into_iter().flatten());
                 out.push(("Pedals".into(), HEADING.into()));
                 out.extend(
                     [
-                        crate::game_lists::slider_row(
+                        crate::hud::lists::slider_row(
                             app,
                             "pedal_t",
                             "Throttle pedal strength",
                             "Pedal response",
                             &|v| format!("x{v}"),
                         ),
-                        crate::game_lists::slider_row(
+                        crate::hud::lists::slider_row(
                             app,
                             "pedal_b",
                             "Brake pedal strength",
@@ -339,13 +339,13 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             _ => {
                 out.extend(
                     [
-                        crate::game_lists::switch_row(
+                        crate::hud::lists::switch_row(
                             app,
                             "ff",
                             "Force feedback and vibration",
                             "Enable steering forces and gamepad rumble",
                         ),
-                        crate::game_lists::switch_row(
+                        crate::hud::lists::switch_row(
                             app,
                             "ff_invert",
                             "Invert force feedback by default",
@@ -355,7 +355,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     .into_iter()
                     .flatten(),
                 );
-                out.push((crate::game_lists::row("Device strengths", 'i', "", "Select a device and open its Force feedback tab to adjust force, vibration and direction", None), "noop".into()));
+                out.push((crate::hud::lists::row("Device strengths", 'i', "", "Select a device and open its Force feedback tab to adjust force, vibration and direction", None), "noop".into()));
             }
         },
         ListKind::Controller(name, tab) => {
@@ -370,7 +370,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             match (*tab).min(DEVICE_TABS.len() - 1) {
                 0 => {
                     out.push((
-                        crate::game_lists::row(
+                        crate::hud::lists::row(
                             "Connection",
                             'i',
                             if live.is_some() {
@@ -389,7 +389,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                         .split('|')
                         .any(|n| crate::controllers::names_match(n, name));
                     out.push((
-                        crate::game_lists::row(
+                        crate::hud::lists::row(
                             "Use this device",
                             's',
                             if disabled { "off" } else { "on" },
@@ -398,17 +398,17 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                         ),
                         "device_on".into(),
                     ));
-                    out.push(crate::game_lists::opens(
+                    out.push(crate::hud::lists::opens(
                         "Axes and pedals",
                         "Map steering, throttle, brake and clutch",
                         "device_tab 1",
                     ));
-                    out.push(crate::game_lists::opens(
+                    out.push(crate::hud::lists::opens(
                         "Buttons",
                         "Assign controls and configure latching switches",
                         "device_tab 2",
                     ));
-                    out.push(crate::game_lists::opens(
+                    out.push(crate::hud::lists::opens(
                         "Force feedback",
                         "Adjust this device's force, vibration and direction",
                         "device_tab 3",
@@ -437,7 +437,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     ));
                     let invert = d.ff_invert.unwrap_or(app.settings.ff_invert);
                     out.push((
-                        crate::game_lists::row(
+                        crate::hud::lists::row(
                             "Invert force feedback",
                             's',
                             if invert { "on" } else { "off" },
@@ -458,7 +458,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 .map(|(_, v)| format!("{v:+.2}"))
                 .unwrap_or_else(|| "Disconnected".into());
             out.push((
-                crate::game_lists::row(
+                crate::hud::lists::row(
                     "Live reading",
                     'i',
                     &live,
@@ -476,7 +476,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             ));
             if let Some((_, inv)) = d.axes[*a] {
                 out.push((
-                    crate::game_lists::row(
+                    crate::hud::lists::row(
                         "Reversed",
                         's',
                         if inv { "on" } else { "off" },
@@ -537,13 +537,13 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             } else {
                 names.control(action)
             };
-            out.push(crate::game_lists::opens(
+            out.push(crate::hud::lists::opens(
                 &omsi_ui::tr("Action: %{action}").replace("%{action}", &value),
                 "Choose an OMSI event or game action",
                 "choose_action",
             ));
             out.push((
-                crate::game_lists::row(
+                crate::hud::lists::row(
                     "Latching switch",
                     's',
                     if d.latching.contains(b) { "on" } else { "off" },
@@ -552,7 +552,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 ),
                 format!("latching {b}"),
             ));
-            out.push(crate::game_lists::button(
+            out.push(crate::hud::lists::button(
                 "Clear assignment",
                 "Clear",
                 "Leave this button without an action",
@@ -635,7 +635,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         return parent(kind);
     }
     if let ListKind::ControllerDevices(_) = kind {
-        if crate::game_lists::option_do(app, verb, arg, mv) {
+        if crate::hud::lists::option_do(app, verb, arg, mv) {
             return Some(kind.clone());
         }
         if !matches!(mv, Move::Next) {
@@ -719,7 +719,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             off.push(name.clone());
         }
         app.settings.ctrl_off = off.join("|");
-        crate::game_lists::remember_setting("ctrl_off", &app.settings.ctrl_off);
+        crate::hud::lists::remember_setting("ctrl_off", &app.settings.ctrl_off);
         return Some(kind.clone());
     }
     let mut devices = configurations(app);

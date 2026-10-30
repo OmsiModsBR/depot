@@ -20,6 +20,7 @@ pub(crate) const SCENE: &str = include_str!("shaders/scene.hlsl");
 pub(crate) const UI: &str = include_str!("shaders/ui.hlsl");
 pub(crate) const CORONA: &str = include_str!("shaders/corona.hlsl");
 pub(crate) const SKY: &str = include_str!("shaders/sky.hlsl");
+pub(crate) const SMOKE: &str = include_str!("shaders/smoke.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -255,6 +256,18 @@ mod tests {
         let slots = reported_slots(&ps).unwrap();
         println!("sky pixel shader: {slots} instruction slots");
         assert!(slots <= 460, "the sky pixel shader takes {slots} slots");
+    }
+
+    #[test]
+    fn smoke_shaders_compile_for_sm3() {
+        let vs = compile(SMOKE, "smoke.hlsl", "vs_main", Stage::Vertex).unwrap();
+        let ps = compile(SMOKE, "smoke.hlsl", "ps_main", Stage::Pixel).unwrap();
+        assert_eq!(vs[0], 0xFFFE_0300);
+        assert_eq!(ps[0], 0xFFFF_0300);
+        // (a separate pass: its pixel shader has its own 512 slots, with room to spare)
+        let slots = reported_slots(&ps).unwrap();
+        println!("smoke pixel shader: {slots} instruction slots");
+        assert!(slots <= 460, "the smoke pixel shader takes {slots} slots");
     }
 
     #[test]

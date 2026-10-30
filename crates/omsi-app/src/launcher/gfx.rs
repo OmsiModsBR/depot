@@ -2,7 +2,7 @@
 //! game's renderer on it. Opening the game's renderer meant compiling every scene, sky,
 //! shadow and post pass before the window showed anything (most of a minute on a slow
 //! driver); the interface needs one pipeline. The bus preview is drawn by a helper process
-//! of its own (see `preview`), so nothing 3D waits in front of the launcher's window.
+//! of its own (see `crate::showroom`), so nothing 3D waits in front of the launcher's window.
 
 use anyhow::{anyhow, Result};
 use std::sync::{Arc, Mutex};
@@ -22,7 +22,7 @@ impl Gfx {
     /// A device for `window`: on `instance` if it can, else on the next graphics interface
     /// and adapter that can (`instance` then becomes that one's), as the game opens its own.
     pub fn for_window(instance: &mut wgpu::Instance, window: &Arc<Window>) -> Result<Gfx> {
-        crate::startup::for_window(instance, window, |adapter, surface| {
+        crate::core::startup::for_window(instance, window, |adapter, surface| {
             Gfx::open(adapter, surface)
         })
     }

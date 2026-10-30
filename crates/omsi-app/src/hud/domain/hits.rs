@@ -7,7 +7,7 @@ pub struct Hits {
     /// Where the game menu's lines were drawn this frame (physical pixels), for the mouse.
     pub menu_rects: Vec<[f32; 4]>,
     /// Per line of `menu_rects`, where the arrows round its value are (a list's setting,
-    /// `game_lists::ADJUST`): `[from, to, plus]` - a click from `from` to `to` steps it
+    /// `hud::lists::ADJUST`): `[from, to, plus]` - a click from `from` to `to` steps it
     /// down, one right of `plus` up.
     pub menu_arrows: Vec<Option<[f32; 3]>>,
     pub menu_scroll_thumb: Option<[f32; 4]>,
@@ -46,6 +46,8 @@ pub struct Hits {
     /// Where the information bar was drawn (within the panel, before `Ui::draw_at` moves it), for the
     /// navigator to keep out of its way.
     pub info_rect: Option<[f32; 4]>,
+    /// The arrow of a two-tier information bar that folds its second tier away.
+    pub info_chevron: Option<[f32; 4]>,
 }
 
 impl Default for Hits {
@@ -71,6 +73,7 @@ impl Default for Hits {
             dd_rows: 8,
             dd_scroll: None,
             info_rect: None,
+            info_chevron: None,
         }
     }
 }

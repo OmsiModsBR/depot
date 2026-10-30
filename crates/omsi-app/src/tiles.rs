@@ -1040,7 +1040,7 @@ fn loader_pool() -> &'static rayon::ThreadPool {
         rayon::ThreadPoolBuilder::new()
             .num_threads(n)
             .thread_name(|i| format!("tile loader {i}"))
-            .start_handler(|_| crate::threads::lower_thread_priority())
+            .start_handler(|_| crate::core::threads::lower_thread_priority())
             .build()
             .expect("tile loader pool")
     })
@@ -1476,7 +1476,7 @@ impl Streamer {
                 std::time::Instant::now(),
             );
             self.world.compact_slots(renderer, scene);
-            crate::memory::release_free_memory();
+            crate::core::memory::release_free_memory();
         }
         if self.last_summary.elapsed().as_secs_f32() >= 10.0 && omsi_cfg::flags::PROFILE.is_set() {
             self.last_summary = std::time::Instant::now();

@@ -1,6 +1,6 @@
 use omsi_launcher_ui::vehicles::PrerenderPhase;
 use openomsi_game::testing::launcher::prerender::*;
-use openomsi_game::testing::launcher::showroom::Look;
+use openomsi_game::testing::showroom::Look;
 use std::time::Duration;
 use std::time::Instant;
 

@@ -44,11 +44,7 @@ pub struct StartView {
     time_text: String,
 }
 
-/// `2024-06-14` as `14/06/2024`.
-pub fn date_shown(iso: &str) -> String {
-    let (y, m, d) = omsi_ui::widgets::parse_date(iso);
-    format!("{d:02}/{m:02}/{y:04}")
-}
+pub use omsi_launcher_ui::state::date_shown;
 
 /// A typed date (`14/06/2024`, `14.6.2024`, or `2024-06-14`) as `2024-06-14`; None when it is
 /// no date.

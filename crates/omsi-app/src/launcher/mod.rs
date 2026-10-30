@@ -4,7 +4,7 @@
 //! It is a program of its own (the game binary started without a session), drawn with wgpu
 //! on a plain device of its own (see `gfx`): none of the game's renderer is opened for it,
 //! so the window is there at once. The chosen bus stands in a picture kept from an earlier
-//! time and drawn live by a helper process while a page shows it (see `preview`), and the
+//! time and drawn live by a helper process while a page shows it (see `crate::showroom`), and the
 //! interface - flat and dark, every control custom - is drawn with `omsi-ui` straight
 //! onto the window. A session is a process of its own as well (see `state`). The data side (content
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
@@ -17,24 +17,23 @@ pub(crate) mod chrome;
 pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
+pub(crate) mod host;
 pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
 mod omsi2_map;
-mod original;
 pub(crate) mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
-pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod setup;
-pub(crate) mod showroom;
 pub(crate) mod start;
-pub(crate) mod state;
+pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
-pub(crate) use state::crash_of;
+pub(crate) use omsi_launcher_ui::state::crash_of;
+pub(crate) use omsi_launcher_ui::state::days_text;
 pub(crate) mod dialogs;
 mod theme;
 pub(crate) mod thumbs;
@@ -43,8 +42,10 @@ pub(crate) mod timetable_plan;
 pub(crate) mod tray;
 pub(crate) mod ui;
 
+use crate::showroom;
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_ui::picture::MapPicture;
 use omsi_launcher_ui::Page as UiPage;
 use omsi_ui::paint::Align;
 use omsi_ui::{Draw, Rect, Weight};
@@ -151,7 +152,7 @@ pub struct Launcher {
     gpu: Option<omsi_ui::Gpu>,
     ui: Ui,
     state: state::State,
-    preview: preview::Preview,
+    preview: showroom::Preview,
     page: Page,
     page_anim: f32,
     pub drive: drive::DriveView,
@@ -264,8 +265,8 @@ impl Launcher {
             gfx: None,
             gpu: None,
             ui: Ui::new(),
-            state: state::State::new(),
-            preview: preview::Preview::new(),
+            state: state::State::new(&host::GameHost),
+            preview: showroom::Preview::new(),
             page: Page::Drive,
             page_anim: 1.0,
             drive: drive::DriveView::default(),
@@ -465,7 +466,7 @@ impl Launcher {
     fn drop_gpu(&mut self) {
         self.gpu = None;
         self.preview_tex = None;
-        self.preview = preview::Preview::new();
+        self.preview = showroom::Preview::new();
         // (the helper drawing pictures ahead of time is not left up for the game)
         self.prerender.suspend();
         self.map_tex = None;
@@ -526,7 +527,7 @@ impl Launcher {
             let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
                 Ok(g) => g,
                 Err(e) => {
-                    crate::startup::fatal_message(&format!(
+                    crate::core::startup::fatal_message(&format!(
                         "Project Depot cannot draw on this computer: {e:#}"
                     ));
                     std::process::exit(1);
@@ -577,11 +578,11 @@ impl ApplicationHandler for Launcher {
         });
         let (fit, at) = match asked {
             Some((iw, ih)) => (winit::dpi::LogicalSize::new(iw, ih), None),
-            None => crate::startup::fit_window(event_loop, 1440.0, 880.0, None),
+            None => crate::core::startup::fit_window(event_loop, 1440.0, 880.0, None),
         };
         let mut attrs = Window::default_attributes()
             .with_title("Project Depot")
-            .with_window_icon(crate::startup::window_icon())
+            .with_window_icon(crate::core::startup::window_icon())
             .with_inner_size(fit);
         if !mobile::mobile() {
             // (the launcher draws its own title bar, as Windows 11 apps do: see `chrome`)
@@ -601,7 +602,7 @@ impl ApplicationHandler for Launcher {
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
-                crate::startup::fatal_message(&format!(
+                crate::core::startup::fatal_message(&format!(
                     "Project Depot cannot open its window: {e}"
                 ));
                 event_loop.exit();
@@ -611,7 +612,7 @@ impl ApplicationHandler for Launcher {
         let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
             Ok(g) => g,
             Err(e) => {
-                crate::startup::fatal_message(&format!(
+                crate::core::startup::fatal_message(&format!(
                     "Project Depot cannot draw on this computer: {e:#}"
                 ));
                 event_loop.exit();
@@ -624,14 +625,14 @@ impl ApplicationHandler for Launcher {
             {
                 Ok(s) => s,
                 Err(e) => {
-                    crate::startup::fatal_message(&format!(
+                    crate::core::startup::fatal_message(&format!(
                         "Project Depot cannot draw into its window: {e:#}"
                     ));
                     event_loop.exit();
                     return;
                 }
             };
-        log::info!("launcher window {}x{} (scale {:.2}), adapter {}, open {:.0} ms after the program started", size.width, size.height, window.scale_factor(), g.adapter_name, crate::startup::since_start_ms());
+        log::info!("launcher window {}x{} (scale {:.2}), adapter {}, open {:.0} ms after the program started", size.width, size.height, window.scale_factor(), g.adapter_name, crate::core::startup::since_start_ms());
         self.gpu = Some(self.new_gpu(&g));
         self.window = Some(window);
         self.surface = Some(surface);
@@ -891,41 +892,6 @@ fn run_time(t: u64) -> String {
             .replace("%{h}", &(m / 60).to_string())
             .replace("%{m}", &(m % 60).to_string())
     }
-}
-
-/// A tour's days as the core puts them ("Mon-Fri & holidays, school days"), in the
-/// player's language, piece by piece.
-pub(crate) fn days_text(d: &str) -> String {
-    let (head, school) = match (
-        d.strip_suffix(", school holidays"),
-        d.strip_suffix(", school days"),
-    ) {
-        (Some(h), _) => (h, Some("school holidays")),
-        (_, Some(h)) => (h, Some("school days")),
-        _ => (d, None),
-    };
-    let (week, holidays) = match head.strip_suffix(" & holidays") {
-        Some(w) => (w, true),
-        None if head == "holidays" => ("", true),
-        None => (head, false),
-    };
-    let mut out = week
-        .split(", ")
-        .filter(|x| !x.is_empty())
-        .map(|x| omsi_ui::tr(x).into_owned())
-        .collect::<Vec<_>>()
-        .join(", ");
-    if holidays {
-        out = if out.is_empty() {
-            omsi_ui::tr("holidays").into_owned()
-        } else {
-            format!("{out} & {}", omsi_ui::tr("holidays"))
-        };
-    }
-    if let Some(x) = school {
-        out = format!("{out}, {}", omsi_ui::tr(x));
-    }
-    out
 }
 
 /// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
@@ -1498,7 +1464,7 @@ impl Launcher {
             self.shown_once = true;
             log::info!(
                 "launcher: first picture in the window {:.0} ms after the program started",
-                crate::startup::since_start_ms()
+                crate::core::startup::since_start_ms()
             );
         }
         self.check_exit(event_loop);
@@ -1710,7 +1676,7 @@ impl Launcher {
             && self.pages.controls_tab == 0
             && self.pages.kb.dialog.is_some();
         // (and OmsiLaunch's install or removal dialogs)
-        let engine = !mobile && !matches!(self.state.original.flow, original::Flow::Idle);
+        let engine = !mobile && !matches!(self.state.original.flow, state::Flow::Idle);
         // (and the integrity report's export over Diagnostics)
         let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
         if self.browser.is_some() || crash || reset || disconnected {
@@ -2436,13 +2402,13 @@ impl Launcher {
         let again = progress != self.prerender_seen;
         self.prerender_seen = progress;
         for look in looks {
-            let key = preview::kept_key(&look, shape);
+            let key = showroom::kept_key(&look, shape);
             if again {
                 self.thumbs.retry(&key);
             }
             let (bus, paint) = (look.bus.clone(), look.paint.clone());
             self.thumbs
-                .want(&key, move || preview::kept_picture(&look, shape));
+                .want(&key, move || showroom::kept_picture(&look, shape));
             self.vehicles
                 .set_paint_thumb(&bus, &paint, self.thumbs.get(&key));
         }
@@ -2511,10 +2477,8 @@ impl Launcher {
                 self.state.select_map(&file);
             }
         }
-        self.maps.set_picture(
-            self.map_pic.shown(),
-            self.map_pic.reading.is_some() || self.map_pic.pending.is_some(),
-        );
+        self.maps
+            .set_picture(self.map_pic.shown(), self.map_pic.busy());
         // the rows' small pictures, the same file read on a thread of their own
         let root = std::path::PathBuf::from(&self.state.config.root);
         for file in self.maps.visible().to_vec() {
@@ -2745,18 +2709,6 @@ impl Launcher {
     }
 }
 
-/// The preview helper's renderer (see `preview`): a bus on a floor needs none of the game's costly passes - no
-/// ambient occlusion, a small shadow map, 4x MSAA for the edges whatever the game uses.
-fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
-    omsi_render::RenderOptions {
-        msaa: 4,
-        ssao: false,
-        shadow_size: 1024,
-        render_scale: 1.0,
-        ..settings.render_options()
-    }
-}
-
 /// Whether Windows animates its controls (Settings > Accessibility > Visual effects >
 /// Animation effects): off, the launcher shows every change at once too. Elsewhere, on.
 fn windows_motion() -> bool {
@@ -2779,117 +2731,5 @@ fn windows_motion() -> bool {
     #[cfg(not(windows))]
     {
         true
-    }
-}
-
-/// The picture in a map's folder (`picture.jpg` and the like, as a map ships it), for the
-/// Maps page: read and made smaller on a thread, then put on the GPU.
-#[derive(Default)]
-pub(crate) struct MapPicture {
-    /// The map file it is of.
-    file: String,
-    reading: Option<std::sync::mpsc::Receiver<Option<image::RgbaImage>>>,
-    pending: Option<image::RgbaImage>,
-    texture: Option<usize>,
-    /// Width over height, while the texture shows this map's picture.
-    aspect: Option<f32>,
-}
-
-impl MapPicture {
-    fn want(&mut self, root: &std::path::Path, file: &str) {
-        if self.file != file {
-            self.file = file.to_string();
-            self.aspect = None;
-            self.pending = None;
-            // (found through the content roots as the map list found it: a mod's map, or one
-            // read in place from an archive, has its own picture)
-            let dir = Self::folder(root, file);
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let img = dir
-                    .and_then(|d| Self::find(&d))
-                    .and_then(|f| Self::read(&f));
-                let _ = tx.send(img);
-            });
-            self.reading = Some(rx);
-        }
-        if let Some(rx) = self.reading.as_ref() {
-            match rx.try_recv() {
-                Ok(img) => {
-                    self.pending = img;
-                    self.reading = None;
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.reading = None,
-            }
-        }
-    }
-
-    /// The folder of the map `file`, found through the content roots as the map list found it.
-    pub(crate) fn folder(root: &std::path::Path, file: &str) -> Option<std::path::PathBuf> {
-        let global = omsi_cfg::find_in_roots(file)
-            .map(|(_, p)| p)
-            .unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
-        global.parent().map(|d| d.to_path_buf())
-    }
-
-    /// The picture in `dir`: a file named "picture" (any case) the image reader knows.
-    pub(crate) fn find(dir: &std::path::Path) -> Option<std::path::PathBuf> {
-        let mut files: Vec<_> = omsi_cfg::vfs::list_dir(dir)?
-            .into_iter()
-            .filter(|(_, is_dir)| !is_dir)
-            .map(|(name, _)| dir.join(name))
-            .filter(|p| {
-                p.file_stem()
-                    .is_some_and(|s| s.eq_ignore_ascii_case("picture"))
-                    && p.extension().and_then(|x| x.to_str()).is_some_and(|x| {
-                        ["jpg", "jpeg", "png", "bmp"].contains(&x.to_ascii_lowercase().as_str())
-                    })
-            })
-            .collect();
-        files.sort();
-        files.into_iter().next()
-    }
-
-    /// The picture decoded within bounds (a map's file is anyone's: no more than 8192 pixels a
-    /// side and 256 MB decoded, and a file on disk over 64 MB is not read at all), then made to
-    /// fit 1280 x 1280 (the page shows it a few hundred points wide; a texture of that size goes
-    /// on any card).
-    pub(crate) fn read(file: &std::path::Path) -> Option<image::RgbaImage> {
-        if std::fs::metadata(file).is_ok_and(|m| m.len() > 64 << 20) {
-            return None;
-        }
-        let bytes = omsi_cfg::vfs::read(file).ok()?;
-        let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
-            .with_guessed_format()
-            .ok()?;
-        let mut limits = image::Limits::default();
-        limits.max_image_width = Some(8192);
-        limits.max_image_height = Some(8192);
-        limits.max_alloc = Some(256 << 20);
-        reader.limits(limits);
-        let img = reader.decode().ok()?;
-        let img = if img.width() > 1280 || img.height() > 1280 {
-            img.resize(1280, 1280, image::imageops::FilterType::Triangle)
-        } else {
-            img
-        };
-        Some(img.to_rgba8())
-    }
-
-    fn upload(&mut self, gpu: &mut omsi_ui::Gpu, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let Some(img) = self.pending.take() else {
-            return;
-        };
-        let (w, h) = img.dimensions();
-        match self.texture {
-            Some(id) => gpu.update_image(device, queue, id, w, h, img.as_raw()),
-            None => self.texture = Some(gpu.add_image(device, queue, w, h, img.as_raw())),
-        }
-        self.aspect = Some(w as f32 / h.max(1) as f32);
-    }
-
-    fn shown(&self) -> Option<(usize, f32)> {
-        Some((self.texture?, self.aspect?))
     }
 }

@@ -1,7 +1,7 @@
 //! The mouse and the VR pointer: clicks, the cursor, looking around and zooming, and what
 //! is under the cursor.
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::output::{cursor_ray, pixel_angle, ORBIT_MAX, ORBIT_MIN};
 use omsi_render::Camera;
 use winit::keyboard::KeyCode;
@@ -50,7 +50,7 @@ pub const ZOOM_INTENT: f32 = 0.70;
 /// ease-out as the viewpoint switch instead of teleporting. `t` seconds in;
 /// returns the current look, zoom and done. Pure (tested below).
 pub fn reset_blend(look_from: (f32, f32), zoom_from: f32, t: f32) -> ((f32, f32), f32, bool) {
-    let x = (t / crate::app::CAM_BLEND_SECS).clamp(0.0, 1.0);
+    let x = (t / crate::core::app::CAM_BLEND_SECS).clamp(0.0, 1.0);
     let u = 1.0 - x;
     let s = 1.0 - u * u * u;
     (
@@ -609,6 +609,19 @@ impl App {
         if self.vr_nav_edit.is_some() {
             return;
         }
+        // the arrow of a two-tier information bar folds its second tier away
+        if pressed && self.game_menu.is_none() {
+            let (x, y) = self.hud_cursor();
+            let over = self
+                .ui
+                .as_ref()
+                .and_then(|u| u.hits.info_chevron)
+                .is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
+            if over {
+                self.info_collapsed = !self.info_collapsed;
+                return;
+            }
+        }
         // the object editor: the mouse picks and drags
         if self.game_menu.is_none() && self.editor_mouse(pressed) {
             return;
@@ -651,7 +664,7 @@ impl App {
                     Some(true) => {
                         let at = n.placement();
                         self.settings.navigator_corner = at.clone();
-                        crate::game_lists::remember_setting("navigator_corner", &at);
+                        crate::hud::lists::remember_setting("navigator_corner", &at);
                         return;
                     }
                     None => {}
@@ -971,7 +984,7 @@ impl App {
             .unwrap_or((0.0, 0.0));
         if self.settings.mouse_steering != on {
             self.settings.mouse_steering = on;
-            crate::game_lists::remember_setting("mouse_steering", if on { "1" } else { "0" });
+            crate::hud::lists::remember_setting("mouse_steering", if on { "1" } else { "0" });
         }
     }
 

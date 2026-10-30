@@ -7,7 +7,7 @@ use glam::Vec2;
 use openomsi_game::testing;
 use openomsi_game::testing::ui::menu::*;
 use openomsi_game::testing::ui::overlay::*;
-use testing::game_lists::{row, ListKind, HEADING};
+use testing::hud::lists::{row, ListKind, HEADING};
 use testing::hud::{DropdownView, MenuKind, Preview};
 use testing::ui::pages::{page_frame, test_column, test_frame, PageFrame};
 

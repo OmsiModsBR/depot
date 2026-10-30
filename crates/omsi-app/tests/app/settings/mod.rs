@@ -162,7 +162,7 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
     // --enhanced / --enhanced-plus (and their variables) do not apply to DirectX9 (D3D9Ex)
     let d3d9 = Settings::from_text("graphics_api=d3d9\n");
     assert_eq!(
-        openomsi_game::testing::startup::enhanced_wanted(&d3d9, true, true),
+        openomsi_game::testing::core::startup::enhanced_wanted(&d3d9, true, true),
         if cfg!(windows) {
             (false, false)
         } else {
@@ -171,7 +171,7 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
     );
     let vulkan = Settings::from_text("graphics_api=vulkan\n");
     assert_eq!(
-        openomsi_game::testing::startup::enhanced_wanted(&vulkan, true, true),
+        openomsi_game::testing::core::startup::enhanced_wanted(&vulkan, true, true),
         (true, true)
     );
     let mut s = Settings::from_text("graphics=enhanced_plus\n");

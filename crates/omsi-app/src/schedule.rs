@@ -1474,7 +1474,7 @@ impl Schedule {
         }
         // what was read ahead and not used (textures of variants the AI never shows)
         world.forget_prefetched();
-        crate::memory::release_free_memory();
+        crate::core::memory::release_free_memory();
         self.fleet_check = day_time;
         log::info!("timetable fleet: {} vehicle/paint sets of the first {:.0} minutes read and uploaded in {:.1} s (at most {:.0} MB read ahead at once), a first start of every type in {:.1} s", sets.len(), fleet_ahead() / 60.0, (t1 - t0).as_secs_f32(), most_held as f64 / 1e6, t1.elapsed().as_secs_f32());
     }
@@ -1719,7 +1719,7 @@ impl Schedule {
             .map(std::time::Duration::from_secs_f32)
             .unwrap_or(FLEET_IDLE);
         if world.trim_vehicle_sets(renderer, scene, &keep, idle) > 0 {
-            crate::memory::release_free_memory();
+            crate::core::memory::release_free_memory();
         }
         let prefetch = world.vehicle_prefetch(renderer);
         for (ty, scheme) in sets {
@@ -1735,7 +1735,7 @@ impl Schedule {
             self.fleet_reading.insert(key.clone(), ty.clone());
             let (p, ready) = (prefetch.clone(), self.fleet_ready.clone());
             // (off the frame's pool: see `threads`)
-            crate::threads::background_pool().spawn(move || {
+            crate::core::threads::background_pool().spawn(move || {
                 p.prefetch(&ty, scheme);
                 ready.lock().push(key);
             });
