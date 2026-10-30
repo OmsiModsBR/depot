@@ -12,6 +12,7 @@
 mod coronas;
 mod scene;
 pub mod shader;
+mod sky;
 mod smoke;
 mod ui;
 

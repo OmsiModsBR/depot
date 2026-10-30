@@ -522,6 +522,17 @@ impl SceneCoronas<'_> {
     }
 }
 
+/// The sky dome behind a picture: the three pictures of `envir.cfg`'s `[sky_textures]` and
+/// the light that blends them. Without the pictures the picture keeps its clear colour.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SceneSky {
+    /// The day, twilight and night pictures, as scene texture ids.
+    pub textures: Option<[usize; 3]>,
+    /// x the sun's azimuth (radians, clockwise from north), yzw the weights of the day,
+    /// twilight and night pictures.
+    pub params: [f32; 4],
+}
+
 /// The smoke and particles of a picture, as the default renderer hands them to its smoke
 /// shader (`Scene::frame_smoke` of `omsi-render`): camera-facing squares of the game's smoke
 /// picture, alpha-blended over the scene, farthest first. Only OMSI's own `[smoke]` and
@@ -553,6 +564,8 @@ pub struct SceneFrame<'a> {
     pub lamps: SceneLamps<'a>,
     /// The light coronas drawn over the scene.
     pub coronas: SceneCoronas<'a>,
+    /// The sky dome drawn first, behind everything.
+    pub sky: SceneSky,
     /// The smoke and particles drawn over the world's batches.
     pub smoke: SceneSmoke<'a>,
 }
@@ -826,6 +839,7 @@ mod tests {
             surface_bias: -24,
             lamps: SceneLamps::default(),
             coronas: SceneCoronas::default(),
+            sky: Default::default(),
             smoke: SceneSmoke::default(),
         };
         frame.validate().unwrap();

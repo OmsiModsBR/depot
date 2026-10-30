@@ -10,7 +10,7 @@
 //! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
 //! frame is done.
 //!
-//! What the plan does not carry yet is not drawn in this mode: the sky, shadows and pictures
+//! What the plan does not carry yet is not drawn in this mode: shadows and pictures
 //! drawn on the GPU into textures (the navigator's maps; see the crate's README).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,8 +23,8 @@ use omsi_render::{
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
     BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneCoronas, SceneFrame,
-    SceneLamps, SceneLight, SceneMaterial, SceneSmoke, SceneTexture, TexAddress, TexFormat, UiDraw,
-    UiFrame, UiLayer, UiOverlay,
+    SceneLamps, SceneLight, SceneMaterial, SceneSky, SceneSmoke, SceneTexture, TexAddress,
+    TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -224,6 +224,10 @@ impl Inner {
                 grid: scene.frame_light_grid(),
                 place: plan.light_grid,
                 tile_map: plan.light_map,
+            },
+            sky: SceneSky {
+                textures: scene.sky_textures(),
+                params: plan.sky,
             },
         };
         let material = |id: usize| {

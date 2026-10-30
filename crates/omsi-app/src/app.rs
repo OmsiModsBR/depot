@@ -9,6 +9,7 @@ use crate::memory::texture_budget;
 use crate::menu;
 use crate::money;
 use crate::nav;
+use crate::output::Backend;
 use crate::player::Player;
 use crate::puddles;
 use crate::radio;
@@ -40,9 +41,8 @@ pub(crate) struct App {
     pub(crate) window: Option<Arc<Window>>,
     pub(crate) surface: Option<SurfaceState<'static>>,
     pub(crate) renderer: Option<Renderer>,
-    /// The "DirectX9 (D3D9Ex)" output of the window (see `output`).
-    #[cfg(windows)]
-    pub(crate) d3d9: Option<crate::output::D3d9Output>,
+    /// What the window draws with, chosen when it opens (see `output`).
+    pub(crate) output: crate::output::Output,
     #[cfg(windows)]
     pub(crate) vr: Option<crate::output::Vr>,
     pub(crate) scene: Option<Scene>,
@@ -403,34 +403,6 @@ impl App {
         false
     }
 
-    /// Whether the window draws with "DirectX9 (D3D9Ex)".
-    #[cfg(windows)]
-    pub(crate) fn d3d9_active(&self) -> bool {
-        self.d3d9.is_some()
-    }
-
-    #[cfg(not(windows))]
-    pub(crate) fn d3d9_active(&self) -> bool {
-        false
-    }
-
-    /// Under "DirectX9 (D3D9Ex)", shows the picture the renderer drew this frame.
-    pub(crate) fn d3d9_present(&self) {
-        #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
-            d.present();
-        }
-    }
-
-    /// Under "DirectX9 (D3D9Ex)", the mirror an `omsi-ui` Gpu drawing over the window's
-    /// picture hands its draws to.
-    pub(crate) fn d3d9_ui_mirror(&self) -> Option<omsi_ui::UiMirror> {
-        #[cfg(windows)]
-        return self.d3d9.as_ref().map(|d| d.ui_mirror());
-        #[cfg(not(windows))]
-        None
-    }
-
     pub(crate) fn resumed_impl(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(window) = self.window.clone() {
             // back from the background (a phone): the window's surface is made again
@@ -438,7 +410,7 @@ impl App {
                 if let Some(r) = self.renderer.as_ref() {
                     let size = window.inner_size();
                     let vsync = self.settings.vsync && !self.vr_active();
-                    self.surface = if self.d3d9_active() {
+                    self.surface = if self.output.backend() == Backend::D3d9 {
                         SurfaceState::shown_elsewhere(
                             &self.instance,
                             window.clone(),
@@ -581,16 +553,16 @@ impl App {
                 }
             },
         };
-        // "DirectX9 (D3D9Ex)": the renderer keeps the books on wgpu's noop device, the
-        // Direct3D 9Ex device draws the window (see `output`)
-        #[cfg(windows)]
-        let d3d9 = crate::startup::d3d9_requested();
-        #[cfg(not(windows))]
-        let d3d9 = false;
-        let opened = if d3d9 {
-            crate::startup::books_renderer(&self.instance, self.settings.render_options())
-        } else {
-            window_renderer(&mut self.instance, &window, self.settings.render_options())
+        // the backend is chosen here, once: under `Backend::D3d9` the renderer keeps the
+        // books on wgpu's noop device and the output's device draws the window
+        let backend = Backend::wanted();
+        let opened = match backend {
+            Backend::D3d9 => {
+                crate::startup::books_renderer(&self.instance, self.settings.render_options())
+            }
+            Backend::Wgpu => {
+                window_renderer(&mut self.instance, &window, self.settings.render_options())
+            }
         };
         let mut renderer = match opened {
             Ok(r) => r,
@@ -600,20 +572,18 @@ impl App {
                 return;
             }
         };
-        #[cfg(windows)]
-        if d3d9 {
-            match crate::output::D3d9Output::attach(
+        if backend == Backend::D3d9 {
+            if let Err(e) = self.output.attach(
                 &mut renderer,
                 &window,
                 self.settings.vsync,
                 (self.settings.msaa, u32::from(self.settings.anisotropy)),
             ) {
-                Ok(out) => self.d3d9 = Some(out),
-                Err(e) => {
-                    fatal_message(&format!("The game cannot draw with DirectX9 (D3D9Ex) on this computer: {e:#}. Choose another graphics API in the options."));
-                    crate::platform::exit(event_loop);
-                    return;
-                }
+                fatal_message(&format!(
+                    "{e:#}. Choose another graphics API in the options."
+                ));
+                crate::platform::exit(event_loop);
+                return;
             }
         }
         #[cfg(windows)]
@@ -641,7 +611,7 @@ impl App {
         );
         crate::lights::set_corona_root(&self.args.root);
         let size = window.inner_size();
-        let surface = if d3d9 {
+        let surface = if backend == Backend::D3d9 {
             SurfaceState::shown_elsewhere(
                 &self.instance,
                 window.clone(),
@@ -694,10 +664,7 @@ impl App {
     /// Load the map, vehicle and traffic according to `args`.
     pub(crate) fn load_world_now(&mut self, event_loop: &ActiveEventLoop) {
         let renderer = self.renderer.take().expect("renderer");
-        #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
-            d.new_scene();
-        }
+        self.output.new_scene();
         let mut scene = renderer.new_scene();
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
@@ -899,8 +866,8 @@ impl App {
                     self.settings.ui_opacity,
                     &self.settings.navigator_corner,
                 ));
-                // (under D3D9Ex the maps are drawn on that device too)
-                let ui_mirror = self.d3d9_ui_mirror();
+                // (under `Backend::D3d9` the maps are drawn on the output's device too)
+                let ui_mirror = self.output.ui_mirror();
                 if let Some(n) = self.navigator.as_mut() {
                     n.ui_mirror = ui_mirror;
                     n.arrows = self.settings.nav_arrows;
@@ -1148,7 +1115,7 @@ impl App {
                     frame.present();
                 }
                 self.renderer = Some(renderer);
-                self.d3d9_present();
+                self.output.present();
             } else {
                 self.renderer = Some(renderer);
             }

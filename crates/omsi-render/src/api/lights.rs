@@ -218,5 +218,6 @@ impl Renderer {
             ],
         });
         scene.sky_bind_group = Some(bg);
+        scene.sky_textures = Some(textures);
     }
 }

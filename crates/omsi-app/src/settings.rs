@@ -1443,24 +1443,20 @@ impl Settings {
         }
     }
 
-    /// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9` or
-    /// OMSI_BACKEND=d3d9; Windows only, and not with VR, which takes DirectX 12).
-    pub fn d3d9_selected(&self) -> bool {
-        let wanted = omsi_cfg::flags::BACKEND
-            .text()
-            .unwrap_or_else(|| self.graphics_api.clone());
-        cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
+    /// The graphics backend these settings choose for the game window (see `Backend::of`).
+    pub(crate) fn backend(&self) -> crate::output::Backend {
+        crate::output::Backend::of(self)
     }
 
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
     /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
     pub fn fair_weather_clouds(&self) -> bool {
-        !self.d3d9_selected()
+        self.backend() != crate::output::Backend::D3d9
     }
 
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
     pub fn locked_for_api(mut self) -> Self {
-        if self.d3d9_selected() {
+        if self.backend() == crate::output::Backend::D3d9 {
             self.lock_vanilla();
         }
         self
