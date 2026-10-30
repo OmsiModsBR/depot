@@ -1010,6 +1010,14 @@ pub static OPTS: &[Opt] = &[
         "Windy trees",
         "Leaves sway in the wind",
     ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_snow",
+        "Snow",
+        "Snowflakes fall in snow weather",
+    ),
     // Advanced graphics
     special(
         ADVANCED,
@@ -2051,6 +2059,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "reflections" => !traced,
         "fov" => !triple,
         "triple_fov_deg" => triple,
+        // (the falling snow DirectX9 draws on request: the other APIs draw their own)
+        "dx9_snow" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
