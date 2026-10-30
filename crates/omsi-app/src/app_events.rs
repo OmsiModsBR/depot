@@ -682,9 +682,40 @@ impl ApplicationHandler for App {
                         };
                         let __t5 = Instant::now();
                         let view = self.camera.as_ref().map(|c| c.forward().as_dvec3());
+                        t.populate_budget = Some(traffic::POPULATE_BUDGET);
                         t.populate_seen(w, r, scene, center, view);
                         *self.profile.entry("traffic.populate").or_default() +=
                             __t5.elapsed().as_secs_f64();
+                        let split = t.populate_split;
+                        for (k, v) in [
+                            ("traffic.populate.despawn", split.despawn),
+                            ("traffic.populate.wake", split.wake),
+                            ("traffic.populate.fill", split.fill),
+                            ("traffic.populate.spawn", split.spawn),
+                            ("traffic.populate.parked", split.parked),
+                        ] {
+                            *self.profile.entry(k).or_default() += v;
+                        }
+                        // the rest of the cars a moment later
+                        if split.cut {
+                            self.populate_t = self.populate_t.min(0.1);
+                        }
+                        if omsi_cfg::flags::PROFILE.is_set() && __t5.elapsed().as_secs_f64() > 0.01
+                        {
+                            log::info!(
+                                "populate: {:.1} ms (despawn {:.1}, wake {:.1}, fill {:.1}, spawn {:.1} of which {:.1} making {} cars, {} places tried, parked {:.1}){}",
+                                __t5.elapsed().as_secs_f64() * 1000.0,
+                                split.despawn * 1000.0,
+                                split.wake * 1000.0,
+                                split.fill * 1000.0,
+                                split.spawn * 1000.0,
+                                split.create * 1000.0,
+                                split.created,
+                                split.tried,
+                                split.parked * 1000.0,
+                                if split.cut { ", cut at its budget" } else { "" }
+                            );
+                        }
                         t.keep_clear = self
                             .player
                             .as_ref()
