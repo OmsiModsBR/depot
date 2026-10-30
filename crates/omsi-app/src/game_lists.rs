@@ -4,7 +4,7 @@
 //! list of (label, action) lines in the menu's chooser; choosing a line does it and shows
 //! the list again (or the next one: a line's tours).
 
-use crate::app::App;
+use crate::core::app::App;
 
 /// Which list the chooser shows.
 #[derive(Debug, Clone, PartialEq)]
@@ -452,14 +452,14 @@ pub(crate) fn keyboard_actions(app: &App) -> Vec<String> {
 }
 
 fn keyboard_cfg(app: &App) -> omsi_content::KeyboardCfg {
-    omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&app.args.root))
+    omsi_content::KeyboardCfg::load(&crate::core::startup::keyboard_cfg(&app.args.root))
         .unwrap_or_default()
         .with_game_defaults()
         .with_vr_defaults()
 }
 
 fn write_keyboard_cfg(_app: &App, cfg: &omsi_content::KeyboardCfg) -> Result<(), String> {
-    let dir = crate::startup::content_dir()
+    let dir = crate::core::startup::content_dir()
         .ok_or_else(|| "No writable Project Depot content folder was found".to_string())?
         .join("Inputs");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -478,9 +478,9 @@ impl App {
         if let Some(p) = self.player.as_mut() {
             p.bindings = runtime.vehicles;
         }
-        self.own_keys = crate::startup::own_keys(&self.args.root);
+        self.own_keys = crate::core::startup::own_keys(&self.args.root);
         self.own_shift =
-            crate::startup::own_bindings(&self.args.root, omsi_content::input::KEY_SHIFT);
+            crate::core::startup::own_bindings(&self.args.root, omsi_content::input::KEY_SHIFT);
         // A key changed by the player must win over the ready-made W/A/S/D or arrow
         // presets just as a key changed on the launcher's Controls page does.
         self.args.drive_keys = "omsi".into();
@@ -3339,8 +3339,8 @@ fn reload_settings(app: &mut App) {
 
 fn sync_live(app: &mut App) {
     let s = &app.settings;
-    crate::startup::SOUND_AI.store(s.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
-    crate::startup::SOUND_SCENERY.store(
+    crate::core::startup::SOUND_AI.store(s.vol_ai.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    crate::core::startup::SOUND_SCENERY.store(
         s.vol_scenery.to_bits(),
         std::sync::atomic::Ordering::Relaxed,
     );

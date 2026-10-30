@@ -1,7 +1,7 @@
 //! In-game controller configuration. Edits are saved before installing mappings on the
 //! existing controller; opening this UI never creates another hardware connection.
-use crate::app::App;
 use crate::controllers::{DeviceCfg, Func};
+use crate::core::app::App;
 use crate::game_lists::{ListKind, Move, HEADING};
 
 pub fn is_controller_list(kind: Option<&ListKind>) -> bool {

@@ -3,7 +3,7 @@
 //! the screen, the views, the pause, and a status line every minute - what a bug report
 //! needs to be understood without asking.
 
-use crate::app::App;
+use crate::core::app::App;
 
 #[derive(Default)]
 pub(crate) struct LogState {
@@ -20,7 +20,7 @@ pub(crate) fn log_system(settings: &crate::settings::Settings) {
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(0);
-    let ram = crate::memory::physical_memory()
+    let ram = crate::core::memory::physical_memory()
         .map(|b| b / 1_000_000)
         .unwrap_or(0);
     log::info!(

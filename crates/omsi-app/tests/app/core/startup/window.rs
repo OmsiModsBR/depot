@@ -1,4 +1,4 @@
-use openomsi_game::testing::startup::software_adapter;
+use openomsi_game::testing::core::startup::software_adapter;
 
 /// The software renderers come after every graphics chip (#770).
 #[test]
@@ -21,7 +21,7 @@ fn software_renderers_are_told_from_chips() {
 fn the_window_fits_a_small_screen_and_sits_in_its_middle() {
     // 1920 x 1200 at 125 %: 1600 x 900 points would be 2000 px wide
     let ((w, h), (x, y)) =
-        openomsi_game::testing::startup::fit_rect((1600.0, 900.0), (1920.0, 1200.0), 1.25);
+        openomsi_game::testing::core::startup::fit_rect((1600.0, 900.0), (1920.0, 1200.0), 1.25);
     assert!(
         w * 1.25 <= 1920.0 * 0.9 + 1.0 && h * 1.25 <= 1200.0 * 0.85 + 1.0,
         "{w} x {h}"
@@ -31,6 +31,6 @@ fn the_window_fits_a_small_screen_and_sits_in_its_middle() {
     assert!(y > 0);
     // a big screen keeps the size asked for
     let ((w, h), _) =
-        openomsi_game::testing::startup::fit_rect((1600.0, 900.0), (3840.0, 2160.0), 1.5);
+        openomsi_game::testing::core::startup::fit_rect((1600.0, 900.0), (3840.0, 2160.0), 1.5);
     assert_eq!((w, h), (1600.0, 900.0));
 }

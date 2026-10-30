@@ -507,7 +507,7 @@ impl Ui {
             let x0 = 16.0 * s;
             // (below the on-screen buttons of a phone, which keep their size when the
             // interface is made smaller)
-            let mut y = if crate::platform::touch_controls() {
+            let mut y = if crate::core::platform::touch_controls() {
                 (80.0 * f.scale.max(0.5) * f.ui_scale.max(1.0)).max(corner_top)
             } else {
                 corner_top
@@ -1778,7 +1778,7 @@ impl Ui {
         let sep = self.text.plate(r, scene, 9);
         scene.overlays.push((dim, [0.0, 0.0, f.width, f.height]));
         // key hints only where there is a keyboard
-        let keys = !f.vr && !crate::platform::touch_controls();
+        let keys = !f.vr && !crate::core::platform::touch_controls();
         // the timetable beside the list, where the window is wide enough
         let preview = f
             .menu_preview

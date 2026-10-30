@@ -1,6 +1,6 @@
 //! Changing the weather (by hand, the cycle, METAR) and the clock (real-time sync, jumps).
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::weather_setup::load_weather;
 
 impl App {

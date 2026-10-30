@@ -841,7 +841,7 @@ impl Navigator {
         let (x0, y0) = self.panel_origin(
             (sw, sh),
             (pw, ph),
-            crate::platform::touch_controls(),
+            crate::core::platform::touch_controls(),
             f.info_rect,
         );
 

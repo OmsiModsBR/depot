@@ -5,9 +5,10 @@ fn the_stock_file_has_none_of_the_players() {
     if !root.join("Inputs/keyboard.cfg").exists() {
         return;
     }
-    assert!(openomsi_game::testing::startup::own_bindings(root, 0).is_empty());
-    assert!(
-        openomsi_game::testing::startup::own_bindings(root, omsi_content::input::KEY_SHIFT)
-            .is_empty()
-    );
+    assert!(openomsi_game::testing::core::startup::own_bindings(root, 0).is_empty());
+    assert!(openomsi_game::testing::core::startup::own_bindings(
+        root,
+        omsi_content::input::KEY_SHIFT
+    )
+    .is_empty());
 }

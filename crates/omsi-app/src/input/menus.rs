@@ -1,7 +1,7 @@
 //! The game menu and its lists: opening and closing them, moving through them and picking
 //! an entry.
 
-use crate::app::App;
+use crate::core::app::App;
 
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server.
@@ -18,7 +18,7 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
 
 /// Whether the session was started on a server (`--lan-join https://…`).
 /// Without LAN play the game joins nothing (`--lan-join` is ignored).
-pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
+pub(crate) fn on_server(args: &crate::core::cli::Args) -> bool {
     {
         let _ = args;
         false
@@ -26,7 +26,9 @@ pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
 }
 
 /// The game menu's lines for a session with these arguments.
-pub(crate) fn game_menu_for(args: &crate::cli::Args) -> &'static [(&'static str, &'static str)] {
+pub(crate) fn game_menu_for(
+    args: &crate::core::cli::Args,
+) -> &'static [(&'static str, &'static str)] {
     if on_server(args) {
         &SERVER_GAME_MENU
     } else {
@@ -581,7 +583,7 @@ impl App {
     }
 }
 
-impl crate::app::App {
+impl crate::core::app::App {
     /// The game menu's lines for this session: back to the own bus while walking about,
     /// the administration for a host and a server's admin. What can be set is behind
     /// "Options", "Vehicle options" and "World options".

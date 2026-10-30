@@ -1,6 +1,6 @@
 //! Runs without a window: exporting a bus (`--export-glb`) and the service commands.
 
-use crate::cli::Args;
+use crate::core::cli::Args;
 use crate::export;
 use crate::scene::World;
 use crate::situation::start_clock;

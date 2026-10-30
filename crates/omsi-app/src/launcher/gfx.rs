@@ -22,7 +22,7 @@ impl Gfx {
     /// A device for `window`: on `instance` if it can, else on the next graphics interface
     /// and adapter that can (`instance` then becomes that one's), as the game opens its own.
     pub fn for_window(instance: &mut wgpu::Instance, window: &Arc<Window>) -> Result<Gfx> {
-        crate::startup::for_window(instance, window, |adapter, surface| {
+        crate::core::startup::for_window(instance, window, |adapter, surface| {
             Gfx::open(adapter, surface)
         })
     }
