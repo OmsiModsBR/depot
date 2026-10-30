@@ -375,14 +375,15 @@ pub fn plan_install(root: &Path, data: &Path, zip: &[u8]) -> Result<InstallPlan>
         if f.is_dir() {
             continue;
         }
+        let name = f.name()?;
         if f.unix_mode()
             .map(|m| m & 0o170000 == 0o120000)
             .unwrap_or(false)
         {
-            bail!("the package holds a link ({})", f.name());
+            bail!("the package holds a link ({name})");
         }
-        let path = entry_rel(f.name())
-            .ok_or_else(|| anyhow!("the package holds an unsafe path ({})", f.name()))?;
+        let path =
+            entry_rel(&name).ok_or_else(|| anyhow!("the package holds an unsafe path ({name})"))?;
         if !seen.insert(key(&path)) {
             bail!("the package lists {path} twice");
         }
@@ -495,7 +496,7 @@ pub fn install(
             if f.is_dir() {
                 continue;
             }
-            let path = entry_rel(f.name()).ok_or_else(|| anyhow!("unsafe path"))?;
+            let path = entry_rel(&f.name()?).ok_or_else(|| anyhow!("unsafe path"))?;
             let dst = staged.join(&path);
             std::fs::create_dir_all(dst.parent().unwrap())?;
             let mut out = std::fs::File::create(&dst)?;
