@@ -34,7 +34,6 @@ mod mac_hid;
 mod map_surface;
 mod menu;
 mod money;
-mod nav;
 mod output;
 mod placing;
 mod radio;

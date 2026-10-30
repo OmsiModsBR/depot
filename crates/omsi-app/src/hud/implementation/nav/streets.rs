@@ -1,20 +1,7 @@
-use super::angle_diff;
+use super::{angle_diff, Streets};
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKind, Network};
-
-/// The street names of the map: per lane of its network the street it belongs to, and
-/// where to write each name on the city map. OMSI maps have no street names of their own,
-/// but their street name signs carry them: a sign names the road its plate runs along,
-/// and the name is carried on along that road until it turns or meets another name.
-pub struct Streets {
-    pub(super) names: Vec<String>,
-    /// Per lane: index into `names`, or `u32::MAX`.
-    pub(super) of_lane: Vec<u32>,
-    /// A place to write a name: the point, the road's direction (radians, world, from +x
-    /// anticlockwise) and the name.
-    pub(super) labels: Vec<(DVec2, f32, u32)>,
-}
 
 /// The heading of a sign whose plate runs along its road, relative to the road (degrees;
 /// settled on the stock Verkehrszeichen_MC signs of Berlin-Spandau, see `build_streets`).

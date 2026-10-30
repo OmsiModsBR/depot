@@ -1,6 +1,6 @@
 use omsi_ui::Rect;
-use openomsi_game::testing::nav::city::*;
-use openomsi_game::testing::nav::draw::rects_overlap;
+use openomsi_game::testing::hud::nav::city::*;
+use openomsi_game::testing::hud::nav::draw::rects_overlap;
 
 /// The compass' clickable rect, as `draw` registers it.
 fn compass_rect(w: f32, h: f32, s: f32, open: bool) -> Rect {

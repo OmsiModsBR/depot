@@ -32,7 +32,7 @@ use std::time::Instant;
 // The map is drawn with the game's own city map palette and order (see `navigator`): every
 // road's dark casing first, then every road's surface over every casing, then the chosen
 // line's route in the map's own red - so the two maps are the same picture.
-use crate::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
+use crate::hud::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
 const STOP: Color = Color::rgba(240, 240, 240, 1.0);
 // Entry points wear the launcher's accent (`omsi_ui::theme::accent`); the one under the mouse
 // a grey ring, the chosen one a white (a click on the map takes the place of a name in a list
@@ -110,7 +110,7 @@ pub struct Entry {
 #[derive(Default)]
 pub struct Roads {
     /// Every carriageway the map has, as the game groups them: points in world metres.
-    pub roads: Vec<crate::nav::MapRoad>,
+    pub roads: Vec<crate::hud::nav::MapRoad>,
     /// The linked network behind them (a trip's road pieces are lanes of it).
     pub net: Arc<Network>,
     /// (tile x, tile y, spline id, path) → the lane the timetable names.
@@ -1017,7 +1017,7 @@ fn ring(p: &mut Painter, at: Vec3, r_px: f32, w_px: f32, c: Color, mpp: f32) {
 /// A polyline with the points the eye cannot tell apart taken out (the game's own map
 /// simplification, in metres: 12 cm there, half a pixel here).
 fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
-    crate::nav::simplify(pts, tol)
+    crate::hud::nav::simplify(pts, tol)
 }
 
 /// Read a map the way the map needs it: the roads the game's city map draws, the entry
@@ -1103,7 +1103,7 @@ fn read_map(look: &Look) -> Roads {
         places,
         signs,
     } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
-    let (roads, net) = crate::nav::city_roads(lanes, &road_surfaces);
+    let (roads, net) = crate::hud::nav::city_roads(lanes, &road_surfaces);
     // the lanes the timetable can name, and the lanes of every spline behind them
     let mut by_path = HashMap::new();
     let mut by_spline: HashMap<(i32, i32, i64), Vec<usize>> = HashMap::new();

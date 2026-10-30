@@ -167,6 +167,28 @@ pub mod hud {
     pub use crate::hud::implementation::legacy::settings::vr_settings_sidebar_step;
     pub use crate::hud::implementation::legacy::*;
 
+    pub mod nav {
+        pub use crate::hud::domain::nav::*;
+        pub use crate::hud::implementation::nav::*;
+
+        pub mod draw {
+            pub use crate::hud::implementation::nav::draw::*;
+        }
+
+        pub mod city {
+            pub use crate::hud::implementation::nav::city::*;
+        }
+        pub mod geometry {
+            pub use crate::hud::implementation::nav::geometry::*;
+        }
+        pub mod lines {
+            pub use crate::hud::implementation::nav::lines::*;
+        }
+        pub mod minimap {
+            pub use crate::hud::implementation::nav::minimap::picture::map_view;
+        }
+    }
+
     pub mod lists {
         pub use crate::hud::domain::lists::*;
         pub use crate::hud::implementation::lists::{
@@ -289,23 +311,6 @@ pub mod map_surface {
 }
 pub mod money {
     pub use crate::money::*;
-}
-pub mod nav {
-    pub use crate::nav::*;
-
-    pub mod draw {
-        pub use crate::nav::draw::*;
-    }
-
-    pub mod city {
-        pub use crate::nav::city::*;
-    }
-    pub mod geometry {
-        pub use crate::nav::geometry::*;
-    }
-    pub mod lines {
-        pub use crate::nav::lines::*;
-    }
 }
 pub mod on_foot {
     pub use crate::on_foot::*;

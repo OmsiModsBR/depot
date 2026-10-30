@@ -37,7 +37,6 @@ mod line_times;
 mod mac_game_controller;
 mod map_surface;
 mod money;
-mod nav;
 mod on_foot;
 mod output;
 mod player;

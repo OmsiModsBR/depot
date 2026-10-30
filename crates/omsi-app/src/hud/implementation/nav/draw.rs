@@ -1,4 +1,4 @@
-use super::{BUS, DOT, METRO, TRAIN, TRAM, TROLLEY};
+use super::{FocusKind, BUS, DOT, METRO, TRAIN, TRAM, TROLLEY};
 use glam::{DVec2, Vec2, Vec3};
 use omsi_ui::{Atlas, Color, Painter, Rect};
 
@@ -251,14 +251,6 @@ pub fn stop_request_icon(
         row.w -= size + 6.0 * scale;
     }
     row
-}
-
-/// What the navigator is centred on when it is not the bus: the walker on foot, or the free
-/// camera (F4).
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum FocusKind {
-    Walker,
-    Camera,
 }
 
 /// A walker seen from above (head between the shoulders, a wedge ahead of it for the way they
