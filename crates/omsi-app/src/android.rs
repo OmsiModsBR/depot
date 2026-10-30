@@ -14,7 +14,6 @@
 
 use crate::app::App;
 use crate::cli::Args;
-use crate::lan_mods;
 use crate::launcher;
 use crate::startup::{graphics_instance, BUILD, VERSION};
 use crate::{launcher_statics, make_app, prepare};
@@ -144,7 +143,6 @@ fn android_main(app: AndroidApp) {
     if let Err(e) = event_loop.run_app(&mut shell) {
         log::error!("{e}");
     }
-    lan_mods::clean_up();
     // (the activity ends with the program)
     std::process::exit(0);
 }
@@ -374,7 +372,6 @@ impl Shell {
             game.exiting(event_loop);
             let window = game.window.take();
             drop(game);
-            lan_mods::clean_up();
             log::info!("session ended: back to the launcher");
             let l = self.launcher();
             if let Some(w) = window {

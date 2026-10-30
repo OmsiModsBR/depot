@@ -74,6 +74,7 @@ const VARIED: &[(&str, &str)] = &[
     ("show_fps", "1"),
     ("clouds", "0"),
     ("windy_trees", "0"),
+    ("dx9_snow", "1"),
     ("pax_density", "0.5"),
     ("vol_ai", "0.4"),
     ("vol_scenery", "0.7"),

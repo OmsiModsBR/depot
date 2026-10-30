@@ -3147,6 +3147,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["ui_dimming"] = json!(62);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
+    // DirectX9 (D3D9Ex) only: falling snow, off unless chosen
+    v["dx9_snow"] = json!(false);
     // outside sounds heard from a cab go through a low-pass
     v["muffle_outside"] = json!(false);
     // OMSI's own options
@@ -3963,6 +3965,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ui_background" => v[&k] = json!(background_name(val)),
             "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
+            "dx9_snow" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
             "time_speed" => {
@@ -4590,6 +4593,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         dimming_of(v.get("ui_dimming").unwrap_or(&Value::Null))
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", false)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",

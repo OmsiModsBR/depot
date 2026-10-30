@@ -772,6 +772,12 @@ fn stock_texture_id(name: &str) -> u16 {
     id
 }
 
+/// The picture of a snowflake (`Texture\snowflake.tga`, the original; 0, the built-in glow, if
+/// missing).
+pub fn snowflake_texture_id() -> u16 {
+    stock_texture_id("snowflake.tga")
+}
+
 /// The fog cone's picture (`Texture\light_cone.bmp`).
 pub fn cone_texture_id() -> u16 {
     stock_texture_id("light_cone.bmp")

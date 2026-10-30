@@ -2716,7 +2716,8 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         );
         let (kind, rate) = precip_of(&weather);
         let mut rn = rain::Rain::new();
-        rn.set(kind, rate);
+        // (the offscreen picture is the default renderer's, which draws its own snowfall)
+        rn.set(kind, rate, false);
         for _ in 0..30 {
             scene
                 .coronas

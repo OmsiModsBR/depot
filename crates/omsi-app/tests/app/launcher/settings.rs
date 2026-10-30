@@ -31,6 +31,7 @@ const BEFORE: &[&str] = &[
     "smoke_user_only",
     "smoke_max",
     "smoke_in_mirrors",
+    "dx9_snow",
     "fullscreen",
     "resolution",
     "vsync",
@@ -360,6 +361,28 @@ fn d3d9_limits_each_option_of_the_table() {
     // (VR takes DirectX 12 instead: the choice is offered)
     s["vr"] = json!(true);
     assert!(drawn(&mut s, "graphics"));
+}
+
+/// The Snow option is DirectX9's own: it is on the page only with that API.
+#[test]
+fn the_dx9_snow_option_is_shown_only_under_directx9() {
+    let drawn = |api: &str| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        let sec = OPTS.iter().find(|o| o.key == "dx9_snow").unwrap().sec;
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            sec,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of("opt-dx9_snow"))
+    };
+    assert!(!drawn("vulkan"));
+    assert_eq!(drawn("d3d9"), cfg!(windows));
 }
 
 /// An option DirectX9 leaves some choices out of offers only the rest, and a saved value
