@@ -1,24 +1,3 @@
-/// A start without a bus leaves the bus, its paint, number and plate and a depot file picked
-/// for it out of the duty, on foot - the choice itself keeps them for the next start.
-#[test]
-fn a_start_without_a_bus_leaves_the_bus_out_of_the_duty_only() {
-    let mut d = omsi_launcher_lib::Duty {
-        bus: "Vehicles/A/a.bus".into(),
-        paint: Some("Red".into()),
-        number: Some("3201".into()),
-        plate: Some("B-V 1".into()),
-        hof: Some("Picked".into()),
-        on_foot: Some(false),
-        ..Default::default()
-    };
-    openomsi_game::testing::launcher::state::without_bus(&mut d, Some("Map's own".into()));
-    assert!(d.bus.is_empty());
-    assert_eq!((&d.paint, &d.number, &d.plate), (&None, &None, &None));
-    assert_eq!(d.hof.as_deref(), Some("Map's own"));
-    assert_eq!(d.on_foot, Some(true));
-    // (the arguments of a duty without a bus: omsi-launcher-core's a_start_without_a_bus_names_none)
-}
-
 use openomsi_game::testing::launcher::start::*;
 
 #[test]

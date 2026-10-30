@@ -5,7 +5,6 @@
 //! drains them at the start of each frame, so it never waits.
 
 use omsi_launcher_lib as core;
-use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 
@@ -73,157 +72,8 @@ pub enum Msg {
     Crashed(String),
 }
 
-/// The duty as it is remembered between launches (`~/.depot/launcher-duty.json`).
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(default)]
-pub struct Choice {
-    pub bus: String,
-    pub paint: String,
-    /// The number plate the player typed for the bus (empty: as the content says).
-    pub plate: String,
-    /// The fleet number picked from the bus's `[number]` list (empty: its first).
-    pub number: String,
-    pub hof: String,
-    /// The depot file was chosen by hand (else it follows the map and the date).
-    pub hof_manual: bool,
-    pub map: String,
-    /// The start: the entry point's place in the map's list, or -1 = automatic (nearest to
-    /// the duty's first stop by road).
-    pub entry: i32,
-    pub line: Option<String>,
-    pub tour: Option<String>,
-    pub free: bool,
-    /// Minutes of the day.
-    pub time: i32,
-    pub start_trip: Option<(String, String, usize, i32)>,
-    pub date: String,
-    /// "auto", spring, summer, autumn, winter.
-    pub season: String,
-    pub weather: String,
-    pub traffic: f32,
-    pub passengers: bool,
-    pub schedule: bool,
-    pub autostart: bool,
-    /// Start on foot (no bus of one's own until one is placed).
-    pub on_foot: bool,
-    /// off, host, join
-    pub lan_mode: String,
-    pub lan_addr: String,
-    /// 2: `entry` may be -1 (automatic); older files had a fixed entry point there.
-    pub version: u32,
-    /// The kind of session the Maps page starts: "new", "saved" (a situation the game saved)
-    /// or "without_bus" (on foot at the start point).
-    pub session: String,
-}
-
-impl Default for Choice {
-    fn default() -> Self {
-        Choice {
-            bus: String::new(),
-            paint: String::new(),
-            plate: String::new(),
-            number: String::new(),
-            hof: String::new(),
-            hof_manual: false,
-            map: String::new(),
-            entry: -1,
-            line: None,
-            tour: None,
-            free: false,
-            time: 9 * 60,
-            start_trip: None,
-            date: "1989-05-30".into(),
-            season: "auto".into(),
-            weather: String::new(),
-            traffic: 30.0,
-            passengers: true,
-            schedule: true,
-            autostart: false,
-            on_foot: false,
-            lan_mode: "off".into(),
-            lan_addr: String::new(),
-            version: 3,
-            session: "new".into(),
-        }
-    }
-}
-
-fn choice_path() -> std::path::PathBuf {
-    core::data_dir().join("launcher-duty.json")
-}
-
-impl Choice {
-    /// The bus "Use for the next start" was clicked for, with what its card held (after
-    /// `State::select_bus`, which picks the bus and its automatic depot file).
-    pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
-        self.bus = u.file;
-        self.paint = u.paint;
-        self.hof_manual = u.hof.is_some();
-        if let Some(hof) = u.hof {
-            self.hof = hof;
-        }
-        self.number = u.number.unwrap_or_default();
-        self.plate = u.plate;
-    }
-
-    /// No bus picked for the next start: the whole preselection goes, no depot file, number
-    /// or plate picked for it stays behind for the game (the depot file goes back to the
-    /// automatic one, which the caller sets).
-    pub fn clear_bus(&mut self) {
-        self.bus.clear();
-        self.paint.clear();
-        self.number.clear();
-        self.plate.clear();
-        self.hof_manual = false;
-    }
-
-    pub fn load() -> Choice {
-        let c: Choice = std::fs::read_to_string(choice_path())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
-        Self::fresh(c)
-    }
-
-    /// A duty read back from the file, as a new launcher starts with it.
-    pub fn fresh(mut c: Choice) -> Choice {
-        // A server is joined on purpose, in the launcher's own session (Multiplayer page): a
-        // join left in the file made every later start connect to it, with no sign of it on
-        // the Drive page ("Leave Server" is only there for a server joined since the launch).
-        if c.lan_mode == "join" {
-            c.lan_mode = "off".into();
-        }
-        if c.version < 2 {
-            // the start was always the map's first entry point: now it is automatic
-            c.entry = -1;
-            c.version = 2;
-        }
-        if c.version < 3 {
-            // the Drive page always held a bus; on a computer the bus of a start is now only one
-            // picked on Vehicles ("Use this bus"), so the old one is no preselection
-            if !super::mobile::mobile() {
-                c.bus.clear();
-                c.paint.clear();
-                c.number.clear();
-                c.plate.clear();
-                c.hof_manual = false;
-            }
-            c.version = 3;
-        }
-        // (older launchers took a vehicle line of a broken ailists.cfg for the map's depot)
-        if c.hof.to_ascii_lowercase().contains(".bus")
-            || c.hof.to_ascii_lowercase().contains(".ovh")
-        {
-            c.hof.clear();
-        }
-        c
-    }
-    pub fn save(&self) {
-        if let Ok(t) = serde_json::to_string_pretty(self) {
-            let _ = omsi_cfg::write_atomic(choice_path(), t);
-        }
-    }
-}
+/// The duty as it is remembered between launches (`omsi_launcher_lib::start`).
+pub use core::start::Choice;
 
 /// How a compression or an undo ended.
 #[derive(Debug, Clone)]
@@ -366,7 +216,7 @@ impl State {
                 .unwrap_or("ENG"),
         );
         let keybindings = core::get_keybindings().unwrap_or(serde_json::Value::Null);
-        let mut choice = Choice::load();
+        let mut choice = Choice::load(super::mobile::mobile());
         // (at the real time, a trip picked in an earlier session has most likely left)
         if settings
             .get("use_real_time")
@@ -820,52 +670,13 @@ impl State {
 
     /// The duty as the backend takes it.
     pub fn duty(&self) -> core::Duty {
-        let c = &self.choice;
-        // (multiplayer is disabled: a duty never hosts or joins)
-        let lan = "off".to_string();
-        // Joining: the host's map, as its status gives it (a code's host is asked when the
-        // code is typed). The game takes it from the host's welcome too, but only when that
-        // comes before the map is loaded: through a tunnel it came later, the game started
-        // on the map chosen here, and the players never met ("the host drives on X10 Berlin,
-        // you on Berlin-Spandau"). A map not installed here comes with the host's mods.
-        let host_map: Option<String> = None;
-        core::Duty {
-            map: host_map.unwrap_or_else(|| c.map.clone()),
-            bus: c.bus.clone(),
-            paint: Some(c.paint.clone()).filter(|p| !p.is_empty()),
-            plate: Some(c.plate.clone()).filter(|p| !p.trim().is_empty()),
-            number: Some(c.number.clone()).filter(|n| !n.trim().is_empty()),
-            hof: Some(if c.hof_manual {
-                c.hof.clone()
-            } else {
-                self.default_hof()
-            })
-            .filter(|p| !p.is_empty()),
-            entry: Some(c.entry),
-            line: if c.free { None } else { c.line.clone() },
-            tour: if c.free { None } else { c.tour.clone() },
-            trip: if c.free {
-                None
-            } else {
-                self.picked_trip().map(|i| i.to_string())
-            },
-            whole_tour: !c.free && self.picked_trip().is_some(),
-            time: format!("{:02}:{:02}", c.time / 60, c.time % 60),
-            date: Some(c.date.clone()),
-            weather: Some(c.weather.clone()).filter(|w| !w.is_empty()),
-            traffic: Some(c.traffic.round() as u32),
-            passengers: Some(c.passengers),
-            schedule: Some(c.schedule),
-            autostart: Some(c.autostart),
-            on_foot: Some(c.on_foot),
-            profile: Some(self.config.profile.clone()).filter(|p| !p.is_empty()),
-            lan: Some(lan),
-            lan_name: None,
-            season: Some(c.season.clone()).filter(|s| s != "auto"),
-            tutorial: None,
-            situation: None,
-            monitor_at: None,
-        }
+        let hof = if self.choice.hof_manual {
+            self.choice.hof.clone()
+        } else {
+            self.default_hof()
+        };
+        self.choice
+            .to_duty(hof, self.picked_trip(), &self.config.profile)
     }
 
     /// The situations to continue on the chosen map: the last one and the save slots
@@ -1463,75 +1274,16 @@ impl State {
         self.line()?.tours.iter().find(|x| &x.number == t)
     }
 
-    /// The depot file a bus uses on the chosen map: the map's own when the bus has it (or
-    /// has none: the game borrows it), else the bus's first.
-    /// The depot file for the chosen bus: the one the map's own buses use on the chosen date
-    /// (the chrono scenarios change it: Berlin's 1994 depot has line 137 where 1986's had
-    /// 92), which the bus has, else its first.
+    /// The depot file for the chosen bus on the chosen map (`core::start::default_hof`).
     pub fn default_hof(&self) -> String {
-        let on_date = self.map().and_then(|m| {
-            let dir = omsi_cfg::resolve_path(std::path::Path::new(&self.config.root), &m.file);
-            omsi_map::ailists::depot_hof_on(
-                dir.parent()?,
-                omsi_map::ailists::date_code(&self.choice.date)?,
-            )
-        });
-        let want = on_date
-            .or_else(|| self.map().map(|m| m.hof.clone()))
-            .unwrap_or_default();
-        let Some(v) = self.bus() else { return want };
-        // (the bus's own depot of the same place before the map's borrowed from another
-        // bus, and one named like the map before its first, #896)
-        let names: Vec<&str> = v.hofs.iter().map(|h| h.as_str()).collect();
-        let like = |hints: &[&str]| {
-            omsi_vehicle::hof::closest_name(&names, hints).map(|i| v.hofs[i].clone())
-        };
-        let map_hints: Vec<String> = self
-            .map()
-            .map(|m| {
-                vec![
-                    m.name.clone(),
-                    m.friendly.clone(),
-                    m.file
-                        .trim_end_matches("/global.cfg")
-                        .rsplit('/')
-                        .next()
-                        .unwrap_or("")
-                        .to_string(),
-                ]
-            })
-            .unwrap_or_default();
-        let map_hints: Vec<&str> = map_hints.iter().map(|h| h.as_str()).collect();
-        // a depot file carrying the line driven: the day's, one named like the map, else the fullest
-        let with_line = match (&self.choice.line, self.choice.free) {
-            (Some(line), false) => {
-                core::depot_names_with_line(std::path::Path::new(&self.config.root), &v.file, line)
-            }
-            _ => Vec::new(),
-        };
-        if !with_line.is_empty() && !with_line.iter().any(|h| h.eq_ignore_ascii_case(&want)) {
-            let names: Vec<&str> = with_line.iter().map(|h| h.as_str()).collect();
-            let hints: Vec<&str> = std::iter::once(want.as_str())
-                .chain(map_hints.iter().copied())
-                .collect();
-            let pick = omsi_vehicle::hof::closest_name(&names, &hints).unwrap_or(0);
-            return with_line[pick].clone();
-        }
-        v.hofs
-            .iter()
-            .find(|h| h.eq_ignore_ascii_case(&want))
-            .cloned()
-            .or_else(|| like(&[want.as_str()]))
-            .or(Some(want.clone()).filter(|w| !w.is_empty()))
-            .or_else(|| like(&map_hints))
-            .or_else(|| v.hofs.first().cloned())
-            .unwrap_or_default()
+        core::start::default_hof(&self.config.root, &self.choice, self.map(), self.bus())
     }
 
     /// The bus "Use for the next start" was clicked for on Vehicles.
     pub fn use_bus(&mut self, u: omsi_launcher_ui::vehicles::UseBus) {
         self.select_bus(&u.file);
-        self.choice.use_bus(u);
+        self.choice
+            .use_bus(u.file, u.paint, u.hof, u.number, u.plate);
         if !self.choice.hof_manual {
             self.choice.hof = self.default_hof();
         }
@@ -1584,13 +1336,7 @@ impl State {
     /// (its timetable days with it), and a weather preset that does not fit it any more goes.
     pub fn set_season(&mut self, season: &str) {
         self.choice.season = season.to_string();
-        let months = [
-            ("spring", "04"),
-            ("summer", "07"),
-            ("autumn", "10"),
-            ("winter", "01"),
-        ];
-        if let Some((_, month)) = months.iter().find(|m| m.0 == season) {
+        if let Some(month) = core::start::season_month(season) {
             let date = self.choice.date.clone();
             self.choice.date = date_in_month(&date, month);
             self.load_lines();
@@ -1606,57 +1352,22 @@ impl State {
 
     /// The season the chosen date (or the override) means.
     pub fn season(&self) -> &str {
-        if self.choice.season != "auto" {
-            return &self.choice.season;
-        }
-        let m: u32 = self
-            .choice
-            .date
-            .get(5..7)
-            .and_then(|x| x.parse().ok())
-            .unwrap_or(5);
-        match m {
-            12 | 1 | 2 => "winter",
-            3..=5 => "spring",
-            6..=8 => "summer",
-            _ => "autumn",
-        }
+        self.choice.season()
     }
 
     /// Weather presets that make sense in the season (no summer shower in the snow).
     pub fn weather_fits(&self, w: &core::WeatherInfo) -> bool {
-        let rain = w.precip.starts_with("rain");
-        match self.season() {
-            "winter" => w.snow || if rain { w.temp <= 10.0 } else { w.temp <= 16.0 },
-            s => {
-                if w.snow || w.temp <= 0.0 {
-                    return false;
-                }
-                s != "summer" || w.temp >= 8.0
-            }
-        }
+        core::start::weather_fits(self.season(), w)
     }
 
     /// The trip of the tour a start at the chosen time begins with: the next to leave (one
     /// that left a minute or two ago still counts), else the tour's last.
     pub fn first_trip(&self) -> Option<usize> {
-        let t = self.tour()?;
-        if let Some(i) = self.picked_trip() {
-            if let Some(k) = t.trips.iter().position(|x| x.index == i) {
-                return Some(k);
-            }
-        }
-        let now = self.choice.time as f64 * 60.0;
-        trip_index_at(t, now)
+        self.choice.first_trip(self.tour()?, self.real_time())
     }
 
     pub fn picked_trip(&self) -> Option<usize> {
-        let (line, tour, index, time) = self.choice.start_trip.as_ref()?;
-        // (at the real time the clock moves on, and the trip picked stays: the bus waits for it)
-        (self.choice.line.as_ref() == Some(line)
-            && self.choice.tour.as_ref() == Some(tour)
-            && (*time == self.choice.time || self.real_time()))
-        .then_some(*index)
+        self.choice.picked_trip(self.real_time())
     }
 
     /// The start time follows the computer's clock (`use_real_time`).
@@ -1670,14 +1381,9 @@ impl State {
     /// Start the tour at trip `index` (leaving at `departure`): at its departure, or at the
     /// real time, which then stays and the bus waits for the trip.
     pub fn pick_trip(&mut self, index: usize, departure: f64) {
-        let (Some(line), Some(tour)) = (self.choice.line.clone(), self.choice.tour.clone()) else {
-            return;
-        };
-        if !self.real_time() {
-            self.choice.time = (departure / 60.0).floor() as i32;
+        if self.choice.pick_trip(index, departure, self.real_time()) {
+            self.touched();
         }
-        self.choice.start_trip = Some((line, tour, index, self.choice.time));
-        self.touched();
     }
 }
 
@@ -1686,35 +1392,14 @@ pub fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
     pid.is_some_and(|p| instances.iter().any(|i| i.pid == p))
 }
 
-/// The trip a tour starts with at `now`, shared by the route preview and the launch choice.
-pub(super) fn trip_index_at(tour: &core::TourInfo, now: f64) -> Option<usize> {
-    tour.trips
-        .iter()
-        .position(|x| x.departure >= now - 120.0)
-        .or(if tour.trips.is_empty() {
-            None
-        } else {
-            Some(tour.trips.len() - 1)
-        })
-}
+pub(super) use core::start::trip_index_at;
 
 pub fn hhmm(seconds: f64) -> String {
     let s = seconds.max(0.0).round() as i64;
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
 }
 
-/// `date` (`YYYY-MM-DD`) moved into `month` (`04`, `07`, `10` or `01`, a season's), the day
-/// kept within the month: 31 March into spring is 30 April.
-pub fn date_in_month(date: &str, month: &str) -> String {
-    let yy = date.get(0..4).unwrap_or("1989");
-    let last = if month == "04" { 30 } else { 31 };
-    let dd = date
-        .get(8..10)
-        .and_then(|d| d.parse::<u32>().ok())
-        .unwrap_or(15)
-        .clamp(1, last);
-    format!("{yy}-{month}-{dd:02}")
-}
+pub use core::start::date_in_month;
 
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
@@ -1738,16 +1423,7 @@ pub fn is_zip(path: &str) -> bool {
     core::is_zip(std::path::Path::new(path))
 }
 
-/// `d` as a start without a bus has it: on foot at the start point, the bus, its paint, number
-/// and plate left out, and the depot file the map and the date give (not one picked for a bus).
-pub fn without_bus(d: &mut core::Duty, default_hof: Option<String>) {
-    d.bus.clear();
-    d.paint = None;
-    d.number = None;
-    d.plate = None;
-    d.hof = default_hof.filter(|h| !h.is_empty());
-    d.on_foot = Some(true);
-}
+pub use core::start::without_bus;
 
 /// Why `root` is not an OMSI 2 to play on, said so that the player knows what to choose.
 pub fn root_problem(root: &str) -> String {
