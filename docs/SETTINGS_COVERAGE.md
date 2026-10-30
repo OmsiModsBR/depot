@@ -43,6 +43,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `ctrl_off` | yes | yes | yes | yes |
 | `detail_textures` | yes | yes | yes | yes |
 | `doppler` | yes | yes | yes | yes |
+| `dx9_snow` | yes | yes | yes | yes |
 | `drive_keys` | yes | yes | yes | yes, known difference (launcher>game) |
 | `driver` | yes | yes | yes | yes |
 | `driverview_smooth` | yes | yes | yes | yes |

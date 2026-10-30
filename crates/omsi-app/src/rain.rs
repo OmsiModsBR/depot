@@ -9,6 +9,9 @@ pub struct Rain {
     particles: Vec<Vec3>,
     kind: i32,
     rate: f32,
+    /// Snow is drawn here, as flakes of OMSI 2's snowflake picture (the DirectX9 renderer's
+    /// own option); otherwise the renderer draws its snowfall itself.
+    flakes: bool,
     rng: u64,
 }
 
@@ -35,6 +38,7 @@ impl Rain {
             particles: Vec::new(),
             kind: 0,
             rate: 0.0,
+            flakes: false,
             rng: 0xABCDEF12345,
         }
     }
@@ -43,13 +47,15 @@ impl Rain {
         omsi_geometry::util::unit_f32(&mut self.rng)
     }
 
-    /// `kind`: 0 none, 1 rain, 2 snow; `rate` 0..1.
-    pub fn set(&mut self, kind: i32, rate: f32) {
+    /// `kind`: 0 none, 1 rain, 2 snow; `rate` 0..1. `flakes`: snow is drawn here, as sprites
+    /// of the snowflake picture ("DirectX9 (D3D9Ex)" with its Snow option on).
+    pub fn set(&mut self, kind: i32, rate: f32, flakes: bool) {
         self.kind = kind;
         self.rate = rate.clamp(0.0, 1.0);
-        // (snow is drawn by the renderer itself, from the weather: render snow.wgsl,
+        self.flakes = flakes;
+        // (snow is otherwise drawn by the renderer itself, from the weather: render snow.wgsl,
         // `Lighting::snowfall`)
-        let n = if kind == 0 || kind == 2 {
+        let n = if kind == 0 || (kind == 2 && !flakes) {
             0
         } else {
             (400.0 + 2600.0 * self.rate) as usize
@@ -127,6 +133,13 @@ impl Rain {
         } else {
             (0.05, [0.75, 0.8, 0.9], 0.35)
         };
+        // (a snowflake is a sprite of the game's snowflake picture, a cone of -3; a raindrop
+        // a streak, -2)
+        let (cone_cos, texture) = if self.kind == 2 {
+            (-3.0, crate::lights::snowflake_texture_id())
+        } else {
+            (-2.0, 0)
+        };
         let mut excluded = 0usize;
         for p in &self.particles {
             let w = camera + p.as_dvec3();
@@ -140,7 +153,8 @@ impl Rain {
                 color,
                 brightness,
                 direction: Vec3::ZERO,
-                cone_cos: if self.kind == 2 { -1.0 } else { -2.0 },
+                cone_cos,
+                texture,
                 ..Default::default()
             });
         }
