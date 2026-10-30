@@ -239,6 +239,7 @@ fn the_cab_is_fogged_like_the_world() {
         cab: &cab,
         surface_bias: -24,
         coronas: Default::default(),
+        sky: Default::default(),
         lamps: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
