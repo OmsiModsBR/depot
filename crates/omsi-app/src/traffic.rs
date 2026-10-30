@@ -727,7 +727,7 @@ pub struct Traffic {
     /// area (#43).
     pub populate_budget: Option<f64>,
     /// When the pass under way has to stop putting cars on the road.
-    spawn_deadline: Option<Instant>,
+    pub spawn_deadline: Option<Instant>,
     /// Seconds each of them has stood still.
     pub others_still: HashMap<u32, f32>,
     /// Per car: `AiCar::geo_block` of the frame before (who waits for whom by geometry).
