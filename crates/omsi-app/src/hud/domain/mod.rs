@@ -3,7 +3,9 @@
 mod frame;
 mod hits;
 mod info;
+pub(crate) mod lists;
+pub(crate) mod nav;
 
 pub use frame::{ChatView, DropdownView, Frame, MenuKind, Preview};
 pub use hits::Hits;
-pub use info::{InfoBar, InfoItem, InfoTone};
+pub use info::{InfoBar, InfoCell, InfoItem, InfoTone};

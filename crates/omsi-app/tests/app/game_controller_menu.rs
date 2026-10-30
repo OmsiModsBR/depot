@@ -1,7 +1,7 @@
 use omsi_content::input::gamectrler::{DeviceCfg, Func};
 use openomsi_game::testing;
 use openomsi_game::testing::game_controller_menu::*;
-use openomsi_game::testing::game_lists::{ListKind, Move};
+use openomsi_game::testing::hud::lists::{ListKind, Move};
 
 #[test]
 fn controller_menu_steps_clamp_and_wrap() {

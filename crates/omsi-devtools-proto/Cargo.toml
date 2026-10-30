@@ -1,0 +1,11 @@
+[package]
+name = "omsi-devtools-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Messages and framing shared by the game and the launcher's developer tools (snapshots, commands, handshake)"
+
+[dependencies]
+serde.workspace = true
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
+thiserror.workspace = true

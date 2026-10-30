@@ -1,6 +1,6 @@
 //! The game built without the `lan` feature: it is never in a LAN session.
 
-impl crate::App {
+impl crate::core::app::App {
     /// Whether this game joined another's LAN session: never without LAN play.
     #[inline]
     pub(crate) fn is_lan_client(&self) -> bool {
@@ -71,7 +71,7 @@ pub(crate) mod lan {
 
 /// The server admin's list: never opened, as no one is a server's admin.
 pub(crate) mod admin {
-    use crate::App;
+    use crate::core::app::App;
 
     /// The admin list's lines: none.
     pub(crate) fn items(_app: &App) -> Vec<(String, String)> {

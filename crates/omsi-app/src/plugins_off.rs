@@ -1,6 +1,6 @@
 //! The game built without the `plugins` feature: no plugin ever has the mouse.
 
-impl crate::App {
+impl crate::core::app::App {
     /// Whether the plugins' panels have the mouse: never without plugins.
     #[inline]
     pub(crate) fn plugin_focus(&self) -> bool {

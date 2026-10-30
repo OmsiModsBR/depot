@@ -6,7 +6,7 @@
 //! A first stop no entry point leads to - Spandau's line 13 enters the map 6 m before
 //! Zitadellenweg, at the end of the road - is left out: the duty starts at the next one.
 
-use crate::cli::{parse_time, Args};
+use crate::core::cli::{parse_time, Args};
 use crate::scene::World;
 use crate::schedule;
 use crate::situation::start_clock;

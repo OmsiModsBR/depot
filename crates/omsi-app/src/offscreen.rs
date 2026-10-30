@@ -2,15 +2,16 @@
 
 use crate::actions::dump_display_textures;
 use crate::career;
-use crate::cli::{parse_time, parse_triggers, Args};
+use crate::core::cli::{parse_time, parse_triggers, Args};
+use crate::core::memory::texture_budget;
+use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
+use crate::hud::nav;
 use crate::humans;
 use crate::lights;
-use crate::memory::texture_budget;
 use crate::money;
-use crate::nav;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
@@ -24,7 +25,6 @@ use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
-use crate::startup::graphics_instance;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{

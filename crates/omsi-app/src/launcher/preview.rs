@@ -189,7 +189,11 @@ pub fn cache_file_with(look: &Look, shape: Shape, fingerprint: &str) -> PathBuf 
     let small = shape == thumb_shape();
     // (the small pictures drawn ahead of time are not drawn again with every build: they
     // change with the bus and with `THUMB_REVISION`, bumped when the showroom's drawing does)
-    let build = if small { THUMB_REVISION } else { crate::BUILD };
+    let build = if small {
+        THUMB_REVISION
+    } else {
+        crate::core::startup::BUILD
+    };
     let h = fnv(&[
         &look.root.to_string_lossy(),
         &look.bus,
@@ -350,9 +354,9 @@ pub fn prune(dir: &std::path::Path, keep: usize) {
 /// The helper: shows what `cmds` asks for and hands each picture to `send` (false when
 /// the launcher is gone), until `cmds` ends.
 pub fn serve(cmds: Receiver<Cmd>, mut send: impl FnMut(Msg) -> bool) -> anyhow::Result<()> {
-    crate::launcher_statics();
+    crate::core::launcher_statics();
     let settings = crate::settings::Settings::load();
-    let instance = crate::startup::graphics_instance();
+    let instance = crate::core::startup::graphics_instance();
     // (the renderer's setup waited for on the heap, not on this thread's stack)
     let mut renderer = pollster::block_on(Box::pin(omsi_render::Renderer::new_with(
         &instance,

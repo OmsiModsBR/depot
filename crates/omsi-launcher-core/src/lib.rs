@@ -3188,6 +3188,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_bar_mode", json!("full")),
         ("info_bar_pos", json!("top")),
         ("info_bar_fps", json!(false)),
+        ("info_bar_collapsed", json!(false)),
+        ("info_bar_labels", json!(true)),
+        ("info_bar_lowfuel", json!(false)),
         ("info_item_time", json!(true)),
         ("info_item_speed", json!(true)),
         ("info_item_trip", json!(true)),
@@ -3946,10 +3949,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "map"
                 })
             }
-            "info_bar" | "info_bar_fps" => v[&k] = json!(b(val)),
+            "info_bar" | "info_bar_fps" | "info_bar_collapsed" | "info_bar_labels"
+            | "info_bar_lowfuel" => v[&k] = json!(b(val)),
             k if INFO_ITEM_KEYS.iter().any(|x| *x == k) => v[&k] = json!(b(val)),
             "info_bar_mode" => {
-                v[&k] = json!(if matches!(val, "compact" | "essential" | "custom") {
+                v[&k] = json!(if matches!(
+                    val,
+                    "compact" | "essential" | "custom" | "twotier" | "split"
+                ) {
                     val
                 } else {
                     "full"
@@ -4558,14 +4565,17 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .and_then(|x| x.as_str())
         .unwrap_or("top");
     text.push_str(&format!(
-        "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-        if matches!(mode, "compact" | "essential" | "custom") {
+        "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\ninfo_bar_collapsed={}\ninfo_bar_labels={}\ninfo_bar_lowfuel={}\n",
+        if matches!(mode, "compact" | "essential" | "custom" | "twotier" | "split") {
             mode
         } else {
             "full"
         },
         if pos == "bottom" { "bottom" } else { "top" },
-        b("info_bar_fps", false)
+        b("info_bar_fps", false),
+        b("info_bar_collapsed", false),
+        b("info_bar_labels", true),
+        b("info_bar_lowfuel", false)
     ));
     for key in INFO_ITEM_KEYS {
         text.push_str(&format!("{key}={}\n", b(key, true)));
@@ -6313,6 +6323,19 @@ mod info_bar_tests {
         assert!(text.lines().any(|l| l == "info_bar_mode=compact"));
         assert!(text.lines().any(|l| l == "info_bar_pos=bottom"));
         assert!(text.lines().any(|l| l == "info_bar_fps=1"));
+        let v = settings_from_text(Some(
+            "info_bar_mode=twotier\ninfo_bar_collapsed=1\ninfo_bar_labels=0\ninfo_bar_lowfuel=1\n",
+        ));
+        assert_eq!(v["info_bar_mode"], json!("twotier"));
+        assert_eq!(v["info_bar_collapsed"], json!(true));
+        assert_eq!(v["info_bar_labels"], json!(false));
+        assert_eq!(v["info_bar_lowfuel"], json!(true));
+        let text = settings_to_text(&v, None);
+        assert!(text.lines().any(|l| l == "info_bar_labels=0"));
+        assert!(text.lines().any(|l| l == "info_bar_lowfuel=1"));
+        let v = settings_from_text(Some("info_bar_mode=split\n"));
+        assert_eq!(v["info_bar_mode"], json!("split"));
+        assert_eq!(v["info_bar_labels"], json!(true));
         let v = settings_from_text(Some("info_bar_mode=sideways\ninfo_bar_pos=left\n"));
         assert_eq!(v["info_bar_mode"], json!("full"));
         assert_eq!(v["info_bar_pos"], json!("top"));

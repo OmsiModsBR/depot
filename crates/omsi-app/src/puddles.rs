@@ -178,9 +178,9 @@ impl Body {
 /// darker at dusk and at night.
 fn spray_look() -> ([f32; 3], f32) {
     use std::sync::atomic::Ordering::Relaxed;
-    let (grey, opacity) = if crate::startup::CLASSIC.load(Relaxed) {
+    let (grey, opacity) = if crate::core::startup::CLASSIC.load(Relaxed) {
         (0.32, 0.26)
-    } else if crate::startup::ENHANCED.load(Relaxed) {
+    } else if crate::core::startup::ENHANCED.load(Relaxed) {
         (0.5, 1.0)
     } else {
         (0.65, 0.42)
