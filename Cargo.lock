@@ -2861,6 +2861,7 @@ dependencies = [
  "env_logger",
  "glam",
  "image",
+ "libc",
  "log",
  "omsi-cfg",
  "omsi-launcher-core",
