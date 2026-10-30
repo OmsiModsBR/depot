@@ -383,6 +383,15 @@ pub struct Ui {
     images: hashbrown::HashMap<std::path::PathBuf, Option<(TextureId, u32, u32)>>,
 }
 
+/// One readout of an information bar's second tier, laid out.
+struct TierCell {
+    items: Vec<(Label, InfoTone, f32)>,
+    w: f32,
+    h: f32,
+    meter: Option<f32>,
+    alert: bool,
+}
+
 /// The information bar's groups in rows no wider than `room` (`widths`: each group's), each
 /// as many groups as fit with `gap` between them; a group wider than the room alone is a row
 /// of its own (it ran off both sides of a narrow window, and on a phone it lay under the
@@ -681,6 +690,7 @@ impl Ui {
         // --- the information bar, along the top (or the bottom) in the middle: in as many
         // rows as the room it has needs
         self.hits.info_rect = None;
+        self.hits.info_chevron = None;
         // (nothing to say - every item switched off, a layout that has only the vehicle's items
         // and no vehicle - is no empty plate)
         if let Some(info) = f.info.as_ref().filter(|i| !i.groups.is_empty()) {
@@ -731,26 +741,96 @@ impl Ui {
                     g.iter().map(|i| i.2).sum::<f32>() + gap * g.len().saturating_sub(1) as f32
                 })
                 .collect();
-            let rows = info_rows(&widths, group_gap, (x1 - x0 - pad * 2.0).max(1.0));
+            // (the arrow of a two-tier layout takes room at the end of the first tier)
+            let chev_w = if info.tiered { 26.0 * s } else { 0.0 };
+            let rows = info_rows(&widths, group_gap, (x1 - x0 - pad * 2.0 - chev_w).max(1.0));
             let lh = groups.iter().flatten().map(|i| i.0.h).max().unwrap_or(0) as f32;
             let row_h = lh + 6.0 * s;
             let row_w = |row: &Vec<usize>| {
                 row.iter().map(|k| widths[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
             };
             let lw = rows.iter().map(row_w).fold(0.0f32, f32::max);
-            let (w, h) = (lw + pad * 2.0, row_h * rows.len() as f32 + pad * 0.5);
+            let (w1, h1) = (
+                lw + chev_w + pad * 2.0,
+                row_h * rows.len() as f32 + pad * 0.5,
+            );
+            // --- the second tier: small readouts (a name over a value, a meter under it)
+            let small = (12.0 * s) as u32;
+            let cells: Vec<TierCell> = info
+                .tier2
+                .iter()
+                .map(|c| {
+                    let items: Vec<(Label, InfoTone, f32)> = c
+                        .items
+                        .iter()
+                        .map(|it| {
+                            let px_i = if it.tone == InfoTone::Dim { small } else { px };
+                            let l = if it.raw {
+                                self.text
+                                    .label_raw(r, scene, &it.text, px_i, colour(it.tone))
+                            } else {
+                                self.text.label(r, scene, &it.text, px_i, colour(it.tone))
+                            };
+                            let w = l.w as f32
+                                + if matches!(it.tone, InfoTone::Fps(_)) {
+                                    12.0 * s
+                                } else {
+                                    0.0
+                                };
+                            (l, it.tone, w)
+                        })
+                        .collect();
+                    let meter_w = if c.meter.is_some() { 48.0 * s } else { 0.0 };
+                    let w = items.iter().map(|i| i.2).fold(meter_w, f32::max);
+                    let h = items.iter().map(|i| i.0.h as f32).sum::<f32>()
+                        + if c.meter.is_some() { 7.0 * s } else { 0.0 };
+                    TierCell {
+                        items,
+                        w,
+                        h,
+                        meter: c.meter,
+                        alert: c.alert,
+                    }
+                })
+                .collect();
+            let cell_ws: Vec<f32> = cells.iter().map(|c| c.w).collect();
+            let rows2 = info_rows(&cell_ws, group_gap, (x1 - x0 - pad * 2.0).max(1.0));
+            let row2_w = |row: &Vec<usize>| {
+                row.iter().map(|k| cell_ws[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
+            };
+            let row2_h = cells.iter().map(|c| c.h).fold(0.0f32, f32::max) + 8.0 * s;
+            let (w2, h2) = if cells.is_empty() {
+                (0.0, 0.0)
+            } else {
+                (
+                    rows2.iter().map(row2_w).fold(0.0f32, f32::max) + pad * 2.0,
+                    row2_h * rows2.len() as f32 + pad * 0.5,
+                )
+            };
+            // (stacked, the two tiers are one plate as wide as the wider; split, two plates)
+            let gap2 = if info.split && h2 > 0.0 { 4.0 * s } else { 0.0 };
+            let (w, h) = if info.split {
+                (w1.max(w2), h1 + gap2 + h2)
+            } else {
+                (w1.max(w2), h1 + h2)
+            };
             let x = (x0 + x1 - w) * 0.5;
             let y = if bottom {
                 f.height - h - 10.0 * s
             } else {
                 top_y
             };
+            let p1x = (x0 + x1 - if info.split { w1 } else { w }) * 0.5;
+            let p1w = if info.split { w1 } else { w };
             let plate = self.text.plate(r, scene, 3);
-            scene.overlays.push((plate, [x, y, x + w, y + h]));
+            scene.overlays.push((
+                plate,
+                [p1x, y, p1x + p1w, y + if info.split { h1 } else { h }],
+            ));
             let line = self.text.plate(r, scene, 10);
             for (n, row) in rows.iter().enumerate() {
                 let ry = y + pad * 0.25 + n as f32 * row_h;
-                let mut cx = x + (w - row_w(row)) * 0.5;
+                let mut cx = p1x + (p1w - chev_w - row_w(row)) * 0.5;
                 for (i, k) in row.iter().enumerate() {
                     if i > 0 {
                         let hx = cx - group_gap * 0.5;
@@ -796,6 +876,116 @@ impl Ui {
                         cx += iw + gap;
                     }
                     cx += group_gap - gap;
+                }
+            }
+            // the arrow: a "v" (details folded away: click to show) or a "^" (click to hide)
+            if info.tiered {
+                let cr = [p1x + p1w - chev_w, y, p1x + p1w, y + h1];
+                if f.cursor.0 >= cr[0]
+                    && f.cursor.0 <= cr[2]
+                    && f.cursor.1 >= cr[1]
+                    && f.cursor.1 <= cr[3]
+                {
+                    let hl = self.text.plate(r, scene, 5);
+                    scene.overlays.push((
+                        hl,
+                        [
+                            cr[0] + 2.0 * s,
+                            cr[1] + 3.0 * s,
+                            cr[2] - 4.0 * s,
+                            cr[3] - 3.0 * s,
+                        ],
+                    ));
+                }
+                let mark = self.text.plate(r, scene, 12);
+                let u = (2.4 * s).max(1.0);
+                let (mx, my) = ((cr[0] + cr[2]) * 0.5 - u * 0.65, y + row_h * 0.5 - u * 0.5);
+                for k in -2i32..=2 {
+                    let step = if info.collapsed { 2 - k.abs() } else { k.abs() };
+                    let (px0, py0) = (mx + k as f32 * u, my + (step as f32 - 1.0) * u);
+                    scene
+                        .overlays
+                        .push((mark, [px0, py0, px0 + u * 1.2, py0 + u * 1.2]));
+                }
+                self.hits.info_chevron = Some(cr);
+            }
+            // the second tier
+            if h2 > 0.0 {
+                let (p2x, p2w, y2) = if info.split {
+                    ((x0 + x1 - w2) * 0.5, w2, y + h1 + gap2)
+                } else {
+                    (p1x, p1w, y + h1)
+                };
+                if info.split {
+                    let plate2 = self.text.plate(r, scene, 3);
+                    scene.overlays.push((plate2, [p2x, y2, p2x + p2w, y2 + h2]));
+                } else {
+                    // (a hairline between the tiers)
+                    scene.overlays.push((
+                        line,
+                        [
+                            p2x + pad,
+                            y2 - s.max(1.0) * 0.5,
+                            p2x + p2w - pad,
+                            y2 + s.max(1.0) * 0.5,
+                        ],
+                    ));
+                }
+                for (n, row) in rows2.iter().enumerate() {
+                    let ry = y2 + pad * 0.25 + n as f32 * row2_h;
+                    let mut cx = p2x + (p2w - row2_w(row)) * 0.5;
+                    for (i, k) in row.iter().enumerate() {
+                        let c = &cells[*k];
+                        if i > 0 {
+                            let hx = cx - group_gap * 0.5;
+                            scene.overlays.push((
+                                line,
+                                [hx, ry + 4.0 * s, hx + s.max(1.0), ry + row2_h - 4.0 * s],
+                            ));
+                        }
+                        if c.alert {
+                            let hot = self.text.plate(r, scene, 16);
+                            scene.overlays.push((
+                                hot,
+                                [
+                                    cx - group_gap * 0.4,
+                                    ry + 1.0 * s,
+                                    cx + c.w + group_gap * 0.4,
+                                    ry + row2_h - 1.0 * s,
+                                ],
+                            ));
+                        }
+                        let mut ty = ry + (row2_h - c.h) * 0.5;
+                        for (l, tone, _) in &c.items {
+                            let mut tx = cx;
+                            if let InfoTone::Fps(level) = tone {
+                                let d = self.text.plate(r, scene, fps_dot_level(*level));
+                                let cy = ty + l.h as f32 * 0.5;
+                                scene
+                                    .overlays
+                                    .push((d, [cx, cy - 3.5 * s, cx + 7.0 * s, cy + 3.5 * s]));
+                                tx = cx + 12.0 * s;
+                            }
+                            scene
+                                .overlays
+                                .push((l.tex, [tx, ty, tx + l.w as f32, ty + l.h as f32]));
+                            ty += l.h as f32;
+                        }
+                        if let Some(level) = c.meter {
+                            let track = self.text.plate(r, scene, 10);
+                            let fill = self.text.plate(r, scene, if c.alert { 15 } else { 13 });
+                            let (mw, mh) = (48.0 * s, 3.0 * s);
+                            let my = ty + 4.0 * s;
+                            scene.overlays.push((track, [cx, my, cx + mw, my + mh]));
+                            if level > 0.0 {
+                                scene.overlays.push((
+                                    fill,
+                                    [cx, my, cx + mw * level.clamp(0.0, 1.0), my + mh],
+                                ));
+                            }
+                        }
+                        cx += c.w + group_gap;
+                    }
                 }
             }
             self.hits.info_rect = Some([x, y, x + w, y + h]);
@@ -1055,6 +1245,8 @@ impl TextCache {
             6 => vec![0, 0, 0, 120],
             // a hairline between the information bar's groups
             10 => vec![255, 255, 255, 46],
+            // behind a readout that warns (a tank nearly empty)
+            16 => vec![238, 106, 95, 41],
             // the speed limit's red frame and white sign
             11 => vec![208, 48, 48, 255],
             12 => vec![235, 235, 235, 255],

@@ -212,6 +212,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     let clock_note = args.clock_moved.clone();
     // (as the last session left it, #1164)
     let info_bar = settings.info_bar;
+    let info_collapsed = settings.info_bar_collapsed;
     let mut app = App {
         args,
         instance: crate::core::startup::game_instance(),
@@ -354,6 +355,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         key_capture: None,
         menu_prev_pause: false,
         info_bar,
+        info_collapsed,
+        info_chev_hover: 0.0,
         pending_time: None,
         world_day: None,
         autosave_t: 0.0,

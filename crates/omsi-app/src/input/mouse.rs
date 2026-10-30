@@ -609,6 +609,19 @@ impl App {
         if self.vr_nav_edit.is_some() {
             return;
         }
+        // the arrow of a two-tier information bar folds its second tier away
+        if pressed && self.game_menu.is_none() {
+            let (x, y) = self.hud_cursor();
+            let over = self
+                .ui
+                .as_ref()
+                .and_then(|u| u.hits.info_chevron)
+                .is_some_and(|r| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
+            if over {
+                self.info_collapsed = !self.info_collapsed;
+                return;
+            }
+        }
         // the object editor: the mouse picks and drags
         if self.game_menu.is_none() && self.editor_mouse(pressed) {
             return;

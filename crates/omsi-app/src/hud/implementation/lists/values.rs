@@ -487,6 +487,9 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "timetable_win" => app.timetable,
         "info_bar" => app.info_bar,
         "info_bar_fps" => s.info_bar_fps,
+        "info_bar_collapsed" => s.info_bar_collapsed,
+        "info_bar_labels" => s.info_bar_labels,
+        "info_bar_lowfuel" => s.info_bar_lowfuel,
         k if crate::settings::info_item_index(k).is_some() => {
             s.info_items[crate::settings::info_item_index(k)?]
         }
@@ -730,6 +733,19 @@ pub(in crate::hud) fn toggle_set(
         "info_bar_fps" => {
             app.settings.info_bar_fps = on;
             Some(("info_bar_fps", bit))
+        }
+        "info_bar_collapsed" => {
+            app.settings.info_bar_collapsed = on;
+            app.info_collapsed = on;
+            Some(("info_bar_collapsed", bit))
+        }
+        "info_bar_labels" => {
+            app.settings.info_bar_labels = on;
+            Some(("info_bar_labels", bit))
+        }
+        "info_bar_lowfuel" => {
+            app.settings.info_bar_lowfuel = on;
+            Some(("info_bar_lowfuel", bit))
         }
         k if crate::settings::info_item_index(k).is_some() => {
             let i = crate::settings::info_item_index(k)?;

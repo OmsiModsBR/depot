@@ -18,6 +18,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
     let later = "Takes effect when the game starts the next time";
     // (the switches of the custom layout only where that layout is chosen)
     let custom_bar = s.info_bar_mode == "custom";
+    let tiers = matches!(s.info_bar_mode.as_str(), "twotier" | "split");
     let game: Vec<(String, String)> = vec![
         switch_row(app, "navigator", "Navigator", "Enables/Disables the Minimap"),
         switch_row(app, "nav_ai", "AI vehicles on the map", "Shows/hides the other (AI) vehicles on the Minimap and the city map"),
@@ -38,6 +39,9 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay; Custom bar the items chosen below"),
         pick("info_bar_pos", "Information bar position", "Along the top or the bottom of the screen"),
         switch_row(app, "info_bar_fps", "Frame rate in the information bar", "Adds the frame rate and its 1 % low as the bar's last item"),
+        switch_row(app, "info_bar_collapsed", "Second tier starts folded away", "In the Two-tier and Split layouts the lower readouts start hidden; the arrow beside the bar shows them").filter(|_| tiers),
+        switch_row(app, "info_bar_labels", "Names in the second tier", "Writes the name of each readout (Trip, Tank, ...) above its value in the Two-tier and Split layouts").filter(|_| tiers),
+        switch_row(app, "info_bar_lowfuel", "Highlight a low tank", "Turns the tank meter red and marks its readout when under 15 % in the Two-tier and Split layouts").filter(|_| tiers),
         switch_row(app, "info_item_time", "Time", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "info_item_speed", "Speed and limit", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "info_item_trip", "Trip distance", "Shown in the Custom bar layout").filter(|_| custom_bar),

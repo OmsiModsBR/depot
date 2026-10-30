@@ -139,6 +139,8 @@ pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static s
             ("compact", "Compact bar"),
             ("essential", "Essentials only"),
             ("custom", "Custom bar"),
+            ("twotier", "Two-tier bar"),
+            ("split", "Split bar"),
         ],
         "info_bar_pos" => vec![
             ("top", "Top of the screen"),
