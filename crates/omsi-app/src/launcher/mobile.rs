@@ -22,10 +22,7 @@ pub const PAGE_H: f32 = 700.0;
 /// How far a finger moves (interface points) before a touch is a drag, not a tap.
 const SLOP: f32 = 9.0;
 
-/// Whether the launcher is laid out for fingers.
-pub fn mobile() -> bool {
-    crate::core::platform::MOBILE || omsi_cfg::flags::MOBILE.is_set()
-}
+pub use omsi_launcher_ui::state::mobile;
 
 /// The fingers on the launcher.
 #[derive(Default)]

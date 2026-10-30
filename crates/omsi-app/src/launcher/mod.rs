@@ -17,12 +17,12 @@ pub(crate) mod chrome;
 pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
+pub(crate) mod host;
 pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
 mod omsi2_map;
-mod original;
 pub(crate) mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
@@ -30,9 +30,10 @@ pub(crate) mod prerender;
 pub(crate) mod settings;
 pub(crate) mod setup;
 pub(crate) mod start;
-pub(crate) mod state;
+pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
-pub(crate) use state::crash_of;
+pub(crate) use omsi_launcher_ui::state::crash_of;
+pub(crate) use omsi_launcher_ui::state::days_text;
 pub(crate) mod dialogs;
 mod theme;
 pub(crate) mod thumbs;
@@ -264,7 +265,7 @@ impl Launcher {
             gfx: None,
             gpu: None,
             ui: Ui::new(),
-            state: state::State::new(),
+            state: state::State::new(&host::GameHost),
             preview: showroom::Preview::new(),
             page: Page::Drive,
             page_anim: 1.0,
@@ -891,41 +892,6 @@ fn run_time(t: u64) -> String {
             .replace("%{h}", &(m / 60).to_string())
             .replace("%{m}", &(m % 60).to_string())
     }
-}
-
-/// A tour's days as the core puts them ("Mon-Fri & holidays, school days"), in the
-/// player's language, piece by piece.
-pub(crate) fn days_text(d: &str) -> String {
-    let (head, school) = match (
-        d.strip_suffix(", school holidays"),
-        d.strip_suffix(", school days"),
-    ) {
-        (Some(h), _) => (h, Some("school holidays")),
-        (_, Some(h)) => (h, Some("school days")),
-        _ => (d, None),
-    };
-    let (week, holidays) = match head.strip_suffix(" & holidays") {
-        Some(w) => (w, true),
-        None if head == "holidays" => ("", true),
-        None => (head, false),
-    };
-    let mut out = week
-        .split(", ")
-        .filter(|x| !x.is_empty())
-        .map(|x| omsi_ui::tr(x).into_owned())
-        .collect::<Vec<_>>()
-        .join(", ");
-    if holidays {
-        out = if out.is_empty() {
-            omsi_ui::tr("holidays").into_owned()
-        } else {
-            format!("{out} & {}", omsi_ui::tr("holidays"))
-        };
-    }
-    if let Some(x) = school {
-        out = format!("{out}, {}", omsi_ui::tr(x));
-    }
-    out
 }
 
 /// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
@@ -1710,7 +1676,7 @@ impl Launcher {
             && self.pages.controls_tab == 0
             && self.pages.kb.dialog.is_some();
         // (and OmsiLaunch's install or removal dialogs)
-        let engine = !mobile && !matches!(self.state.original.flow, original::Flow::Idle);
+        let engine = !mobile && !matches!(self.state.original.flow, state::Flow::Idle);
         // (and the integrity report's export over Diagnostics)
         let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
         if self.browser.is_some() || crash || reset || disconnected {

@@ -271,9 +271,6 @@ pub mod launcher {
     pub mod start {
         pub use crate::launcher::start::*;
     }
-    pub mod state {
-        pub use crate::launcher::state::*;
-    }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }

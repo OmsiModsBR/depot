@@ -14,7 +14,6 @@ mod prerender;
 mod settings;
 mod setup;
 mod start;
-mod state;
 mod thumbs;
 mod timetable_plan;
 mod tray;
