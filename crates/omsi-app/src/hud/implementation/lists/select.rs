@@ -127,7 +127,7 @@ pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static s
             ("wasd", "W A S D only"),
             ("arrows", "Arrow keys only"),
         ],
-        "resolution" => crate::launcher::settings::RESOLUTIONS.to_vec(),
+        "resolution" => omsi_launcher_lib::settings::RESOLUTIONS.to_vec(),
         "navigator_corner" => vec![
             ("top-left", "Top left"),
             ("top-right", "Top right"),
@@ -259,7 +259,7 @@ pub fn select_state(
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let mut options = select_options(key);
     // (under DirectX9 an option may leave some choices out, see `api_limits`)
-    if crate::launcher::settings::d3d9_fixes_vanilla(file) {
+    if omsi_launcher_lib::settings::d3d9_fixes_vanilla(file) {
         if let Some(l) = crate::api_limits::d3d9(key) {
             options.retain(|o| l.allows(o.0));
         }

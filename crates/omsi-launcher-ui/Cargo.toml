@@ -12,6 +12,7 @@ path = "src/lib.rs"
 [dependencies]
 omsi-ui = { path = "../omsi-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
+omsi-cfg = { path = "../omsi-cfg" }
 wgpu.workspace = true
 glam.workspace = true
 pollster.workspace = true
