@@ -526,7 +526,7 @@ impl Launcher {
             let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
                 Ok(g) => g,
                 Err(e) => {
-                    crate::startup::fatal_message(&format!(
+                    crate::core::startup::fatal_message(&format!(
                         "Project Depot cannot draw on this computer: {e:#}"
                     ));
                     std::process::exit(1);
@@ -577,11 +577,11 @@ impl ApplicationHandler for Launcher {
         });
         let (fit, at) = match asked {
             Some((iw, ih)) => (winit::dpi::LogicalSize::new(iw, ih), None),
-            None => crate::startup::fit_window(event_loop, 1440.0, 880.0, None),
+            None => crate::core::startup::fit_window(event_loop, 1440.0, 880.0, None),
         };
         let mut attrs = Window::default_attributes()
             .with_title("Project Depot")
-            .with_window_icon(crate::startup::window_icon())
+            .with_window_icon(crate::core::startup::window_icon())
             .with_inner_size(fit);
         if !mobile::mobile() {
             // (the launcher draws its own title bar, as Windows 11 apps do: see `chrome`)
@@ -601,7 +601,7 @@ impl ApplicationHandler for Launcher {
         let window = match event_loop.create_window(attrs) {
             Ok(w) => Arc::new(w),
             Err(e) => {
-                crate::startup::fatal_message(&format!(
+                crate::core::startup::fatal_message(&format!(
                     "Project Depot cannot open its window: {e}"
                 ));
                 event_loop.exit();
@@ -611,7 +611,7 @@ impl ApplicationHandler for Launcher {
         let g = match gfx::Gfx::for_window(&mut self.instance, &window) {
             Ok(g) => g,
             Err(e) => {
-                crate::startup::fatal_message(&format!(
+                crate::core::startup::fatal_message(&format!(
                     "Project Depot cannot draw on this computer: {e:#}"
                 ));
                 event_loop.exit();
@@ -624,14 +624,14 @@ impl ApplicationHandler for Launcher {
             {
                 Ok(s) => s,
                 Err(e) => {
-                    crate::startup::fatal_message(&format!(
+                    crate::core::startup::fatal_message(&format!(
                         "Project Depot cannot draw into its window: {e:#}"
                     ));
                     event_loop.exit();
                     return;
                 }
             };
-        log::info!("launcher window {}x{} (scale {:.2}), adapter {}, open {:.0} ms after the program started", size.width, size.height, window.scale_factor(), g.adapter_name, crate::startup::since_start_ms());
+        log::info!("launcher window {}x{} (scale {:.2}), adapter {}, open {:.0} ms after the program started", size.width, size.height, window.scale_factor(), g.adapter_name, crate::core::startup::since_start_ms());
         self.gpu = Some(self.new_gpu(&g));
         self.window = Some(window);
         self.surface = Some(surface);
@@ -1498,7 +1498,7 @@ impl Launcher {
             self.shown_once = true;
             log::info!(
                 "launcher: first picture in the window {:.0} ms after the program started",
-                crate::startup::since_start_ms()
+                crate::core::startup::since_start_ms()
             );
         }
         self.check_exit(event_loop);

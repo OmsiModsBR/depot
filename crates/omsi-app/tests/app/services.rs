@@ -1,5 +1,5 @@
 use clap::Parser;
-use openomsi_game::testing::cli::Args;
+use openomsi_game::testing::core::cli::Args;
 use openomsi_game::testing::services::*;
 use std::path::PathBuf;
 use std::sync::Arc;

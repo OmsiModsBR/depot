@@ -381,7 +381,7 @@ pub(crate) fn note(
         (j.key.0.as_str(), j.key.1.as_str(), j.key.2)
             != (duty.line.as_str(), duty.tour.as_str(), duty.first_trip)
     }) {
-        let dir = crate::startup::content_dir()
+        let dir = crate::core::startup::content_dir()
             .unwrap_or_else(|| root.to_path_buf())
             .join("Journeys");
         *slot = Some(Journey::new(

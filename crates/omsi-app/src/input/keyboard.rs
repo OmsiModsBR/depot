@@ -1,10 +1,10 @@
 //! The keyboard: a key press in the game, the menus, the choosers and the text fields.
 
-use crate::app::App;
+use crate::core::app::App;
+use crate::core::startup::shift_held_now;
 use crate::keys;
 use crate::player::{digit_of, fallback_action};
 use crate::situation::apply_situation;
-use crate::startup::shift_held_now;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 
@@ -245,7 +245,7 @@ impl App {
         if let (Some(m), PhysicalKey::Code(code)) = (self.menu.as_mut(), event_key) {
             if pressed {
                 if code == KeyCode::Escape {
-                    crate::platform::exit(event_loop);
+                    crate::core::platform::exit(event_loop);
                 }
                 m.key(code);
                 if m.start {
@@ -485,7 +485,7 @@ impl App {
                         self.finish_vr_nav_edit();
                         self.game_menu = None;
                         self.finish_session();
-                        crate::platform::exit(event_loop);
+                        crate::core::platform::exit(event_loop);
                         return;
                     }
                     if let Some(a) = action {

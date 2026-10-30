@@ -522,6 +522,17 @@ impl SceneCoronas<'_> {
     }
 }
 
+/// The sky dome behind a picture: the three pictures of `envir.cfg`'s `[sky_textures]` and
+/// the light that blends them. Without the pictures the picture keeps its clear colour.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SceneSky {
+    /// The day, twilight and night pictures, as scene texture ids.
+    pub textures: Option<[usize; 3]>,
+    /// x the sun's azimuth (radians, clockwise from north), yzw the weights of the day,
+    /// twilight and night pictures.
+    pub params: [f32; 4],
+}
+
 /// One picture of the scene.
 #[derive(Debug, Clone, Copy)]
 pub struct SceneFrame<'a> {
@@ -542,6 +553,8 @@ pub struct SceneFrame<'a> {
     pub lamps: SceneLamps<'a>,
     /// The light coronas drawn over the scene.
     pub coronas: SceneCoronas<'a>,
+    /// The sky dome drawn first, behind everything.
+    pub sky: SceneSky,
 }
 
 impl SceneFrame<'_> {
@@ -813,6 +826,7 @@ mod tests {
             surface_bias: -24,
             lamps: SceneLamps::default(),
             coronas: SceneCoronas::default(),
+            sky: Default::default(),
         };
         frame.validate().unwrap();
         let mut out = Vec::new();

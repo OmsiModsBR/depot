@@ -11,7 +11,7 @@
 //! feet on the ground, turning, sitting down on a seat and getting up are the passengers'
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::humans::{AvatarCmd, BusId, Humans};
 use glam::{DVec2, DVec3};
 use omsi_sim::collision::Obb;
@@ -1095,7 +1095,7 @@ impl App {
             return;
         };
         if f.toggle_kneel() {
-            let msg = match (f.kneel, crate::platform::touch_controls()) {
+            let msg = match (f.kneel, crate::core::platform::touch_controls()) {
                 (true, false) => "Kneeling: C (or Space) stands up again",
                 (true, true) => "Kneeling: the button again stands up",
                 (false, _) => "Standing",

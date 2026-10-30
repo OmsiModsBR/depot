@@ -140,6 +140,8 @@ pub(super) struct SceneStore {
     pipeline: Option<ScenePipeline>,
     /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
     pub(super) coronas: super::coronas::CoronaStore,
+    /// The sky dome's pass.
+    pub(super) sky: super::sky::SkyStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
     unsupported: Option<String>,
     /// The per-frame instance records, and the dynamic buffer they go up in (with the
@@ -151,7 +153,7 @@ pub(super) struct SceneStore {
     lamps: Lamps,
     tile_map: Option<TileMap>,
     /// The depth surface scene targets are drawn with, and its size (the largest asked).
-    target_depth: Option<(u32, u32, IDirect3DSurface9)>,
+    pub(super) target_depth: Option<(u32, u32, IDirect3DSurface9)>,
 }
 
 /// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
@@ -579,7 +581,7 @@ impl A2c {
     }
 
     /// Switches alpha-to-coverage on or off (nothing for a vendor without one).
-    fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
+    pub(super) fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
         let (state, value) = match (self, on) {
             (Self::None, _) => return Ok(()),
             (Self::Atoc, true) => (D3DRS_ADAPTIVETESS_Y, four_cc(b"ATOC")),
@@ -920,6 +922,7 @@ impl D3d9Device {
             }
         }
         self.ensure_coronas();
+        self.ensure_sky();
         Ok(())
     }
 
@@ -1030,7 +1033,7 @@ impl D3d9Device {
                         .CreateDepthStencilSurface(
                             w,
                             h,
-                            D3DFMT_D24X8,
+                            self.depth_format,
                             D3DMULTISAMPLE_NONE,
                             0,
                             true,
@@ -1329,6 +1332,9 @@ impl D3d9Device {
             // reversed depth: cleared to the far plane, 0, and nearer is greater
             d.Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 0.0, 0)
                 .map_err(map_err)?;
+            // the sky first, behind everything; the setup below sets what the scene needs
+            // again (its depth test, blending, shaders, filters and constants)
+            self.draw_sky(frame, pixel, coverage)?;
             d.SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE.0 as u32)
                 .map_err(map_err)?;
             d.SetRenderState(D3DRS_ZFUNC, D3DCMP_GREATEREQUAL.0 as u32)

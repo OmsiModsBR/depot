@@ -1,6 +1,6 @@
 //! Camera helpers: the default and follow cameras, picking rays, the orbit distance, and the mirrors.
 
-use crate::cli::Args;
+use crate::core::cli::Args;
 use crate::output::interface::output::{Player, World};
 use crate::scene;
 use crate::traffic;
@@ -447,7 +447,7 @@ pub(crate) fn render_mirrors(
     let mut lighting = lighting.clone();
     // a mirror's small picture: nothing smaller than a few of its pixels, and nothing much
     // beyond what a mirror shows (the far distance below)
-    let px = crate::startup::MIRROR_SIZE
+    let px = crate::core::startup::MIRROR_SIZE
         .load(std::sync::atomic::Ordering::Relaxed)
         .max(64) as f32;
     lighting.min_obj_size = lighting.min_obj_size.max((12.0 / px).clamp(0.03, 0.09));

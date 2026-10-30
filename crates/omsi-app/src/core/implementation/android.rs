@@ -12,12 +12,11 @@
 //! lacks: the full screen without the system bars, the screen kept on, asking for access
 //! to the shared storage, and the vibration.
 
-use crate::app::App;
-use crate::cli::Args;
-use crate::lan_mods;
+use crate::core::app::App;
+use crate::core::cli::Args;
+use crate::core::startup::{graphics_instance, BUILD, VERSION};
+use crate::core::{launcher_statics, make_app, prepare};
 use crate::launcher;
-use crate::startup::{graphics_instance, BUILD, VERSION};
-use crate::{launcher_statics, make_app, prepare};
 use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -144,7 +143,6 @@ fn android_main(app: AndroidApp) {
     if let Err(e) = event_loop.run_app(&mut shell) {
         log::error!("{e}");
     }
-    lan_mods::clean_up();
     // (the activity ends with the program)
     std::process::exit(0);
 }
@@ -293,7 +291,9 @@ fn hide_from_gallery(content: &Path) {
                 .is_some_and(|n| n.eq_ignore_ascii_case("Screenshots"))
         })
         .collect();
-    if let Some(root) = crate::startup::root_memo().and_then(|f| std::fs::read_to_string(f).ok()) {
+    if let Some(root) =
+        crate::core::startup::root_memo().and_then(|f| std::fs::read_to_string(f).ok())
+    {
         let root = PathBuf::from(root.trim());
         if root.is_dir() && !root.starts_with(content) && !content.starts_with(&root) {
             dirs.push(root);
@@ -315,7 +315,7 @@ fn hide_from_gallery(content: &Path) {
 /// after the launcher's Setup saved a new one (it waited for the next start of the app, and
 /// the media scanner had put the installation's textures into the gallery by then, #1632).
 pub(crate) fn hide_content_from_gallery() {
-    if let Some(content) = crate::startup::content_dir() {
+    if let Some(content) = crate::core::startup::content_dir() {
         hide_from_gallery(&content);
     }
 }
@@ -353,7 +353,7 @@ impl Shell {
                 log::error!("{e:#}");
             }
             // (an installation chosen under Setup is known from here on)
-            if let Some(content) = crate::startup::content_dir() {
+            if let Some(content) = crate::core::startup::content_dir() {
                 hide_from_gallery(&content);
             }
             launcher_statics();
@@ -367,14 +367,13 @@ impl Shell {
     /// the window back.
     fn switch(&mut self, event_loop: &ActiveEventLoop) {
         if self.game.is_some() {
-            if !crate::platform::take_leave() {
+            if !crate::core::platform::take_leave() {
                 return;
             }
             let mut game = self.game.take().unwrap();
             game.exiting(event_loop);
             let window = game.window.take();
             drop(game);
-            lan_mods::clean_up();
             log::info!("session ended: back to the launcher");
             let l = self.launcher();
             if let Some(w) = window {
@@ -506,7 +505,7 @@ impl ApplicationHandler for Shell {
 
     fn memory_warning(&mut self, _event_loop: &ActiveEventLoop) {
         log::warn!("the system is short of memory");
-        crate::memory::release_free_memory();
+        crate::core::memory::release_free_memory();
     }
 
     fn exiting(&mut self, event_loop: &ActiveEventLoop) {

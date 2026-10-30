@@ -1,4 +1,4 @@
-use openomsi_game::testing::startup::*;
+use openomsi_game::testing::core::startup::*;
 
 #[test]
 fn the_monitor_holding_a_point_is_found_whatever_its_place() {
@@ -24,7 +24,7 @@ fn a_monitor_left_of_the_primary_one_gets_through_the_argument_parser() {
         vec!["depot", "--monitor-at=-1500,300"],
         vec!["depot", "--monitor-at", "-1500,300"],
     ] {
-        let args = openomsi_game::testing::cli::Args::try_parse_from(&form)
+        let args = openomsi_game::testing::core::cli::Args::try_parse_from(&form)
             .unwrap_or_else(|e| panic!("{form:?}: {e}"));
         assert_eq!(
             args.monitor_at.as_deref().and_then(parse_point),

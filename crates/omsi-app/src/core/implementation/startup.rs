@@ -1,5 +1,6 @@
 //! Start-up: finding the OMSI 2 installation, the graphics instance, the build, the allocator and the console.
 
+use crate::output::Backend;
 use anyhow::{anyhow, Result};
 use omsi_render::Renderer;
 use std::path::{Path, PathBuf};
@@ -325,28 +326,7 @@ pub fn graphics_instance() -> wgpu::Instance {
         .unwrap_or_else(|| wgpu::Instance::new(descriptor))
 }
 
-/// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
-/// OMSI_BACKEND=d3d9): Windows only, and not with VR (OpenXR takes DirectX 12).
-pub(crate) fn d3d9_requested() -> bool {
-    if !cfg!(windows) {
-        return false;
-    }
-    let settings = crate::settings::Settings::load();
-    let wanted = omsi_cfg::flags::BACKEND
-        .text()
-        .unwrap_or_else(|| settings.graphics_api.clone());
-    is_d3d9(&wanted) && !settings.vr_requested()
-}
-
-pub(crate) fn is_d3d9(name: &str) -> bool {
-    matches!(
-        name.trim().to_ascii_lowercase().as_str(),
-        "d3d9" | "d3d9ex" | "dx9"
-    )
-}
-
-/// wgpu's device that draws nothing (the dedicated server's, and the books of "DirectX9
-/// (D3D9Ex)", see `output`).
+/// wgpu's device that draws nothing (the books of [`Backend::D3d9`]).
 fn noop_instance() -> wgpu::Instance {
     let mut descriptor = instance_descriptor(None);
     descriptor.backends = wgpu::Backends::NOOP;
@@ -354,10 +334,10 @@ fn noop_instance() -> wgpu::Instance {
     wgpu::Instance::new(descriptor)
 }
 
-/// The game window's instance: [`graphics_instance`], or wgpu's noop device under "DirectX9
-/// (D3D9Ex)", where `omsi-render` only keeps the books.
+/// The game window's instance: [`graphics_instance`], or wgpu's noop device under
+/// [`Backend::D3d9`], where `omsi-render` only keeps the books.
 pub(crate) fn game_instance() -> wgpu::Instance {
-    if d3d9_requested() {
+    if Backend::wanted() == Backend::D3d9 {
         log::info!("graphics: DirectX9 (D3D9Ex) chosen; wgpu runs on its noop device for the scene's books");
         return noop_instance();
     }
@@ -665,7 +645,7 @@ pub fn fit_rect(want: (f64, f64), screen: (f64, f64), scale: f64) -> ((f64, f64)
 
 /// The application icon for the window (Windows and Linux; macOS takes the bundle's).
 pub(crate) fn window_icon() -> Option<winit::window::Icon> {
-    static PNG: &[u8] = include_bytes!("../../../assets/icons/app/depot-256.png");
+    static PNG: &[u8] = include_bytes!("../../../../../assets/icons/app/depot-256.png");
     let img = image::load_from_memory(PNG).ok()?.into_rgba8();
     let (w, h) = img.dimensions();
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
@@ -680,7 +660,7 @@ pub fn enhanced_wanted(
 ) -> (bool, bool) {
     let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
     let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
-    if settings.d3d9_selected() {
+    if settings.backend() == Backend::D3d9 {
         if enhanced || plus {
             log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
         }

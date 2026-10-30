@@ -1,6 +1,6 @@
 //! What the traffic is told about the player and the LAN buses.
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::humans;
 use crate::player::Player;
 use crate::scene::World;

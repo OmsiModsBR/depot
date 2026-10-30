@@ -1,6 +1,6 @@
 //! Where a session starts from: the clock, the depot (`.hof`), a saved situation and writing one.
 
-use crate::cli::{parse_time, Args};
+use crate::core::cli::{parse_time, Args};
 use crate::player::Player;
 use crate::scene::{self, World};
 use anyhow::{anyhow, Result};
@@ -224,7 +224,7 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
                 .find(|(n, _)| n.eq_ignore_ascii_case("Colorscheme"))
                 .filter(|(_, c)| *c >= 0.0)
                 .map(|(_, c)| format!("{}", *c as i64));
-            crate::cli::SituationOther {
+            crate::core::cli::SituationOther {
                 bus: content_relative(&v.file.replace('\\', "/"), "vehicles"),
                 spawn: spawn_arg(x, y, situation_heading(&v.orientation), v.pos[1]),
                 hof: Some(v.paint.clone()).filter(|p| !p.trim().is_empty()),

@@ -232,6 +232,10 @@ pub struct Settings {
     /// Windy trees: the trees' foliage bends and sways in the weather's wind and its gusts
     /// (above the trunk only; with no wind nothing moves).
     pub windy_trees: bool,
+    /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
+    /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
+    /// snow without it.
+    pub dx9_snow: bool,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -427,7 +431,7 @@ pub fn pedal_curve(v: f32, strength: f32) -> f32 {
 
 impl Default for Settings {
     fn default() -> Self {
-        if crate::platform::MOBILE {
+        if crate::core::platform::MOBILE {
             // a phone's graphics chip and battery: 2x MSAA (cheap on a tiled GPU), no
             // ambient occlusion, a smaller shadow map and mirrors, a shorter view
             return Self {
@@ -519,6 +523,7 @@ impl Settings {
             show_fps: false,
             clouds: true,
             windy_trees: true,
+            dx9_snow: false,
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -882,6 +887,7 @@ impl Settings {
                 "show_fps" | "fps" => s.show_fps = b(v),
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
+                "dx9_snow" => s.dx9_snow = b(v),
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')
@@ -1420,24 +1426,26 @@ impl Settings {
         }
     }
 
-    /// Whether the game window draws with "DirectX9 (D3D9Ex)" (`graphics_api = d3d9` or
-    /// OMSI_BACKEND=d3d9; Windows only, and not with VR, which takes DirectX 12).
-    pub fn d3d9_selected(&self) -> bool {
-        let wanted = omsi_cfg::flags::BACKEND
-            .text()
-            .unwrap_or_else(|| self.graphics_api.clone());
-        cfg!(windows) && crate::startup::is_d3d9(&wanted) && !self.vr_requested()
+    /// The graphics backend these settings choose for the game window (see `Backend::of`).
+    pub(crate) fn backend(&self) -> crate::output::Backend {
+        crate::output::Backend::of(self)
+    }
+
+    /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
+    /// under that API (the other renderers draw their own snowfall).
+    pub fn dx9_snowfall(&self) -> bool {
+        self.dx9_snow && self.backend() == crate::output::Backend::D3d9
     }
 
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
     /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
     pub fn fair_weather_clouds(&self) -> bool {
-        !self.d3d9_selected()
+        self.backend() != crate::output::Backend::D3d9
     }
 
     /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
     pub fn locked_for_api(mut self) -> Self {
-        if self.d3d9_selected() {
+        if self.backend() == crate::output::Backend::D3d9 {
             self.lock_vanilla();
         }
         self
@@ -1540,7 +1548,7 @@ impl Settings {
             reflections: self.reflections,
             no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
             ray_tracing: self.ray_tracing()
-                || crate::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
+                || crate::core::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 }

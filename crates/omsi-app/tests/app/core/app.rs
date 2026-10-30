@@ -1,4 +1,4 @@
-use openomsi_game::testing::app::CamBlend;
+use openomsi_game::testing::core::app::CamBlend;
 
 fn blend(t: f32) -> f32 {
     CamBlend {

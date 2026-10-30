@@ -440,7 +440,7 @@ impl State {
         // launcher learns of it from the previous run's log)
         #[cfg(target_os = "android")]
         {
-            s.crash = crate::android::previous_run_crash();
+            s.crash = crate::core::android::previous_run_crash();
         }
         s
     }
