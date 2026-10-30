@@ -443,8 +443,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         window: None,
         surface: None,
         renderer: None,
-        #[cfg(windows)]
-        d3d9: None,
+        output: Default::default(),
         #[cfg(windows)]
         vr: None,
         scene: None,

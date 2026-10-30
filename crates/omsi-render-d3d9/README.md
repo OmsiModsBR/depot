@@ -16,7 +16,7 @@ is a product decision.
 A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
 pictures and leaves the frame open, the new interface (the Esc menu, the Alt bar, the
 loading screen, drawn by `omsi-ui`) is mirrored into it, and the game presents it when its
-frame is done. Not drawn in that mode yet: the sky, smoke, triple screen, screenshots, pictures the
+frame is done. Not drawn in that mode yet: smoke, triple screen, screenshots, pictures the
 GPU draws into textures (the navigator's maps, mirrors), and what "The scene layer" lists as
 not yet.
 
@@ -32,6 +32,7 @@ not yet.
 | `ui` | all | The interface as this renderer takes it: `omsi-ui`'s layers, draws and vertices, and the HUD's pictures; the layout, viewport and scissor rules shared with `omsi-ui` |
 | `d3d9` interface layer | Windows | Each `omsi-ui` Gpu's pictures, atlas and vertex lists (`ui_image`, `ui_atlas`, `ui_vertices`), `draw_ui` and `draw_overlays`, with the interface shader (`shaders/ui.hlsl`, a port of `omsi-ui`'s) |
 | `d3d9` corona pass | Windows | `set_corona_texture`, and in `draw_scene` the light coronas over the scene (`shaders/corona.hlsl`) |
+| `d3d9` sky pass | Windows | The sky dome behind the scene (`SceneFrame::sky`, `shaders/sky.hlsl`), drawn first without depth |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -108,6 +109,8 @@ instruction slots it takes and how many the card allows
 the log instead of a black world; the scene is then not tried again every frame. That count
 (`caps::instruction_slots`) is held within a tenth of the compiler's by a test.
 
+The sky: the background of every picture, the window's and the mirrors' (`SceneFrame::sky`, `shaders/sky.hlsl`, `d3d9/sky.rs`). A dome (a hemisphere and a little below the horizon, as the default renderer's) centred on the camera, so it never shows parallax and turns with the camera; it is drawn first, before the scene and without depth, so it replaces only what was the flat clear colour. Its colour is the map's three sky pictures (`envir.cfg`'s `[sky_textures]`: day, twilight, night), read along the azimuth relative to the sun (the brighter glow sits toward the sun) and from the zenith (top) to the horizon (bottom), blended in linear light by the weights the sun's altitude gives (the twilight picture counts for 0.8 of its light, the night's for 0.6, as the default renderer), and mixed with the fog's colour near the horizon and, in a thick fog, over the whole sky, so far geometry fades into it without a seam. The game sends the picture ids (`Scene::sky_textures`) and the sun's azimuth and weights (`FramePlan::sky`). Always on in this mode; with no pictures set, or one not put up, the picture keeps its clear colour. No clouds, stars or sun glow (later), no atmosphere and no gradients of its own: the vanilla picture only. Its pixel shader is a pass of its own and takes far fewer than the scene's slots.
+
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
 in fog. They are camera-facing sprites the default renderer keeps the books of
@@ -124,7 +127,7 @@ renderer draws as coronas come with them; the snowfall's own pass is not here.
 
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky, smoke,
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky's clouds, stars and sun glow, smoke,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
