@@ -1,6 +1,6 @@
 //! The object editor's keys, mouse and wheel (the editor itself is `crate::editor`).
 
-use crate::app::App;
+use crate::core::app::App;
 use winit::keyboard::KeyCode;
 
 impl App {
@@ -63,7 +63,7 @@ impl App {
                 ed.describe(&world)
             }
             crate::editor::Action::Save => {
-                let content = crate::startup::content_dir();
+                let content = crate::core::startup::content_dir();
                 let ed = self.editor.as_ref().unwrap();
                 match content.map(|c| ed.save(&world, &self.args.map, &c, &self.args.root)) {
                     Some(Ok(files)) if files.is_empty() => "Nothing to save".to_string(),

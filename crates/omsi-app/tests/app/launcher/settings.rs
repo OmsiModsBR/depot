@@ -1,8 +1,8 @@
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_lib::start::Choice;
 use omsi_ui::Rect;
 use openomsi_game::testing::launcher::settings::*;
-use openomsi_game::testing::launcher::state::Choice;
 use openomsi_game::testing::launcher::ui::id_of;
 use openomsi_game::testing::launcher::ui::Ui;
 use serde_json::json;
@@ -27,6 +27,11 @@ const BEFORE: &[&str] = &[
     "reflections",
     "clouds",
     "windy_trees",
+    "smoke",
+    "smoke_user_only",
+    "smoke_max",
+    "smoke_in_mirrors",
+    "dx9_snow",
     "fullscreen",
     "resolution",
     "vsync",
@@ -149,6 +154,9 @@ const BEFORE: &[&str] = &[
     "info_bar_mode",
     "info_bar_pos",
     "info_bar_fps",
+    "info_bar_collapsed",
+    "info_bar_labels",
+    "info_bar_lowfuel",
     "info_item_time",
     "info_item_speed",
     "info_item_trip",
@@ -356,6 +364,28 @@ fn d3d9_limits_each_option_of_the_table() {
     // (VR takes DirectX 12 instead: the choice is offered)
     s["vr"] = json!(true);
     assert!(drawn(&mut s, "graphics"));
+}
+
+/// The Snow option is DirectX9's own: it is on the page only with that API.
+#[test]
+fn the_dx9_snow_option_is_shown_only_under_directx9() {
+    let drawn = |api: &str| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        let sec = OPTS.iter().find(|o| o.key == "dx9_snow").unwrap().sec;
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            sec,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of("opt-dx9_snow"))
+    };
+    assert!(!drawn("vulkan"));
+    assert_eq!(drawn("d3d9"), cfg!(windows));
 }
 
 /// An option DirectX9 leaves some choices out of offers only the rest, and a saved value

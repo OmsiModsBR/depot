@@ -122,15 +122,34 @@ impl Renderer {
     }
 
     /// Upload this frame's smoke particles, farthest first (they are blended over each other).
-    pub(crate) fn prepare_smoke(&self, scene: &mut Scene, eye: DVec3) {
+    ///
+    /// `mirror`: the picture is a mirror's (a render texture), which shows no smoke when the
+    /// options say so ([`RenderOptions::smoke_in_mirrors`]).
+    pub(crate) fn prepare_smoke(&self, scene: &mut Scene, eye: DVec3, mirror: bool) {
         let ro = scene.render_origin;
-        let mut order: Vec<(f64, GpuCorona)> = scene
+        scene.last_smoke.clear();
+        if mirror && !self.options.smoke_in_mirrors {
+            scene.smoke_count = 0;
+            return;
+        }
+        let mut order: Vec<(f64, GpuCorona, bool)> = scene
             .smoke
             .iter()
-            .filter_map(|p| smoke_sprite(p, ro).map(|g| (-(p.position - eye).length_squared(), g)))
+            .filter_map(|p| {
+                smoke_sprite(p, ro).map(|g| (-(p.position - eye).length_squared(), g, p.spray))
+            })
             .collect();
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let data: Vec<GpuCorona> = order.into_iter().map(|(_, g)| g).collect();
+        if self.mirroring() {
+            // (the game's own spray is no OMSI smoke: the second renderer does not get it)
+            scene.last_smoke.extend(
+                order
+                    .iter()
+                    .filter(|o| !o.2)
+                    .map(|o| bytemuck::cast::<GpuCorona, [f32; 20]>(o.1)),
+            );
+        }
+        let data: Vec<GpuCorona> = order.into_iter().map(|(_, g, _)| g).collect();
         scene.smoke_count = data.len() as u32;
         if data.is_empty() {
             return;

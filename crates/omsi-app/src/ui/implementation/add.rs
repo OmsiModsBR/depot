@@ -29,7 +29,7 @@ use winit::keyboard::KeyCode;
 /// bus's own), cut to the vehicle; none when there is none (read off the game's thread: it
 /// reads a file and walks the bus's folder).
 pub(crate) fn read_picture(root: &std::path::Path, bus: &str, paint: &str) -> Option<Picture> {
-    let img = crate::launcher::preview::kept_thumb(root, bus, paint)?;
+    let img = crate::showroom::kept_thumb(root, bus, paint)?;
     let (w, h) = img.dimensions();
     let rgba = img.into_raw();
     let part = ingame::subject_part(w as usize, h as usize, &rgba).unwrap_or([0.0, 0.0, 1.0, 1.0]);
@@ -71,15 +71,15 @@ impl AddFrame {
 /// The window's live 3D view: the launcher's preview helper started for it, and the vehicle
 /// and paint it shows in the light of the game's time.
 pub(crate) struct LiveView {
-    preview: crate::launcher::preview::Preview,
-    look: Option<crate::launcher::preview::Look>,
+    preview: crate::showroom::Preview,
+    look: Option<crate::showroom::Look>,
     last: std::time::Instant,
 }
 
 impl LiveView {
     fn new() -> LiveView {
         LiveView {
-            preview: crate::launcher::preview::Preview::for_game(),
+            preview: crate::showroom::Preview::for_game(),
             look: None,
             last: std::time::Instant::now(),
         }
@@ -87,7 +87,7 @@ impl LiveView {
 
     /// What the window draws of it: the vehicle and paint wanted, and whether it failed.
     fn frame(&self) -> (u64, bool) {
-        let tag = self.look.as_ref().map_or(0, crate::launcher::preview::tag);
+        let tag = self.look.as_ref().map_or(0, crate::showroom::tag);
         let failed = self.preview.gave_up() || (self.preview.error.is_some() && !self.preview.busy);
         (tag, failed)
     }
@@ -113,7 +113,7 @@ impl App {
             return;
         }
         self.load_vehicle_list();
-        let vehicles = crate::game_lists::place_choices(self);
+        let vehicles = crate::hud::lists::place_choices(self);
         if vehicles.iter().all(|m| m.1.is_empty()) {
             self.service_msg = Some(("No vehicles found".into(), 3.0));
             return;
@@ -146,10 +146,10 @@ impl App {
         else {
             return;
         };
-        let liveries = crate::game_lists::place_liveries(self, &file);
-        let depots = crate::game_lists::place_depots(self, &file);
-        let numbers = crate::game_lists::place_numbers(self, &file);
-        let description = crate::game_lists::place_description(self, &file);
+        let liveries = crate::hud::lists::place_liveries(self, &file);
+        let depots = crate::hud::lists::place_depots(self, &file);
+        let numbers = crate::hud::lists::place_numbers(self, &file);
+        let description = crate::hud::lists::place_description(self, &file);
         if let Some(win) = self.new_ui.add.as_mut() {
             win.choose(i, liveries, depots, numbers, description);
             self.new_ui.add_last = win.chosen();
@@ -160,10 +160,10 @@ impl App {
     /// What the live view shows: the vehicle and paint chosen in the window (the bus's own
     /// paint for "Random livery"), on the map driven, in the light of the game's hour and day
     /// and the weather it started with.
-    fn add_live_look(&self) -> Option<crate::launcher::preview::Look> {
+    fn add_live_look(&self) -> Option<crate::showroom::Look> {
         let (bus, paint) = self.new_ui.add.as_ref()?.picture_look()?;
         let (day, month) = self.clock.day_month();
-        Some(crate::launcher::preview::Look {
+        Some(crate::showroom::Look {
             root: self.args.root.clone(),
             map: self.args.map.clone(),
             bus,
@@ -181,7 +181,7 @@ impl App {
         let Some(live) = self.new_ui.add_live.as_mut() else {
             return;
         };
-        let same = |a: &crate::launcher::preview::Look, b: &crate::launcher::preview::Look| {
+        let same = |a: &crate::showroom::Look, b: &crate::showroom::Look| {
             (&a.bus, &a.paint) == (&b.bus, &b.paint)
         };
         if let Some(look) = look {

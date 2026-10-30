@@ -1892,8 +1892,22 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         Page::Profile => super::pages::profile(l, content),
         Page::Settings => super::settings::settings(l, content),
         Page::Controls => super::pages::controls(l, content),
-        Page::Mods => super::pages::mods(l, content),
-        Page::Tutorials => super::pages::tutorials(l, content),
+        Page::Mods => omsi_launcher_ui::window::mods(
+            &mut omsi_launcher_ui::Frame {
+                ui: &mut l.ui,
+                state: &mut l.state,
+                drop_hover: l.pages.drop_hover,
+            },
+            content,
+        ),
+        Page::Tutorials => omsi_launcher_ui::window::tutorials(
+            &mut omsi_launcher_ui::Frame {
+                ui: &mut l.ui,
+                state: &mut l.state,
+                drop_hover: l.pages.drop_hover,
+            },
+            content,
+        ),
         Page::Timetable => super::timetable::draw(l, content),
         Page::Setup => super::setup::setup(l, content),
     }

@@ -2229,6 +2229,7 @@ fn a_smoke_sprite_carries_its_spin_ground_and_z_offset() {
         spin: std::f32::consts::FRAC_PI_2,
         z_offset: 0.1,
         ground: Some(33.0),
+        spray: false,
     };
     let g = smoke_sprite(&p, ro).unwrap();
     assert_eq!(g.pos, [1.0, 2.0, 3.5]);

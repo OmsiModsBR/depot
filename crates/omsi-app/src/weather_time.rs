@@ -1,6 +1,6 @@
 //! Changing the weather (by hand, the cycle, METAR) and the clock (real-time sync, jumps).
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::weather_setup::load_weather;
 
 impl App {
@@ -246,7 +246,7 @@ impl App {
             .and_then(|w| w.strip_prefix("metar:"))
         {
             Some(code) if !code.trim().is_empty() => code.trim().to_ascii_uppercase(),
-            _ => crate::launcher::drive::nearest_airport(
+            _ => omsi_launcher_lib::start::nearest_airport(
                 &self.args.root.to_string_lossy(),
                 &self.args.map,
             ),

@@ -71,3 +71,11 @@ openOMSI commit was imported wholesale; selected openOMSI changes (MIT) were rei
 one at a time, with source and licence recorded in [CHANGELOG.md](CHANGELOG.md). It carries behaviour
 changes, including vehicle physics changes whose match with OMSI 2 is not yet demonstrated. Only a
 Windows x64 game/launcher package is published. See [release notes](docs/releases/0.2.52.md).
+
+## Depot 0.3.0
+
+Published 2026-10-30 from tag `v0.3.0`, the first release numbered by hand (see
+[versioning](docs/VERSIONING.md)). It still derives from the openOMSI 0.2.16 baseline, with no later
+openOMSI commit imported wholesale. It adds an optional DirectX 9 renderer, a new in-game interface
+and launcher, and removes the multiplayer and plugin code. Only a Windows x64 game/launcher package
+is published. See [release notes](docs/releases/0.3.0.md).

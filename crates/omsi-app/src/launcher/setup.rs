@@ -215,7 +215,7 @@ pub fn setup(l: &mut Launcher, area: Rect) {
             y = free_space(l, Rect::new(left.x, y + GAP, left.w, 0.0));
         }
         // (Windows only: opening the original OMSI 2 through OmsiLaunch)
-        if super::original::available() {
+        if super::state::available() {
             y = super::original_ui::engine_card(l, Rect::new(left.x, y + GAP, left.w, 0.0));
         }
         own_files(l, Rect::new(left.x, y + GAP, left.w, 0.0));
@@ -1439,7 +1439,7 @@ fn save_folders(l: &mut Launcher) {
             // (a phone: the gallery is kept out of the folder chosen at once, before
             // its media scanner lists its textures as photos, #1632)
             #[cfg(target_os = "android")]
-            crate::android::hide_content_from_gallery();
+            crate::core::android::hide_content_from_gallery();
             if content_moved {
                 // (the mods are the new folder's)
                 l.state.mods_asked = false;

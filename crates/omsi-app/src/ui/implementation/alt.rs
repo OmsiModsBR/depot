@@ -135,7 +135,7 @@ impl App {
                 "alt-keyboard"
             },
             pumping: self.pumping.map(|p| p.0),
-            route_arrows: crate::game_lists::route_arrows_on(self),
+            route_arrows: crate::hud::lists::route_arrows_on(self),
         }
     }
 
@@ -184,7 +184,7 @@ impl App {
             "remove" => self.remove_driven_vehicle(),
             "repair" => self.run_service(id),
             "help" => {
-                crate::game_lists::toggle_route_arrows(self);
+                crate::hud::lists::toggle_route_arrows(self);
             }
             "reposition" | "tour" | "destination" | "service" | "time" | "weather" | "controls"
             | "driver" => self.open_tool(id),

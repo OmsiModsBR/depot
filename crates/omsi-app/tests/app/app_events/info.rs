@@ -52,6 +52,9 @@ fn the_custom_layout_leaves_out_what_is_switched_off() {
         limit: None,
         fps: None,
         items: [true; 9],
+        labels: true,
+        low_fuel: false,
+        collapsed: false,
     };
     assert_eq!(info_bar(&data, InfoMode::Custom, false).groups.len(), 1);
     data.items[0] = false;
@@ -75,6 +78,9 @@ fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
         limit: None,
         fps: Some((74.0, Some(52.0))),
         items: [true; 9],
+        labels: true,
+        low_fuel: false,
+        collapsed: false,
     };
     let bar = info_bar(&data, InfoMode::Full, true);
     assert!(bar.bottom);
@@ -84,4 +90,40 @@ fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
     assert_eq!(compact.groups[1][0].text, "74 / 52 fps");
     // (asked for, the frame rate is there in every layout)
     assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 1);
+}
+
+/// The two-tier layouts: the clock in the first tier, the frame rate among the readouts of
+/// the second, which the arrow folds away; the split layout keeps them on a plate of its own.
+#[test]
+fn the_two_tier_layouts_have_a_second_tier_that_folds_away() {
+    use openomsi_game::testing::app_events::{info_bar, InfoData, InfoMode};
+    let clock = omsi_sim::SimClock::default();
+    let mut data = InfoData {
+        clock: &clock,
+        player: None,
+        duty: None,
+        passengers: None,
+        capacity: None,
+        metres: 0.0,
+        limit: None,
+        fps: Some((74.0, Some(52.0))),
+        items: [true; 9],
+        labels: true,
+        low_fuel: true,
+        collapsed: false,
+    };
+    let bar = info_bar(&data, InfoMode::TwoTier, true);
+    assert!(bar.tiered && !bar.split && bar.bottom && !bar.collapsed);
+    assert_eq!(bar.groups.len(), 1);
+    assert_eq!(bar.tier2.len(), 1);
+    assert!(bar.tier2[0].items[0].text.starts_with("74 fps"));
+    let split = info_bar(&data, InfoMode::Split, false);
+    assert!(split.tiered && split.split);
+    data.collapsed = true;
+    let folded = info_bar(&data, InfoMode::TwoTier, false);
+    assert!(folded.tiered && folded.collapsed && folded.tier2.is_empty());
+    assert_eq!(folded.groups.len(), 1);
+    // (the one-row layouts have no second tier and no arrow)
+    let full = info_bar(&data, InfoMode::Full, false);
+    assert!(!full.tiered && full.tier2.is_empty());
 }

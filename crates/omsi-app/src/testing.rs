@@ -64,17 +64,11 @@ pub mod actions {
 pub mod api_limits {
     pub use crate::api_limits::*;
 }
-pub mod app {
-    pub use crate::app::*;
-}
 pub mod app_events {
     pub use crate::app_events::*;
 }
 pub mod bus_service {
     pub use crate::bus_service::*;
-}
-pub mod cli {
-    pub use crate::cli::*;
 }
 pub mod condensation {
     pub use crate::condensation::*;
@@ -93,6 +87,18 @@ pub mod condensation {
 }
 pub mod controllers {
     pub use crate::controllers::*;
+}
+pub mod core {
+    pub mod app {
+        pub use crate::core::domain::app::*;
+        pub use crate::core::implementation::app::*;
+    }
+    pub mod cli {
+        pub use crate::core::domain::cli::*;
+    }
+    pub mod startup {
+        pub use crate::core::implementation::startup::*;
+    }
 }
 pub mod describe {
     pub use crate::describe::*;
@@ -149,9 +155,6 @@ pub mod frame_stats {
 pub mod game_controller_menu {
     pub use crate::game_controller_menu::*;
 }
-pub mod game_lists {
-    pub use crate::game_lists::*;
-}
 pub mod headtrack {
     pub use crate::headtrack::*;
 }
@@ -161,7 +164,37 @@ pub mod hpattern {
 pub mod hud {
     pub use crate::hud::domain::*;
     pub use crate::hud::implementation::legacy::oft::*;
+    pub use crate::hud::implementation::legacy::settings::vr_settings_sidebar_step;
     pub use crate::hud::implementation::legacy::*;
+
+    pub mod nav {
+        pub use crate::hud::domain::nav::*;
+        pub use crate::hud::implementation::nav::*;
+
+        pub mod draw {
+            pub use crate::hud::implementation::nav::draw::*;
+        }
+
+        pub mod city {
+            pub use crate::hud::implementation::nav::city::*;
+        }
+        pub mod geometry {
+            pub use crate::hud::implementation::nav::geometry::*;
+        }
+        pub mod lines {
+            pub use crate::hud::implementation::nav::lines::*;
+        }
+        pub mod minimap {
+            pub use crate::hud::implementation::nav::minimap::picture::map_view;
+        }
+    }
+
+    pub mod lists {
+        pub use crate::hud::domain::lists::*;
+        pub use crate::hud::implementation::lists::{
+            duty::*, route::*, rows::*, select::*, values::*,
+        };
+    }
 }
 pub mod humans {
     pub use crate::humans::*;
@@ -229,23 +262,14 @@ pub mod launcher {
     pub mod prerender {
         pub use crate::launcher::prerender::*;
     }
-    pub mod preview {
-        pub use crate::launcher::preview::*;
-    }
     pub mod settings {
         pub use crate::launcher::settings::*;
     }
     pub mod setup {
         pub use crate::launcher::setup::*;
     }
-    pub mod showroom {
-        pub use crate::launcher::showroom::*;
-    }
     pub mod start {
         pub use crate::launcher::start::*;
-    }
-    pub mod state {
-        pub use crate::launcher::state::*;
     }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
@@ -278,23 +302,6 @@ pub mod map_surface {
 }
 pub mod money {
     pub use crate::money::*;
-}
-pub mod nav {
-    pub use crate::nav::*;
-
-    pub mod draw {
-        pub use crate::nav::draw::*;
-    }
-
-    pub mod city {
-        pub use crate::nav::city::*;
-    }
-    pub mod geometry {
-        pub use crate::nav::geometry::*;
-    }
-    pub mod lines {
-        pub use crate::nav::lines::*;
-    }
 }
 pub mod on_foot {
     pub use crate::on_foot::*;
@@ -407,20 +414,33 @@ pub mod settings {
                 self.arrows_switch_cams as u8
             ));
             text.push_str(&format!(
-                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-                self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
+                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\ninfo_bar_collapsed={}\ninfo_bar_labels={}\ninfo_bar_lowfuel={}\n",
+                self.info_bar_mode,
+                self.info_bar_pos,
+                self.info_bar_fps as u8,
+                self.info_bar_collapsed as u8,
+                self.info_bar_labels as u8,
+                self.info_bar_lowfuel as u8
             ));
             for (key, on) in INFO_ITEM_KEYS.iter().zip(self.info_items) {
                 text.push_str(&format!("{key}={}\n", on as u8));
             }
             text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
+            text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
             text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
             // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
             text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
             text.push_str(&format!("pax_voices={}\nnav_arrows={}\nnav_ai={}\nnav_follow_view={}\nnav_surface={}\nnav_light={}\nnav_contours={}\nnav_orientation={}\nnav_view={}\nget_up={}\ninfo_bar={}\ntime_speed={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\nshadow_casters={}\nreflections={}\n", self.pax_voices, self.nav_arrows as u8, self.nav_ai as u8, self.nav_follow_view as u8, self.nav_surface as u8, self.nav_light as u8, self.nav_contours as u8, self.nav_orientation, self.nav_view, self.get_up as u8, self.info_bar as u8, self.time_speed, self.time_sync as u8, self.metar_sync as u8, self.metar_station, self.shadow_casters, self.reflections as u8));
             text.push_str(&format!("ctrl_deadzone={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nmouse_sens={}\ngraphics_api={}\nff_invert={}\nff_enabled={}\nbrake_hold={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nwheel_range={}\nwheel_lock={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\n", self.ctrl_deadzone, self.ctrl_off, self.steering_linear as u8, self.old_steering as u8, self.red_steer_spd as u8, self.mouse_sens, self.graphics_api, self.ff_invert as u8, self.ff_enabled as u8, self.brake_hold as u8, self.mouse_steering as u8, self.mouse_right_off as u8, self.mouse_smooth as u8, self.wheel_range, self.wheel_lock, self.camera_collision as u8, self.pedal_throttle, self.pedal_brake, self.seat[0], self.seat[1], self.seat[2]));
             text.push_str(&format!("head_tracking={}\nhead_tracking_port={}\nhead_tracking_bind={}\nhead_tracking_invert={}\n", self.head_tracking as u8, self.head_tracking_port, self.head_tracking_bind, self.head_tracking_invert));
+            text.push_str(&format!(
+                "smoke={}\nsmoke_user_only={}\nsmoke_max={}\nsmoke_in_mirrors={}\n",
+                self.smoke as u8,
+                self.smoke_user_only as u8,
+                self.smoke_max,
+                self.smoke_in_mirrors as u8
+            ));
             text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
             text.push_str(&format!("ui_accent={}\n", self.ui_accent));
             text.push_str(&format!("ui_corners={}\n", self.ui_corners));
@@ -432,11 +452,16 @@ pub mod settings {
         pub use crate::settings::bus_seats::*;
     }
 }
+pub mod showroom {
+    pub use crate::showroom::domain::message::*;
+    pub use crate::showroom::implementation::{link::*, scene::*, wire::*};
+    pub use crate::showroom::*;
+}
 pub mod situation {
     pub use crate::situation::*;
 }
-pub mod startup {
-    pub use crate::startup::*;
+pub mod spawn {
+    pub use crate::spawn::load_coupled_parts;
 }
 pub mod tiles {
     pub use crate::tiles::*;

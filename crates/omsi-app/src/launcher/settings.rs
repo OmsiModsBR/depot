@@ -8,6 +8,7 @@ use super::ui::{id_of, matches, ButtonKind, Ui};
 use super::{Launcher, Page};
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
 use omsi_launcher_ui::Page as UiPage;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
@@ -398,6 +399,8 @@ const INFO_BAR_MODES: &[(&str, &str)] = &[
     ("compact", "Compact bar"),
     ("essential", "Essentials only"),
     ("custom", "Custom bar"),
+    ("twotier", "Two-tier bar"),
+    ("split", "Split bar"),
 ];
 const INFO_BAR_POSITIONS: &[(&str, &str)] = &[
     ("top", "Top of the screen"),
@@ -409,19 +412,6 @@ const SEASONS: &[(&str, &str)] = &[
     ("summer", "Summer"),
     ("autumn", "Autumn"),
     ("winter", "Winter"),
-];
-
-/// The window sizes the settings offer (`resolution`).
-pub(crate) const RESOLUTIONS: &[(&str, &str)] = &[
-    ("auto", "Automatic"),
-    ("1280x720", "1280 x 720"),
-    ("1280x800", "1280 x 800 (Steam Deck)"),
-    ("1366x768", "1366 x 768"),
-    ("1600x900", "1600 x 900"),
-    ("1920x1080", "1920 x 1080"),
-    ("1920x1200", "1920 x 1200"),
-    ("2560x1440", "2560 x 1440"),
-    ("3840x2160", "3840 x 2160"),
 ];
 
 /// The Online options (chat, chat size, other players' names, voice chat), kept apart and
@@ -593,6 +583,27 @@ pub static OPTS: &[Opt] = &[
         "info_bar_fps",
         "Frame rate in the information bar",
         "Adds the frame rate and its 1 % low as the bar's last item",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_collapsed",
+        "Second tier starts folded away",
+        "In the Two-tier and Split layouts the lower readouts start hidden; the arrow beside the bar shows them",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_labels",
+        "Names in the second tier",
+        "Writes the name of each readout (Trip, Tank, ...) above its value in the Two-tier and Split layouts",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_lowfuel",
+        "Highlight a low tank",
+        "Turns the tank meter red and marks its readout when under 15 % in the Two-tier and Split layouts",
     ),
     toggle(
         GENERAL,
@@ -1009,6 +1020,45 @@ pub static OPTS: &[Opt] = &[
         "windy_trees",
         "Windy trees",
         "Leaves sway in the wind",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke",
+        "Smoke and particles",
+        "Exhaust, chimneys and the like",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke_user_only",
+        "Smoke of the player's vehicle only",
+        "Other vehicles and the scenery draw none",
+    ),
+    slide_typed(
+        GRAPHICS,
+        "Effects",
+        "smoke_max",
+        "Most particles per system",
+        "Each smoke system keeps at most this many",
+        (10.0, 100.0, 10.0),
+        count,
+        integer,
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "smoke_in_mirrors",
+        "Smoke in mirrors",
+        "",
+    ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_snow",
+        "Snow",
+        "Snowflakes fall in snow weather",
     ),
     // Advanced graphics
     special(
@@ -1996,16 +2046,6 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
     !v.is_null() && default_in(st, o.key).is_some_and(|d| !same(v, &d))
 }
 
-/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
-/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-pub(crate) fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    // (the environment read last: the page asks this for every option, every frame)
-    cfg!(windows)
-        && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
-        && !s.get("vr").and_then(Value::as_bool).unwrap_or(false)
-        && !omsi_cfg::flags::OPENXR.is_set()
-}
-
 /// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
 fn api_limit(s: &Value, key: &str) -> Option<&'static crate::api_limits::ApiLimit> {
     if d3d9_fixes_vanilla(s) {
@@ -2051,11 +2091,16 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "reflections" => !traced,
         "fov" => !triple,
         "triple_fov_deg" => triple,
+        // (the falling snow DirectX9 draws on request: the other APIs draw their own)
+        "dx9_snow" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
         k if k.starts_with("head_tracking_") => st.on("head_tracking"),
         k if k.starts_with("info_item_") => st.get("info_bar_mode").as_str() == Some("custom"),
+        "info_bar_collapsed" | "info_bar_labels" | "info_bar_lowfuel" => {
+            matches!(st.get("info_bar_mode").as_str(), Some("twotier" | "split"))
+        }
         "ui_dimming" => st.get("ui_background").as_str() == Some("scene"),
         _ => true,
     };

@@ -19,7 +19,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     env:
-      OPENOMSI_VERSION: 0.2.17
+      OPENOMSI_VERSION: 0.3.0
       CARGO_PROFILE_RELEASE_DEBUG: 0
       CARGO_PROFILE_RELEASE_STRIP: debuginfo
       CARGO_BUILD_JOBS: 2

@@ -12,7 +12,7 @@ pub const RELEASES_URL: &str = "https://github.com/OmsiModsBR/depot/releases";
 
 /// This build's version.
 pub fn current_version() -> &'static str {
-    crate::startup::VERSION
+    crate::core::startup::VERSION
 }
 
 /// Whether `url` is the project's repository or a page inside it: `https` only, the exact
@@ -46,7 +46,7 @@ pub fn open_dotnet_download() {
 
 fn open_in_browser(url: &str) {
     #[cfg(target_os = "android")]
-    crate::android::open_url(url);
+    crate::core::android::open_url(url);
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "windows")]
