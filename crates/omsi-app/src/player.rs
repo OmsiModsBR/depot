@@ -2164,7 +2164,7 @@ impl Player {
             if !ray_may_hit(&vehicle.ty, i, &transform, o, dir, 0.0) {
                 continue;
             }
-            if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
+            if let Some(t) = mesh.ray_inv(o, dir, &transform.inverse(), &mut 0) {
                 if t > 0.02 {
                     if t < nearest {
                         nearest = t;
@@ -2189,7 +2189,7 @@ impl Player {
                 if !ray_may_hit(&trailer.ty, i, &transform, o, dir, 0.0) {
                     continue;
                 }
-                if let Some(t) = omsi_geometry::ray_mesh(o, dir, &mesh.data, &transform) {
+                if let Some(t) = mesh.ray_inv(o, dir, &transform.inverse(), &mut 0) {
                     if t > 0.02 {
                         if t < nearest {
                             nearest = t;
@@ -3171,8 +3171,7 @@ fn hovered_body_part_in(look: &mut Look) -> Option<(String, bool)> {
         if !ray_may_hit(&vehicle.ty, i, xf, o, dir, 0.0) {
             continue;
         }
-        look.split.triangles += (vm.data.indices.len() / 3) as u64;
-        if let Some(t) = omsi_geometry::ray_mesh_inv(o, dir, &vm.data, inv) {
+        if let Some(t) = vm.ray_inv(o, dir, inv, &mut look.split.triangles) {
             if best.map(|(bt, _)| t < bt).unwrap_or(true) {
                 best = Some((t, i));
             }
@@ -3220,8 +3219,7 @@ fn pick_main(look: &mut Look) -> Option<usize> {
         if !ray_may_hit(&vehicle.ty, i, &xf, o, dir, spread * 2.2) {
             continue;
         }
-        look.split.triangles += (vm.data.indices.len() / 3) as u64;
-        let tris = omsi_geometry::cone_triangles_inv(o, dir, spread * 2.0 + 1e-4, &vm.data, &inv);
+        let tris = vm.cone_inv(o, dir, spread * 2.0 + 1e-4, &inv, &mut look.split.triangles);
         if !tris.is_empty() {
             candidates.push((i, xf, inv, tris));
         }
@@ -3331,8 +3329,7 @@ fn nearest_blocker(look: &mut Look, dir: Vec3) -> f32 {
             if !ray_may_hit(ty, i, transform, o, dir, 0.0) {
                 continue;
             }
-            triangles += (vm.data.indices.len() / 3) as u64;
-            if let Some(t) = omsi_geometry::ray_mesh_inv(o, dir, &vm.data, inv) {
+            if let Some(t) = vm.ray_inv(o, dir, inv, &mut triangles) {
                 if t > 0.02 && t < nearest {
                     nearest = t;
                 }
@@ -3478,9 +3475,7 @@ fn pick_trailers(look: &mut Look) -> Option<(usize, usize)> {
             if !ray_may_hit(&trailer.ty, i, &xf, o, dir, spread * 2.2) {
                 continue;
             }
-            look.split.triangles += (vm.data.indices.len() / 3) as u64;
-            let tris =
-                omsi_geometry::cone_triangles_inv(o, dir, spread * 2.0 + 1e-4, &vm.data, &inv);
+            let tris = vm.cone_inv(o, dir, spread * 2.0 + 1e-4, &inv, &mut look.split.triangles);
             if !tris.is_empty() {
                 candidates.push((ti, i, xf, inv, tris));
             }

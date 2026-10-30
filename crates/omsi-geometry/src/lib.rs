@@ -8,8 +8,10 @@ use omsi_scenery::Spline;
 
 mod hole_rims;
 mod terrain_walls;
+mod tri_tree;
 pub mod util;
 pub use terrain_walls::terrain_hole_walls;
+pub use tri_tree::TriTree;
 
 /// A renderable triangle mesh with one texture per material slot.
 #[derive(Debug, Clone, Default)]
@@ -2467,23 +2469,28 @@ pub fn cone_triangles_inv(
             mesh.positions[tri[1] as usize],
             mesh.positions[tri[2] as usize],
         );
-        let c = (p0 + p1 + p2) / 3.0;
-        let r = (p0 - c)
-            .length()
-            .max((p1 - c).length())
-            .max((p2 - c).length());
-        let w = c - o;
-        let along = w.dot(a);
-        if along < -r {
-            continue;
+        if cone_keeps(o, a, tan_half, p0, p1, p2) {
+            out.push((k * 3) as u32);
         }
-        let across = (w - a * along).length();
-        if across > (along + r).max(0.0) * tan_half + r + 1e-3 {
-            continue;
-        }
-        out.push((k * 3) as u32);
     }
     out
+}
+
+/// Does the triangle's sphere (round its centre) reach into the cone from `o` along `a`?
+fn cone_keeps(o: Vec3, a: Vec3, tan_half: f32, p0: Vec3, p1: Vec3, p2: Vec3) -> bool {
+    let c = (p0 + p1 + p2) / 3.0;
+    let r = (p0 - c)
+        .length()
+        .max((p1 - c).length())
+        .max((p2 - c).length());
+    let w = c - o;
+    let along = w.dot(a);
+    if along < -r {
+        return false;
+    }
+    let across = (w - a * along).length();
+    // (written as the scan always had it: a NaN keeps the triangle)
+    !(across > (along + r).max(0.0) * tan_half + r + 1e-3)
 }
 
 pub fn ray_triangles(
