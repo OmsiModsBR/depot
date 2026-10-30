@@ -69,7 +69,10 @@ const GLOW_HALF_ANGLE_DEG: f32 = 7.0;
 pub(crate) fn glow_strength(light: &crate::scene::SceneLight, cloud_cover: f32) -> f32 {
     let sun = light.sun_dir[3].clamp(0.0, 1.0);
     let horizon = ((light.sun_dir[2] + 0.03) / 0.08).clamp(0.0, 1.0);
-    let clouds = 1.0 - 0.6 * cloud_cover.clamp(0.0, 1.0);
+    // (a closed deck, the Overcast types, hides the sun whatever strength the light carries)
+    let cover = cloud_cover.clamp(0.0, 1.0);
+    let closed = ((cover - 0.8) / 0.2).clamp(0.0, 1.0);
+    let clouds = (1.0 - 0.6 * cover) * (1.0 - closed * closed * (3.0 - 2.0 * closed));
     let fog = 1.0 - (light.fog[3] * 150.0 - 0.15).clamp(0.0, 1.0);
     sun * horizon * clouds * fog
 }

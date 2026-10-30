@@ -1805,8 +1805,10 @@ fn the_sun_glow_fades_with_the_horizon_the_clouds_and_the_fog() {
     let low = glow_strength(&l(0.0, 1.0, 0.0), 0.0);
     assert!(low > 0.0 && low < 1.0, "{low}");
     // clouds thin it, a thick fog takes it
-    let cloudy = glow_strength(&l(0.5, 1.0, 0.0), 1.0);
-    assert!(cloudy > 0.0 && cloudy < 0.5, "{cloudy}");
+    let cloudy = glow_strength(&l(0.5, 1.0, 0.0), 0.7);
+    assert!(cloudy > 0.0 && cloudy < 0.7, "{cloudy}");
+    // a closed deck (Overcast) hides it even when the light still carries some sun
+    assert_eq!(glow_strength(&l(0.5, 0.15, 0.0), 1.0), 0.0);
     assert_eq!(glow_strength(&l(0.5, 1.0, 0.01), 0.0), 0.0);
 }
 
