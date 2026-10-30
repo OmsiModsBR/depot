@@ -20,7 +20,6 @@ mod editor;
 mod env_file;
 mod export;
 mod game_controller_menu;
-mod game_lists;
 mod headtrack;
 mod hud;
 mod humans;

@@ -46,7 +46,7 @@ pub(crate) struct App {
     pub(crate) editor: Option<crate::editor::Editor>,
     pub(crate) vehicle_list: Vec<(String, String)>,
     /// The drop-down open over a row of the settings window, if one is.
-    pub(crate) dropdown: Option<crate::game_lists::Dropdown>,
+    pub(crate) dropdown: Option<crate::hud::lists::Dropdown>,
     /// (manufacturer, type) of each vehicle of `vehicle_list`, by its path.
     pub(crate) vehicle_meta: std::collections::HashMap<String, (String, String)>,
     pub(crate) world: Option<Arc<World>>,
@@ -268,8 +268,8 @@ pub(crate) struct App {
     pub(crate) placing: Option<crate::placing::Placing>,
     /// The chooser shows the administration's lines (label, action) instead of vehicles.
     pub(crate) admin_list: Option<Vec<(String, String)>>,
-    /// Which of the game menu's lists `admin_list` holds (see `game_lists`).
-    pub(crate) list_kind: Option<crate::game_lists::ListKind>,
+    /// Which of the game menu's lists `admin_list` holds (see `hud::lists`).
+    pub(crate) list_kind: Option<crate::hud::lists::ListKind>,
     /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
     pub(crate) route_arrows: crate::route_arrows::RouteArrows,
     /// OMSI's global key actions from `Inputs/keyboard.cfg` ([game]).

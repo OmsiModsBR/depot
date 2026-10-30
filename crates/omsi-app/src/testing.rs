@@ -155,9 +155,6 @@ pub mod frame_stats {
 pub mod game_controller_menu {
     pub use crate::game_controller_menu::*;
 }
-pub mod game_lists {
-    pub use crate::game_lists::*;
-}
 pub mod headtrack {
     pub use crate::headtrack::*;
 }
@@ -168,6 +165,13 @@ pub mod hud {
     pub use crate::hud::domain::*;
     pub use crate::hud::implementation::legacy::oft::*;
     pub use crate::hud::implementation::legacy::*;
+
+    pub mod lists {
+        pub use crate::hud::domain::lists::*;
+        pub use crate::hud::implementation::lists::{
+            duty::*, route::*, rows::*, select::*, values::*,
+        };
+    }
 }
 pub mod humans {
     pub use crate::humans::*;

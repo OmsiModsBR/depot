@@ -23,7 +23,6 @@ mod evdev_ff;
 mod ffb_calibration;
 mod frame_stats;
 mod game_controller_menu;
-mod game_lists;
 mod headtrack;
 mod hpattern;
 mod hud;

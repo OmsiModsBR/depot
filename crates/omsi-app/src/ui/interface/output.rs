@@ -5,7 +5,7 @@
 
 pub(in crate::ui) use crate::core::app::App;
 pub(in crate::ui) use crate::core::startup::VERSION;
-pub(in crate::ui) use crate::game_lists::{self, ListKind, Move};
+pub(in crate::ui) use crate::hud::lists::{self, ListKind, Move};
 pub(in crate::ui) use crate::hud::{Frame, Hits, MenuKind};
 pub(in crate::ui) use crate::input::ROUTE_NUMBER_MAX;
 pub(in crate::ui) use crate::launcher::MapPicture;
