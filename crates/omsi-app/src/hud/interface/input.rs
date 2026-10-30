@@ -2,7 +2,7 @@
 //! the menu's lines and controls were drawn, for the mouse).
 
 pub use super::super::domain::{
-    ChatView, DropdownView, Frame, Hits, InfoBar, InfoItem, InfoTone, MenuKind, Preview,
+    ChatView, DropdownView, Frame, Hits, InfoBar, InfoCell, InfoItem, InfoTone, MenuKind, Preview,
 };
 pub(crate) use super::super::implementation::legacy::shift_overlays;
 pub use super::super::implementation::legacy::{backdrop, fps_level, size_factor, Hud, Ui};

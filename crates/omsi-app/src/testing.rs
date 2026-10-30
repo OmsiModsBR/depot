@@ -407,8 +407,13 @@ pub mod settings {
                 self.arrows_switch_cams as u8
             ));
             text.push_str(&format!(
-                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-                self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
+                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\ninfo_bar_collapsed={}\ninfo_bar_labels={}\ninfo_bar_lowfuel={}\n",
+                self.info_bar_mode,
+                self.info_bar_pos,
+                self.info_bar_fps as u8,
+                self.info_bar_collapsed as u8,
+                self.info_bar_labels as u8,
+                self.info_bar_lowfuel as u8
             ));
             for (key, on) in INFO_ITEM_KEYS.iter().zip(self.info_items) {
                 text.push_str(&format!("{key}={}\n", on as u8));

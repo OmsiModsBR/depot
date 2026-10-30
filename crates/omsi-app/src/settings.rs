@@ -205,12 +205,19 @@ pub struct Settings {
     /// it was left, not switched on again every session (#1164).
     pub info_bar: bool,
     /// What the information bar shows: `full` (all of it), `compact` (time, speed, line, next
-    /// stop) or `essential` (speed, limit, delay).
+    /// stop), `essential` (speed, limit, delay), `custom`, `twotier` (the driving items above,
+    /// small readouts below) or `split` (a driving plate and a separate strip below it).
     pub info_bar_mode: String,
     /// Where it sits: `top` or `bottom`.
     pub info_bar_pos: String,
     /// The frame rate (and its 1 % low) as the bar's last part, not only in the corner.
     pub info_bar_fps: bool,
+    /// The two-tier layouts start with the second tier folded away (the arrow unfolds it).
+    pub info_bar_collapsed: bool,
+    /// Names above the readouts of the second tier ("Trip", "Tank", ...).
+    pub info_bar_labels: bool,
+    /// Marks the tank (red meter and cell) once it is under 15 %.
+    pub info_bar_lowfuel: bool,
     /// Which items the `custom` layout shows, in the order of [`INFO_ITEM_KEYS`].
     pub info_items: [bool; 9],
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
@@ -615,6 +622,9 @@ impl Settings {
             info_bar_mode: "full".into(),
             info_bar_pos: "top".into(),
             info_bar_fps: false,
+            info_bar_collapsed: false,
+            info_bar_labels: true,
+            info_bar_lowfuel: false,
             info_items: [true; 9],
             autosave_minutes: 5,
             ui_accent: "Amber".into(),
@@ -1291,16 +1301,20 @@ impl Settings {
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
                 "info_bar_mode" => {
-                    s.info_bar_mode = if matches!(v, "compact" | "essential" | "custom") {
-                        v.to_string()
-                    } else {
-                        "full".to_string()
-                    }
+                    s.info_bar_mode =
+                        if matches!(v, "compact" | "essential" | "custom" | "twotier" | "split") {
+                            v.to_string()
+                        } else {
+                            "full".to_string()
+                        }
                 }
                 "info_bar_pos" => {
                     s.info_bar_pos = if v == "bottom" { "bottom" } else { "top" }.to_string()
                 }
                 "info_bar_fps" => s.info_bar_fps = b(v),
+                "info_bar_collapsed" => s.info_bar_collapsed = b(v),
+                "info_bar_labels" => s.info_bar_labels = b(v),
+                "info_bar_lowfuel" => s.info_bar_lowfuel = b(v),
                 k if info_item_index(k).is_some() => {
                     if let Some(i) = info_item_index(k) {
                         s.info_items[i] = b(v);

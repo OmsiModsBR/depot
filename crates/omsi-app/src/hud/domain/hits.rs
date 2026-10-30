@@ -46,6 +46,8 @@ pub struct Hits {
     /// Where the information bar was drawn (within the panel, before `Ui::draw_at` moves it), for the
     /// navigator to keep out of its way.
     pub info_rect: Option<[f32; 4]>,
+    /// The arrow of a two-tier information bar that folds its second tier away.
+    pub info_chevron: Option<[f32; 4]>,
 }
 
 impl Default for Hits {
@@ -71,6 +73,7 @@ impl Default for Hits {
             dd_rows: 8,
             dd_scroll: None,
             info_rect: None,
+            info_chevron: None,
         }
     }
 }

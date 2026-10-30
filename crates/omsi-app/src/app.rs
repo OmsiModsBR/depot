@@ -300,6 +300,11 @@ pub(crate) struct App {
     /// air and cabin temperatures, the passengers aboard, the trip and its next stop along
     /// the top of the picture.
     pub(crate) info_bar: bool,
+    /// The second tier of the two-tier layouts is folded away right now (the arrow beside
+    /// the bar flips it; the setting `info_bar_collapsed` is how it starts).
+    pub(crate) info_collapsed: bool,
+    /// How long the cursor has rested on that arrow, for its tooltip after a second.
+    pub(crate) info_chev_hover: f32,
     /// A time of day the bus's script wrote (`(S.S.Time)`), for the clock at the next frame.
     pub(crate) pending_time: Option<f64>,
     /// The play time (`clock.run_time`) the last situation was saved at.
