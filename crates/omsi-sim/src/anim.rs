@@ -131,37 +131,39 @@ impl MeshAnimator {
 /// `[animparent]`: a mesh hangs on the mesh whose `[mesh_ident]` it names and moves with
 /// it (the NL202's changer, ticket printer and IBIS keys ride on the cash desk, which
 /// swings with the driver's door). Sets the parent of every mesh, `defs` being the
-/// meshes in the order the animators have them. A name nobody carries leaves the mesh
-/// on its own, like the original. The parent is looked for among the meshes before this
-/// one, the last of them that carries the name (OMSI resolves `[animparent]` as it
-/// reads the file: door variants that reuse their arms' names hung the later
-/// variant's leaves on the first variant's arm, #348); one listed only after it is taken
-/// as a last resort.
+/// meshes in the order the animators have them. The parent is looked for among the
+/// meshes before this one, the last of them that carries the name exactly as written
+/// (capitals count): door variants that reuse their arms' names hang each variant's
+/// leaves on its own arm (#348). The game does not mend a model: a name that matches
+/// only in another case, or only a mesh listed after this one, leaves the mesh on its
+/// own and the log says so (once per mesh and name, not for every copy of the vehicle),
+/// so the mistake shows and can be fixed in the model.
 pub fn link_parents(animators: &mut [MeshAnimator], defs: &[&MeshDef]) {
     // `OMSI_NO_ANIMPARENT=1`: every mesh on its own, for an A/B
     if omsi_cfg::flags::NO_ANIMPARENT.is_set() {
         return;
     }
     for (i, a) in animators.iter_mut().enumerate() {
-        a.parent = defs
-            .get(i)
-            .and_then(|d| d.anim_parent.as_deref())
-            .map(str::trim)
-            .filter(|n| !n.is_empty())
-            .and_then(|name| {
-                let named = |d: &&&MeshDef| {
-                    d.mesh_ident
-                        .as_deref()
-                        .map(|m| m.trim().eq_ignore_ascii_case(name))
-                        .unwrap_or(false)
-                };
-                // (one only listed after it: taken all the same, as before)
-                defs[..i.min(defs.len())]
-                    .iter()
-                    .rposition(|d| named(&d))
-                    .or_else(|| defs.iter().position(|d| named(&d)))
-            })
-            .filter(|p| *p != i);
+        let Some(name) = defs.get(i).and_then(|d| d.anim_parent.as_deref()) else {
+            a.parent = None;
+            continue;
+        };
+        a.parent = defs[..i.min(defs.len())]
+            .iter()
+            .rposition(|d| d.mesh_ident.as_deref() == Some(name));
+        if a.parent.is_none() {
+            static WARNED: std::sync::Mutex<Vec<(String, String)>> =
+                std::sync::Mutex::new(Vec::new());
+            let key = (defs[i].file.clone(), name.to_string());
+            let mut warned = WARNED.lock().unwrap_or_else(|e| e.into_inner());
+            if !warned.contains(&key) {
+                log::warn!(
+                    "[animparent] {name:?} of mesh {}: no mesh before it has this [mesh_ident]",
+                    key.0
+                );
+                warned.push(key);
+            }
+        }
     }
 }
 
