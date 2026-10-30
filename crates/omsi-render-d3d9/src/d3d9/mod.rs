@@ -115,6 +115,64 @@ pub struct D3d9Device {
     max_anisotropy: u32,
     /// How the adapter's driver switches alpha-to-coverage on.
     a2c: scene::A2c,
+    /// The depth format of the back buffer and of every off-screen depth surface:
+    /// `D3DFMT_D24S8`, or `D3DFMT_D24X8` when the adapter has no stencil depth for the current
+    /// picture format and multisampling. Same 24 depth bits either way.
+    depth_format: D3DFORMAT,
+}
+
+/// The format of the desktop the window's back buffer follows.
+fn display_format(d3d: &IDirect3D9Ex) -> D3DFORMAT {
+    let mut mode = D3DDISPLAYMODE::default();
+    // SAFETY: the out-parameter is a live local.
+    unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
+        .map(|_| mode.Format)
+        .unwrap_or(D3DFMT_X8R8G8B8)
+}
+
+/// The depth format to use with `samples` (1 = no multisampling): `D3DFMT_D24S8` when the
+/// adapter offers it as a depth surface that matches the window's back buffer and the
+/// off-screen colour format, at that sample count, else `D3DFMT_D24X8`.
+fn pick_depth_format(d3d: &IDirect3D9Ex, samples: u32) -> D3DFORMAT {
+    let display = display_format(d3d);
+    // SAFETY: plain queries on a live interface; the quality-levels out-parameter is not wanted.
+    let stencil = unsafe {
+        d3d.CheckDeviceFormat(
+            D3DADAPTER_DEFAULT,
+            D3DDEVTYPE_HAL,
+            display,
+            D3DUSAGE_DEPTHSTENCIL as u32,
+            D3DRTYPE_SURFACE,
+            D3DFMT_D24S8,
+        )
+        .is_ok()
+            && [display, D3DFMT_A8R8G8B8].into_iter().all(|target| {
+                d3d.CheckDepthStencilMatch(
+                    D3DADAPTER_DEFAULT,
+                    D3DDEVTYPE_HAL,
+                    display,
+                    target,
+                    D3DFMT_D24S8,
+                )
+                .is_ok()
+            })
+            && (samples <= 1
+                || d3d
+                    .CheckDeviceMultiSampleType(
+                        D3DADAPTER_DEFAULT,
+                        D3DDEVTYPE_HAL,
+                        D3DFMT_D24S8,
+                        true,
+                        D3DMULTISAMPLE_TYPE(samples as i32),
+                        std::ptr::null_mut(),
+                    )
+                    .is_ok())
+    };
+    if stencil {
+        D3DFMT_D24S8
+    } else {
+        D3DFMT_D24X8
+    }
 }
 
 fn present_params(
@@ -123,6 +181,7 @@ fn present_params(
     height: u32,
     vsync: bool,
     samples: u32,
+    depth_format: D3DFORMAT,
 ) -> D3DPRESENT_PARAMETERS {
     let (hwnd, w, h) = match target {
         // 1x1 back buffer: an off-screen device never presents.
@@ -137,7 +196,7 @@ fn present_params(
         BackBufferHeight: h,
         hDeviceWindow: hwnd,
         EnableAutoDepthStencil: true.into(),
-        AutoDepthStencilFormat: D3DFMT_D24X8,
+        AutoDepthStencilFormat: depth_format,
         MultiSampleType: D3DMULTISAMPLE_TYPE(if samples > 1 { samples as i32 } else { 0 }),
         PresentationInterval: if vsync {
             D3DPRESENT_INTERVAL_ONE as u32
@@ -291,7 +350,16 @@ impl D3d9Device {
                 Target::Offscreen => GetDesktopWindow(),
                 Target::Window(hwnd) => hwnd,
             };
-            let mut pp = present_params(target, width, height, true, 1);
+            let depth_format = pick_depth_format(&d3d, 1);
+            if depth_format == D3DFMT_D24S8 {
+                log::info!("d3d9: depth format D24S8");
+            } else {
+                log::warn!(
+                    "d3d9: {} offers no D24S8 depth for this picture; D24X8 is used (no stencil)",
+                    caps.adapter_name
+                );
+            }
+            let mut pp = present_params(target, width, height, true, 1, depth_format);
             let mut device = None;
             d3d.CreateDeviceEx(
                 D3DADAPTER_DEFAULT,
@@ -327,6 +395,7 @@ impl D3d9Device {
                 anisotropy: 1,
                 max_anisotropy: raw.MaxAnisotropy.max(1),
                 a2c: a2c,
+                depth_format,
             })
         }
     }
@@ -446,7 +515,14 @@ impl D3d9Device {
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         if let Target::Window(_) = self.target {
             self.window_size = (width.max(1), height.max(1));
-            let mut pp = present_params(self.target, width, height, self.vsync, self.msaa.1);
+            let mut pp = present_params(
+                self.target,
+                width,
+                height,
+                self.vsync,
+                self.msaa.1,
+                self.depth_format,
+            );
             // SAFETY: `pp` outlives the call.
             unsafe { self.device.ResetEx(&mut pp, std::ptr::null_mut()) }.map_err(map_err)?;
         }
@@ -467,6 +543,20 @@ impl D3d9Device {
             Target::Window(_) => self.samples_for(msaa),
         };
         self.msaa = (msaa, granted);
+        let depth_format = pick_depth_format(&self._d3d, granted);
+        if depth_format != self.depth_format {
+            if depth_format == D3DFMT_D24X8 {
+                log::warn!(
+                    "d3d9: no D24S8 depth with {granted}x multisampling here; D24X8 is used (no stencil)"
+                );
+            } else {
+                log::info!("d3d9: depth format D24S8 (with {granted}x multisampling)");
+            }
+            self.depth_format = depth_format;
+            // (surfaces made in the old format are made again when next needed)
+            self.offscreen = None;
+            self.scene.target_depth = None;
+        }
         if granted != msaa {
             log::warn!("d3d9: {msaa}x multisampling is not offered here; {granted}x is used");
         }
@@ -477,14 +567,7 @@ impl D3d9Device {
     /// The largest sample count up to `wanted` the card offers for the window's back buffer and
     /// its depth surface (1 when none).
     fn samples_for(&self, wanted: u32) -> u32 {
-        let mut mode = D3DDISPLAYMODE::default();
-        // SAFETY: the out-parameter is a live local.
-        let display = unsafe {
-            self._d3d
-                .GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode)
-        }
-        .map(|_| mode.Format)
-        .unwrap_or(D3DFMT_X8R8G8B8);
+        let display = display_format(&self._d3d);
         let offered = |format: D3DFORMAT, n: u32| {
             // SAFETY: plain query on a live interface; the quality-levels out-parameter is not
             // wanted.
@@ -555,7 +638,7 @@ impl D3d9Device {
                 .CreateDepthStencilSurface(
                     w,
                     h,
-                    D3DFMT_D24X8,
+                    self.depth_format,
                     D3DMULTISAMPLE_NONE,
                     0,
                     true,
