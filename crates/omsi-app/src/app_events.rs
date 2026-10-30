@@ -207,7 +207,7 @@ impl ApplicationHandler for App {
                     && !self.menu_edit_icao
                     && matches!(
                         self.list_kind,
-                        Some(crate::game_lists::ListKind::RouteNumbers)
+                        Some(crate::hud::lists::ListKind::RouteNumbers)
                     )
                 {
                     if let Some(text) = event.text.as_deref() {
@@ -373,13 +373,13 @@ impl ApplicationHandler for App {
                 if (!self.vr_active() || self.player.is_none())
                     && matches!(
                         self.list_kind,
-                        Some(crate::game_lists::ListKind::Options(_))
+                        Some(crate::hud::lists::ListKind::Options(_))
                     )
                     && self.admin_list.as_ref().is_some_and(|rows| {
                         rows.iter().any(|(_, action)| action.starts_with("vr_nav_"))
                     })
                 {
-                    self.open_list(crate::game_lists::ListKind::Options(0));
+                    self.open_list(crate::hud::lists::ListKind::Options(0));
                 }
                 #[cfg(windows)]
                 self.poll_vr_cursor_position();
@@ -1299,7 +1299,7 @@ impl ApplicationHandler for App {
                         );
                         if let Some(cam) = self.camera.as_ref() {
                             // (the seat kept for this bus, when one is: see `bus_seats`)
-                            let bus = crate::game_lists::seat_key(p);
+                            let bus = crate::hud::lists::seat_key(p);
                             if bus != self.seat_bus {
                                 if let Some((seat, pitch)) = crate::settings::bus_seats::of(&bus) {
                                     self.settings.seat = seat;
@@ -2753,7 +2753,7 @@ impl ApplicationHandler for App {
                 // the interface over the picture
                 // (the pages of an open settings window)
                 let menu_tabs = match self.list_kind.as_ref() {
-                    Some(k) if self.chooser.is_some() => crate::game_lists::page_titles(self, k),
+                    Some(k) if self.chooser.is_some() => crate::hud::lists::page_titles(self, k),
                     _ => None,
                 };
                 if let (true, Some(r), Some(scene)) = (
@@ -3044,7 +3044,7 @@ impl ApplicationHandler for App {
                                 }
                                 None => (Vec::new(), None),
                             };
-                        let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(
+                        let (menu_kind, menu_head, menu_preview) = crate::hud::lists::menu_extras(
                             self.list_kind.as_ref(),
                             self.admin_list.as_deref(),
                             chooser_sel,
@@ -3888,7 +3888,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
-        crate::game_lists::flush_settings(false);
+        crate::hud::lists::flush_settings(false);
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -3907,7 +3907,7 @@ impl ApplicationHandler for App {
     /// quit signal): the session is written and the LAN peers hear that we left, before
     /// anything else is torn down (Cmd+Q ends the process without returning from the loop).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        crate::game_lists::flush_settings(true);
+        crate::hud::lists::flush_settings(true);
         self.finish_session();
         log::info!("game ends");
     }
@@ -4247,14 +4247,14 @@ impl App {
                     }
 
                     // (a click on a tour shows its stops: the trip starts with the button)
-                    if matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
-                        && crate::game_lists::tour_at(self, k).is_some()
+                    if matches!(self.list_kind, Some(crate::hud::lists::ListKind::Tours(..)))
+                        && crate::hud::lists::tour_at(self, k).is_some()
                     {
                         self.chooser = Some(k);
-                        if let Some(crate::game_lists::ListKind::Tours(line, _)) =
+                        if let Some(crate::hud::lists::ListKind::Tours(line, _)) =
                             self.list_kind.clone()
                         {
-                            self.list_kind = Some(crate::game_lists::ListKind::Tours(line, None));
+                            self.list_kind = Some(crate::hud::lists::ListKind::Tours(line, None));
                         }
                         return;
                     }

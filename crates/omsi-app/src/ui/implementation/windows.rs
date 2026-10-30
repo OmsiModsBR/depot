@@ -19,7 +19,7 @@ use super::super::domain::win_input::WinInput;
 use super::super::domain::windows::{
     quick_times, DestForm, KeyAnswer, TimeForm, ToolFrame, ToolWindow, TourForm,
 };
-use super::super::interface::output::{game_lists, App, ListKind, Move, PlayerDuty};
+use super::super::interface::output::{lists, App, ListKind, Move, PlayerDuty};
 use glam::Vec2;
 use omsi_sim::SimClock;
 use omsi_ui::alt_windows::{self as aw, Event, View};
@@ -61,7 +61,7 @@ fn hm(secs: f64) -> String {
 /// "Back" and its notes), as (label, the rest of the action).
 fn rows_of(app: &App, kind: &ListKind, verb: &str) -> Vec<(String, String)> {
     let prefix = format!("{verb} ");
-    game_lists::items(app, kind)
+    lists::items(app, kind)
         .into_iter()
         .filter_map(|(label, action)| {
             action
@@ -99,8 +99,8 @@ impl App {
                 ToolWindow::Time(f)
             }
             "weather" => {
-                let now = game_lists::weather_name(self);
-                let files: Vec<(String, String)> = game_lists::weather_files()
+                let now = lists::weather_name(self);
+                let files: Vec<(String, String)> = lists::weather_files()
                     .into_iter()
                     .map(|f| {
                         let file = f.rsplit('/').next().unwrap_or(&f);
@@ -156,7 +156,7 @@ impl App {
         let line = self
             .player
             .as_ref()
-            .and_then(|p| game_lists::line_shown(&p.vehicle))
+            .and_then(|p| lists::line_shown(&p.vehicle))
             .unwrap_or_default();
         let destinations: Vec<(String, String, usize)> =
             rows_of(self, &ListKind::Destinations, "dest")
@@ -629,7 +629,7 @@ impl App {
                         .get(i)
                         .map(|r| r.1.clone());
                     if let Some(spot) = spot {
-                        game_lists::run(self, &ListKind::Spots, &format!("spot {spot}"));
+                        lists::run(self, &ListKind::Spots, &format!("spot {spot}"));
                     }
                 }
                 _ => {}
@@ -675,7 +675,7 @@ impl App {
                         .map(|s| s.0.clone());
                     self.new_ui.close_tool();
                     if let Some(code) = airport {
-                        game_lists::dropdown_apply(self, &format!("metar_src {code}"));
+                        lists::dropdown_apply(self, &format!("metar_src {code}"));
                     }
                     self.apply_weather(real, file);
                 }
@@ -703,7 +703,7 @@ impl App {
             ToolWindow::EndTour => {
                 if e == Event::Ok {
                     self.new_ui.close_tool();
-                    game_lists::end_duty(self);
+                    lists::end_duty(self);
                 }
             }
             ToolWindow::Destination(d) => {
@@ -714,10 +714,10 @@ impl App {
                         let (line, dest) = d.changes();
                         self.new_ui.close_tool();
                         if let Some(ti) = dest {
-                            game_lists::run(self, &ListKind::Destinations, &format!("dest {ti}"));
+                            lists::run(self, &ListKind::Destinations, &format!("dest {ti}"));
                         }
                         if let Some(line) = line {
-                            game_lists::set_route_by_hand(self, &line);
+                            lists::set_route_by_hand(self, &line);
                         }
                     }
                     _ => {}
@@ -746,7 +746,7 @@ impl App {
                 } else if e == Event::Check(1) {
                     self.new_ui.tool.open(ToolWindow::Profile);
                 } else if e == Event::Check(2) {
-                    let names = game_lists::driver_names(self);
+                    let names = lists::driver_names(self);
                     let now = self
                         .career
                         .path
@@ -766,7 +766,7 @@ impl App {
                     let name = selected.and_then(|i| names.get(i)).cloned();
                     self.new_ui.close_tool();
                     if let Some(name) = name {
-                        game_lists::switch_driver(self, &name);
+                        lists::switch_driver(self, &name);
                     }
                 }
                 _ => {}
@@ -811,7 +811,7 @@ impl App {
             Event::Ok => {
                 if let (Some((line, tour)), Some(stop)) = (f.chosen(), f.stop) {
                     self.new_ui.close_tool();
-                    game_lists::start_duty_at(self, &line, &tour, f.trip, stop);
+                    lists::start_duty_at(self, &line, &tour, f.trip, stop);
                     return;
                 }
             }
@@ -834,7 +834,7 @@ impl App {
                 let (_, number) = rest.split_once('\u{1}')?;
                 let tour = found.and_then(|l| l.tours.iter().find(|t| t.number == number));
                 let (what, when) = match (sch, tour) {
-                    (Some(s), Some(t)) => game_lists::tour_preview(s, line, t, self.clock.time),
+                    (Some(s), Some(t)) => lists::tour_preview(s, line, t, self.clock.time),
                     _ => (label, String::new()),
                 };
                 Some((what, when, number.to_string()))
@@ -896,7 +896,7 @@ impl App {
                 self.service_msg = Some(("Keyboard only".into(), 3.0));
             }
             3 if !self.vr_active() => {
-                game_lists::option_do(self, "headtrack", "", Move::Next);
+                lists::option_do(self, "headtrack", "", Move::Next);
                 let msg = if self.settings.head_tracking {
                     "Head tracking on"
                 } else {
@@ -917,7 +917,7 @@ impl App {
         }
         if f.real != self.settings.time_sync {
             let to = if f.real { Move::Inc } else { Move::Dec };
-            game_lists::option_do(self, "time_sync", "", to);
+            lists::option_do(self, "time_sync", "", to);
         }
         if !f.real {
             self.set_date_time(f.clock(&self.clock));
@@ -961,17 +961,17 @@ impl App {
         }
         if real != self.settings.metar_sync {
             let to = if real { Move::Inc } else { Move::Dec };
-            game_lists::option_do(self, "metar_sync", "", to);
+            lists::option_do(self, "metar_sync", "", to);
         }
         if real {
             return;
         }
-        let now = game_lists::weather_name(self);
+        let now = lists::weather_name(self);
         if let Some(file) = file {
             let stem = file.rsplit('/').next().unwrap_or(&file);
             let stem = stem.rsplit_once('.').map(|x| x.0).unwrap_or(stem);
             if !stem.trim_start_matches('#').eq_ignore_ascii_case(&now) {
-                game_lists::dropdown_apply(self, &format!("wx {file}"));
+                lists::dropdown_apply(self, &format!("wx {file}"));
             }
         }
     }

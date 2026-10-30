@@ -651,7 +651,7 @@ impl App {
                     Some(true) => {
                         let at = n.placement();
                         self.settings.navigator_corner = at.clone();
-                        crate::game_lists::remember_setting("navigator_corner", &at);
+                        crate::hud::lists::remember_setting("navigator_corner", &at);
                         return;
                     }
                     None => {}
@@ -971,7 +971,7 @@ impl App {
             .unwrap_or((0.0, 0.0));
         if self.settings.mouse_steering != on {
             self.settings.mouse_steering = on;
-            crate::game_lists::remember_setting("mouse_steering", if on { "1" } else { "0" });
+            crate::hud::lists::remember_setting("mouse_steering", if on { "1" } else { "0" });
         }
     }
 

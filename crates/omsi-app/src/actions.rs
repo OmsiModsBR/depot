@@ -126,7 +126,7 @@ impl App {
     /// Save the personnel file and the session summary (once: every caller ends the game,
     /// and the frames the loop still runs before it stops count no more time).
     pub(crate) fn finish_session(&mut self) {
-        crate::game_lists::flush_settings(true);
+        crate::hud::lists::flush_settings(true);
         self.exiting = true;
         // (the tiles loaded on the way added to what the map lacks)
         if let Some(w) = self.world.clone() {
@@ -606,20 +606,20 @@ impl App {
         };
         match id {
             "resume" => self.close_game_menu(),
-            "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
-            "controls" => self.open_list(crate::game_lists::ListKind::Controls),
+            "options" => self.open_list(crate::hud::lists::ListKind::Options(0)),
+            "controls" => self.open_list(crate::hud::lists::ListKind::Controls),
             "camera" => {
-                let tab = crate::game_lists::options_tab(self, "Camera");
-                self.open_list(crate::game_lists::ListKind::Options(tab));
+                let tab = crate::hud::lists::options_tab(self, "Camera");
+                self.open_list(crate::hud::lists::ListKind::Options(tab));
             }
-            "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
-            "world" => self.open_list(crate::game_lists::ListKind::World(0)),
+            "vehicle" => self.open_list(crate::hud::lists::ListKind::Vehicle(0)),
+            "world" => self.open_list(crate::hud::lists::ListKind::World(0)),
             "copycode" => {
                 self.close_game_menu();
                 self.copy_server_code();
             }
-            "admin" => self.open_list(crate::game_lists::ListKind::Admin),
-            "duty" => self.open_list(crate::game_lists::ListKind::Lines),
+            "admin" => self.open_list(crate::hud::lists::ListKind::Admin),
+            "duty" => self.open_list(crate::hud::lists::ListKind::Lines),
             "map" => {
                 self.close_game_menu();
                 if let Some(n) = self.navigator.as_mut() {
@@ -646,7 +646,7 @@ impl App {
             }
             // the route ends here: free drive, as the list of lines has it
             "endduty" => {
-                crate::game_lists::end_duty(self);
+                crate::hud::lists::end_duty(self);
                 self.close_game_menu();
             }
             "tobus" => {
@@ -750,7 +750,7 @@ impl App {
                     ));
                 } else {
                     // (as the launcher's bus step: the manufacturer, then the type)
-                    self.open_list(crate::game_lists::ListKind::PlaceMaker);
+                    self.open_list(crate::hud::lists::ListKind::PlaceMaker);
                 }
             }
             "couple" => {
@@ -802,11 +802,11 @@ impl App {
                     ));
                 }
             }
-            "driver" => self.open_list(crate::game_lists::ListKind::Drivers),
-            "number" => self.open_list(crate::game_lists::ListKind::Numbers),
-            "dest" => self.open_list(crate::game_lists::ListKind::Destinations),
-            "hof" => self.open_list(crate::game_lists::ListKind::Hofs),
-            "tplist" => self.open_list(crate::game_lists::ListKind::Spots),
+            "driver" => self.open_list(crate::hud::lists::ListKind::Drivers),
+            "number" => self.open_list(crate::hud::lists::ListKind::Numbers),
+            "dest" => self.open_list(crate::hud::lists::ListKind::Destinations),
+            "hof" => self.open_list(crate::hud::lists::ListKind::Hofs),
+            "tplist" => self.open_list(crate::hud::lists::ListKind::Spots),
             "editor" => {
                 self.close_game_menu();
                 self.toggle_editor();
@@ -1100,7 +1100,7 @@ impl App {
             self.hover_key = None;
             if matches!(
                 self.list_kind,
-                Some(crate::game_lists::ListKind::Options(_))
+                Some(crate::hud::lists::ListKind::Options(_))
             ) {
                 self.refresh_list();
             }
@@ -1447,7 +1447,7 @@ impl App {
         self.info_bar = on;
         if self.settings.info_bar != on {
             self.settings.info_bar = on;
-            crate::game_lists::remember_setting("info_bar", if on { "1" } else { "0" });
+            crate::hud::lists::remember_setting("info_bar", if on { "1" } else { "0" });
         }
     }
 

@@ -6,3 +6,12 @@ pub use super::super::domain::{
 };
 pub(crate) use super::super::implementation::legacy::shift_overlays;
 pub use super::super::implementation::legacy::{backdrop, fps_level, size_factor, Hud, Ui};
+
+/// The menu's lists and settings windows, by subject.
+pub(crate) mod lists {
+    pub(crate) use super::super::super::domain::lists::*;
+    pub(crate) use super::super::super::implementation::lists::{
+        chooser::*, dropdown::*, duty::*, keyboard::*, pages::*, route::*, rows::*, store::*,
+        values::*, vehicles::*,
+    };
+}

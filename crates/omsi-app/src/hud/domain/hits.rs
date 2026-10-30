@@ -7,7 +7,7 @@ pub struct Hits {
     /// Where the game menu's lines were drawn this frame (physical pixels), for the mouse.
     pub menu_rects: Vec<[f32; 4]>,
     /// Per line of `menu_rects`, where the arrows round its value are (a list's setting,
-    /// `game_lists::ADJUST`): `[from, to, plus]` - a click from `from` to `to` steps it
+    /// `hud::lists::ADJUST`): `[from, to, plus]` - a click from `from` to `to` steps it
     /// down, one right of `plus` up.
     pub menu_arrows: Vec<Option<[f32; 3]>>,
     pub menu_scroll_thumb: Option<[f32; 4]>,

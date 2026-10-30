@@ -934,7 +934,7 @@ impl App {
             }
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 if let Some(t) = self.menu_edit.take() {
-                    crate::game_lists::set_route_by_hand(self, &t);
+                    crate::hud::lists::set_route_by_hand(self, &t);
                     self.close_game_menu();
                 }
                 return;
@@ -955,7 +955,7 @@ impl App {
     pub(crate) fn route_edit_text(&mut self, text: &str) {
         if !matches!(
             self.list_kind,
-            Some(crate::game_lists::ListKind::RouteNumbers)
+            Some(crate::hud::lists::ListKind::RouteNumbers)
         ) || self.menu_edit.is_none()
         {
             return;
@@ -982,7 +982,7 @@ impl App {
                 self.icao_edit_key(code);
             } else if matches!(
                 self.list_kind,
-                Some(crate::game_lists::ListKind::RouteNumbers)
+                Some(crate::hud::lists::ListKind::RouteNumbers)
             ) {
                 self.route_edit_key(code);
             } else {
@@ -1004,20 +1004,20 @@ impl App {
                     || matches!(
                         self.list_kind,
                         Some(
-                            crate::game_lists::ListKind::Events
-                                | crate::game_lists::ListKind::Keyboard(_)
+                            crate::hud::lists::ListKind::Events
+                                | crate::hud::lists::ListKind::Keyboard(_)
                         )
                     ) =>
             {
                 if let Some(kind) = self.list_kind.clone() {
-                    if let Some(back) = crate::game_lists::run(self, &kind, "back") {
+                    if let Some(back) = crate::hud::lists::run(self, &kind, "back") {
                         self.open_list(back);
                     }
                 }
             }
             KeyCode::Escape => {
                 if self.tours_list() {
-                    self.open_list(crate::game_lists::ListKind::Lines);
+                    self.open_list(crate::hud::lists::ListKind::Lines);
                 } else {
                     self.chooser = None;
                     self.admin_list = None;
@@ -1027,10 +1027,10 @@ impl App {
             KeyCode::ArrowUp | KeyCode::KeyW => self.chooser = Some(self.chooser_next(sel, n - 1)),
             KeyCode::ArrowDown | KeyCode::KeyS => self.chooser = Some(self.chooser_next(sel, 1)),
             KeyCode::ArrowLeft | KeyCode::KeyA if self.settings_list() => {
-                self.list_adjust(sel, crate::game_lists::Move::Dec)
+                self.list_adjust(sel, crate::hud::lists::Move::Dec)
             }
             KeyCode::ArrowRight | KeyCode::KeyD if self.settings_list() => {
-                self.list_adjust(sel, crate::game_lists::Move::Inc)
+                self.list_adjust(sel, crate::hud::lists::Move::Inc)
             }
             KeyCode::Tab if self.settings_list() => {
                 let back = self.keys.contains(&KeyCode::ShiftLeft)
