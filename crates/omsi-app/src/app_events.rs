@@ -1695,6 +1695,15 @@ impl ApplicationHandler for App {
                     {
                         self.hover_key = key;
                         self.update_hover();
+                        let split = self.hover_split;
+                        for (stage, took) in [
+                            ("player.hover.pick", split.pick),
+                            ("player.hover.trailer", split.trailer),
+                            ("player.hover.blocker", split.blocker),
+                            ("player.hover.body", split.body),
+                        ] {
+                            *self.profile.entry(stage).or_default() += took;
+                        }
                     }
                     *self.profile.entry("player.hover").or_default() +=
                         __th.elapsed().as_secs_f64();

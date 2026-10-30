@@ -460,6 +460,9 @@ pub mod showroom {
 pub mod situation {
     pub use crate::situation::*;
 }
+pub mod spawn {
+    pub use crate::spawn::load_coupled_parts;
+}
 pub mod tiles {
     pub use crate::tiles::*;
 }
