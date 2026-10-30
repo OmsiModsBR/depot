@@ -3433,7 +3433,7 @@ fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
         // (DirectX9 only: the other APIs draw their own snowfall)
-        app.d3d9_active().then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
+        (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
     ]
         .into_iter()
         .flatten()

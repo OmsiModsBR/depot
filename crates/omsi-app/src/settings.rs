@@ -1457,7 +1457,7 @@ impl Settings {
     /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
     /// under that API (the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
-        self.dx9_snow && self.d3d9_selected()
+        self.dx9_snow && self.backend() == crate::output::Backend::D3d9
     }
 
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
