@@ -69,7 +69,7 @@ pub(crate) fn next_coupled(
 /// Load the `[couple_back]` chain behind `vehicle` (articulated rear sections, trailers),
 /// each file resolved from the folder of the part before it in whichever content root
 /// holds it.
-pub(crate) fn load_coupled_parts(
+pub fn load_coupled_parts(
     root: &Path,
     vehicle: &mut omsi_sim::VehicleInstance,
 ) -> Vec<Arc<omsi_sim::VehicleType>> {
