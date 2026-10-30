@@ -113,6 +113,8 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     float3 c = srgb_decode(tex2Dlod(t_day, uv).rgb) * sky.y
         + srgb_decode(tex2Dlod(t_twilight, uv).rgb) * sky.z * 0.8
         + srgb_decode(tex2Dlod(t_night, uv).rgb) * sky.w * 0.6;
+    // the sky's own colour, which the clouds are lit from (the stars are behind them)
+    float3 sky_c = c;
     // the stars: only at night (fading in with the dusk), above the horizon
     float pixel = length(float2(length(ddx(d)), length(ddy(d))));
     float night = smoothstep(0.35, 1.0, sky.w);
@@ -128,7 +130,7 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     // night sky; the closed deck greys over
     float sun_up = saturate(sun_dir.z * 4.0 + 0.3);
     float3 lit = sun_color.rgb * 1.1 * sun_up + ambient.rgb * lerp(0.5, 1.5, sun_up) + sky_color.rgb * 0.3;
-    float3 cloud_col = max(min(lit, 0.97), c * 1.12) * (1.0 - 0.3 * closed);
+    float3 cloud_col = max(min(lit, 0.97), sky_c * 1.12) * (1.0 - 0.3 * closed);
     c = lerp(c, cloud_col, cover);
     // fog swallows the horizon, and a thick fog (a few hundred metres of sight) the whole sky
     float horizon = saturate(1.0 - elev / 0.12) * saturate(fog.w * 1500.0);

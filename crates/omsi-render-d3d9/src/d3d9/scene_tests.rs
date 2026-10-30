@@ -1689,3 +1689,31 @@ fn the_stars_show_at_night_and_not_by_day() {
     // and they stay put from one frame to the next
     assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
 }
+
+#[test]
+fn a_closed_deck_of_cloud_hides_the_stars() {
+    let Some(mut dev) = device() else { return };
+    // a cloud picture that covers everything, lit by nothing but a little ambient light
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    let mut l = light([0.0; 4]);
+    l.ambient = [0.0; 4];
+    l.sun_dir = [0.0, 0.0, -1.0, 0.0];
+    let sky = |dev: &mut D3d9Device, texture| {
+        dark_sky(
+            dev,
+            [0.0, 0.0, 0.0, 1.0],
+            crate::scene::SceneClouds {
+                texture,
+                params: [1.0, 0.0, 0.0, 1500.0],
+            },
+        )
+    };
+    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
+    // (the view looks straight up, where the clouds' cover is full)
+    let clear = sky(&mut dev, None);
+    let stars = draw_sky_with(&mut dev, clear, LOOK_UP, l, (128, 128));
+    assert!(lit(&stars) > 0);
+    let deck = sky(&mut dev, Some(4));
+    let px = draw_sky_with(&mut dev, deck, LOOK_UP, l, (128, 128));
+    assert_eq!(lit(&px), 0, "stars show through a closed deck");
+}
