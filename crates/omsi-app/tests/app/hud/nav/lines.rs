@@ -1,5 +1,5 @@
 use openomsi_game::testing;
-use openomsi_game::testing::nav::lines::*;
+use openomsi_game::testing::hud::nav::lines::*;
 
 #[test]
 fn decimals_follow_the_language() {

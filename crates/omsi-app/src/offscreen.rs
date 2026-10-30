@@ -8,10 +8,10 @@ use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
+use crate::hud::nav;
 use crate::humans;
 use crate::lights;
 use crate::money;
-use crate::nav;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };

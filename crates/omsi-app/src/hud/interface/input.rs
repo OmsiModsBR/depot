@@ -15,3 +15,9 @@ pub(crate) mod lists {
         values::*, vehicles::*,
     };
 }
+
+/// The route navigator, the minimap and the city map.
+pub(crate) mod nav {
+    pub(crate) use super::super::super::domain::nav::*;
+    pub(crate) use super::super::super::implementation::nav::*;
+}

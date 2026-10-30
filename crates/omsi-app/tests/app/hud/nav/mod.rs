@@ -122,14 +122,14 @@ fn the_navigator_keeps_where_it_was_dragged_on_a_phone_and_clear_of_the_informat
 use omsi_sim::traffic::{Lane, LaneKey, LaneKind};
 use omsi_ui::{Layer, Painter};
 use openomsi_game::testing;
-use openomsi_game::testing::nav::draw::{
+use openomsi_game::testing::hud::nav::draw::{
     rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon, Icon,
     STOP_REQUEST,
 };
-use openomsi_game::testing::nav::geometry::{
+use openomsi_game::testing::hud::nav::geometry::{
     confirm_road_surfaces, road_geometry, visible_road_lanes,
 };
-use openomsi_game::testing::nav::*;
+use openomsi_game::testing::hud::nav::*;
 
 #[test]
 fn stop_request_icon_reserves_space_only_while_active() {
@@ -586,7 +586,8 @@ fn a_navigator_in_a_bottom_corner_stands_above_an_information_bar_along_the_bott
 
 #[test]
 fn walker_and_camera_icons_draw_and_differ() {
-    use testing::nav::draw::{focus_marker, FocusKind};
+    use testing::hud::nav::draw::focus_marker;
+    use testing::hud::nav::FocusKind;
     let draw = |kind| {
         let mut ui = omsi_ui::Painter::new();
         focus_marker(&mut ui, kind, glam::Vec2::new(100.0, 100.0), 0.7, 12.0);
@@ -595,4 +596,27 @@ fn walker_and_camera_icons_draw_and_differ() {
     let (walker, camera) = (draw(FocusKind::Walker), draw(FocusKind::Camera));
     assert!(walker > 0 && camera > 0);
     assert_ne!(walker, camera, "the two icons are different shapes");
+}
+
+/// Both views keep the point looked at in the middle of the map and what is ahead of it
+/// above, so the heading is up in the tilted view and in the top view alike.
+#[test]
+fn the_top_and_the_tilted_view_both_have_ahead_up() {
+    use openomsi_game::testing::hud::nav::minimap::map_view;
+    for top in [false, true] {
+        let fwd = DVec2::new(1.0, 0.0);
+        let look = DVec2::new(10.0, 20.0);
+        let vp = Mat4::perspective_rh(FOV.to_radians(), 1.0, 1.0, 10_000.0)
+            * map_view(look, fwd, 200.0, top);
+        let at = |p: Vec3| {
+            let c = vp * p.extend(1.0);
+            (c.x / c.w, c.y / c.w)
+        };
+        let (mx, my) = at(Vec3::new(10.0, 20.0, 0.0));
+        assert!(mx.abs() < 1e-4 && my.abs() < 1e-4, "top={top}");
+        let (_, ahead) = at(Vec3::new(60.0, 20.0, 0.0));
+        assert!(ahead > 0.05, "top={top} ahead={ahead}");
+        let (right, _) = at(Vec3::new(10.0, 20.0 - 50.0, 0.0));
+        assert!(right > 0.05, "top={top} right={right}");
+    }
 }

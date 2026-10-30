@@ -1,4 +1,4 @@
-use openomsi_game::testing::nav::geometry::turn_towards;
+use openomsi_game::testing::hud::nav::geometry::turn_towards;
 use std::f64::consts::PI;
 
 #[test]
