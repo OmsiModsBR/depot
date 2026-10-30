@@ -88,7 +88,7 @@ fn code_and_name(label: &str) -> Option<(&str, &str)> {
 
 /// The row of the page for the HUD list's line (`id`: what it does, `label`: what it says) in a
 /// list of `kind`. A settings line is `name\u{1f}kind\u{1f}value\u{1f}description\u{1f}fraction`
-/// (`game_lists::row`): `s` a switch, `v` a slider, `c` a stepper, `o` opens a list or a
+/// (`hud::lists::row`): `s` a switch, `v` a slider, `c` a stepper, `o` opens a list or a
 /// drop-down, `i` information, `E` a value being typed, anything else a button. A list line is
 /// its text, a line ending in dots opens another list.
 pub fn row_of(id: &str, label: &str, kind: MenuKind) -> PageRow {
@@ -99,7 +99,7 @@ pub fn row_of(id: &str, label: &str, kind: MenuKind) -> PageRow {
         lead: Before::None,
         heading: false,
     };
-    if id == crate::game_lists::HEADING {
+    if id == crate::hud::lists::HEADING {
         row.label = label.split('\u{1f}').next().unwrap_or("").to_string();
         row.heading = true;
         return row;

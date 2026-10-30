@@ -1,5 +1,5 @@
 use clap::Parser;
-use openomsi_game::testing::cli::Args;
+use openomsi_game::testing::core::cli::Args;
 use openomsi_game::testing::weather_setup::*;
 
 #[test]

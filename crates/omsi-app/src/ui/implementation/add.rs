@@ -113,7 +113,7 @@ impl App {
             return;
         }
         self.load_vehicle_list();
-        let vehicles = crate::game_lists::place_choices(self);
+        let vehicles = crate::hud::lists::place_choices(self);
         if vehicles.iter().all(|m| m.1.is_empty()) {
             self.service_msg = Some(("No vehicles found".into(), 3.0));
             return;
@@ -146,10 +146,10 @@ impl App {
         else {
             return;
         };
-        let liveries = crate::game_lists::place_liveries(self, &file);
-        let depots = crate::game_lists::place_depots(self, &file);
-        let numbers = crate::game_lists::place_numbers(self, &file);
-        let description = crate::game_lists::place_description(self, &file);
+        let liveries = crate::hud::lists::place_liveries(self, &file);
+        let depots = crate::hud::lists::place_depots(self, &file);
+        let numbers = crate::hud::lists::place_numbers(self, &file);
+        let description = crate::hud::lists::place_description(self, &file);
         if let Some(win) = self.new_ui.add.as_mut() {
             win.choose(i, liveries, depots, numbers, description);
             self.new_ui.add_last = win.chosen();

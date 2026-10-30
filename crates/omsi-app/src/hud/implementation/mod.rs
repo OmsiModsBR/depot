@@ -2,3 +2,4 @@
 //! procedures on its objects.
 
 pub(crate) mod legacy;
+pub(crate) mod lists;

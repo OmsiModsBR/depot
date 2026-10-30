@@ -11,7 +11,7 @@
 //! actions of `Inputs/keyboard.cfg` (or the keys that stand for them), so every bus - stock
 //! or mod - is driven by them as it is by the keyboard.
 
-use crate::app::App;
+use crate::core::app::App;
 use crate::output::ORBIT_DEFAULT;
 use omsi_render::Renderer;
 use omsi_ui::paint::Align;
@@ -165,7 +165,7 @@ pub struct Touch {
 impl Touch {
     pub fn new() -> Touch {
         Touch {
-            enabled: crate::platform::touch_controls(),
+            enabled: crate::core::platform::touch_controls(),
             fingers: Vec::new(),
             steer: 0.0,
             throttle: 0.0,
@@ -1121,7 +1121,7 @@ impl App {
 
     fn touch_button(&mut self, event_loop: &ActiveEventLoop, b: Btn, down: bool) {
         if down {
-            crate::platform::buzz(12);
+            crate::core::platform::buzz(12);
         }
         match b {
             Btn::Menu => {
@@ -1245,7 +1245,7 @@ impl App {
             Btn::Info => self.set_info_bar(!self.info_bar),
             Btn::Tilt => {
                 self.touch.tilt = !self.touch.tilt;
-                crate::platform::set_tilt(self.touch.tilt);
+                crate::core::platform::set_tilt(self.touch.tilt);
                 let t = if self.touch.tilt {
                     "Tilt steering on: hold the phone like a wheel"
                 } else {
@@ -1264,7 +1264,7 @@ impl App {
         }
         let t = &mut self.touch;
         if t.tilt {
-            if let Some(s) = crate::platform::tilt_steering() {
+            if let Some(s) = crate::core::platform::tilt_steering() {
                 t.steer = s;
             }
         } else if !t.steering {

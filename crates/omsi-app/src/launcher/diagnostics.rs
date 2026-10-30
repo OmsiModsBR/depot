@@ -148,8 +148,8 @@ fn line(l: &mut Launcher, r: Rect, y: f32, label: &str, value: &str) {
 
 fn build_card(l: &mut Launcher, r: Rect) {
     card(&mut l.ui, r, "This build", None);
-    line(l, r, r.y + 72.0, "Version", crate::startup::VERSION);
-    line(l, r, r.y + 112.0, "Build", crate::startup::BUILD);
+    line(l, r, r.y + 72.0, "Version", crate::core::startup::VERSION);
+    line(l, r, r.y + 112.0, "Build", crate::core::startup::BUILD);
     line(l, r, r.y + 152.0, "System", std::env::consts::OS);
     let adapter = if l.adapter.is_empty() {
         "not known yet".to_string()
@@ -168,8 +168,8 @@ fn build_card(l: &mut Launcher, r: Rect) {
     ) {
         let body = format!(
             "Project Depot {} (build {}, {})\n\nWhat happened:\n",
-            crate::startup::VERSION,
-            crate::startup::BUILD,
+            crate::core::startup::VERSION,
+            crate::core::startup::BUILD,
             std::env::consts::OS
         );
         crate::about::open_url(&format!(

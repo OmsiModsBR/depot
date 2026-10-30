@@ -24,7 +24,7 @@ const SLOP: f32 = 9.0;
 
 /// Whether the launcher is laid out for fingers.
 pub fn mobile() -> bool {
-    crate::platform::MOBILE || omsi_cfg::flags::MOBILE.is_set()
+    crate::core::platform::MOBILE || omsi_cfg::flags::MOBILE.is_set()
 }
 
 /// The fingers on the launcher.

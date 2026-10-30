@@ -1,4 +1,4 @@
-use openomsi_game::testing::startup::{instance_descriptor, RESOURCE_MEMORY_PERCENT};
+use openomsi_game::testing::core::startup::{instance_descriptor, RESOURCE_MEMORY_PERCENT};
 
 /// Resources past the card's budget are refused as an "out of memory" the game gets
 /// over, before the driver runs out (#48); losing the device stays the driver's call.

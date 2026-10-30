@@ -39,7 +39,7 @@ pub(crate) fn touch_controls() -> bool {
 pub(crate) fn tilt_steering() -> Option<f32> {
     #[cfg(target_os = "android")]
     {
-        crate::android::tilt()
+        crate::core::android::tilt()
     }
     #[cfg(not(target_os = "android"))]
     {
@@ -50,7 +50,7 @@ pub(crate) fn tilt_steering() -> Option<f32> {
 /// Switch the tilt sensor on or off (it costs battery while on).
 pub(crate) fn set_tilt(on: bool) {
     #[cfg(target_os = "android")]
-    crate::android::set_tilt(on);
+    crate::core::android::set_tilt(on);
     #[cfg(not(target_os = "android"))]
     let _ = on;
 }
@@ -58,7 +58,7 @@ pub(crate) fn set_tilt(on: bool) {
 /// A short buzz of the phone (a button that did something the eye may miss).
 pub(crate) fn buzz(ms: u32) {
     #[cfg(target_os = "android")]
-    crate::android::vibrate(ms);
+    crate::core::android::vibrate(ms);
     #[cfg(not(target_os = "android"))]
     let _ = ms;
 }

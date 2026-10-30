@@ -9,7 +9,7 @@
 //! a fresh `World` (whose caches belong to one scene); the old scene goes when the new one
 //! is ready, so the picture never goes blank while switching.
 
-use crate::cli::Args;
+use crate::core::cli::Args;
 use crate::player;
 use crate::scene;
 use crate::situation::start_clock;

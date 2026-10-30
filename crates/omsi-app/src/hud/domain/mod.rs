@@ -3,6 +3,7 @@
 mod frame;
 mod hits;
 mod info;
+pub(crate) mod lists;
 
 pub use frame::{ChatView, DropdownView, Frame, MenuKind, Preview};
 pub use hits::Hits;

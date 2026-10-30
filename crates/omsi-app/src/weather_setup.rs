@@ -1,9 +1,9 @@
 //! The weather of a session: its `.owt` file, the sky and clouds it makes, and how wet the streets are.
 
-use crate::cli::Args;
+use crate::core::cli::Args;
+use crate::core::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
 use crate::lights;
 use crate::scene;
-use crate::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
 pub(crate) use omsi_content::weather::psychro::{
     absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
     relative_humidity_percent as relative_humidity,
