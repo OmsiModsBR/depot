@@ -7,6 +7,14 @@ reviewed and published manually; a push to `main` does not publish anything.
 Inherited workflows are archived in `docs/upstream-automation/`, not active
 under `.github/workflows/`. No automatic upstream synchronization is enabled.
 
+**The next release is Depot 0.3.0.** Since 0.3.0 the release number is
+`MAJOR.MINOR.PATCH`, chosen by hand: `MINOR` goes up for a release with new features or
+removals, `PATCH` for a release that only fixes the previous one. `VERSION` holds
+`MAJOR.MINOR`; the commit count that `scripts/version.sh` and `omsi-app/build.rs` append
+only names development builds, so a release build passes `OPENOMSI_VERSION` explicitly
+(for example `OPENOMSI_VERSION=0.3.0`). The tag and the GitHub release are made by hand
+after review.
+
 **Depot 0.2.52 is the current release** (2026-10-10, tag `v0.2.52`), the first with
 behaviour changes since the rebranding. Depot release numbers are Depot's own count and do not
 mean the same openOMSI version was imported. See [release notes](releases/0.2.52.md).
