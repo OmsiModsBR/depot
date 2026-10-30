@@ -2866,6 +2866,7 @@ dependencies = [
  "omsi-launcher-core",
  "omsi-ui",
  "pollster",
+ "serde_json",
  "wgpu",
 ]
 

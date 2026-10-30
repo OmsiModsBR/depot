@@ -14,20 +14,20 @@ fn game(pid: u32, running: bool) -> Instance {
 #[test]
 fn the_wait_after_start_ends_once_the_game_is_listed() {
     // (a list asked for before the game was started)
-    assert!(!openomsi_game::testing::launcher::state::game_listed(
+    assert!(!omsi_launcher_ui::state::game_listed(
         Some(7),
         &[game(3, true)]
     ));
-    assert!(openomsi_game::testing::launcher::state::game_listed(
+    assert!(omsi_launcher_ui::state::game_listed(
         Some(7),
         &[game(3, true), game(7, true)]
     ));
-    assert!(openomsi_game::testing::launcher::state::game_listed(
+    assert!(omsi_launcher_ui::state::game_listed(
         Some(7),
         &[game(7, false)]
     ));
     // (Start pressed, the game not started yet)
-    assert!(!openomsi_game::testing::launcher::state::game_listed(
+    assert!(!omsi_launcher_ui::state::game_listed(
         None,
         &[game(7, true)]
     ));

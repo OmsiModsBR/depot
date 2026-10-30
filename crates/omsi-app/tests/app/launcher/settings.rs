@@ -1,8 +1,8 @@
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_lib::start::Choice;
 use omsi_ui::Rect;
 use openomsi_game::testing::launcher::settings::*;
-use openomsi_game::testing::launcher::state::Choice;
 use openomsi_game::testing::launcher::ui::id_of;
 use openomsi_game::testing::launcher::ui::Ui;
 use serde_json::json;

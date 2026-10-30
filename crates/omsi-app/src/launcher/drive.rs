@@ -6,11 +6,12 @@
 //!
 //! The order is what a player does: what to drive, then when, then where.
 
-use super::state::{hhmm, trip_index_at};
+use super::state::hhmm;
 use super::theme::*;
 use super::ui::{id_of, ButtonKind};
 use super::Launcher;
 use glam::{DVec2, Vec2};
+use omsi_launcher_lib::start::trip_index_at;
 use omsi_launcher_lib::start::{favourite_key as fav_key, read_favourites};
 use omsi_launcher_lib::{display_bus_name, vehicle_type_label, WeatherInfo};
 use omsi_ui::paint::Align;

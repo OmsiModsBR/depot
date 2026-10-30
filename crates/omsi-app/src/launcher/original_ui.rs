@@ -1,7 +1,7 @@
 //! Setup's "Original OMSI 2 engine" card and the dialogs of OmsiLaunch's installation and
 //! removal. The card is drawn on Windows computers only.
 
-use super::original::{available, Flow};
+use super::state::{available, Flow};
 use super::theme::*;
 use super::ui::ButtonKind;
 use super::Launcher;

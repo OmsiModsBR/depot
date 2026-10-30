@@ -4,7 +4,7 @@ fn a_panic_is_found_and_a_clean_end_is_not() {
     let _ = std::fs::create_dir_all(&dir);
     let p = dir.join("game.log");
     std::fs::write(&p, "[t INFO x] loading\n[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
-    let (what, tail) = openomsi_game::testing::launcher::state::crash_of(&p).unwrap();
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
     assert!(what.contains("index out of bounds"), "{what}");
     assert!(tail.contains("loading"));
     std::fs::write(
@@ -12,15 +12,15 @@ fn a_panic_is_found_and_a_clean_end_is_not() {
         "[t INFO x] loading\n[t INFO openomsi_game::app_events] game ends\n",
     )
     .unwrap();
-    assert!(openomsi_game::testing::launcher::state::crash_of(&p).is_none());
+    assert!(omsi_launcher_ui::state::crash_of(&p).is_none());
     std::fs::write(&p, "[t ERROR omsi_render] the graphics device was lost (Unknown): Unexpected error variant\n[t INFO openomsi_game::app_events] game ends\n").unwrap();
-    assert!(openomsi_game::testing::launcher::state::crash_of(&p)
+    assert!(omsi_launcher_ui::state::crash_of(&p)
         .unwrap()
         .0
         .contains("device was lost"));
     // an error before the game started, or one it got over, is not the crash
     std::fs::write(&p, "[t ERROR omsi_render] a part of the picture could not be recorded (left out)\n[t INFO x] starting the game: omsi\n[t INFO omsi_render] renderer: compiling the sky and clouds shaders\n").unwrap();
-    assert!(openomsi_game::testing::launcher::state::crash_of(&p).is_none());
+    assert!(omsi_launcher_ui::state::crash_of(&p).is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -38,7 +38,7 @@ fn a_loss_caught_mid_frame_is_reported_as_the_loss() {
         \x20   Error in Device::poll: Parent device is lost\n\
         [t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Parent device is lost)\n\
         [t INFO openomsi_game::app_events] game ends\n").unwrap();
-    let (what, _) = openomsi_game::testing::launcher::state::crash_of(&p).unwrap();
+    let (what, _) = omsi_launcher_ui::state::crash_of(&p).unwrap();
     assert!(
         what.contains("ending the session: the graphics device was lost"),
         "{what}"
@@ -50,7 +50,7 @@ fn a_loss_caught_mid_frame_is_reported_as_the_loss() {
     std::fs::write(&p, "[t INFO x] starting the game: omsi\n\
         [t INFO openomsi_game::app_events] game ends\n\
         [t WARN openomsi_game] the graphics device did not close in order (the game had ended already)\n").unwrap();
-    assert!(openomsi_game::testing::launcher::state::crash_of(&p).is_none());
+    assert!(omsi_launcher_ui::state::crash_of(&p).is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -70,16 +70,13 @@ fn the_report_has_the_computer_and_a_clean_title() {
     }
     log.push_str("[t ERROR openomsi_game::app_events] ending the session: the graphics device was lost (Unknown: Out of memory)\n[t INFO openomsi_game::app_events] game ends\n[t WARN openomsi_game::scene] tile loading: first-area batch prepared in 352.71 s\n");
     std::fs::write(&p, log).unwrap();
-    let (what, tail) = openomsi_game::testing::launcher::state::crash_of(&p).unwrap();
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
     assert_eq!(
         what,
         "ending the session: the graphics device was lost (Unknown: Out of memory)"
     );
     let (machine, end) = tail
-        .split_once(&format!(
-            "\n{}\n",
-            openomsi_game::testing::launcher::state::CRASH_TAIL_GAP
-        ))
+        .split_once(&format!("\n{}\n", omsi_launcher_ui::state::CRASH_TAIL_GAP))
         .unwrap();
     assert!(
         machine.contains("8192 MB memory")

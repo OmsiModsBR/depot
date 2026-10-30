@@ -7,9 +7,7 @@ fn only_a_zip_is_installed_from_the_page() {
     for f in ["Example bus.zip", "Map.ZIP", "pack.rar"] {
         std::fs::write(dir.join(f), b"PK").unwrap();
     }
-    let is = |name: &str| {
-        openomsi_game::testing::launcher::state::is_zip(&dir.join(name).to_string_lossy())
-    };
+    let is = |name: &str| omsi_launcher_ui::state::is_zip(&dir.join(name).to_string_lossy());
     let seen = (
         is("Example bus.zip"),
         is("Map.ZIP"),
