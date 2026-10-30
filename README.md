@@ -6,7 +6,7 @@
 
 Independent repository: https://github.com/OmsiModsBR/depot
 
-Current Depot release: **[0.2.52](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52)** (2026-10-10), based on openOMSI 0.2.16. The previous release, [0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17), was rebranding only.
+Current Depot release: **[0.3.0](https://github.com/OmsiModsBR/depot/releases/tag/v0.3.0)** (2026-10-30), based on openOMSI 0.2.16. Previous releases: [0.2.52](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52) and [0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17) (rebranding only).
 
 Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openOMSI): `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
@@ -41,6 +41,9 @@ view, navigator map packages, a pusher joint, timetable and sound fixes, and mor
 validated only by automated tests, and the physics changes are not shown to match OMSI 2 yet. 1:1
 compatibility remains a development goal, not an achieved result. See the
 [release notes](docs/releases/0.2.52.md) and the [changelog](CHANGELOG.md).
+**Depot 0.3.0** adds an optional DirectX 9 renderer, a new in-game interface and launcher, map
+and vehicle integrity checks, more physics and passenger fixes, and removes the multiplayer and
+plugin code that was switched off. See its [release notes](docs/releases/0.3.0.md).
 
 > [!IMPORTANT]
 > **Project Depot needs an original copy of OMSI 2.** It contains no game content of its own: it
@@ -50,13 +53,13 @@ compatibility remains a development goal, not an achieved result. See the
 ## Download
 
 The current release is available on the
-[**0.2.52 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52):
+[**0.3.0 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.3.0):
 
 | Platform | File |
 | --- | --- |
-| Windows x64 | `depot-0.2.52-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
+| Windows x64 | `depot-0.3.0-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
 
-ARM64, Linux, macOS and Android packages are not included in Depot 0.2.52.
+ARM64, Linux, macOS and Android packages are not included in Depot 0.3.0.
 Inherited platform support and build instructions do not imply published Depot packages.
 
 Start the game, point the launcher to your OMSI 2 folder once, pick a map, a bus and a duty,

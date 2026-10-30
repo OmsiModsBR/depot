@@ -6,6 +6,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-30
+
+Release notes: [docs/releases/0.3.0.md](docs/releases/0.3.0.md).
+
 ### Changed
 - Developer tools, step 2 (no change for players): `omsi-devtools-proto` now refuses a frame with bytes left over after its message, names the handshake failure `HelloError`, limits a subscription to 512 names and a text value to 1024 characters, and reports a control character in text as its own error. Tests cover the exact frame size limit.
 - The `zip` library used to read and write zip packages is updated from 8.6 to 9 (it carries fixes for unsafe paths, links and reads larger than an entry declares). Launcher, original OMSI 2 mode: when the library cannot read the name of an entry of an OmsiLaunch or module package, the install stops with an error. Nothing else changes for the player.
