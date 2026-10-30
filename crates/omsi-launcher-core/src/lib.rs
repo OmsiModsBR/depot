@@ -3149,6 +3149,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["windy_trees"] = json!(true);
     // the glow around the sun (DirectX9 (D3D9Ex) only)
     v["sun_glow"] = json!(true);
+    // DirectX9 (D3D9Ex) only: falling snow, off unless chosen
+    v["dx9_snow"] = json!(false);
     // outside sounds heard from a cab go through a low-pass
     v["muffle_outside"] = json!(false);
     // OMSI's own options
@@ -3188,6 +3190,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_bar_mode", json!("full")),
         ("info_bar_pos", json!("top")),
         ("info_bar_fps", json!(false)),
+        ("info_bar_collapsed", json!(false)),
+        ("info_bar_labels", json!(true)),
+        ("info_bar_lowfuel", json!(false)),
         ("info_item_time", json!(true)),
         ("info_item_speed", json!(true)),
         ("info_item_trip", json!(true)),
@@ -3932,10 +3937,14 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "map"
                 })
             }
-            "info_bar" | "info_bar_fps" => v[&k] = json!(b(val)),
+            "info_bar" | "info_bar_fps" | "info_bar_collapsed" | "info_bar_labels"
+            | "info_bar_lowfuel" => v[&k] = json!(b(val)),
             k if INFO_ITEM_KEYS.iter().any(|x| *x == k) => v[&k] = json!(b(val)),
             "info_bar_mode" => {
-                v[&k] = json!(if matches!(val, "compact" | "essential" | "custom") {
+                v[&k] = json!(if matches!(
+                    val,
+                    "compact" | "essential" | "custom" | "twotier" | "split"
+                ) {
                     val
                 } else {
                     "full"
@@ -3952,6 +3961,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
+            "dx9_snow" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
             "time_speed" => {
@@ -4537,14 +4547,17 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .and_then(|x| x.as_str())
         .unwrap_or("top");
     text.push_str(&format!(
-        "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-        if matches!(mode, "compact" | "essential" | "custom") {
+        "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\ninfo_bar_collapsed={}\ninfo_bar_labels={}\ninfo_bar_lowfuel={}\n",
+        if matches!(mode, "compact" | "essential" | "custom" | "twotier" | "split") {
             mode
         } else {
             "full"
         },
         if pos == "bottom" { "bottom" } else { "top" },
-        b("info_bar_fps", false)
+        b("info_bar_fps", false),
+        b("info_bar_collapsed", false),
+        b("info_bar_labels", true),
+        b("info_bar_lowfuel", false)
     ));
     for key in INFO_ITEM_KEYS {
         text.push_str(&format!("{key}={}\n", b(key, true)));
@@ -4573,6 +4586,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
+    text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", false)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
@@ -6292,6 +6306,19 @@ mod info_bar_tests {
         assert!(text.lines().any(|l| l == "info_bar_mode=compact"));
         assert!(text.lines().any(|l| l == "info_bar_pos=bottom"));
         assert!(text.lines().any(|l| l == "info_bar_fps=1"));
+        let v = settings_from_text(Some(
+            "info_bar_mode=twotier\ninfo_bar_collapsed=1\ninfo_bar_labels=0\ninfo_bar_lowfuel=1\n",
+        ));
+        assert_eq!(v["info_bar_mode"], json!("twotier"));
+        assert_eq!(v["info_bar_collapsed"], json!(true));
+        assert_eq!(v["info_bar_labels"], json!(false));
+        assert_eq!(v["info_bar_lowfuel"], json!(true));
+        let text = settings_to_text(&v, None);
+        assert!(text.lines().any(|l| l == "info_bar_labels=0"));
+        assert!(text.lines().any(|l| l == "info_bar_lowfuel=1"));
+        let v = settings_from_text(Some("info_bar_mode=split\n"));
+        assert_eq!(v["info_bar_mode"], json!("split"));
+        assert_eq!(v["info_bar_labels"], json!(true));
         let v = settings_from_text(Some("info_bar_mode=sideways\ninfo_bar_pos=left\n"));
         assert_eq!(v["info_bar_mode"], json!("full"));
         assert_eq!(v["info_bar_pos"], json!("top"));

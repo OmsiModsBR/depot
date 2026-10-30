@@ -64,17 +64,11 @@ pub mod actions {
 pub mod api_limits {
     pub use crate::api_limits::*;
 }
-pub mod app {
-    pub use crate::app::*;
-}
 pub mod app_events {
     pub use crate::app_events::*;
 }
 pub mod bus_service {
     pub use crate::bus_service::*;
-}
-pub mod cli {
-    pub use crate::cli::*;
 }
 pub mod condensation {
     pub use crate::condensation::*;
@@ -93,6 +87,18 @@ pub mod condensation {
 }
 pub mod controllers {
     pub use crate::controllers::*;
+}
+pub mod core {
+    pub mod app {
+        pub use crate::core::domain::app::*;
+        pub use crate::core::implementation::app::*;
+    }
+    pub mod cli {
+        pub use crate::core::domain::cli::*;
+    }
+    pub mod startup {
+        pub use crate::core::implementation::startup::*;
+    }
 }
 pub mod describe {
     pub use crate::describe::*;
@@ -149,9 +155,6 @@ pub mod frame_stats {
 pub mod game_controller_menu {
     pub use crate::game_controller_menu::*;
 }
-pub mod game_lists {
-    pub use crate::game_lists::*;
-}
 pub mod headtrack {
     pub use crate::headtrack::*;
 }
@@ -161,7 +164,37 @@ pub mod hpattern {
 pub mod hud {
     pub use crate::hud::domain::*;
     pub use crate::hud::implementation::legacy::oft::*;
+    pub use crate::hud::implementation::legacy::settings::vr_settings_sidebar_step;
     pub use crate::hud::implementation::legacy::*;
+
+    pub mod nav {
+        pub use crate::hud::domain::nav::*;
+        pub use crate::hud::implementation::nav::*;
+
+        pub mod draw {
+            pub use crate::hud::implementation::nav::draw::*;
+        }
+
+        pub mod city {
+            pub use crate::hud::implementation::nav::city::*;
+        }
+        pub mod geometry {
+            pub use crate::hud::implementation::nav::geometry::*;
+        }
+        pub mod lines {
+            pub use crate::hud::implementation::nav::lines::*;
+        }
+        pub mod minimap {
+            pub use crate::hud::implementation::nav::minimap::picture::map_view;
+        }
+    }
+
+    pub mod lists {
+        pub use crate::hud::domain::lists::*;
+        pub use crate::hud::implementation::lists::{
+            duty::*, route::*, rows::*, select::*, values::*,
+        };
+    }
 }
 pub mod humans {
     pub use crate::humans::*;
@@ -279,23 +312,6 @@ pub mod map_surface {
 pub mod money {
     pub use crate::money::*;
 }
-pub mod nav {
-    pub use crate::nav::*;
-
-    pub mod draw {
-        pub use crate::nav::draw::*;
-    }
-
-    pub mod city {
-        pub use crate::nav::city::*;
-    }
-    pub mod geometry {
-        pub use crate::nav::geometry::*;
-    }
-    pub mod lines {
-        pub use crate::nav::lines::*;
-    }
-}
 pub mod on_foot {
     pub use crate::on_foot::*;
 }
@@ -407,8 +423,13 @@ pub mod settings {
                 self.arrows_switch_cams as u8
             ));
             text.push_str(&format!(
-                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\n",
-                self.info_bar_mode, self.info_bar_pos, self.info_bar_fps as u8
+                "info_bar_mode={}\ninfo_bar_pos={}\ninfo_bar_fps={}\ninfo_bar_collapsed={}\ninfo_bar_labels={}\ninfo_bar_lowfuel={}\n",
+                self.info_bar_mode,
+                self.info_bar_pos,
+                self.info_bar_fps as u8,
+                self.info_bar_collapsed as u8,
+                self.info_bar_labels as u8,
+                self.info_bar_lowfuel as u8
             ));
             for (key, on) in INFO_ITEM_KEYS.iter().zip(self.info_items) {
                 text.push_str(&format!("{key}={}\n", on as u8));
@@ -416,6 +437,7 @@ pub mod settings {
             text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
             text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
+            text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
             text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
             // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
             text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
@@ -435,9 +457,6 @@ pub mod settings {
 }
 pub mod situation {
     pub use crate::situation::*;
-}
-pub mod startup {
-    pub use crate::startup::*;
 }
 pub mod tiles {
     pub use crate::tiles::*;

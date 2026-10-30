@@ -1102,6 +1102,42 @@ fn a_scene_drawn_into_a_texture_is_what_a_later_material_shows() {
 }
 
 #[test]
+fn a_scene_target_has_the_devices_depth_format_also_after_it_changes() {
+    let Some(mut dev) = device() else { return };
+    let frame = quad_frame(&[], &[], &[], &[]);
+    let depth_format = |dev: &D3d9Device| {
+        let mut desc = D3DSURFACE_DESC::default();
+        // SAFETY: the surface is live and the out-parameter is a local.
+        unsafe {
+            dev.scene
+                .target_depth
+                .as_ref()
+                .unwrap()
+                .2
+                .GetDesc(&mut desc)
+                .unwrap();
+        }
+        desc.Format
+    };
+    dev.draw_scene_into(3, (4, 4), [0.0, 0.0, 0.0, 1.0], &frame, |_| None)
+        .unwrap();
+    assert_eq!(depth_format(&dev), dev.depth_format);
+    // a format that differs from the shared surface's is made again, not reused
+    let other = if dev.depth_format == D3DFMT_D24S8 {
+        D3DFMT_D24X8
+    } else {
+        D3DFMT_D24S8
+    };
+    dev.depth_format = other;
+    dev.scene.target_depth = None;
+    dev.draw_scene_into(3, (4, 4), [0.0, 0.0, 0.0, 1.0], &frame, |_| None)
+        .ok();
+    if let Some((_, _, _)) = &dev.scene.target_depth {
+        assert_eq!(depth_format(&dev), other);
+    }
+}
+
+#[test]
 fn a_scene_target_of_no_size_is_refused() {
     let Some(mut dev) = device() else { return };
     let frame = quad_frame(&[], &[], &[], &[]);

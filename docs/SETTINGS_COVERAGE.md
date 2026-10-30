@@ -43,6 +43,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `ctrl_off` | yes | yes | yes | yes |
 | `detail_textures` | yes | yes | yes | yes |
 | `doppler` | yes | yes | yes | yes |
+| `dx9_snow` | yes | yes | yes | yes |
 | `drive_keys` | yes | yes | yes | yes, known difference (launcher>game) |
 | `driver` | yes | yes | yes | yes |
 | `driverview_smooth` | yes | yes | yes | yes |
@@ -79,7 +80,10 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `head_tracking_yaw_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `head_tracking_z_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `info_bar` | yes | yes | yes | yes |
+| `info_bar_collapsed` | yes | yes | yes | yes |
 | `info_bar_fps` | yes | yes | yes | yes |
+| `info_bar_labels` | yes | yes | yes | yes |
+| `info_bar_lowfuel` | yes | yes | yes | yes |
 | `info_bar_mode` | yes | yes | yes | yes |
 | `info_bar_pos` | yes | yes | yes | yes |
 | `info_item_time` | yes | yes | yes | yes |

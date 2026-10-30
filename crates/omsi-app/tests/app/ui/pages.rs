@@ -2,7 +2,7 @@ use glam::Vec2;
 use omsi_ui::menu_page::Back;
 use omsi_ui::pause_menu;
 use openomsi_game::testing;
-use openomsi_game::testing::game_lists::{row, ListKind};
+use openomsi_game::testing::hud::lists::{row, ListKind};
 use openomsi_game::testing::hud::MenuKind;
 use openomsi_game::testing::hud::{DropdownView, Preview};
 use openomsi_game::testing::ui::menu::{Area, MenuFrameInternals};
@@ -63,7 +63,7 @@ fn every_kind_of_settings_row_maps_to_its_control() {
         Ctl::Button("H".into())
     );
     // a heading: never chosen, its label alone
-    let h = row_of(testing::game_lists::HEADING, "Steering", o);
+    let h = row_of(testing::hud::lists::HEADING, "Steering", o);
     assert!(h.heading);
     assert_eq!(h.label, "Steering");
     assert!(!r.heading);

@@ -1,6 +1,6 @@
 //! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
 
-use crate::cli::{parse_triggers, Args};
+use crate::core::cli::{parse_triggers, Args};
 use crate::player::Player;
 use crate::scene::{self, World};
 use crate::situation::{find_hof, start_clock};
@@ -468,7 +468,7 @@ pub(crate) fn spawn_player(
             .map(|c| c.mesh_parts())
             .unwrap_or(0)
     );
-    let bindings = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args.root))
+    let bindings = omsi_content::KeyboardCfg::load(&crate::core::startup::keyboard_cfg(&args.root))
         .map(|k| k.with_game_defaults().vehicles)
         .unwrap_or_default();
     static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);

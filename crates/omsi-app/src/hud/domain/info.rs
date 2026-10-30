@@ -45,9 +45,28 @@ impl InfoItem {
     }
 }
 
+/// One readout of the second tier: its items (a name above it in grey, the value), a
+/// meter under the value when it is a level (the tank), and the mark of a warning.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InfoCell {
+    pub items: Vec<InfoItem>,
+    /// How full, 0 to 1.
+    pub meter: Option<f32>,
+    /// The cell is lit and its meter is red (a tank under 15 %).
+    pub alert: bool,
+}
+
 /// The information bar: items in groups, along the top or the bottom of the screen.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct InfoBar {
     pub groups: Vec<Vec<InfoItem>>,
     pub bottom: bool,
+    /// The two-tier layouts: the readouts of the second tier (none while it is folded away).
+    pub tier2: Vec<InfoCell>,
+    /// The second tier is its own plate under the first (not a row of the same plate).
+    pub split: bool,
+    /// A two-tier layout: the arrow that folds the second tier away is drawn.
+    pub tiered: bool,
+    /// The second tier is folded away (the arrow points down).
+    pub collapsed: bool,
 }

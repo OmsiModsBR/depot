@@ -205,12 +205,19 @@ pub struct Settings {
     /// it was left, not switched on again every session (#1164).
     pub info_bar: bool,
     /// What the information bar shows: `full` (all of it), `compact` (time, speed, line, next
-    /// stop) or `essential` (speed, limit, delay).
+    /// stop), `essential` (speed, limit, delay), `custom`, `twotier` (the driving items above,
+    /// small readouts below) or `split` (a driving plate and a separate strip below it).
     pub info_bar_mode: String,
     /// Where it sits: `top` or `bottom`.
     pub info_bar_pos: String,
     /// The frame rate (and its 1 % low) as the bar's last part, not only in the corner.
     pub info_bar_fps: bool,
+    /// The two-tier layouts start with the second tier folded away (the arrow unfolds it).
+    pub info_bar_collapsed: bool,
+    /// Names above the readouts of the second tier ("Trip", "Tank", ...).
+    pub info_bar_labels: bool,
+    /// Marks the tank (red meter and cell) once it is under 15 %.
+    pub info_bar_lowfuel: bool,
     /// Which items the `custom` layout shows, in the order of [`INFO_ITEM_KEYS`].
     pub info_items: [bool; 9],
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
@@ -235,6 +242,10 @@ pub struct Settings {
     /// The glow around the sun under "DirectX9 (D3D9Ex)" (OMSI 2's "Sun Glow"; the other
     /// graphics APIs draw none).
     pub sun_glow: bool,
+    /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
+    /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
+    /// snow without it.
+    pub dx9_snow: bool,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -430,7 +441,7 @@ pub fn pedal_curve(v: f32, strength: f32) -> f32 {
 
 impl Default for Settings {
     fn default() -> Self {
-        if crate::platform::MOBILE {
+        if crate::core::platform::MOBILE {
             // a phone's graphics chip and battery: 2x MSAA (cheap on a tiled GPU), no
             // ambient occlusion, a smaller shadow map and mirrors, a shorter view
             return Self {
@@ -523,6 +534,7 @@ impl Settings {
             clouds: true,
             windy_trees: true,
             sun_glow: true,
+            dx9_snow: false,
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -614,6 +626,9 @@ impl Settings {
             info_bar_mode: "full".into(),
             info_bar_pos: "top".into(),
             info_bar_fps: false,
+            info_bar_collapsed: false,
+            info_bar_labels: true,
+            info_bar_lowfuel: false,
             info_items: [true; 9],
             autosave_minutes: 5,
             ui_accent: "Amber".into(),
@@ -887,6 +902,7 @@ impl Settings {
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
+                "dx9_snow" => s.dx9_snow = b(v),
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')
@@ -1290,16 +1306,20 @@ impl Settings {
                 "notes" => s.notes = b(v),
                 "info_bar" => s.info_bar = b(v),
                 "info_bar_mode" => {
-                    s.info_bar_mode = if matches!(v, "compact" | "essential" | "custom") {
-                        v.to_string()
-                    } else {
-                        "full".to_string()
-                    }
+                    s.info_bar_mode =
+                        if matches!(v, "compact" | "essential" | "custom" | "twotier" | "split") {
+                            v.to_string()
+                        } else {
+                            "full".to_string()
+                        }
                 }
                 "info_bar_pos" => {
                     s.info_bar_pos = if v == "bottom" { "bottom" } else { "top" }.to_string()
                 }
                 "info_bar_fps" => s.info_bar_fps = b(v),
+                "info_bar_collapsed" => s.info_bar_collapsed = b(v),
+                "info_bar_labels" => s.info_bar_labels = b(v),
+                "info_bar_lowfuel" => s.info_bar_lowfuel = b(v),
                 k if info_item_index(k).is_some() => {
                     if let Some(i) = info_item_index(k) {
                         s.info_items[i] = b(v);
@@ -1430,6 +1450,12 @@ impl Settings {
         crate::output::Backend::of(self)
     }
 
+    /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
+    /// under that API (the other renderers draw their own snowfall).
+    pub fn dx9_snowfall(&self) -> bool {
+        self.dx9_snow && self.backend() == crate::output::Backend::D3d9
+    }
+
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
     /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
     pub fn fair_weather_clouds(&self) -> bool {
@@ -1541,7 +1567,7 @@ impl Settings {
             reflections: self.reflections,
             no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
             ray_tracing: self.ray_tracing()
-                || crate::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
+                || crate::core::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 }

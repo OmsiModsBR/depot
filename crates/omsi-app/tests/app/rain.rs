@@ -55,3 +55,64 @@ fn snow_on_glass_is_mostly_clear_and_thickest_at_the_rim() {
         "the rim should carry more snow than the middle ({a:.1} vs {b:.1})"
     );
 }
+
+/// A noop renderer's scene, to collect the coronas a tick pushes.
+fn scene() -> omsi_render::Scene {
+    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    descriptor.backends = wgpu::Backends::NOOP;
+    descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+    let instance = wgpu::Instance::new(descriptor);
+    let renderer = pollster::block_on(omsi_render::Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        omsi_render::RenderOptions {
+            msaa: 1,
+            shadow_size: 1024,
+            ..Default::default()
+        },
+    ))
+    .expect("noop renderer");
+    renderer.new_scene()
+}
+
+/// Snow is the renderer's own unless the DirectX9 option asks for flakes here: then there
+/// are as many as the rain has drops, as sprites of a cone of -3, none inside a bus.
+#[test]
+fn snow_flakes_are_sprites_only_when_asked_for() {
+    use glam::{DVec3, Vec3};
+    let mut scene = scene();
+    let mut rain = openomsi_game::testing::rain::Rain::new();
+    rain.set(2, 1.0, false);
+    rain.tick(0.1, DVec3::ZERO, Vec3::ZERO, &mut scene, &[]);
+    assert!(scene.coronas.is_empty(), "the renderer draws the snow");
+
+    rain.set(2, 1.0, true);
+    rain.tick(0.1, DVec3::ZERO, Vec3::ZERO, &mut scene, &[]);
+    assert_eq!(scene.coronas.len(), 3000);
+    assert!(scene.coronas.iter().all(|c| c.cone_cos == -3.0));
+
+    // a light fall has fewer flakes than a heavy one
+    scene.coronas.clear();
+    rain.set(2, 0.0, true);
+    rain.tick(0.1, DVec3::ZERO, Vec3::ZERO, &mut scene, &[]);
+    assert_eq!(scene.coronas.len(), 400);
+
+    // none of them falls in a bus: a box that holds the whole field takes them all
+    scene.coronas.clear();
+    rain.set(2, 1.0, true);
+    rain.tick(
+        0.1,
+        DVec3::ZERO,
+        Vec3::ZERO,
+        &mut scene,
+        &[(DVec3::ZERO, 0.0, [200.0, 200.0, 200.0, 0.0, 0.0, 0.0])],
+    );
+    assert!(scene.coronas.is_empty());
+
+    // rain stays rain: streaks of a cone of -2, whatever the option says
+    scene.coronas.clear();
+    rain.set(1, 1.0, true);
+    rain.tick(0.1, DVec3::ZERO, Vec3::ZERO, &mut scene, &[]);
+    assert!(scene.coronas.iter().all(|c| c.cone_cos == -2.0));
+}

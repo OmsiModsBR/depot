@@ -1,7 +1,7 @@
 //! The game menu and its lists: opening and closing them, moving through them and picking
 //! an entry.
 
-use crate::app::App;
+use crate::core::app::App;
 
 /// The game menu on a server (`--lan-join https://…`): the world's clock and weather are the
 /// server's, and the way out leaves the server.
@@ -18,7 +18,7 @@ pub(crate) const SERVER_GAME_MENU: [(&str, &str); 8] = [
 
 /// Whether the session was started on a server (`--lan-join https://…`).
 /// Without LAN play the game joins nothing (`--lan-join` is ignored).
-pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
+pub(crate) fn on_server(args: &crate::core::cli::Args) -> bool {
     {
         let _ = args;
         false
@@ -26,7 +26,9 @@ pub(crate) fn on_server(args: &crate::cli::Args) -> bool {
 }
 
 /// The game menu's lines for a session with these arguments.
-pub(crate) fn game_menu_for(args: &crate::cli::Args) -> &'static [(&'static str, &'static str)] {
+pub(crate) fn game_menu_for(
+    args: &crate::core::cli::Args,
+) -> &'static [(&'static str, &'static str)] {
     if on_server(args) {
         &SERVER_GAME_MENU
     } else {
@@ -35,7 +37,7 @@ pub(crate) fn game_menu_for(args: &crate::cli::Args) -> &'static [(&'static str,
 }
 
 /// The lines of the game menu: (what, label). What can be set is on the pages behind
-/// "Options", "Vehicle options" and "World options" (see `game_lists`).
+/// "Options", "Vehicle options" and "World options" (see `hud::lists`).
 pub const GAME_MENU: [(&str, &str); 15] = [
     ("resume", "Resume"),
     ("options", "Options..."),
@@ -90,11 +92,11 @@ impl App {
         self.paused = self.menu_prev_pause;
     }
 
-    /// Show one of the menu's lists in the chooser (see `game_lists`).
-    pub(crate) fn open_list(&mut self, kind: crate::game_lists::ListKind) {
-        crate::game_lists::forget_page_titles();
+    /// Show one of the menu's lists in the chooser (see `hud::lists`).
+    pub(crate) fn open_list(&mut self, kind: crate::hud::lists::ListKind) {
+        crate::hud::lists::forget_page_titles();
         self.dropdown = None;
-        self.admin_list = Some(crate::game_lists::items(self, &kind));
+        self.admin_list = Some(crate::hud::lists::items(self, &kind));
         self.list_kind = Some(kind);
         // (on its first line, not on a heading)
         self.chooser = Some(if self.is_heading(0) {
@@ -104,12 +106,12 @@ impl App {
         });
     }
 
-    /// Line `k` of the list shown heads the lines under it (`game_lists::HEADING`).
+    /// Line `k` of the list shown heads the lines under it (`hud::lists::HEADING`).
     pub(crate) fn is_heading(&self, k: usize) -> bool {
         self.admin_list
             .as_ref()
             .and_then(|l| l.get(k))
-            .is_some_and(|l| l.1 == crate::game_lists::HEADING)
+            .is_some_and(|l| l.1 == crate::hud::lists::HEADING)
     }
 
     /// The line `step` lines on from `sel` (round the list; `n - 1` is one back), over the
@@ -132,13 +134,13 @@ impl App {
     }
 
     /// Left or Right on line `k` of a list, or a click on the arrows round its value: its
-    /// setting one step down (`-`) or up (`+`), see `game_lists::ADJUST`; other lines stay.
+    /// setting one step down (`-`) or up (`+`), see `hud::lists::ADJUST`; other lines stay.
     pub(crate) fn chooser_adjust(&mut self, k: usize, dir: &str) {
         let Some(action) = self
             .admin_list
             .as_ref()
             .and_then(|l| l.get(k))
-            .and_then(|l| l.1.strip_suffix(crate::game_lists::ADJUST))
+            .and_then(|l| l.1.strip_suffix(crate::hud::lists::ADJUST))
             .map(|a| format!("{a} {dir}"))
         else {
             return;
@@ -171,7 +173,7 @@ impl App {
         }
         if code.len() == 4 && code.chars().all(|c| c.is_ascii_alphabetic()) {
             self.settings.metar_station = code.clone();
-            crate::game_lists::remember_setting("metar_station", &code);
+            crate::hud::lists::remember_setting("metar_station", &code);
             self.metar_rx = None;
             self.metar_once = false;
             self.metar_next = 0.0;
@@ -235,7 +237,7 @@ impl App {
 
     /// A settings window (options, vehicle, world) is open.
     pub(crate) fn settings_list(&self) -> bool {
-        use crate::game_lists::ListKind;
+        use crate::hud::lists::ListKind;
         self.chooser.is_some()
             && matches!(
                 self.list_kind,
@@ -272,7 +274,7 @@ impl App {
 
     /// Show page `i` of the open settings window.
     pub(crate) fn settings_tab(&mut self, i: usize) {
-        use crate::game_lists::ListKind;
+        use crate::hud::lists::ListKind;
         let next = match self.list_kind.as_ref() {
             Some(ListKind::Options(_)) => ListKind::Options(i),
             Some(ListKind::Vehicle(_)) => ListKind::Vehicle(i),
@@ -293,7 +295,7 @@ impl App {
         let Some(kind) = self.list_kind.clone() else {
             return;
         };
-        let Some((titles, at)) = crate::game_lists::page_titles(self, &kind) else {
+        let Some((titles, at)) = crate::hud::lists::page_titles(self, &kind) else {
             return;
         };
         let n = titles.len().max(1);
@@ -309,14 +311,14 @@ impl App {
         let Some(kind) = self.list_kind.clone() else {
             return;
         };
-        let n = crate::game_lists::page_titles(self, &kind)
+        let n = crate::hud::lists::page_titles(self, &kind)
             .map(|t| t.0.len())
             .unwrap_or(0);
         if i < n {
             self.settings_tab(i);
         } else {
             self.key_capture = None;
-            if let Some(parent) = crate::game_lists::run(self, &kind, "back") {
+            if let Some(parent) = crate::hud::lists::run(self, &kind, "back") {
                 self.menu_top = None;
                 self.open_list(parent);
             } else {
@@ -326,8 +328,8 @@ impl App {
     }
 
     /// Change the value of line `k` of the open settings window as `mv` says.
-    pub(crate) fn list_adjust(&mut self, k: usize, mv: crate::game_lists::Move) {
-        use crate::game_lists::ListKind;
+    pub(crate) fn list_adjust(&mut self, k: usize, mv: crate::hud::lists::Move) {
+        use crate::hud::lists::ListKind;
         let Some(kind) = self.list_kind.clone() else {
             return;
         };
@@ -350,12 +352,12 @@ impl App {
         else {
             return;
         };
-        let slider = crate::game_lists::is_slider(action.split(' ').next().unwrap_or(""));
-        crate::game_lists::LIST_DIRTY.store(false, std::sync::atomic::Ordering::Relaxed);
-        if let Some(next) = crate::game_lists::run_move(self, &kind, &action, mv) {
+        let slider = crate::hud::lists::is_slider(action.split(' ').next().unwrap_or(""));
+        crate::hud::lists::LIST_DIRTY.store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Some(next) = crate::hud::lists::run_move(self, &kind, &action, mv) {
             // (a slider dragged sends the same value many times over: the list stays)
             if slider
-                && !crate::game_lists::LIST_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed)
+                && !crate::hud::lists::LIST_DIRTY.swap(false, std::sync::atomic::Ordering::Relaxed)
             {
                 return;
             }
@@ -373,7 +375,7 @@ impl App {
     /// along it from the left.
     /// True when the control is a slider (which the mouse button then holds: it follows the cursor).
     pub(crate) fn list_click(&mut self, k: usize, fx: f32) -> bool {
-        use crate::game_lists::Move;
+        use crate::hud::lists::Move;
         let Some(action) = self
             .admin_list
             .as_ref()
@@ -383,7 +385,7 @@ impl App {
             return false;
         };
         let verb = action.split(' ').next().unwrap_or("");
-        let slider = crate::game_lists::is_slider(verb);
+        let slider = crate::hud::lists::is_slider(verb);
         let mv = if slider {
             Move::To(fx)
         } else if fx < 0.5 {
@@ -404,7 +406,7 @@ impl App {
         let Some((_, action)) = d.items.get(i).cloned() else {
             return;
         };
-        crate::game_lists::dropdown_apply(self, &action);
+        crate::hud::lists::dropdown_apply(self, &action);
         if let Some(kind) = self.list_kind.clone() {
             self.open_list(kind);
             let last = self
@@ -419,7 +421,7 @@ impl App {
     /// A line's tours are open, with the stops of the tour chosen beside them.
     pub(crate) fn tours_list(&self) -> bool {
         self.chooser.is_some()
-            && matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
+            && matches!(self.list_kind, Some(crate::hud::lists::ListKind::Tours(..)))
     }
 
     /// The trip of the chosen tour leaving before (or after) the one chosen, as OMSI's
@@ -427,8 +429,8 @@ impl App {
     pub(crate) fn trip_step(&mut self, forward: bool) {
         let k = self.chooser.unwrap_or(0);
         let (Some((line, tour)), Some((_, _, trip, trips))) = (
-            crate::game_lists::tour_at(self, k),
-            crate::game_lists::tour_choice(self, k),
+            crate::hud::lists::tour_at(self, k),
+            crate::hud::lists::tour_choice(self, k),
         ) else {
             return;
         };
@@ -439,7 +441,7 @@ impl App {
         };
         if to != trip {
             self.pane_scroll = None;
-            self.list_kind = Some(crate::game_lists::ListKind::Tours(
+            self.list_kind = Some(crate::hud::lists::ListKind::Tours(
                 line,
                 Some((tour, 0, to)),
             ));
@@ -450,8 +452,8 @@ impl App {
     pub(crate) fn tour_stop_step(&mut self, forward: bool) {
         let k = self.chooser.unwrap_or(0);
         let (Some((line, tour)), Some((n, at, trip, _))) = (
-            crate::game_lists::tour_at(self, k),
-            crate::game_lists::tour_choice(self, k),
+            crate::hud::lists::tour_at(self, k),
+            crate::hud::lists::tour_choice(self, k),
         ) else {
             return;
         };
@@ -461,7 +463,7 @@ impl App {
             at.saturating_sub(1)
         };
         self.pane_scroll = None;
-        self.list_kind = Some(crate::game_lists::ListKind::Tours(
+        self.list_kind = Some(crate::hud::lists::ListKind::Tours(
             line,
             Some((tour, to, trip)),
         ));
@@ -477,20 +479,20 @@ impl App {
             return;
         }
         let (Some((line, tour)), Some((n, at, trip, _))) = (
-            crate::game_lists::tour_at(self, k),
-            crate::game_lists::tour_choice(self, k),
+            crate::hud::lists::tour_at(self, k),
+            crate::hud::lists::tour_choice(self, k),
         ) else {
             return;
         };
         if i < n {
             self.pane_scroll = None;
-            self.list_kind = Some(crate::game_lists::ListKind::Tours(
+            self.list_kind = Some(crate::hud::lists::ListKind::Tours(
                 line,
                 Some((tour, i, trip)),
             ));
             return;
         }
-        crate::game_lists::start_duty_at(self, &line, &tour, trip, at);
+        crate::hud::lists::start_duty_at(self, &line, &tour, trip, at);
         self.chooser = None;
         self.admin_list = None;
         self.list_kind = None;
@@ -512,7 +514,7 @@ impl App {
                 .and_then(|l| l.get(k))
                 .map(|l| l.1.clone())
                 .unwrap_or_default();
-            if let Some(d) = crate::game_lists::dropdown_for(self, k, &id) {
+            if let Some(d) = crate::hud::lists::dropdown_for(self, k, &id) {
                 self.dropdown = Some(d);
                 self.dd_reveal();
                 return;
@@ -525,11 +527,11 @@ impl App {
             let kind = self
                 .list_kind
                 .take()
-                .unwrap_or(crate::game_lists::ListKind::Admin);
+                .unwrap_or(crate::hud::lists::ListKind::Admin);
             let Some((_, action)) = list.get(k).cloned() else {
                 return;
             };
-            match crate::game_lists::run(self, &kind, &action) {
+            match crate::hud::lists::run(self, &kind, &action) {
                 Some(next) => {
                     let keep = next == kind;
                     if !keep {
@@ -550,12 +552,12 @@ impl App {
                 None if action != "back"
                     && matches!(
                         kind,
-                        crate::game_lists::ListKind::Tours(..)
-                            | crate::game_lists::ListKind::Numbers
-                            | crate::game_lists::ListKind::Destinations
-                            | crate::game_lists::ListKind::RouteNumbers
-                            | crate::game_lists::ListKind::Hofs
-                            | crate::game_lists::ListKind::Spots
+                        crate::hud::lists::ListKind::Tours(..)
+                            | crate::hud::lists::ListKind::Numbers
+                            | crate::hud::lists::ListKind::Destinations
+                            | crate::hud::lists::ListKind::RouteNumbers
+                            | crate::hud::lists::ListKind::Hofs
+                            | crate::hud::lists::ListKind::Spots
                     ) =>
                 {
                     self.close_game_menu()
@@ -569,7 +571,7 @@ impl App {
         let Some((_, bus)) = self.vehicle_list.get(k).cloned() else {
             return;
         };
-        self.open_list(crate::game_lists::ListKind::PlaceLivery(bus));
+        self.open_list(crate::hud::lists::ListKind::PlaceLivery(bus));
     }
 
     /// How many lines the menu shows now (the chooser's list, else the game menu's).
@@ -581,7 +583,7 @@ impl App {
     }
 }
 
-impl crate::app::App {
+impl crate::core::app::App {
     /// The game menu's lines for this session: back to the own bus while walking about,
     /// the administration for a host and a server's admin. What can be set is behind
     /// "Options", "Vehicle options" and "World options".

@@ -182,7 +182,7 @@ impl PageFrame {
     }
 }
 
-impl crate::app::App {
+impl crate::core::app::App {
     /// Whether the new interface draws the open list (a page behind the Esc menu): a list is
     /// open from the Esc menu.
     pub(crate) fn new_pages_active(&self) -> bool {

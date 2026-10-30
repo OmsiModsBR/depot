@@ -67,18 +67,18 @@ pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
     }
 }
 
-use crate::app::{App, FrozenMirrors};
+use crate::core::app::{App, FrozenMirrors};
+use crate::core::startup::process_cpu_seconds;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
+use crate::hud::nav;
 use crate::humans;
 use crate::lights;
-use crate::nav;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
 use crate::puddles;
 use crate::quit;
-use crate::startup::process_cpu_seconds;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather_setup::{
@@ -125,7 +125,7 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 self.finish_vr_nav_edit();
                 self.finish_session();
-                crate::platform::exit(event_loop);
+                crate::core::platform::exit(event_loop);
             }
             WindowEvent::Resized(size) => {
                 if let (Some(s), Some(r)) = (self.surface.as_mut(), self.renderer.as_ref()) {
@@ -207,7 +207,7 @@ impl ApplicationHandler for App {
                     && !self.menu_edit_icao
                     && matches!(
                         self.list_kind,
-                        Some(crate::game_lists::ListKind::RouteNumbers)
+                        Some(crate::hud::lists::ListKind::RouteNumbers)
                     )
                 {
                     if let Some(text) = event.text.as_deref() {
@@ -373,13 +373,13 @@ impl ApplicationHandler for App {
                 if (!self.vr_active() || self.player.is_none())
                     && matches!(
                         self.list_kind,
-                        Some(crate::game_lists::ListKind::Options(_))
+                        Some(crate::hud::lists::ListKind::Options(_))
                     )
                     && self.admin_list.as_ref().is_some_and(|rows| {
                         rows.iter().any(|(_, action)| action.starts_with("vr_nav_"))
                     })
                 {
-                    self.open_list(crate::game_lists::ListKind::Options(0));
+                    self.open_list(crate::hud::lists::ListKind::Options(0));
                 }
                 #[cfg(windows)]
                 self.poll_vr_cursor_position();
@@ -428,7 +428,7 @@ impl ApplicationHandler for App {
                     } else {
                         log::error!("ending the session: the graphics device was lost ({why})");
                     }
-                    crate::platform::exit(event_loop);
+                    crate::core::platform::exit(event_loop);
                     return;
                 }
                 let desktop_vsync = self.settings.vsync && !self.vr_active();
@@ -560,7 +560,7 @@ impl ApplicationHandler for App {
                                 m.maps.len(),
                                 m.vehicles.len()
                             );
-                            crate::platform::exit(event_loop);
+                            crate::core::platform::exit(event_loop);
                         }
                     }
                     let lines = m.lines();
@@ -581,7 +581,7 @@ impl ApplicationHandler for App {
                             // ("DirectX9 (D3D9Ex)": drawn into a stand-in, shown by its device)
                             wgpu::CurrentSurfaceTexture::Occluded if s.is_shown_elsewhere() => (
                                 None,
-                                Some(crate::app::stand_in_view(
+                                Some(crate::core::app::stand_in_view(
                                     &mut self.stand_in,
                                     r,
                                     s.config.width,
@@ -1299,7 +1299,7 @@ impl ApplicationHandler for App {
                         );
                         if let Some(cam) = self.camera.as_ref() {
                             // (the seat kept for this bus, when one is: see `bus_seats`)
-                            let bus = crate::game_lists::seat_key(p);
+                            let bus = crate::hud::lists::seat_key(p);
                             if bus != self.seat_bus {
                                 if let Some((seat, pitch)) = crate::settings::bus_seats::of(&bus) {
                                     self.settings.seat = seat;
@@ -1574,7 +1574,7 @@ impl ApplicationHandler for App {
                                 let mut started = false;
                                 if let Some(to) = target.as_ref() {
                                     if (entering || left)
-                                        && crate::app::CAM_BLEND_SECS > 0.0
+                                        && crate::core::app::CAM_BLEND_SECS > 0.0
                                         && self.settings.driverview_smooth
                                     {
                                         let from = if entering {
@@ -1614,22 +1614,23 @@ impl ApplicationHandler for App {
                                         // adds no more than a 30th of a second)
                                         if !started {
                                             self.cam_blend.t += dt
-                                                .min(crate::app::CAM_BLEND_MAX_DT)
-                                                / crate::app::CAM_BLEND_SECS;
+                                                .min(crate::core::app::CAM_BLEND_MAX_DT)
+                                                / crate::core::app::CAM_BLEND_SECS;
                                         }
                                         if self.cam_blend.t >= 1.0 {
                                             // (the hand-over to the plain camera: the glide ends exactly on it (k = 1),
                                             // so the curve's tail is not left over to twitch; only what the two ways
                                             // of making the camera might still differ in is eased out)
                                             let mut last = p.driver_world(
-                                                &crate::app::blend_local(from, to, 1.0),
+                                                &crate::core::app::blend_local(from, to, 1.0),
                                             );
                                             finish(&mut last);
-                                            self.cam_blend.carry =
-                                                Some(crate::app::CamCarry::between(&last, &cam));
+                                            self.cam_blend.carry = Some(
+                                                crate::core::app::CamCarry::between(&last, &cam),
+                                            );
                                             self.cam_blend.from = None;
                                         } else {
-                                            let mixed = crate::app::blend_local(
+                                            let mixed = crate::core::app::blend_local(
                                                 from,
                                                 to,
                                                 self.cam_blend.progress(),
@@ -2547,7 +2548,7 @@ impl ApplicationHandler for App {
                     }
                     if let Some(wt) = &self.weather {
                         let (kind, rate) = precip_of(wt);
-                        self.rain.set(kind, rate);
+                        self.rain.set(kind, rate, self.settings.dx9_snowfall());
                         // [wind] direction (deg) speed (m/s)
                         let wind = Vec3::new(
                             wt.wind.0.to_radians().sin() * wt.wind.1,
@@ -2749,10 +2750,24 @@ impl ApplicationHandler for App {
                 } else {
                     None
                 };
+                // the arrow of a two-tier information bar says what it does after a second
+                let over_chevron = self
+                    .ui
+                    .as_ref()
+                    .and_then(|u| u.hits.info_chevron)
+                    .is_some_and(|r| {
+                        let (x, y) = self.hud_cursor();
+                        x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]
+                    });
+                self.info_chev_hover = if over_chevron {
+                    self.info_chev_hover + dt
+                } else {
+                    0.0
+                };
                 // the interface over the picture
                 // (the pages of an open settings window)
                 let menu_tabs = match self.list_kind.as_ref() {
-                    Some(k) if self.chooser.is_some() => crate::game_lists::page_titles(self, k),
+                    Some(k) if self.chooser.is_some() => crate::hud::lists::page_titles(self, k),
                     _ => None,
                 };
                 if let (true, Some(r), Some(scene)) = (
@@ -2777,6 +2792,18 @@ impl ApplicationHandler for App {
                     let names = describe::names(&self.args.root, &self.settings.language);
                     // next to the cursor (`ui`), when the setting asks for it
                     let tooltip = self.hover.as_ref().map(|h| names.control(h));
+                    let tooltip = if over_chevron && self.info_chev_hover >= 1.0 {
+                        Some(
+                            if self.info_collapsed {
+                                "Show details"
+                            } else {
+                                "Hide details"
+                            }
+                            .to_string(),
+                        )
+                    } else {
+                        tooltip
+                    };
                     // the object editor's keys, while it is on (one quiet line)
                     // the mirror editor's keys and the panel under the cursor, while it is on
                     lines.extend(mirror_help);
@@ -3043,7 +3070,7 @@ impl ApplicationHandler for App {
                                 }
                                 None => (Vec::new(), None),
                             };
-                        let (menu_kind, menu_head, menu_preview) = crate::game_lists::menu_extras(
+                        let (menu_kind, menu_head, menu_preview) = crate::hud::lists::menu_extras(
                             self.list_kind.as_ref(),
                             self.admin_list.as_deref(),
                             chooser_sel,
@@ -3128,6 +3155,9 @@ impl ApplicationHandler for App {
                                         metres: self.career.metres,
                                         limit: speed_limit,
                                         items: self.settings.info_items,
+                                        labels: self.settings.info_bar_labels,
+                                        low_fuel: self.settings.info_bar_lowfuel,
+                                        collapsed: self.info_collapsed,
                                         fps: self
                                             .settings
                                             .info_bar_fps
@@ -3345,7 +3375,7 @@ impl ApplicationHandler for App {
                         {
                             (
                                 None,
-                                Some(crate::app::stand_in_view(
+                                Some(crate::core::app::stand_in_view(
                                     &mut self.stand_in,
                                     r,
                                     s.config.width,
@@ -3794,7 +3824,7 @@ impl ApplicationHandler for App {
                                 );
                             }
                             finish = true;
-                            crate::platform::exit(event_loop);
+                            crate::core::platform::exit(event_loop);
                         }
                     }
                     self.total_frames += 1;
@@ -3888,7 +3918,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
-        crate::game_lists::flush_settings(false);
+        crate::hud::lists::flush_settings(false);
         if let Some(w) = &self.window {
             w.request_redraw();
         }
@@ -3899,7 +3929,7 @@ impl ApplicationHandler for App {
         if let Some(sig) = quit::requested() {
             log::info!("{} received: ending the session", quit::signal_name(sig));
             self.finish_session();
-            crate::platform::exit(event_loop);
+            crate::core::platform::exit(event_loop);
         }
     }
 
@@ -3907,7 +3937,7 @@ impl ApplicationHandler for App {
     /// quit signal): the session is written and the LAN peers hear that we left, before
     /// anything else is torn down (Cmd+Q ends the process without returning from the loop).
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        crate::game_lists::flush_settings(true);
+        crate::hud::lists::flush_settings(true);
         self.finish_session();
         log::info!("game ends");
     }
@@ -4247,14 +4277,14 @@ impl App {
                     }
 
                     // (a click on a tour shows its stops: the trip starts with the button)
-                    if matches!(self.list_kind, Some(crate::game_lists::ListKind::Tours(..)))
-                        && crate::game_lists::tour_at(self, k).is_some()
+                    if matches!(self.list_kind, Some(crate::hud::lists::ListKind::Tours(..)))
+                        && crate::hud::lists::tour_at(self, k).is_some()
                     {
                         self.chooser = Some(k);
-                        if let Some(crate::game_lists::ListKind::Tours(line, _)) =
+                        if let Some(crate::hud::lists::ListKind::Tours(line, _)) =
                             self.list_kind.clone()
                         {
-                            self.list_kind = Some(crate::game_lists::ListKind::Tours(line, None));
+                            self.list_kind = Some(crate::hud::lists::ListKind::Tours(line, None));
                         }
                         return;
                     }
@@ -4398,6 +4428,10 @@ pub enum InfoMode {
     Essential,
     /// The full bar with the items the player switched off left out.
     Custom,
+    /// The driving items in one row, small readouts under them that fold away.
+    TwoTier,
+    /// The driving items on a plate of their own, the readouts on a strip under it.
+    Split,
 }
 
 impl InfoMode {
@@ -4406,6 +4440,8 @@ impl InfoMode {
             "compact" => InfoMode::Compact,
             "essential" => InfoMode::Essential,
             "custom" => InfoMode::Custom,
+            "twotier" => InfoMode::TwoTier,
+            "split" => InfoMode::Split,
             _ => InfoMode::Full,
         }
     }
@@ -4428,6 +4464,12 @@ pub struct InfoData<'a> {
     pub fps: Option<(f32, Option<f32>)>,
     /// Which items the custom layout shows (`Settings::info_items`).
     pub items: [bool; 9],
+    /// The two-tier layouts: names above the readouts of the second tier.
+    pub labels: bool,
+    /// The two-tier layouts: a tank under 15 % is marked.
+    pub low_fuel: bool,
+    /// The two-tier layouts: the second tier is folded away.
+    pub collapsed: bool,
 }
 
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
@@ -4436,6 +4478,9 @@ pub struct InfoData<'a> {
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
 pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
     use crate::hud::{InfoItem, InfoTone};
+    if matches!(mode, InfoMode::TwoTier | InfoMode::Split) {
+        return tiered_bar(d, mode == InfoMode::Split, bottom);
+    }
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
     // (the custom layout is the full one less what is switched off, item by item: the time,
@@ -4570,7 +4615,148 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
         };
         groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
     }
-    hud::InfoBar { groups, bottom }
+    hud::InfoBar {
+        groups,
+        bottom,
+        ..Default::default()
+    }
+}
+
+/// The two-tier layouts: the driving items (time, speed and limit, the line and where it
+/// goes, the next stop with the delay) in the first tier, small readouts (trip, odometer,
+/// temperatures, passengers, the tank with its meter, the frame rate) in the second, which
+/// the arrow folds away. `split` puts the second tier on a plate of its own.
+fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> hud::InfoBar {
+    use crate::hud::{InfoCell, InfoItem, InfoTone};
+    let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
+    let dim = |t: &str| InfoItem::new(t, InfoTone::Dim);
+    let t = d.clock.time;
+    let mut groups: Vec<Vec<InfoItem>> = vec![vec![plain(format!(
+        "{:02}:{:02}:{:02}",
+        ((t / 3600.0) as i64).rem_euclid(24),
+        ((t % 3600.0) / 60.0) as i64,
+        (t % 60.0) as i64
+    ))]];
+    let mut cells: Vec<InfoCell> = Vec::new();
+    // (a readout: its name above it when the names are on, else the name folded into the text)
+    let cell = |name: &str, with_name: String, bare: String| InfoCell {
+        items: if d.labels {
+            vec![dim(name), plain(bare)]
+        } else {
+            vec![plain(with_name)]
+        },
+        ..Default::default()
+    };
+    if let Some(p) = d.player {
+        let mut speed = vec![
+            plain(format!("{:.0}", p.vehicle.motion().velocity_kmh().abs())),
+            dim("km/h"),
+        ];
+        if let Some(limit) = d.limit {
+            speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit));
+        }
+        groups.push(speed);
+        if let Some(duty) = d.duty {
+            if let Some(trip) = duty.trips.get(duty.trip_index) {
+                let delay = p.vehicle.host.tt_delay;
+                let delay_item = InfoItem::new(
+                    format!(
+                        "{}{}:{:02}",
+                        if delay < 0.0 { "−" } else { "+" },
+                        (delay.abs() / 60.0) as i64,
+                        (delay.abs() % 60.0) as i64
+                    ),
+                    if delay > 60.0 {
+                        InfoTone::Late
+                    } else if delay < -60.0 {
+                        InfoTone::Early
+                    } else {
+                        InfoTone::Plain
+                    },
+                );
+                let line = if trip.line.trim().is_empty() {
+                    duty.line.trim()
+                } else {
+                    trip.line.trim()
+                };
+                let mut line_group = vec![InfoItem::raw(line, InfoTone::Badge)];
+                if !trip.terminus.trim().is_empty() {
+                    line_group.push(InfoItem::raw(trip.terminus.trim(), InfoTone::Plain));
+                }
+                groups.push(line_group);
+                let mut next = Vec::new();
+                if let Some(s) = trip.stops.get(duty.next_stop) {
+                    next.push(InfoItem::raw(
+                        format!("{} {}", omsi_ui::tr("next:"), s.name.trim()),
+                        InfoTone::Plain,
+                    ));
+                }
+                next.push(delay_item);
+                groups.push(next);
+            }
+        }
+        let trip = distance_driven(d.metres);
+        cells.push(cell("Trip", trip.clone(), trip));
+        if let Some(km) = p.vehicle.var("kmcounter_km").filter(|v| v.is_finite()) {
+            let km = km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0;
+            cells.push(cell(
+                "Odometer",
+                odometer_reading(km),
+                format!("{:.1} km", km.max(0.0)),
+            ));
+        }
+        let (outside, inside) = vehicle_temperatures(p);
+        cells.push(cell(
+            "Outside / cabin",
+            format!("EXT {outside:.0} °C / INT {inside:.0} °C"),
+            format!("{outside:.0} °C / {inside:.0} °C"),
+        ));
+        if let Some(n) = d.passengers {
+            cells.push(cell(
+                "Passengers",
+                passengers_aboard(n, d.capacity),
+                match d.capacity {
+                    Some(c) => format!("{n} / {c}"),
+                    None => n.to_string(),
+                },
+            ));
+        }
+        if let Some(tank) = p.vehicle.var("tank_percent").filter(|v| v.is_finite()) {
+            let level = tank.clamp(0.0, 1.0);
+            let pct = format!("{:.0} %", (level * 100.0).round());
+            let low = d.low_fuel && level < 0.15;
+            let mut c = cell("Tank", format!("tank {pct}"), pct);
+            if low {
+                if let Some(v) = c.items.last_mut() {
+                    v.tone = InfoTone::Late;
+                }
+            }
+            c.meter = Some(level);
+            c.alert = low;
+            cells.push(c);
+        }
+    }
+    if let Some((fps, low)) = d.fps {
+        let text = match low {
+            Some(low) => format!("{fps:.0} fps   {} {low:.0}", omsi_ui::tr("1 % low")),
+            None => format!("{fps:.0} fps"),
+        };
+        cells.push(InfoCell {
+            items: vec![InfoItem::new(text, InfoTone::Fps(hud::fps_level(fps)))],
+            ..Default::default()
+        });
+    }
+    if d.collapsed {
+        cells.clear();
+    }
+    hud::InfoBar {
+        groups,
+        bottom,
+        tier2: cells,
+        split,
+        tiered: true,
+        collapsed: d.collapsed,
+    }
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.

@@ -398,6 +398,8 @@ const INFO_BAR_MODES: &[(&str, &str)] = &[
     ("compact", "Compact bar"),
     ("essential", "Essentials only"),
     ("custom", "Custom bar"),
+    ("twotier", "Two-tier bar"),
+    ("split", "Split bar"),
 ];
 const INFO_BAR_POSITIONS: &[(&str, &str)] = &[
     ("top", "Top of the screen"),
@@ -593,6 +595,27 @@ pub static OPTS: &[Opt] = &[
         "info_bar_fps",
         "Frame rate in the information bar",
         "Adds the frame rate and its 1 % low as the bar's last item",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_collapsed",
+        "Second tier starts folded away",
+        "In the Two-tier and Split layouts the lower readouts start hidden; the arrow beside the bar shows them",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_labels",
+        "Names in the second tier",
+        "Writes the name of each readout (Trip, Tank, ...) above its value in the Two-tier and Split layouts",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
+        "info_bar_lowfuel",
+        "Highlight a low tank",
+        "Turns the tank meter red and marks its readout when under 15 % in the Two-tier and Split layouts",
     ),
     toggle(
         GENERAL,
@@ -1010,6 +1033,14 @@ pub static OPTS: &[Opt] = &[
         "windy_trees",
         "Windy trees",
         "Leaves sway in the wind",
+    ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_snow",
+        "Snow",
+        "Snowflakes fall in snow weather",
     ),
     // Advanced graphics
     special(
@@ -2054,11 +2085,16 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "sun_glow" => fixed,
         "fov" => !triple,
         "triple_fov_deg" => triple,
+        // (the falling snow DirectX9 draws on request: the other APIs draw their own)
+        "dx9_snow" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
         k if k.starts_with("head_tracking_") => st.on("head_tracking"),
         k if k.starts_with("info_item_") => st.get("info_bar_mode").as_str() == Some("custom"),
+        "info_bar_collapsed" | "info_bar_labels" | "info_bar_lowfuel" => {
+            matches!(st.get("info_bar_mode").as_str(), Some("twotier" | "split"))
+        }
         "ui_dimming" => st.get("ui_background").as_str() == Some("scene"),
         _ => true,
     };

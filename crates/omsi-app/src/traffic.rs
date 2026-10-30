@@ -7421,7 +7421,8 @@ impl Traffic {
                                 ),
                             );
                         }
-                        ss.master = crate::startup::sound_gain(&crate::startup::SOUND_AI);
+                        ss.master =
+                            crate::core::startup::sound_gain(&crate::core::startup::SOUND_AI);
                         c.vehicle.host.snapshot_triggers =
                             ss.curve_triggers().into_iter().collect();
                         c.sounds = Some(ss);

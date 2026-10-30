@@ -128,7 +128,7 @@ impl Career {
         let (path, read) = if given.is_absolute() {
             (given.to_path_buf(), given.to_path_buf())
         } else {
-            let own = crate::startup::content_dir()
+            let own = crate::core::startup::content_dir()
                 .map(|c| c.join(rel))
                 .unwrap_or_else(|| omsi_cfg::resolve_path(root, rel));
             let read = if own.exists() {
