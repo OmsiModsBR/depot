@@ -421,6 +421,7 @@ pub mod settings {
             }
             text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
+            text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
             text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
             // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
             text.push_str(&format!("maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n", self.maintenance, self.ai_unsched_factor * 100.0, self.ai_max_scheduled, self.ai_max_random, self.ai_priority_scheduled, self.ai_max_parked, self.ai_max_humans, self.collision_vehicles as u8, self.collision_objects as u8, self.collision_pedestrians as u8, self.head_movement as u8, self.hands_in_cab as u8, self.alt_view as u8, self.precision_zoom as u8));
