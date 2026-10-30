@@ -3147,6 +3147,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["ui_dimming"] = json!(62);
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
+    // the glow around the sun (DirectX9 (D3D9Ex) only)
+    v["sun_glow"] = json!(true);
     // outside sounds heard from a cab go through a low-pass
     v["muffle_outside"] = json!(false);
     // OMSI's own options
@@ -3949,6 +3951,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ui_background" => v[&k] = json!(background_name(val)),
             "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
+            "sun_glow" => v[&k] = json!(b(val)),
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
             "time_speed" => {
@@ -4147,7 +4150,7 @@ pub fn save_settings(v: &Value) -> Result<()> {
 
 /// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
 /// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 22] = [
+pub const GRAPHICS_PROFILE_KEYS: [&str; 23] = [
     "graphics",
     "msaa",
     "render_scale",
@@ -4162,6 +4165,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 22] = [
     "reflections",
     "clouds",
     "windy_trees",
+    "sun_glow",
     "vsync",
     "max_fps",
     "view_distance",
@@ -4568,6 +4572,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         dimming_of(v.get("ui_dimming").unwrap_or(&Value::Null))
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
+    text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",

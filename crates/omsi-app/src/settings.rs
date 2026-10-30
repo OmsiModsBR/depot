@@ -232,6 +232,9 @@ pub struct Settings {
     /// Windy trees: the trees' foliage bends and sways in the weather's wind and its gusts
     /// (above the trunk only; with no wind nothing moves).
     pub windy_trees: bool,
+    /// The glow around the sun under "DirectX9 (D3D9Ex)" (OMSI 2's "Sun Glow"; the other
+    /// graphics APIs draw none).
+    pub sun_glow: bool,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -519,6 +522,7 @@ impl Settings {
             show_fps: false,
             clouds: true,
             windy_trees: true,
+            sun_glow: true,
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -882,6 +886,7 @@ impl Settings {
                 "show_fps" | "fps" => s.show_fps = b(v),
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
+                "sun_glow" => s.sun_glow = b(v),
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')

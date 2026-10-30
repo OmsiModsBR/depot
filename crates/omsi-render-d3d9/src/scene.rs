@@ -533,6 +533,8 @@ pub struct SceneSky {
     pub params: [f32; 4],
     /// The weather's clouds over the dome.
     pub clouds: SceneClouds,
+    /// The glow around the sun, drawn over the scene (the "Sun Glow" option).
+    pub sun_glow: bool,
 }
 
 /// The weather's clouds: one layer of the weather's cloud type, drawn over the sky dome.

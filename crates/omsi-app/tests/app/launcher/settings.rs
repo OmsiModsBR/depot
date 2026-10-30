@@ -26,6 +26,7 @@ const BEFORE: &[&str] = &[
     "shadow_blobs",
     "reflections",
     "clouds",
+    "sun_glow",
     "windy_trees",
     "fullscreen",
     "resolution",

@@ -195,6 +195,8 @@ pub struct FramePlan {
     /// The cloud layer: x the cover (0 none .. 1 closed), yz the drift with the wind in
     /// fractions of the picture's tile, w the layer's base height in metres.
     pub clouds: [f32; 4],
+    /// Whether the glow around the sun is wanted (the `sun_glow` setting).
+    pub sun_glow: bool,
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -242,6 +244,7 @@ pub(crate) fn plan_of(
             f.lighting.cloud_offset[1],
             f.lighting.cloud_height,
         ],
+        sun_glow: f.lighting.sun_glow,
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists

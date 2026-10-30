@@ -2234,6 +2234,7 @@ fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "reflections" => s.reflections,
         "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
+        "sun_glow" => s.sun_glow,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
         "texture_compression" => s.texture_compression,
@@ -2515,6 +2516,10 @@ fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String
         "windy_trees" => {
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
+        }
+        "sun_glow" => {
+            app.settings.sun_glow = on;
+            Some(("sun_glow", bit))
         }
         "fullscreen" => {
             app.settings.fullscreen = on;
@@ -3426,6 +3431,9 @@ fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
         limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
+        // (only "DirectX9 (D3D9Ex)" draws a sun glow)
+        switch_row(app, "sun_glow", "Sun glow", "The bright glow around the sun")
+            .filter(|_| app.output.backend() == crate::output::Backend::D3d9),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
     ]
         .into_iter()
