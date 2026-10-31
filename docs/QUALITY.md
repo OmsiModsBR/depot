@@ -134,7 +134,7 @@ that writes the file then sets the notice). Check on each renderer (Vulkan/DX12,
 
 1. Start a drive and press the screenshot key (or the Esc menu's Screenshot).
 2. Open the new file in `Screenshots/`: the top-left corner must show the scene only.
-3. With the information bar, minimap/navigator and Alt bar (and a window) open, the picture must hold the scene alone, none of the interface.
+3. With the information bar, minimap/navigator and Alt bar (and a window) open, the picture must hold the scene alone, none of the interface. (Vulkan/DX12 only: DirectX9 does not save the picture yet, see `crates/omsi-render-d3d9/README.md`.)
 4. Take two screenshots within 4 seconds: the second file must not show the first notice.
 5. The notice appears on screen in the frames after the capture, and also when the file
    could not be written ("Screenshot could not be saved: ...").

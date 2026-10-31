@@ -23,7 +23,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### In-game interface (Esc menu, Alt bar, windows, loading, trip report)
 
-- **Fixed.** A screenshot (Ctrl+Shift+P, F12 or Esc menu > Screenshot) holds the scene alone: the information bar, the minimap/navigator, the Alt bar, its windows and the other HUD are no longer drawn into the saved picture, on every renderer. The `Screenshot: <path>` notice stays out of it as before. (#612)
+- **Fixed.** A screenshot (Ctrl+Shift+P, F12 or Esc menu > Screenshot) holds the scene alone: the information bar, the minimap/navigator, the Alt bar, its windows and the other HUD are no longer drawn into the saved picture (Vulkan/DX12). The `Screenshot: <path>` notice stays out of it as before. DirectX9 (D3D9Ex) does not save screenshots yet. (#612)
 
 ### DirectX 9 renderer (D3D9Ex)
 
