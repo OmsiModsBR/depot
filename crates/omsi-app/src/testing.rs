@@ -253,9 +253,6 @@ pub mod launcher {
     pub mod mapview {
         pub use crate::launcher::mapview::*;
     }
-    pub mod original_ui {
-        pub use crate::launcher::original_ui::*;
-    }
     pub mod pages {
         pub use crate::launcher::pages::*;
     }
@@ -264,9 +261,6 @@ pub mod launcher {
     }
     pub mod settings {
         pub use crate::launcher::settings::*;
-    }
-    pub mod setup {
-        pub use crate::launcher::setup::*;
     }
     pub mod start {
         pub use crate::launcher::start::*;

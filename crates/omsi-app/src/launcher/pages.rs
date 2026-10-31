@@ -24,7 +24,7 @@ pub struct PagesView {
     pub capturing: Option<(usize, usize)>,
     pub drop_hover: bool,
     /// The Setup page's folders as edited, and its Content card (`setup`).
-    pub setup: super::setup::SetupView,
+    pub setup: omsi_launcher_ui::window::SetupView,
     /// The Controls page's tab: 0 the keyboard, 1 the game controllers.
     pub controls_tab: usize,
     /// The Settings page's section and search (`settings`).

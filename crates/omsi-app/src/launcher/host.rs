@@ -18,4 +18,17 @@ impl omsi_launcher_ui::Host for GameHost {
             None
         }
     }
+
+    fn open_url(&self, url: &str) {
+        crate::about::open_url(url);
+    }
+
+    fn open_dotnet_download(&self) {
+        crate::about::open_dotnet_download();
+    }
+
+    fn hide_content_from_gallery(&self) {
+        #[cfg(target_os = "android")]
+        crate::core::android::hide_content_from_gallery();
+    }
 }
