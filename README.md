@@ -92,57 +92,51 @@ each line is in the [changelog](CHANGELOG.md#030---2026-10-30).
 
 ### Vehicle physics and simulation
 
-*Project Depot has two aims side by side: configuration compatibility and 1:1 behaviour with OMSI 2, and a
-better simulation. It does not chase purely visual extras or features for their own sake; the improvements it
-makes are real increments in the simulation, recorded as such. Labels: **1:1 goal** for corrections towards the
-original, **deliberate improvement** where the Depot goes beyond it on purpose.*
+The project has two aims: configuration compatibility and 1:1 behaviour with OMSI 2, and a better simulation. It
+does not add purely visual extras or features for their own sake; the changes here are increments in the
+simulation. Labels: **1:1 goal** (towards the original) and **deliberate improvement** (beyond it, on purpose).
+Each entry has the label, the technical change and the effect to expect.
 
-Each item gives what you can feel at the wheel first, then the technical side.
-
-* **Articulated buses and trailers are real, separate bodies** *(deliberate improvement; since 0.2.52,
-  refined in 0.3.0)*.
-  *You feel:* the rear section has weight of its own and follows the front one through the joint instead of
-  being glued to it: it trails in a bend, settles over a crest or a dip, and the bellows stay joined to the rear
-  body instead of opening a gap on a grade. A pusher articulated bus no longer folds into an "L" when you turn
-  sharply at 30-50 km/h on uneven ground: the rear tyres grip only as much as the road gives and slide beyond it.
-  *Technically:* every section has its own mass, inertia, centre of gravity, axles, springs and brakes, held by a
-  joint that follows `[coupling_front_character]`; a coupled section with no such key is hitched by a free ball.
-* **Passengers weigh on the player's bus** *(deliberate improvement)*.
-  *You feel:* a full bus sits lower on its springs, gathers speed more slowly, takes longer to stop under the same
-  brakes and moves in pitch and roll like a heavier body; an empty one is livelier.
-  *Technically:* each person's `.hum` `[mass]` adds to the mass of the section they stand in, and the
-  damping follows the heavier body.
-* **Steering you can predict.** *Steering linearity* is on by default *(deliberate improvement)*.
-  *You feel:* the steering keys turn the wheel at the same steady pace whatever your speed, so a tap at 60 km/h
-  is as controllable as a tap at 10; with the switch off (Driving help) the keys turn it more slowly the faster
-  you go, as before. *Mouse steering* stops at the window's edge and keeps the wheel where the mouse left it
-  *(1:1 goal)*: moving the mouse on past the edge used to throw a bus into a slide and a spin at 30-50 km/h.
-  A bus whose file asks for more than 60° of lock now gets it and turns as tightly as its own file says.
-* **Inertia that matches the file.** *(1:1 goal)* `[momentofintertia]` is read in OMSI's y-up order for the
-  player's bus again.
-  *You feel:* a bus with a larger roll value no longer turns in too slowly and leans too far in a curve.
-* **AI vehicles drive like their own vehicles.** *(1:1 goal)*
-  *You feel:* traffic turns about the pivot, with the lock and the axle behaviour its `.bus` file gives, so a
-  long vehicle swings like a long vehicle and a tight-steering one turns tight, and at speed none of them
-  turns harder than 20 m/s² sideways; at a junction they still turn as far as the bend needs to keep to their lane.
-* **Ground under the lift and ramp.** A bus stopped under a canopy or a bridge measures the ground under its lift
-  and ramp, not the roof over them, so the lift can be lowered. **Saved situations** bring back destination
-  signs, IBIS screens and ticket-printer output.
-* **Sound.** *You hear:* door and window claps at the volume their curves gave them instead of falling silent the
-  frame after they start; no stray engine-shutdown sound when a bus arrives. A *Muffle outside sounds* low-pass
-  for the cab is available *(Depot addition, off by default)*. The `sound_levels` lint helps modders find what
-  is likely to sound wrong.
-* **No stutter when paused in traffic.** *You feel:* nothing, which is the point: the game no longer drops to a
-  few frames a second while paused with traffic around, because silent voices now end at zero.
-* **The refactor underneath.** The vehicle physics is one rigid-body model with a single bridge to the scripts'
-  variables; the older A/B switches and models are gone (and `--physics simple`). Bit-exact physics traces guard
-  it, so a change that moves a vehicle by a hair shows up in review.
-* **Other corrections:** `[mouseevent]` meshes behind another mesh can no longer be clicked through it;
+* **Articulated buses and trailers as separate bodies.** *Deliberate improvement; since 0.2.52, refined in 0.3.0.*
+  Technical: every section has its own mass, inertia, centre of gravity, axles, springs and brakes, held by a joint
+  that follows `[coupling_front_character]`; a section without that key is hitched by a free ball. In 0.3.0 the
+  rear tyres of a pusher bus grip only as much as the road gives, and the bellows angles are measured from the
+  rear section. Effect: the rear section trails the front one with its own weight; a pusher bus no longer folds
+  into an L at 30-50 km/h on uneven ground, and the bellows stay joined on grades, crests and dips.
+* **Passengers weigh on the player's bus.** *Deliberate improvement.* Technical: each person's `.hum` `[mass]`
+  adds to the mass of the section they stand in, and pitch and roll damping follow the heavier body. Effect: a
+  loaded bus sits lower on its springs, accelerates more slowly and needs a longer distance to stop.
+* **Steering linearity, on by default.** *Deliberate improvement.* Technical: the steering keys change the
+  curvature by the same amount every millisecond, whatever the speed; the switch is under Driving help, and a
+  saved setting is kept. Effect: a key press steers by the same amount at any speed (off, it steers less the
+  faster the bus goes).
+* **Mouse steering limits.** *1:1 goal.* Technical: the mouse steers no further than the window's edge allows at
+  the current speed and, with mouse steering switched off, the wheel stays where it was left. Effect: no slide or
+  spin from moving the mouse past the edge at speed, and no wheel that springs back to centre.
+* **Full lock from the file.** *1:1 goal.* Technical: a steering angle beyond 60° that a bus's `[inv_min_turnradius]`
+  and axle positions call for is no longer capped. Effect: such a bus turns as tightly as its file says.
+* **Moment of inertia order.** *1:1 goal.* Technical: `[momentofintertia]` is read in the y-up order (pitch, yaw,
+  roll) for the player's bus, as it already was for the AI's. Effect: a bus with a larger roll value no longer turns
+  in too slowly and leans too far in a curve.
+* **AI vehicles steer by their own `.bus` files.** *1:1 goal.* Technical: turning point from `[rot_pnt_long]`, lock
+  from `[inv_min_turnradius]`, every axle towards the centre of the turn, a limit of 20 m/s² sideways at speed (at
+  a junction they turn as far as the bend needs, up to 60°). Effect: traffic turns the way each vehicle's file
+  describes.
+* **Lift and ramp height; saved displays.** A bus stopped under a canopy or a bridge measures the ground under its
+  lift and ramp, so the lift can be lowered. A saved situation brings back destination signs, IBIS screens and
+  ticket-printer output.
+* **Sound.** Technical: a sound started by a trigger keeps the loudest volume its curves gave it; a bus arriving
+  no longer plays triggers fired before its sounds existed. Effect: door and window claps keep their volume. An
+  optional *Muffle outside sounds* low-pass for the cab is a Depot addition, off by default.
+* **Paused with traffic.** Technical: silent voices end at zero instead of decaying through very small numbers.
+  Effect: the game no longer drops to a few frames a second while paused in traffic.
+* **Refactor underneath.** One rigid-body model with a single bridge to the scripts' variables; the older A/B
+  switches, models and `--physics simple` are removed; bit-exact physics traces guard the result in review.
+* **Other corrections.** `[mouseevent]` meshes behind another mesh can no longer be clicked through it;
   `[animparent]` is no longer guessed (a wrong name is logged so the model can be fixed).
 
-*Not claimed:* these changes are supported by automated tests and traces. The ones marked 1:1 goal have not yet
-been shown identical to OMSI 2 in a recorded comparison in the game, and the deliberate improvements are by
-definition not meant to be. Describe them as such.
+Status: these changes are supported by automated tests and traces. Those labelled 1:1 goal have not yet been
+shown identical to OMSI 2 in a recorded comparison in the game; the deliberate improvements are not meant to be.
 
 ### Passengers and people
 
@@ -178,8 +172,8 @@ definition not meant to be. Describe them as such.
 
 * **How it was built.** A light program of its own (`omsi-launcher-ui`), no web view, that opens at once: it no
   longer builds the game's 3D renderer before showing its window (that used to take most of a minute on a slow
-  driver). Previews are drawn by the game's own renderer in a helper process, so a bus looks in the launcher
-  exactly as it does in the game.
+  driver). Previews are drawn by the game's own renderer in a helper process, so the launcher shows a bus
+  as the game draws it.
 * **Look and refinement.** Fluent greys, thin outline icons, rounded cards with hairline strokes, an optional
   accent (Amber by default, plus eight more), sidebar or top bar, plain-dark or scene background, rounded or square
   corners, light motion in Windows 11's timings (nothing bounces, nothing moves at rest), a tooltip after one
