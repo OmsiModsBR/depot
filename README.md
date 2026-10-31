@@ -81,6 +81,30 @@ achieved result.
 > plays on the maps, vehicles and other files of an installed OMSI 2 and **will not start without one**.
 
 
+## The launcher and the interface at a glance
+
+Project Depot opens a light launcher of its own, in the Windows 11 look (optionally a sidebar or a top bar,
+a plain dark or a scene background, rounded or square corners, and a choice of accent colours). The game
+starts only when you drive, and the launcher steps aside to the tray while it runs.
+
+| Page | What it is for |
+| --- | --- |
+| **Maps** | The start page: pick a map, a start point, a line and a tour, the date and the weather, and press **Start driving**. |
+| **Vehicles** | The library grouped by manufacturer and model, with a rendered preview, paints and details. |
+| **Timetable** | Planning a map's lines, tours and trips, with a map and a schematic view. |
+| **Profile** | Your driver, the hours and level, and the record of past drives. |
+| **Mods** | Installing `.zip` mods. |
+| **Controls** | Keyboard and game-controller bindings, with conflicts highlighted. |
+| **Diagnostics** | The OMSI 2 folder card, the **Integrity** check of maps and vehicles and the **AI traffic** tab. |
+| **Settings** and **Setup** | Graphics (including the optional DirectX 9 renderer), simulation, traffic and people, on-screen items, interface; and where OMSI 2 is. |
+
+In the game, the Esc menu, the Alt bar (a tap of Alt), the *Add vehicle* window, the end-of-trip report, the
+information bar (Shift+Y), the navigator and the city map (Shift+M) share the same look.
+
+<!-- screenshots to add here, from the 0.3.0 release (docs/images/): launcher-maps, launcher-vehicles,
+     launcher-timetable, diagnostics-integrity, settings-graphics-dx9, ingame-esc-menu, ingame-alt-bar,
+     ingame-info-bar, ingame-city-map -->
+
 ## Download
 
 Project Depot is built and published for **Windows x64 only**. The current release is on the
