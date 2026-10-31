@@ -89,7 +89,9 @@ pub fn card(ui: &mut Ui, r: Rect, root: &Path, game_runs: bool) -> f32 {
             Align::Left,
         );
         // the line under the name: why it cannot be switched, when it cannot
-        let (note, nc) = if p.locked {
+        // (OmsiLaunch's own, switched off by hand, may only be switched back on)
+        let fixed = p.locked && p.on;
+        let (note, nc) = if fixed {
             (omsi_ui::tr("Always on").into_owned(), TEXT_DIM)
         } else if p.twin {
             (
@@ -114,7 +116,7 @@ pub fn card(ui: &mut Ui, r: Rect, root: &Path, game_runs: bool) -> f32 {
             );
         }
         let ctrl = Rect::new(r.right() - 16.0 - cw, y + (ROW - 32.0) * 0.5, cw, 32.0);
-        if p.locked {
+        if fixed {
             ui.icon(
                 "lock",
                 Vec2::new(ctrl.right() - 20.0, ctrl.center().y),
@@ -149,7 +151,7 @@ pub fn card(ui: &mut Ui, r: Rect, root: &Path, game_runs: bool) -> f32 {
             );
         } else {
             let mut v = p.on;
-            if ui.toggle(&format!("omsi2-plugin-{k}"), ctrl, &mut v, "") {
+            if ui.toggle(&format!("omsi2-plugin-{k}"), ctrl, &mut v, "") && (v || !p.locked) {
                 flip = Some((p.name.clone(), v));
             }
             ui.tooltip(
