@@ -27,7 +27,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - **Added** Diagnostics for #613 (traffic and people not getting denser with every option at its
   maximum): with `RUST_LOG=debug`, `~/.depot/game.log` gets one `traffic density:` line and one
   `crowd:` line every 10 seconds, showing how each population target is derived from the start
-  dialog count, the options and the map. Nothing about the population itself changes. (#PR)
+  dialog count, the options and the map. Nothing about the population itself changes. (#614)
 
 ### DirectX 9 renderer (D3D9Ex)
 
