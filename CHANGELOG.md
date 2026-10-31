@@ -27,7 +27,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Launcher
 
-- **Fixed.** The Setup page's "Game program" line, when the program is found next to the launcher, now shows the running game's version (the same one Diagnostics shows) instead of `0.1.0`. Checked by an automated test only. (#PR)
+- **Fixed.** The Setup page's "Game program" line, when the program is found next to the launcher, now shows the running game's version (the same one Diagnostics shows) instead of `0.1.0`. Checked by an automated test only. (#617)
 
 ## 0.3.0 - 2026-10-30
 
