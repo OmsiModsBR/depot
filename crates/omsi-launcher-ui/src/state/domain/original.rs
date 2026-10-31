@@ -4,6 +4,7 @@
 use super::super::interface::output::oe;
 use oe::detect::{EngineStatus, Integrity};
 use oe::install::{InstallPlan, ReleaseInfo, RemovePlan};
+use oe::modules::{ModuleDef, ModuleRemovePlan};
 use oe::{Engine, OriginalEngineConfig};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
@@ -33,6 +34,8 @@ pub enum Event {
     Downloaded(u64, Result<(Arc<Vec<u8>>, InstallPlan), String>),
     Installed(Result<String, String>),
     Removed(Result<RemovePlan, String>),
+    /// A module's files taken away (`Original::module` names which).
+    ModuleRemoved(Result<ModuleRemovePlan, String>),
     Latest(Result<ReleaseInfo, String>),
     /// The answer of a start: the running game, or why there is none.
     Started(Result<oe::session::Running, oe::start::StartError>),
@@ -61,6 +64,8 @@ pub enum Flow {
     Installing,
     /// Removal needs a confirmation too.
     ConfirmRemove(RemovePlan),
+    /// The same for a module: the files Depot placed for it.
+    ConfirmModuleRemove(ModuleRemovePlan),
     Removing,
     Failed(String),
 }
@@ -81,6 +86,8 @@ pub struct Original {
     pub starting: bool,
     /// The original game this launcher started, while it runs.
     pub run: Option<oe::session::Running>,
+    /// What the dialog installs or removes: a module, or (None) OmsiLaunch itself.
+    pub module: Option<&'static ModuleDef>,
 }
 
 impl Default for Original {
@@ -97,6 +104,7 @@ impl Default for Original {
             checking: false,
             starting: false,
             run: None,
+            module: None,
         }
     }
 }
@@ -124,6 +132,11 @@ impl Original {
         } else {
             Engine::Depot
         }
+    }
+
+    /// The name the install and removal dialogs speak of.
+    pub fn target_name(&self) -> &'static str {
+        self.module.map_or("OmsiLaunch", |m| m.name)
     }
 
     pub fn busy(&self) -> bool {

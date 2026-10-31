@@ -350,21 +350,49 @@ fn engine_dialog_content(
         true,
         "Closes this window; nothing is changed.",
     );
+    // (OmsiLaunch's own texts, or a module's: its name, repository and licence)
+    let module = state.original.module;
+    let name = state.original.target_name();
+    let (repo, license) = module.map_or((REPO, LICENSE), |m| (m.repo, m.license));
+    let title_install = match module {
+        Some(m) => tr("Install %{name}").replace("%{name}", m.name),
+        None => tr("Install OmsiLaunch"),
+    };
+    let title_remove = match module {
+        Some(m) => tr("Remove %{name}").replace("%{name}", m.name),
+        None => tr("Remove OmsiLaunch"),
+    };
     match &state.original.flow {
         Flow::Looking => (
-            tr("Install OmsiLaunch"),
-            vec![(tr("Looking for the newest OmsiLaunch release…"), 13.0, TEXT_DIM, false)],
+            title_install,
+            vec![(
+                match module {
+                    Some(m) => tr("Looking for the newest %{name} release…").replace("%{name}", m.name),
+                    None => tr("Looking for the newest OmsiLaunch release…"),
+                },
+                13.0,
+                TEXT_DIM,
+                false,
+            )],
             vec![cancel],
         ),
         Flow::Offer { release, sha } => (
-            tr("Install OmsiLaunch"),
+            title_install,
             vec![
                 (tr("Version %{version}").replace("%{version}", &release.version), 15.0, TEXT, true),
-                (tr("From the official release of github.com/%{repo}.").replace("%{repo}", REPO), 13.0, TEXT_DIM, false),
-                (tr("License: %{license}. It is a separate program: Depot does not include or change it.").replace("%{license}", LICENSE), 13.0, TEXT_DIM, false),
+                (tr("From the official release of github.com/%{repo}.").replace("%{repo}", repo), 13.0, TEXT_DIM, false),
+                (tr("License: %{license}. It is a separate program: Depot does not include or change it.").replace("%{license}", license), 13.0, TEXT_DIM, false),
                 (tr("SHA-256 of the package:"), 12.5, TEXT_DIM, false),
                 (sha.clone(), 12.0, TEXT, false),
-                (tr("OmsiLaunch is installed into your OMSI 2 folder. Nothing is downloaded until you press Download."), 13.0, TEXT_DIM, false),
+                (
+                    match module {
+                        Some(m) => tr("%{name} is installed into plugins\\OmsiLaunch.Modules in your OMSI 2 folder. Nothing is downloaded until you press Download.").replace("%{name}", m.name),
+                        None => tr("OmsiLaunch is installed into your OMSI 2 folder. Nothing is downloaded until you press Download."),
+                    },
+                    13.0,
+                    TEXT_DIM,
+                    false,
+                ),
             ],
             vec![cancel, ("download", "Download", ButtonKind::Primary, true, "Downloads the package and checks it against the SHA-256 above. Nothing is installed yet.")],
         ),
@@ -375,7 +403,7 @@ fn engine_dialog_content(
             } else {
                 tr("Downloading…")
             };
-            (tr("Install OmsiLaunch"), vec![(tr("Version %{version}").replace("%{version}", &release.version), 15.0, TEXT, true), (text, 13.0, TEXT_DIM, false)], vec![cancel])
+            (title_install, vec![(tr("Version %{version}").replace("%{version}", &release.version), 15.0, TEXT, true), (text, 13.0, TEXT_DIM, false)], vec![cancel])
         }
         Flow::Review { release, plan, .. } => {
             let mut lines = vec![
@@ -391,34 +419,58 @@ fn engine_dialog_content(
                 lines.push((line, 12.5, TEXT, false));
             }
             if !plan.replaces.is_empty() {
-                lines.push((tr("%{n} files of the OmsiLaunch already installed are replaced.").replace("%{n}", &plan.replaces.len().to_string()), 12.5, TEXT_DIM, false));
+                let text = match module {
+                    Some(_) => tr("%{n} files of the version already installed are replaced."),
+                    None => tr("%{n} files of the OmsiLaunch already installed are replaced."),
+                };
+                lines.push((text.replace("%{n}", &plan.replaces.len().to_string()), 12.5, TEXT_DIM, false));
             }
             if plan.conflicts.is_empty() {
                 lines.push((tr("No other file of your OMSI 2 folder is changed or overwritten."), 12.5, TEXT_DIM, false));
             } else {
-                lines.push((tr("These files already exist and are not OmsiLaunch's, so nothing is installed: %{files}").replace("%{files}", &plan.conflicts.join(", ")), 12.5, DANGER, false));
+                let text = match module {
+                    Some(m) => tr("These files already exist and are not %{name}'s, so nothing is installed: %{files}").replace("%{name}", m.name),
+                    None => tr("These files already exist and are not OmsiLaunch's, so nothing is installed: %{files}"),
+                };
+                lines.push((text.replace("%{files}", &plan.conflicts.join(", ")), 12.5, DANGER, false));
             }
+            let tip = match module {
+                Some(_) => "Adds these files to your OMSI 2 folder. Removing them later is one button on the module's card in Settings.",
+                None => "Adds these files to your OMSI 2 folder. Removing them later is one button in Setup.",
+            };
             (
-                tr("Install OmsiLaunch"),
+                title_install,
                 lines,
-                vec![cancel, ("install", "Install", ButtonKind::Primary, plan.ok(), "Adds these files to your OMSI 2 folder. Removing them later is one button in Setup.")],
+                vec![cancel, ("install", "Install", ButtonKind::Primary, plan.ok(), tip)],
             )
         }
-        Flow::Installing => (tr("Install OmsiLaunch"), vec![(tr("Installing…"), 13.0, TEXT_DIM, false)], vec![]),
+        Flow::Installing => (title_install, vec![(tr("Installing…"), 13.0, TEXT_DIM, false)], vec![]),
         Flow::ConfirmRemove(plan) => {
             let mut lines = vec![(tr("%{n} files are removed from your OMSI 2 folder. Your OMSI 2 files, session profiles and other plug-ins stay.").replace("%{n}", &plan.files.len().to_string()), 13.0, TEXT_DIM, false)];
             if plan.pending_recovery {
                 lines.push((tr("A session left OMSI 2 files changed. Restore them first: start a game from Depot, or run OmsiLaunch with /recover."), 12.5, DANGER, false));
             }
             (
-                tr("Remove OmsiLaunch"),
+                title_remove,
                 lines,
                 vec![cancel, ("remove", "Remove", ButtonKind::Danger, !plan.pending_recovery, "Deletes the OmsiLaunch files listed by its own package manifest.")],
             )
         }
-        Flow::Removing => (tr("Remove OmsiLaunch"), vec![(tr("Removing…"), 13.0, TEXT_DIM, false)], vec![]),
+        Flow::ConfirmModuleRemove(plan) => (
+            title_remove,
+            vec![(
+                tr("%{n} files Depot placed for %{name} are removed from your OMSI 2 folder. What the module learned and any file you added to its folder stay.")
+                    .replace("%{n}", &plan.files.len().to_string())
+                    .replace("%{name}", name),
+                13.0,
+                TEXT_DIM,
+                false,
+            )],
+            vec![cancel, ("remove", "Remove", ButtonKind::Danger, !plan.files.is_empty(), "Deletes the files Depot placed for this module, and nothing else.")],
+        ),
+        Flow::Removing => (title_remove, vec![(tr("Removing…"), 13.0, TEXT_DIM, false)], vec![]),
         Flow::Failed(e) => (
-            tr("OmsiLaunch"),
+            name.to_string(),
             vec![(e.clone(), 13.0, DANGER, false)],
             vec![("close", "Close", ButtonKind::Primary, true, "Closes this window.")],
         ),

@@ -131,13 +131,30 @@ impl State {
     /// "Install OmsiLaunch": asks the official repository for the newest release and its
     /// checksum. Nothing else is downloaded before the player agrees.
     pub fn engine_look(&mut self) {
+        self.look_for(None);
+    }
+
+    /// "Download and install…" on a module's card: the same steps as OmsiLaunch's install,
+    /// from the module's own official repository, into its folder only. Refused while a game
+    /// runs (the module's files are in use) and for a module Depot does not know.
+    pub fn module_look(&mut self, id: &str) {
+        if self.in_game() {
+            return;
+        }
+        if let Some(def) = oe::modules::module_def(id) {
+            self.look_for(Some(def));
+        }
+    }
+
+    fn look_for(&mut self, module: Option<&'static oe::modules::ModuleDef>) {
         if self.original.busy() {
             return;
         }
+        self.original.module = module;
         self.original.attempt += 1;
         let n = self.original.attempt;
         self.original.flow = Flow::Looking;
-        self.spawn(move || Msg::Original(Event::Offer(n, offer())));
+        self.spawn(move || Msg::Original(Event::Offer(n, offer(module))));
     }
 
     /// The player agreed to download the package.
@@ -159,13 +176,14 @@ impl State {
             self.original.cancel.clone(),
         );
         let root = std::path::PathBuf::from(&self.config.root);
+        let module = self.original.module;
         self.original.flow = Flow::Downloading {
             release: release.clone(),
         };
         self.spawn(move || {
             Msg::Original(Event::Downloaded(
                 n,
-                fetch_package(&release, &sha, &root, &done, &total, &cancel),
+                fetch_package(&release, &sha, &root, module, &done, &total, &cancel),
             ))
         });
     }
@@ -180,12 +198,17 @@ impl State {
         };
         let root = std::path::PathBuf::from(&self.config.root);
         let data = core::data_dir();
+        let module = self.original.module;
         self.spawn(move || {
-            Msg::Original(Event::Installed(
-                oe::install::install(&root, &data, &zip, &sha, &release.version)
-                    .map(|r| r.version)
-                    .map_err(|e| format!("{e:#}")),
-            ))
+            let r = match module {
+                Some(def) => {
+                    oe::modules::install_module(&root, &data, def, &zip, &sha, &release.version)
+                        .map(|r| r.version)
+                }
+                None => oe::install::install(&root, &data, &zip, &sha, &release.version)
+                    .map(|r| r.version),
+            };
+            Msg::Original(Event::Installed(r.map_err(|e| format!("{e:#}"))))
         });
     }
 
@@ -193,12 +216,44 @@ impl State {
         if self.original.busy() {
             return;
         }
+        self.original.module = None;
         let plan =
             oe::install::plan_remove(std::path::Path::new(&self.config.root), &core::data_dir());
         self.original.flow = Flow::ConfirmRemove(plan);
     }
 
+    /// "Remove…" on a module's card: what Depot placed for it, after a confirmation.
+    pub fn module_ask_remove(&mut self, id: &str) {
+        if self.original.busy() || self.in_game() {
+            return;
+        }
+        let Some(def) = oe::modules::module_def(id) else {
+            return;
+        };
+        self.original.module = Some(def);
+        let plan = oe::modules::plan_remove(
+            std::path::Path::new(&self.config.root),
+            &core::data_dir(),
+            def.id,
+        );
+        self.original.flow = Flow::ConfirmModuleRemove(plan);
+    }
+
     pub fn engine_remove(&mut self) {
+        if matches!(self.original.flow, Flow::ConfirmModuleRemove(_)) {
+            let Some(def) = self.original.module else {
+                return;
+            };
+            self.original.flow = Flow::Removing;
+            let root = std::path::PathBuf::from(&self.config.root);
+            let data = core::data_dir();
+            self.spawn(move || {
+                Msg::Original(Event::ModuleRemoved(
+                    oe::modules::remove_module(&root, &data, def.id).map_err(|e| format!("{e:#}")),
+                ))
+            });
+            return;
+        }
         let Flow::ConfirmRemove(_) = std::mem::replace(&mut self.original.flow, Flow::Removing)
         else {
             return;
@@ -299,9 +354,10 @@ impl State {
                 };
             }
             Event::Installed(r) => {
+                let name = self.original.target_name();
                 self.original.flow = match r {
                     Ok(v) => {
-                        core::log_to_file(&format!("OmsiLaunch {v} installed"));
+                        core::log_to_file(&format!("{name} {v} installed"));
                         Flow::Idle
                     }
                     Err(e) => Flow::Failed(e),
@@ -314,6 +370,17 @@ impl State {
                         // without OmsiLaunch the switch is gone and games start with Depot
                         self.config.original_engine.set_mode(Engine::Depot);
                         self.engine_save();
+                        Flow::Idle
+                    }
+                    Err(e) => Flow::Failed(e),
+                };
+                self.engine_refresh(true);
+            }
+            Event::ModuleRemoved(r) => {
+                let name = self.original.target_name();
+                self.original.flow = match r {
+                    Ok(plan) => {
+                        core::log_to_file(&format!("{name} removed ({} files)", plan.files.len()));
                         Flow::Idle
                     }
                     Err(e) => Flow::Failed(e),
@@ -353,9 +420,13 @@ fn latest() -> Result<ReleaseInfo, String> {
     oe::install::latest_release(&fetcher()).map_err(|e| format!("{e:#}"))
 }
 
-fn offer() -> Result<(ReleaseInfo, String), String> {
+fn offer(module: Option<&'static oe::modules::ModuleDef>) -> Result<(ReleaseInfo, String), String> {
     let f = fetcher();
-    let rel = oe::install::latest_release(&f).map_err(|e| format!("{e:#}"))?;
+    let rel = match module {
+        Some(def) => oe::modules::latest_release(&f, def),
+        None => oe::install::latest_release(&f),
+    }
+    .map_err(|e| format!("{e:#}"))?;
     if !oe::install::host_allowed(&rel.sha_url) {
         return Err("The release points outside the official download hosts.".into());
     }
@@ -370,22 +441,30 @@ fn fetch_package(
     rel: &ReleaseInfo,
     sha: &str,
     root: &std::path::Path,
+    module: Option<&'static oe::modules::ModuleDef>,
     done: &AtomicU64,
     total: &AtomicU64,
     cancel: &AtomicBool,
 ) -> Result<(Arc<Vec<u8>>, InstallPlan), String> {
     let f = fetcher();
-    let (zip, got) = oe::install::download(&f, rel, &mut |d, t| {
+    let mut progress = |d, t: Option<u64>| {
         done.store(d, Relaxed);
         total.store(t.unwrap_or(0), Relaxed);
         !cancel.load(Relaxed)
-    })
+    };
+    let (zip, got) = match module {
+        Some(def) => oe::modules::download(&f, def, rel, &mut progress),
+        None => oe::install::download(&f, rel, &mut progress),
+    }
     .map_err(|e| format!("{e:#}"))?;
     // (the checksum the player saw is the one the package must have)
     if !got.eq_ignore_ascii_case(sha) {
         return Err("The package does not match the checksum that was shown.".into());
     }
-    let plan =
-        oe::install::plan_install(root, &core::data_dir(), &zip).map_err(|e| format!("{e:#}"))?;
+    let plan = match module {
+        Some(def) => oe::modules::plan_install(root, &core::data_dir(), def, &zip),
+        None => oe::install::plan_install(root, &core::data_dir(), &zip),
+    }
+    .map_err(|e| format!("{e:#}"))?;
     Ok((Arc::new(zip), plan))
 }
