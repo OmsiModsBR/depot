@@ -51,17 +51,17 @@ fn the_content_folder_is_never_the_omsi_folder() {
     let base = std::env::temp_dir().join(format!("depot-setup-{}", std::process::id()));
     std::fs::create_dir_all(&base).unwrap();
     let root = base.to_string_lossy().to_string();
-    assert_eq!(check(2, &root, &root).0, Status::Error);
+    assert_eq!(check(2, &root, &root, "0.3.1").0, Status::Error);
     assert_eq!(
-        check(2, &base.join("depot").to_string_lossy(), &root).0,
+        check(2, &base.join("depot").to_string_lossy(), &root, "0.3.1").0,
         Status::Error
     );
     let beside = base.with_extension("content");
     assert_eq!(
-        check(2, &beside.to_string_lossy(), &root).0,
+        check(2, &beside.to_string_lossy(), &root, "0.3.1").0,
         Status::Warning
     );
-    assert_eq!(check(2, "", &root).0, Status::Found);
+    assert_eq!(check(2, "", &root, "0.3.1").0, Status::Found);
     assert!(core::content_folder_problem(&base, &base).is_some());
     let _ = std::fs::remove_dir_all(&base);
 }
@@ -70,4 +70,15 @@ fn the_content_folder_is_never_the_omsi_folder() {
 fn sizes_read_as_the_chart_says_them() {
     assert_eq!(fmt_size(100 * 1_073_741_824), "100 GB");
     assert_eq!(fmt_size(3 * 536_870_912), "1.5 GB");
+}
+
+#[test]
+fn the_game_program_line_shows_the_running_version() {
+    // (a program beside the launcher: the line names the version it was given, not this
+    // crate's own package number)
+    let exe = std::env::current_exe().unwrap();
+    let (st, text) = check(1, &exe.to_string_lossy(), "", "9.8.7");
+    assert_eq!(st, Status::Found);
+    assert!(text.contains("9.8.7"), "{text}");
+    assert!(!text.contains("0.1.0"), "{text}");
 }

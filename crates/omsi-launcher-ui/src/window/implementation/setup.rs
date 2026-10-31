@@ -20,7 +20,8 @@ use omsi_ui::{Color, Rect, Weight};
 const FIELDS: [&str; 3] = ["root", "game", "content"];
 
 /// A folder's line under its field: what was found there.
-pub fn check(field: usize, value: &str, root: &str) -> (Status, String) {
+/// `version` is the running game's version (not this crate's own package number).
+pub fn check(field: usize, value: &str, root: &str, version: &str) -> (Status, String) {
     let v = value.trim();
     let p = std::path::Path::new(v);
     match field {
@@ -56,7 +57,7 @@ pub fn check(field: usize, value: &str, root: &str) -> (Status, String) {
                 (
                     Status::Found,
                     tr("Found next to the launcher. Version %{version}")
-                        .replace("%{version}", env!("CARGO_PKG_VERSION")),
+                        .replace("%{version}", version),
                 )
             } else {
                 (Status::Found, "Found.".into())
@@ -318,7 +319,7 @@ fn folders(f: &mut Frame, view: &mut SetupView, col: Rect) -> f32 {
             values[i].clone()
         };
         if view.checks[i].1.is_none() || view.checks[i].0 != key {
-            let out = check(i, &values[i], &values[0]);
+            let out = check(i, &values[i], &values[0], f.host.version().0);
             view.checks[i] = (key, Some(out));
         }
     }
