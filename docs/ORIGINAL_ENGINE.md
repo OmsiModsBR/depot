@@ -80,7 +80,7 @@ OmsiLaunch install above applied to one module at a time:
   learned or the player added to its folder stays, and so does the folder then.
 
 In OMSI 2 mode, Settings has a **Modules** section (shown only in that mode) with a card for
-each module Depot offers (Omsi Prefetch for now). The card is shown whether or not a release
+each module Depot offers (Omsi Prefetch and openHUD). The card is shown whether or not a release
 exists: finding out would need the network, and Depot goes online only when the player asks
 ("Download and install…" looks the release up and says so when there is none). The card:
 
@@ -93,12 +93,19 @@ exists: finding out would need the network, and Depot goes online only when the 
   module whose `module.json` is in the OMSI 2 folder, a module switched on sends
   `/module:<id>` and one `/module-setting:<id>.<key>=<value>` per saved choice, and one
   switched off sends `/no-module:<id>` (Omsi Prefetch joins every session by itself
-  otherwise). A module that is not in the folder sends nothing;
+  otherwise). openHUD joins a session only when it is asked for, so its card starts
+  switched off and, until the player sets it, sends nothing. A module that is not in the
+  folder sends nothing;
 * offers only a few of a module's settings, and only the values listed in
   `modules::card_settings`; any other key or value saved in the file stops the start with a
   plain message. For Omsi Prefetch: `ram_budget_mb` (`auto`, 2048, 4096, 6144, 8192, 12288),
   `user_vehicles` (`none`, `all`; the `list` choice needs a vehicle picker and is not
-  offered) and `monitor`; its other settings keep the module's defaults;
+  offered) and `monitor`; its other settings keep the module's defaults. For openHUD:
+  `radar`, `radar_corner` (the four corners), `radar_zoom` (`near`, `medium`, `far`),
+  `radar_size_percent` (50, 75, 100, 150, 200), `radar_opacity_percent` (40, 60, 80, 90,
+  100), `pause_menu`, `units` (`metric`, `imperial`), `ui_scale_percent` (75, 100, 125,
+  150, 200) and `language` (`auto`, `en`, `pt-BR`, `de`; its `auto` is English for now);
+  the case of a value saved by hand does not matter;
 * opens the module's data folder (`.omsilaunch/module-data/<id>/`) and never writes there.
 
 ## The settings table
