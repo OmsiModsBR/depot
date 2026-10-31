@@ -64,6 +64,90 @@ pub fn module_dir(id: &str) -> String {
     format!("{MODULES_DIR}/{id}")
 }
 
+/// The version named by the manifest of module `id` in the OMSI 2 folder, when the module is
+/// there (whoever placed it: Depot, or the player by hand).
+pub fn present_version(root: &Path, id: &str) -> Option<String> {
+    if safe_rel(id).is_none() || id.contains('/') {
+        return None;
+    }
+    let path = root.join(module_dir(id)).join("module.json");
+    let meta = path.symlink_metadata().ok()?;
+    if !meta.is_file() || meta.len() > 1024 * 1024 {
+        return None;
+    }
+    let text = std::fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    if v.get("id").and_then(Value::as_str) != Some(id) {
+        return None;
+    }
+    Some(
+        v.get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+    )
+}
+
+/// Whether module `id` is in the OMSI 2 folder: OmsiLaunch finds it there and may load it.
+pub fn present(root: &Path, id: &str) -> bool {
+    present_version(root, id).is_some()
+}
+
+/// Where OmsiLaunch keeps what module `id` learned (`.omsilaunch/module-data/<id>` in the OMSI
+/// 2 folder). The module owns it; Depot only opens it.
+pub fn data_folder(root: &Path, id: &str) -> PathBuf {
+    root.join(".omsilaunch").join("module-data").join(id)
+}
+
+// ---------------------------------------------------------------------------------------
+// the settings Depot offers for a module
+
+/// One setting a module's card offers: the key the module declares and the values the card
+/// may save (as OmsiLaunch receives them). Anything else is refused before a start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CardSetting {
+    pub key: &'static str,
+    pub values: &'static [&'static str],
+    /// The module's own default (the card shows it until the player picks another).
+    pub default: &'static str,
+}
+
+/// Omsi Prefetch's card: the memory it may hold, the player's vehicles and its monitor
+/// window (its documented keys `ram_budget_mb`, `user_vehicles`, `monitor`). The rest of its
+/// settings keep the module's own defaults.
+pub const PREFETCH_SETTINGS: &[CardSetting] = &[
+    CardSetting {
+        key: "ram_budget_mb",
+        values: &["auto", "2048", "4096", "6144", "8192", "12288"],
+        default: "auto",
+    },
+    CardSetting {
+        key: "user_vehicles",
+        values: &["none", "all"],
+        default: "none",
+    },
+    CardSetting {
+        key: "monitor",
+        values: &["false", "true"],
+        default: "false",
+    },
+];
+
+/// The settings the card of module `id` offers (none for a module without a card yet).
+pub fn card_settings(id: &str) -> &'static [CardSetting] {
+    match id {
+        "omsi-prefetch" => PREFETCH_SETTINGS,
+        _ => &[],
+    }
+}
+
+/// Whether `value` may be sent for `key` of module `id`.
+pub fn setting_allowed(id: &str, key: &str, value: &str) -> bool {
+    card_settings(id)
+        .iter()
+        .any(|s| s.key == key && s.values.iter().any(|v| v.eq_ignore_ascii_case(value)))
+}
+
 // ---------------------------------------------------------------------------------------
 // the release
 
@@ -940,5 +1024,60 @@ mod tests {
         assert!(owned_list(&data, &root, "omsi-prefetch").is_empty());
         remove_module(&root, &data, "omsi-prefetch").unwrap();
         assert_eq!(std::fs::read(root.join("Omsi.exe")).unwrap(), b"game");
+    }
+
+    #[test]
+    fn a_module_is_there_when_its_manifest_names_it() {
+        let (root, data) = omsi("present");
+        assert!(!present(&root, "omsi-prefetch"));
+        assert_eq!(present_version(&root, "omsi-prefetch"), None);
+        put(&root, &package(), &data, "1.0.0-beta.1").unwrap();
+        assert_eq!(
+            present_version(&root, "omsi-prefetch").as_deref(),
+            Some("1.0.0-beta.1")
+        );
+        // placed by hand: there too, though Depot owns none of it
+        let (root2, data2) = omsi("by-hand");
+        let dir = root2.join(module_dir("openhud"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("module.json"),
+            r#"{"id":"openhud","version":"0.2"}"#,
+        )
+        .unwrap();
+        assert!(present(&root2, "openhud"));
+        assert!(owned_list(&data2, &root2, "openhud").is_empty());
+        // another module's manifest, or none that parses, is not this module
+        std::fs::write(dir.join("module.json"), r#"{"id":"omsi-prefetch"}"#).unwrap();
+        assert!(!present(&root2, "openhud"));
+        std::fs::write(dir.join("module.json"), b"not json").unwrap();
+        assert!(!present(&root2, "openhud"));
+        // nothing outside the modules' folder is looked at
+        assert!(!present(&root2, "../openhud"));
+        assert!(!present(&root2, "a/b"));
+        assert_eq!(
+            data_folder(&root2, "omsi-prefetch"),
+            root2
+                .join(".omsilaunch")
+                .join("module-data")
+                .join("omsi-prefetch")
+        );
+    }
+
+    #[test]
+    fn a_card_offers_only_its_own_values() {
+        assert!(setting_allowed("omsi-prefetch", "ram_budget_mb", "auto"));
+        assert!(setting_allowed("omsi-prefetch", "ram_budget_mb", "12288"));
+        assert!(setting_allowed("omsi-prefetch", "monitor", "TRUE"));
+        assert!(!setting_allowed("omsi-prefetch", "ram_budget_mb", "100"));
+        assert!(!setting_allowed("omsi-prefetch", "user_vehicles", "list"));
+        assert!(!setting_allowed("omsi-prefetch", "tile_radius", "6"));
+        assert!(!setting_allowed("openhud", "radar", "true"));
+        // each default is one of its own values
+        for m in MODULES {
+            for s in card_settings(m.id) {
+                assert!(s.values.contains(&s.default), "{}", s.key);
+            }
+        }
     }
 }
