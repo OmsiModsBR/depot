@@ -344,9 +344,24 @@ starts only when you drive, and the launcher steps aside to the tray while it ru
 In the game, the Esc menu, the Alt bar (a tap of Alt), the *Add vehicle* window, the end-of-trip report, the
 information bar (Shift+Y), the navigator and the city map (Shift+M) share the same look.
 
-<!-- screenshots to add here, from the 0.3.0 release (docs/images/): launcher-maps, launcher-vehicles,
-     launcher-timetable, diagnostics-integrity, settings-graphics-dx9, ingame-esc-menu, ingame-alt-bar,
-     ingame-info-bar, ingame-city-map -->
+### Screenshots
+
+Taken from the 0.3.0 release on a clean OMSI 2 copy with the stock maps, in English. Personal paths are masked.
+Pictures that would show OMSI 2's own textures or models are not included.
+
+| | |
+| --- | --- |
+| ![Timetable, Trips tab](docs/images/launcher-timetable-trips.png) | ![Settings, Graphics API list with DirectX9 (D3D9Ex)](docs/images/launcher-settings-graphics-api.png) |
+| Timetable: Trips tab with departures, route, profile and AI group | Settings: Graphics API, with the optional "DirectX9 (D3D9Ex)" |
+| ![Diagnostics overview](docs/images/launcher-diagnostics-overview.png) | ![Integrity check with results by kind](docs/images/launcher-diagnostics-integrity.png) |
+| Diagnostics: Overview | Diagnostics: Integrity, findings in tabs by kind |
+| ![AI traffic](docs/images/launcher-diagnostics-ai-traffic.png) | ![Alt bar](docs/images/ingame-alt-bar.png) |
+| Diagnostics: AI traffic, a map's car groups on a chosen day | In game: the Alt bar |
+| ![Information bar, two-tier](docs/images/ingame-info-bar-two-tier.png) | ![Information bar, split](docs/images/ingame-info-bar-split.png) |
+| Information bar: Two-tier layout | Information bar: Split layout |
+| ![Information bar, full](docs/images/ingame-info-bar-full.png) | ![City map](docs/images/ingame-city-map.png) |
+| Information bar: Full layout | City map (Shift+M) |
+
 
 ## Download
 
