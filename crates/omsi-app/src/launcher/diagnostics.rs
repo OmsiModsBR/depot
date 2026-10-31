@@ -9,6 +9,29 @@ use omsi_launcher_ui::kit::{action, card, clipped, dot, text, Status};
 use omsi_launcher_ui::look::*;
 use omsi_ui::{Rect, Weight};
 
+/// The Diagnostics page's tab and what its tabs keep.
+#[derive(Default)]
+pub struct DiagView {
+    /// The page's tab: 0 the overview, 1 the integrity check, 2 the AI traffic.
+    pub tab: usize,
+    /// The Integrity tab (`omsi_launcher_ui::window::integrity_check`).
+    pub check: omsi_launcher_ui::window::CheckView,
+    /// The AI traffic tab.
+    pub(super) ai: super::ai_traffic::AiView,
+}
+
+impl DiagView {
+    /// A window lies over the page (the page sees no mouse meanwhile).
+    pub fn dialog_open(&self) -> bool {
+        (self.tab == 1 && self.check.export_open()) || (self.tab == 2 && self.ai.dialog_open())
+    }
+
+    /// The AI traffic tab shows one of its vehicles in the preview.
+    pub fn shows_vehicle(&self) -> bool {
+        self.tab == 2 && self.ai.shows_vehicle()
+    }
+}
+
 /// The page in `area` (the sidebar is outside it).
 pub fn draw(l: &mut Launcher, area: Rect) {
     // (a phone keeps its compact heading, as the other pages)
@@ -34,7 +57,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     );
     let below = Rect::new(area.x, body.y + 52.0, area.w, area.bottom() - body.y - 52.0);
     match l.pages.diag.tab {
-        1 => super::integrity::draw(l, below),
+        1 => omsi_launcher_ui::window::integrity_check(frame!(l), &mut l.pages.diag.check, below),
         2 => super::ai_traffic::draw(l, below),
         _ => {
             // (the status at the right of the tabs, where the bar has room)
@@ -293,4 +316,13 @@ pub fn url_encode(text: &str) -> String {
         }
     }
     out
+}
+
+/// The window over the page: the AI traffic's editor, or the integrity report's export.
+pub fn dialog(l: &mut Launcher) {
+    if l.pages.diag.tab == 2 {
+        super::ai_edit::dialog(l);
+    } else {
+        omsi_launcher_ui::window::integrity_export(frame!(l), &mut l.pages.diag.check);
+    }
 }

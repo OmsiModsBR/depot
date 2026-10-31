@@ -13,6 +13,7 @@ path = "src/lib.rs"
 omsi-ui = { path = "../omsi-ui" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-cfg = { path = "../omsi-cfg" }
+omsi-integrity = { path = "../omsi-integrity" }
 serde_json.workspace = true
 wgpu.workspace = true
 glam.workspace = true
@@ -21,6 +22,10 @@ anyhow.workspace = true
 log.workspace = true
 env_logger.workspace = true
 image.workspace = true
+
+# the Profile page's drive times in the machine's time zone
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 omsi-ui = { path = "../omsi-ui", features = ["testing"] }

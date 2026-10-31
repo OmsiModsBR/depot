@@ -1,6 +1,8 @@
+//! The Original OMSI 2 engine card's install dialog.
+
 use omsi_launcher_lib::original_engine::install::InstallPlan;
 use omsi_launcher_lib::original_engine::install::PlannedFile;
-use openomsi_game::testing::launcher::original_ui::*;
+use omsi_launcher_ui::window::*;
 
 #[test]
 fn files_are_summed_up_by_folder_with_root_files_first() {

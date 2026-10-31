@@ -5,6 +5,10 @@ has an obvious counterpart, but replaces its architecture where the original was
 64-bit, data loading and tessellation on a worker pool, a modern renderer, no global mutable
 state.
 
+> The round-by-round history further down is inherited from openOMSI and mentions features Depot does not
+> ship: multiplayer and the dedicated server, plugins, the in-app updater and builds for Android, macOS, Linux
+> and ARM64. They are not part of Project Depot; the supported platform is Windows x64 only.
+
 | Original unit(s)                       | Crate / module                | Status |
 |----------------------------------------|-------------------------------|--------|
 | file readers (`TTextfile`)             | `omsi-cfg`                    | done, 100 % of stock content; content roots and mounted `.zip` archives through `omsi-cfg::vfs` |
@@ -907,7 +911,7 @@ light sources (Grundorf, Novi Sad at night), the EN92 Ctrl+Shift cab light.
 
 Round 25 (Sept 27 2026): **Android** - the game is now a library (`openomsi_game`, `lib.rs`;
 `main.rs` calls `run`), built for Android as `libopenomsi_game.so` for a NativeActivity
-(`scripts/build-android.sh`, docs/ANDROID.md). One process and one window there: `android.rs`
+(`scripts/build-android.sh`, docs/removed/ANDROID_NOT_SHIPPED.md). One process and one window there: `android.rs`
 runs the launcher and the game in turn (`omsi_launcher_lib::launch` keeps the command line
 instead of starting a process, `platform::exit` ends a session back to the launcher),
 surfaces are dropped on `suspended` and made again on `resumed`. The launcher lays itself out
