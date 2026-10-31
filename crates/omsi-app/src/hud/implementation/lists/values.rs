@@ -501,6 +501,7 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "reflections" => s.reflections,
         "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
+        "sun_glow" => s.sun_glow,
         "dx9_snow" => s.dx9_snow,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
@@ -783,6 +784,10 @@ pub(in crate::hud) fn toggle_set(
         "windy_trees" => {
             app.settings.windy_trees = on;
             Some(("windy_trees", bit))
+        }
+        "sun_glow" => {
+            app.settings.sun_glow = on;
+            Some(("sun_glow", bit))
         }
         "dx9_snow" => {
             app.settings.dx9_snow = on;

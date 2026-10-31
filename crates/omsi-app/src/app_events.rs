@@ -3300,6 +3300,7 @@ impl ApplicationHandler for App {
                     .collect();
                 lighting.detail = self.settings.detail_textures;
                 lighting.windy_trees = self.settings.windy_trees();
+                lighting.sun_glow = self.settings.sun_glow;
                 lighting.glass_wind = self
                     .player
                     .as_ref()

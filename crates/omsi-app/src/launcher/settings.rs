@@ -1014,6 +1014,7 @@ pub static OPTS: &[Opt] = &[
         ],
     ),
     toggle(GRAPHICS, "Effects", "clouds", "Clouds", ""),
+    toggle(GRAPHICS, "Effects", "sun_glow", "Sun glow", ""),
     toggle(
         GRAPHICS,
         "Effects",
@@ -2089,6 +2090,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         | "led_mips" => !classic,
         "ssao" | "shadows" => !classic && !traced,
         "reflections" => !traced,
+        // (only "DirectX9 (D3D9Ex)" draws it; the other APIs have no sun glow to switch)
+        "sun_glow" => fixed,
         "fov" => !triple,
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)

@@ -127,6 +127,8 @@ The sky: the background of every picture, the window's and the mirrors' (`SceneF
 
 Over the sky's pictures the same pass draws two things, both in `shaders/sky.hlsl`. *Stars*: at night only (the night picture's weight above 0.35, in full at 1), above the horizon, small points of their own brightness laid out on the six faces of a cube (about 0.3 degrees a cell, a share of the cells holding one) so they are the same at every frame and every size of picture; they stay where they are in the world and do not turn with the hours (**provisional**: their count, brightness and turning are not observed yet). *Clouds*: the weather's one layer (`SceneSky::clouds`): the cloud type's picture (`Scene::sky_cloud_picture`, white with the clouds in its alpha; an Overcast type's brightness is its cover), laid flat at the weather's base height (`FramePlan::clouds`: cover, the wind's drift in tiles, height; a tile is 2500 m) as seen from the camera, so the clouds ride with it and only the wind moves them; no clouds for clear weather or a type without a picture, fading out above the horizon and none below it, lit by the scene's light (`SceneLight`, as the default renderer's classic sky), the closed deck greyed, covering the stars, and under the fog like the rest of the sky. Nothing procedural, no moon, no lens flare, no bloom.
 
+The sun's glow (`SceneSky::sun_glow`, the `sun_glow` setting, `shaders/sunglow.hlsl`, `d3d9/sky.rs`): a second pass of its own, drawn after the scene's batches (and the cab's): a camera-facing square on the sun's side, about 7 degrees either side of the sun (**provisional**), added to the picture (`ONE, ONE`) with the depth test against the far plane, so whatever stands in front of the sun hides it and glass (which writes no depth) lets it through. How much shows (`sky::glow_strength`): the sun's strength (0 under an Overcast cover), faded out between 2 degrees below and 3 above the horizon, thinned by the cloud cover (to 40 % at a cover of 0.8) and gone under a closed deck, the Overcast types (only when the clouds are drawn) and gone in a thick fog; its colour is the sun's own light. Off when the setting is off; the scene's pixel shader is untouched.
+
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
 in fog. They are camera-facing sprites the default renderer keeps the books of
@@ -160,7 +162,7 @@ picture, draws the scene without smoke (the pass says so once in the log).
 
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky's sun glow,
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass),
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 

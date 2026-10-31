@@ -248,6 +248,7 @@ impl Inner {
                     texture: scene.sky_cloud_picture(),
                     params: plan.clouds,
                 },
+                sun_glow: plan.sun_glow,
             },
         };
         let material = |id: usize| {

@@ -418,6 +418,7 @@ pub mod settings {
             }
             text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
+            text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
             text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
             text.push_str(&format!("muffle_outside={}\n", self.muffle_outside as u8));
             // OMSI's own options (`ai_unsched_factor` as a percentage, as the file has it)
