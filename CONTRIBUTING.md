@@ -53,6 +53,11 @@ merge: it formats your branch the same way and records the format commit as merg
 * **No large files.** A file of a megabyte or more fails the PR checks. Screenshots and
   videos belong in the pull request's description, not in a commit; test data is small and
   made for the test.
+* **One exception: pictures for the documentation.** The maintainers may commit screenshots of
+  Project Depot's own interface under `docs/images/` for the README and the docs: each well
+  under 400 KB, showing only the interface and content the project may publish (no OMSI 2
+  textures, models, maps or sounds, no personal paths or names), taken from a release. Anyone
+  else attaches screenshots to the pull request as above.
 * **No generated or downloaded content**: no builds, caches, converted textures or example
   maps.
 
