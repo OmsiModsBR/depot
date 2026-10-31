@@ -1041,7 +1041,7 @@ pub static OPTS: &[Opt] = &[
         "smoke_max",
         "Most particles per system",
         "Each smoke system keeps at most this many",
-        (10.0, 100.0, 10.0),
+        (1.0, 100.0, 1.0),
         count,
         integer,
     ),
@@ -1050,7 +1050,7 @@ pub static OPTS: &[Opt] = &[
         "Effects",
         "smoke_in_mirrors",
         "Smoke in mirrors",
-        "",
+        "Smoke and particles also show in the mirrors",
     ),
     // (DirectX9 only, see `shown`)
     toggle(
