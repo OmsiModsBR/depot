@@ -93,11 +93,12 @@ fn keep(id: &str, on: bool, settings: Map<String, Value>) {
     CHOICES.with(|c| {
         let mut c = c.borrow_mut();
         let all = c.get_or_insert_with(|| config::load_modules_in(&core::data_dir()));
+        // (a value saved by hand as a number or a yes or no is kept, as the text it stands for)
         let settings: Map<String, Value> = settings
             .into_iter()
-            .filter(|(k, v)| {
-                v.as_str()
-                    .is_some_and(|t| modules::setting_allowed(id, k, t))
+            .filter_map(|(k, v)| {
+                let t = scalar(&v)?;
+                modules::setting_allowed(id, &k, &t).then_some((k, Value::String(t)))
             })
             .collect();
         all.insert(id.to_string(), json!({"enabled": on, "settings": settings}));
@@ -109,16 +110,21 @@ fn keep(id: &str, on: bool, settings: Map<String, Value>) {
 
 const ROW: f32 = 50.0;
 
+/// A saved setting as text: a string, a number or a yes or no (`true`, `false`).
+fn scalar(v: &Value) -> Option<String> {
+    match v {
+        Value::String(t) => Some(t.clone()),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
 /// The value of `key` the card shows: the saved one when the card offers it, else the default.
 fn value_of(settings: &Map<String, Value>, s: &modules::CardSetting) -> String {
     settings
         .get(s.key)
-        .and_then(|v| match v {
-            Value::String(t) => Some(t.clone()),
-            Value::Bool(b) => Some(b.to_string()),
-            Value::Number(n) => Some(n.to_string()),
-            _ => None,
-        })
+        .and_then(scalar)
         .and_then(|t| s.values.iter().find(|v| v.eq_ignore_ascii_case(&t)))
         .unwrap_or(&s.default)
         .to_string()
