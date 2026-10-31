@@ -163,6 +163,12 @@ impl Renderer {
         self.set_sky_textures_clouds(scene, textures, None)
     }
 
+    /// The picture of the weather's cloud type (white, the clouds in its alpha), for a
+    /// renderer that draws the clouds from it (`None`: the weather has none).
+    pub fn set_sky_cloud_picture(&self, scene: &mut Scene, picture: Option<TextureId>) {
+        scene.sky_cloud_picture = picture;
+    }
+
     /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
     pub fn set_sky_textures_clouds(
         &self,

@@ -152,7 +152,7 @@ pub const D3D9: &[ApiLimit] = &[
         key: "clouds",
         limit: Limit::Locked("As OMSI 2"),
         reason:
-            "the weather's own clouds, nothing added; the sky itself is not drawn by DirectX9 yet",
+            "the weather's own clouds, nothing added (no fair-weather clouds, no procedural ones)",
     },
     ApiLimit {
         key: "windy_trees",

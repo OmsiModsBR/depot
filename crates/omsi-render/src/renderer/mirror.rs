@@ -197,6 +197,9 @@ pub struct FramePlan {
     /// The sky dome's light: x the sun's azimuth (radians, clockwise from north), yzw the
     /// weights of the day, twilight and night pictures ([`crate::Scene::sky_textures`]).
     pub sky: [f32; 4],
+    /// The cloud layer: x the cover (0 none .. 1 closed), yz the drift with the wind in
+    /// fractions of the picture's tile, w the layer's base height in metres.
+    pub clouds: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -238,6 +241,12 @@ pub(crate) fn plan_of(
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         sky: cu.sky,
+        clouds: [
+            f.lighting.cloud_density,
+            f.lighting.cloud_offset[0],
+            f.lighting.cloud_offset[1],
+            f.lighting.cloud_height,
+        ],
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists
@@ -259,6 +268,12 @@ impl crate::scene::Scene {
     /// the game has set them.
     pub fn sky_textures(&self) -> Option<[TextureId; 3]> {
         self.sky_textures
+    }
+
+    /// The picture of the weather's cloud type for a renderer that draws the clouds itself
+    /// (white, the clouds in its alpha), once the game has set it.
+    pub fn sky_cloud_picture(&self) -> Option<TextureId> {
+        self.sky_cloud_picture
     }
 
     /// The lights of the last frame as this renderer's shaders read them, four vectors each:
