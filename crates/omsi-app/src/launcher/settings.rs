@@ -2348,7 +2348,7 @@ enum Card<'a> {
 
 impl Card<'_> {
     fn wide(&self) -> bool {
-        matches!(self, Card::Api(_) | Card::Own("plugins"))
+        matches!(self, Card::Api(_) | Card::Own("plugins" | "omsi2-plugins"))
     }
 
     fn height(&self) -> f32 {
@@ -2395,6 +2395,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
         let own: &[&str] = match sec {
             SOUND => &["radio"],
             DEVICES => &["controls"],
+            // (in OMSI 2 mode: its own plug-ins, each switched on or off)
+            PLUGINS if omsi2 => &["omsi2-plugins"],
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
             INTERFACE => &["preview"],
@@ -2415,6 +2417,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
 pub struct Outside {
     pub reset: bool,
     pub controls: Option<usize>,
+    /// (in) A game runs: the OMSI 2 folder's plug-ins are not switched meanwhile.
+    pub game_runs: bool,
 }
 
 pub fn settings(l: &mut Launcher, area: Rect) {
@@ -2433,6 +2437,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let omsi2 = l.state.omsi2_engine();
     let mut start = start_values(&l.state.choice);
     let mut out = Outside::default();
+    out.game_runs = l.state.in_game();
     let narrow = body.w < 760.0;
     let view = &mut l.pages.set;
     let ui = &mut l.ui;
@@ -3067,6 +3072,7 @@ fn own_card(
             y + 34.0 + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
+        "omsi2-plugins" => super::omsi2_plugins::card(ui, r, root, out.game_runs),
         "oop" => option_presets_card(ui, r, st, root),
         "preview" => preview_card(ui, r),
         "profiles" => profiles_card(ui, r, st),

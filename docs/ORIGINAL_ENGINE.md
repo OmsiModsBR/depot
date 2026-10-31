@@ -146,6 +146,31 @@ Regenerate with `cargo test -p omsi-launcher-core print_docs_table -- --ignored 
 
 With OMSI 2 chosen, the Controls page is read only: it lists the keys and controllers found in the OMSI 2 folder and says they are changed inside OMSI 2. Capture, remapping, reset, import and the controller editors are not offered, and the page never writes `Inputs/keyboard.cfg` or the controller files of that folder.
 
+## The OMSI 2 folder's plug-ins
+
+OMSI 2 loads a plug-in through its descriptor, a `.opl` file directly in `plugins/` naming the
+plug-in's DLL (the OmsiLaunch documentation describes the same: OMSI enumerates
+`plugins\*.opl` and loads the DLL each one names). In OMSI 2 mode, Settings > Plug-ins lists
+these descriptors (`original_engine/plugins.rs`) and switches each plug-in on or off:
+
+* off renames `<name>.opl` to `<name>.opl.disabled` in the same folder; on renames it back.
+  Only the descriptor is renamed: the DLL and the plug-in's other files stay where they are,
+  nothing is deleted, copied or written, and a player can see the state in the folder and
+  undo it by hand. (A Windows 8.3 short name takes its extension from the last dot, `.DIS`
+  here, so `*.opl` cannot match a switched-off descriptor through it.)
+* a rename never takes the place of an existing file: when both `<name>.opl` and
+  `<name>.opl.disabled` are there, the row says so and nothing is renamed until the player
+  keeps one. A descriptor that is a link, and a `plugins` folder reached through a link, are
+  refused; so is any name that is not a plain file name.
+* OmsiLaunch's own plug-in (`plugins/OmsiLaunch.*`) is the link between Depot and OMSI 2: its
+  row is locked on and it is never switched off (one switched off by hand can be switched on).
+* nothing is switched while a game runs. OmsiLaunch never copies, removes or restores the
+  player's other plug-ins in a session, so a switch stays as the player left it. Its check of
+  a module's conflicts reads the `.opl` files only, so switching off a plug-in a module
+  conflicts with lets the module load.
+
+In Depot mode the section keeps its read-only list (the Depot does not load OMSI 2 plug-ins).
+
 ## Files Depot writes
 
 | Where | What |
@@ -158,4 +183,6 @@ With OMSI 2 chosen, the Controls page is read only: it lists the keys and contro
 | `~/.depot/omsi2/staging/` | work area of an install or removal, emptied afterwards |
 
 Nothing is written into the OMSI 2 folder except OmsiLaunch's own files and, for a module the
-player chose, its files under `plugins/OmsiLaunch.Modules/`, at install, and their removal.
+player chose, its files under `plugins/OmsiLaunch.Modules/`, at install, and their removal. The
+one other change is a plug-in the player switches off or on under Settings > Plug-ins: its
+`.opl` descriptor is renamed (see above), nothing else.

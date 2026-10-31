@@ -35,6 +35,7 @@ pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
 mod omsi2_map;
+mod omsi2_plugins;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
