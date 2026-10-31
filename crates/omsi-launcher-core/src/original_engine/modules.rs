@@ -133,12 +133,71 @@ pub const PREFETCH_SETTINGS: &[CardSetting] = &[
     },
 ];
 
+/// openHUD's card: the radar (on or off, corner, zoom, size, opacity), its pause menu, the
+/// units, the size of its interface and its language (its documented keys; `auto` resolves
+/// to English in openHUD 0.1.0). It replaces the pause menu of OMSI 2 only, never Depot's.
+pub const OPENHUD_SETTINGS: &[CardSetting] = &[
+    CardSetting {
+        key: "radar",
+        values: &["true", "false"],
+        default: "true",
+    },
+    CardSetting {
+        key: "radar_corner",
+        values: &["bottom-left", "bottom-right", "top-left", "top-right"],
+        default: "bottom-left",
+    },
+    CardSetting {
+        key: "radar_zoom",
+        values: &["near", "medium", "far"],
+        default: "medium",
+    },
+    CardSetting {
+        key: "radar_size_percent",
+        values: &["50", "75", "100", "150", "200"],
+        default: "100",
+    },
+    CardSetting {
+        key: "radar_opacity_percent",
+        values: &["40", "60", "80", "90", "100"],
+        default: "90",
+    },
+    CardSetting {
+        key: "pause_menu",
+        values: &["true", "false"],
+        default: "true",
+    },
+    CardSetting {
+        key: "units",
+        values: &["metric", "imperial"],
+        default: "metric",
+    },
+    CardSetting {
+        key: "ui_scale_percent",
+        values: &["75", "100", "125", "150", "200"],
+        default: "100",
+    },
+    CardSetting {
+        key: "language",
+        values: &["auto", "en", "pt-BR", "de"],
+        default: "auto",
+    },
+];
+
 /// The settings the card of module `id` offers (none for a module without a card yet).
 pub fn card_settings(id: &str) -> &'static [CardSetting] {
     match id {
         "omsi-prefetch" => PREFETCH_SETTINGS,
+        "openhud" => OPENHUD_SETTINGS,
         _ => &[],
     }
+}
+
+/// Whether module `id` joins a session when the player has not switched it: Omsi Prefetch
+/// joins every session by itself (its activation is `default`), openHUD only when it is
+/// asked for (`requested`).
+pub fn on_by_default(id: &str) -> bool {
+    id != "openhud"
 }
 
 /// Whether `value` may be sent for `key` of module `id`.
@@ -1072,7 +1131,13 @@ mod tests {
         assert!(!setting_allowed("omsi-prefetch", "ram_budget_mb", "100"));
         assert!(!setting_allowed("omsi-prefetch", "user_vehicles", "list"));
         assert!(!setting_allowed("omsi-prefetch", "tile_radius", "6"));
-        assert!(!setting_allowed("openhud", "radar", "true"));
+        assert!(setting_allowed("openhud", "radar", "false"));
+        assert!(setting_allowed("openhud", "language", "pt-BR"));
+        assert!(setting_allowed("openhud", "radar_corner", "TOP-RIGHT"));
+        assert!(!setting_allowed("openhud", "radar_size_percent", "300"));
+        assert!(!setting_allowed("openhud", "language", "fr"));
+        assert!(!setting_allowed("unknown", "radar", "true"));
+        assert!(on_by_default("omsi-prefetch") && !on_by_default("openhud"));
         // each default is one of its own values
         for m in MODULES {
             for s in card_settings(m.id) {

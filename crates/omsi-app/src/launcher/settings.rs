@@ -2403,7 +2403,7 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
             INTERFACE => &["preview"],
-            MODULES if omsi2 => &["omsi-prefetch"],
+            MODULES if omsi2 => &["omsi-prefetch", "openhud"],
             _ => &[],
         };
         // (the Depot's own radio stations, plug-ins and profiles are not OMSI 2's)
@@ -3099,6 +3099,7 @@ fn own_card(
         "omsi-prefetch" => {
             super::omsi2_modules::card(ui, r, "omsi-prefetch", root, &mut out.modules)
         }
+        "openhud" => super::omsi2_modules::card(ui, r, "openhud", root, &mut out.modules),
         "oop" => option_presets_card(ui, r, st, root),
         "preview" => preview_card(ui, r),
         "profiles" => profiles_card(ui, r, st),
