@@ -23,8 +23,8 @@ use omsi_render::{
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
     BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneClouds, SceneCoronas,
-    SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneSky, SceneSmoke, SceneTexture,
-    TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneRain, SceneSky, SceneSmoke,
+    SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -41,6 +41,8 @@ struct Inner {
     draws: Vec<UiDraw>,
     /// A frame is begun and waits for [`D3d9Output::present`].
     open: bool,
+    /// When the last window picture was drawn (raindrops on glass move on by the time between).
+    last_window_picture: Option<std::time::Instant>,
     /// Problems already logged (each kind once, not every frame or every asset).
     warned: hashbrown::HashSet<&'static str>,
     /// The device draws into this window: it lives as long as the device.
@@ -184,6 +186,15 @@ impl Inner {
             );
         }
         let lights = scene.frame_lights();
+        // (only a window picture carries time; a mirror's picture leaves the drops where they are)
+        let seconds = if target.is_none() {
+            let now = std::time::Instant::now();
+            self.last_window_picture
+                .replace(now)
+                .map_or(0.0, |before| (now - before).as_secs_f32())
+        } else {
+            0.0
+        };
         let frame = SceneFrame {
             view_proj: plan.view_proj,
             light: SceneLight {
@@ -225,6 +236,11 @@ impl Inner {
                 place: plan.light_grid,
                 tile_map: plan.light_map,
             },
+            rain: SceneRain {
+                intensity: plan.rain,
+                wiper: scene.glass_wiper,
+                seconds,
+            },
             sky: SceneSky {
                 textures: scene.sky_textures(),
                 params: plan.sky,
@@ -243,6 +259,7 @@ impl Inner {
                 envmap: m.envmap.map(|e| e.0),
                 env_mask: m.env_mask,
                 bump: m.bump.map(|b| b.0),
+                raindrop_map: m.raindrop_map,
                 address: match m.addressing() {
                     TexAddressing::Wrap => TexAddress::Wrap,
                     TexAddressing::Mirror => TexAddress::Mirror,
@@ -434,6 +451,7 @@ impl D3d9Output {
             layers: Vec::new(),
             draws: Vec::new(),
             open: false,
+            last_window_picture: None,
             warned: Default::default(),
             _window: window.clone(),
         }));

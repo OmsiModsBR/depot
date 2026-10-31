@@ -117,6 +117,7 @@ fn draw(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
@@ -239,6 +240,7 @@ fn the_cab_is_fogged_like_the_world() {
         main: &[],
         cab: &cab,
         surface_bias: -24,
+        rain: Default::default(),
         smoke: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
@@ -315,6 +317,7 @@ fn depth_is_reversed_nearer_is_greater() {
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
@@ -436,6 +439,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     let material = |_| {
@@ -612,6 +616,7 @@ fn draw_lamps(
         lamps,
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
@@ -781,6 +786,7 @@ fn texture_addressing_follows_the_material() {
             lamps: Default::default(),
             coronas: Default::default(),
             sky: Default::default(),
+            rain: Default::default(),
             smoke: Default::default(),
         };
         dev.draw_scene(&frame, |_| {
@@ -1085,6 +1091,7 @@ fn quad_frame<'a>(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     }
 }
@@ -1234,6 +1241,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     dev.draw_scene(&frame, |m| {
@@ -1351,6 +1359,7 @@ fn draw_coronas(
         lamps: Default::default(),
         coronas: crate::scene::SceneCoronas { sprites, runs },
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     let u = uniform(0.0);
@@ -1492,6 +1501,7 @@ fn a_corona_run_outside_the_sprites_is_refused() {
             runs: &[(0, 0, 2, false)],
         },
         sky: Default::default(),
+        rain: Default::default(),
         smoke: Default::default(),
     };
     let r = dev.draw_scene(&frame, |_| None);
@@ -1564,6 +1574,7 @@ fn draw_sky_with(
         lamps: Default::default(),
         coronas: Default::default(),
         sky,
+        rain: Default::default(),
         smoke: Default::default(),
     };
     dev.draw_scene(&frame, |_| None).unwrap();
@@ -1884,6 +1895,7 @@ fn draw_smoke(
         lamps: Default::default(),
         coronas: Default::default(),
         sky: Default::default(),
+        rain: Default::default(),
         smoke: crate::scene::SceneSmoke { sprites },
     };
     let u = uniform(0.0);
@@ -1966,4 +1978,199 @@ fn smoke_without_its_picture_is_not_drawn_and_the_picture_outlives_a_scene() {
     dev.recover().unwrap();
     let px = draw_smoke(&mut dev, None, false, &[smoke_puff(0.5, 1.0)]);
     assert!(px[0] > 100, "{:?}", &px[..4]);
+}
+
+// ---- raindrops on glass ----
+
+const PANE: u32 = 64;
+
+/// One picture of a glass pane (a blended quad of a clear picture; `map` its raindrop map,
+/// scene texture 1) under the given rain: the pixels. The light is white.
+fn draw_pane(
+    dev: &mut D3d9Device,
+    map: Option<usize>,
+    rain: crate::SceneRain,
+    late_quad: bool,
+) -> Vec<u8> {
+    dev.begin_frame(&FrameDesc {
+        width: PANE,
+        height: PANE,
+        clear_rgba: [0.0, 0.0, 0.0, 1.0],
+    })
+    .unwrap();
+    let pane = [batch(DrawKind::Blend, 0, 0, 0..1)];
+    let (main, cab): (&[SceneBatch], &[SceneBatch]) = if late_quad {
+        (&[], &pane)
+    } else {
+        (&pane, &[])
+    };
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: SceneLight {
+            sun_color: [1.0, 1.0, 1.0, 0.0],
+            ..light([0.0; 4])
+        },
+        list: &[0],
+        models: &[IDENTITY],
+        params: &[VISIBLE, SECOND],
+        main,
+        cab,
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: Default::default(),
+        sky: Default::default(),
+        rain,
+        smoke: Default::default(),
+    };
+    let u = uniform(2.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(0),
+            raindrop_map: map,
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    dev.end_frame().unwrap()
+}
+
+/// How much light the drops put on the black clear: the sum of the colour channels.
+fn glow(px: &[u8]) -> usize {
+    px.chunks_exact(4)
+        .map(|p| p[..3].iter().map(|&c| usize::from(c)).sum::<usize>())
+        .sum()
+}
+
+fn pane_device() -> Option<D3d9Device> {
+    let mut dev = device()?;
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(0, &v, &i).unwrap();
+    // a pane that is clear (alpha 0), and a raindrop map that marks all of it
+    rgba(&mut dev, 0, [255, 255, 255, 0]);
+    rgba(&mut dev, 1, [255, 255, 255, 255]);
+    Some(dev)
+}
+
+fn raining(seconds: f32, wiper: Option<f32>) -> crate::SceneRain {
+    crate::SceneRain {
+        intensity: 1.0,
+        wiper,
+        seconds,
+    }
+}
+
+#[test]
+fn rain_gathers_drops_on_a_pane_with_a_raindrop_map() {
+    let Some(mut dev) = pane_device() else { return };
+    // dry: nothing, whatever the map
+    let px = draw_pane(&mut dev, Some(1), crate::SceneRain::default(), false);
+    assert_eq!(glow(&px), 0);
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, None), false);
+    }
+    let px = draw_pane(&mut dev, Some(1), raining(0.25, None), false);
+    assert!(glow(&px) > 4000, "{}", glow(&px));
+    // a pane without a raindrop map is left alone, and so is one whose map is not up
+    let px = draw_pane(&mut dev, None, raining(0.0, None), false);
+    assert_eq!(glow(&px), 0);
+    let px = draw_pane(&mut dev, Some(9), raining(0.0, None), false);
+    assert_eq!(glow(&px), 0);
+}
+
+#[test]
+fn the_vehicle_the_camera_is_in_gets_its_drops_too() {
+    let Some(mut dev) = pane_device() else { return };
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, None), true);
+    }
+    let px = draw_pane(&mut dev, Some(1), raining(0.25, None), true);
+    assert!(glow(&px) > 4000);
+}
+
+#[test]
+fn a_dark_raindrop_map_leaves_the_pane_clear() {
+    let Some(mut dev) = pane_device() else { return };
+    rgba(&mut dev, 2, [0, 0, 0, 255]);
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(2), raining(0.25, None), false);
+    }
+    let px = draw_pane(&mut dev, Some(2), raining(0.25, None), false);
+    assert_eq!(glow(&px), 0);
+}
+
+#[test]
+fn a_stroke_of_the_wiper_clears_the_drops_and_the_rain_brings_them_back() {
+    let Some(mut dev) = pane_device() else { return };
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), true);
+    }
+    let wet = glow(&draw_pane(
+        &mut dev,
+        Some(1),
+        raining(0.0, Some(0.0)),
+        false,
+    ));
+    assert!(wet > 4000);
+    // the stroke across the pane in one picture: the whole pane is wiped
+    let px = draw_pane(&mut dev, Some(1), raining(0.1, Some(1.0)), true);
+    assert_eq!(glow(&px), 0);
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(1.0)), true);
+    }
+    let again = glow(&draw_pane(
+        &mut dev,
+        Some(1),
+        raining(0.0, Some(1.0)),
+        false,
+    ));
+    assert!(again > 4000);
+}
+
+#[test]
+fn a_stroke_over_half_the_pane_clears_that_half_only() {
+    let Some(mut dev) = pane_device() else { return };
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), true);
+    }
+    let px = draw_pane(&mut dev, Some(1), raining(0.001, Some(0.5)), true);
+    let half = |left: bool| -> usize {
+        let range = if left {
+            0..PANE / 2 - 4
+        } else {
+            PANE / 2 + 4..PANE
+        };
+        let mut n = 0;
+        for y in 0..PANE {
+            for x in range.clone() {
+                let p = &px[((y * PANE + x) * 4) as usize..][..3];
+                n += p.iter().map(|&c| usize::from(c)).sum::<usize>();
+            }
+        }
+        n
+    };
+    assert_eq!(half(true), 0, "the swept half is clean");
+    assert!(half(false) > 1000, "the other half keeps its drops");
+}
+
+#[test]
+fn other_vehicles_panes_do_not_follow_the_players_wiper() {
+    let Some(mut dev) = pane_device() else { return };
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, Some(0.0)), false);
+    }
+    // the player's wiper sweeps the whole pane; a pane of the world keeps its drops
+    let px = draw_pane(&mut dev, Some(1), raining(0.1, Some(1.0)), false);
+    assert!(glow(&px) > 4000, "{}", glow(&px));
+}
+
+#[test]
+fn the_drops_come_back_with_a_device_opened_again() {
+    let Some(mut dev) = pane_device() else { return };
+    dev.recover().unwrap();
+    for _ in 0..12 {
+        draw_pane(&mut dev, Some(1), raining(0.25, None), false);
+    }
+    let px = draw_pane(&mut dev, Some(1), raining(0.25, None), false);
+    assert!(glow(&px) > 4000);
 }

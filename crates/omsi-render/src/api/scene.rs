@@ -28,6 +28,7 @@ impl Renderer {
             corona_buf: None,
             corona_count: 0,
             smoke: Vec::new(),
+            glass_wiper: None,
             smoke_buf: None,
             smoke_count: 0,
             last_smoke: Vec::new(),
