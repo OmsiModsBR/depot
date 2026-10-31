@@ -41,7 +41,7 @@ request behind every item, is in the [changelog](CHANGELOG.md#030---2026-10-30);
 
 * **DirectX 9 renderer (D3D9Ex), off by default.** Settings → Graphics API offers "DirectX9 (D3D9Ex)" on
   Windows ("Automatic" never picks it). It draws the scene and its materials, lamps and light maps, the
-  sky with clouds and stars, mirrors, light coronas, smoke and particles, the interface and the maps, with
+  sky, mirrors, light coronas, smoke and particles, the interface and the maps, with
   an optional snowfall. Graphics stays at Vanilla under it. It is new: its look is still to be compared
   with the original in the game.
 * **New in-game interface.** A new Esc menu and the pages behind it, the Alt bar (a tap of Alt, never
@@ -158,15 +158,14 @@ shown identical to OMSI 2 in a recorded comparison in the game; the deliberate i
   own books and the DirectX 9 device draws and presents the window.
 * **What it draws:** meshes and textures (RGBA with mip chains, DXT1/3/5), vanilla shading with fog and the alpha
   kinds, the materials' maps (light maps, night maps, environment reflections with masks, bump maps, specular),
-  the lamps and spots of the map and of vehicles, the tile light maps, the sky dome by time of day with the
-  weather's **clouds and the night's stars**, **mirrors**, **light coronas** (headlights, beacons, street lamps,
+  the lamps and spots of the map and of vehicles, the tile light maps, the sky dome by time of day, **mirrors**, **light coronas** (headlights, beacons, street lamps,
   fog cones), **smoke and particles**, the vehicle shadow, the new interface, the minimap and the city map, and
   an optional **snowfall**. Multisampling, anisotropic filtering and alpha-to-coverage are handled so that
   cut-out lettering and fences keep clean edges.
 * **Options follow what OMSI 2 has.** Graphics stays at Vanilla and fixed; quality presets and improvements
   stay hidden; settings the renderer cannot honour show as fixed lines with the reason.
-* **Honest status.** New in 0.3.0. Its look is still to be compared with the original in the game; the clouds,
-  stars, snow and rain streaks in particular are not yet confirmed. Nothing here widens the supported hardware.
+* **Honest status.** New in 0.3.0. Its look is still to be compared with the original in the game; the snow and rain
+  streaks in particular are not yet confirmed. Nothing here widens the supported hardware.
 
 ### The launcher, rebuilt in the Windows 11 look
 
@@ -346,8 +345,9 @@ information bar (Shift+Y), the navigator and the city map (Shift+M) share the sa
 
 ### Screenshots
 
-Taken from the 0.3.0 release on a clean OMSI 2 copy with the stock maps, in English. Personal paths are masked.
-Pictures that would show OMSI 2's own textures or models are not included.
+Taken from the 0.3.0 release, in English. Only launcher pages are shown here: pictures that would show
+OMSI 2's own textures, models or maps are not included. In-game pictures (Alt bar, information bar,
+navigator) will follow, taken on a freely distributable map.
 
 | | |
 | --- | --- |
@@ -355,12 +355,8 @@ Pictures that would show OMSI 2's own textures or models are not included.
 | Timetable: Trips tab with departures, route, profile and AI group | Settings: Graphics API, with the optional "DirectX9 (D3D9Ex)" |
 | ![Diagnostics overview](docs/images/launcher-diagnostics-overview.png) | ![Integrity check with results by kind](docs/images/launcher-diagnostics-integrity.png) |
 | Diagnostics: Overview | Diagnostics: Integrity, findings in tabs by kind |
-| ![AI traffic](docs/images/launcher-diagnostics-ai-traffic.png) | ![Alt bar](docs/images/ingame-alt-bar.png) |
-| Diagnostics: AI traffic, a map's car groups on a chosen day | In game: the Alt bar |
-| ![Information bar, two-tier](docs/images/ingame-info-bar-two-tier.png) | ![Information bar, split](docs/images/ingame-info-bar-split.png) |
-| Information bar: Two-tier layout | Information bar: Split layout |
-| ![Information bar, full](docs/images/ingame-info-bar-full.png) | ![City map](docs/images/ingame-city-map.png) |
-| Information bar: Full layout | City map (Shift+M) |
+| ![AI traffic](docs/images/launcher-diagnostics-ai-traffic.png) | |
+| Diagnostics: AI traffic, a map's car groups on a chosen day | |
 
 
 ## Download
@@ -423,7 +419,7 @@ Mods page tells where to copy one by hand.
 ## Goals
 
 1. **1:1 behaviour.** Every content format of the original - maps, splines, scenery objects,
-   vehicles, scripts, timetables, HOF files, fonts, weather, tickets, situations, plugins -
+   vehicles, scripts, timetables, HOF files, fonts, weather, tickets, situations -
    loads and behaves exactly as in OMSI 2. Existing maps and mods work unchanged.
 2. **No original code or assets.** Nothing from the original is copied; the formats are
    described in [docs/FORMATS.md](docs/FORMATS.md).

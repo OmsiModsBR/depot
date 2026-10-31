@@ -117,7 +117,7 @@ installs over the previous one.
 There are none inside the app: it does not check for, download or install new versions, and it
 no longer asks for the "install unknown apps" permission. Download a newer APK from the Releases
 page and install it over the old one yourself (it must be signed with the same key as the
-installed app; release builds are). See [removed/UPDATER_DISABLED.md](removed/UPDATER_DISABLED.md).
+installed app; release builds are). See [removed/UPDATER_DISABLED.md](UPDATER_DISABLED.md).
 
 `depot/env.txt` on the shared storage takes a few `OMSI_*` switches a computer takes from its
 environment (one `NAME=value` a line): only the harmless rendering and diagnostic ones listed in
