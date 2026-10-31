@@ -319,7 +319,7 @@ fn folders(f: &mut Frame, view: &mut SetupView, col: Rect) -> f32 {
             values[i].clone()
         };
         if view.checks[i].1.is_none() || view.checks[i].0 != key {
-            let out = check(i, &values[i], &values[0], &f.host.version());
+            let out = check(i, &values[i], &values[0], f.host.version().0);
             view.checks[i] = (key, Some(out));
         }
     }

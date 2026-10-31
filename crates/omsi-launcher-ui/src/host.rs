@@ -24,9 +24,12 @@ pub trait Host {
     /// lists the textures as photos. Nothing elsewhere.
     fn hide_content_from_gallery(&self) {}
 
-    /// The game's version and build, as a report names them: `0.3.1 (abc1234)`.
-    fn build(&self) -> String;
+    /// The game's version and build (`0.3.1`, `abc1234`), as Diagnostics and a report name them.
+    fn version(&self) -> (&'static str, &'static str);
 
-    /// The game's version alone, as Diagnostics shows it: `0.3.1`.
-    fn version(&self) -> String;
+    /// The project's repository page (where a problem is reported).
+    fn repo_url(&self) -> &'static str;
+
+    /// Where the preview helper writes its log.
+    fn helper_log(&self) -> std::path::PathBuf;
 }
