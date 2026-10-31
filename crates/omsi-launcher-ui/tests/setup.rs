@@ -1,7 +1,9 @@
+//! The Setup page's folder checks and disk usage chart.
+
 use omsi_launcher_lib as core;
 use omsi_launcher_lib::disk::Node;
 use omsi_launcher_ui::kit::Status;
-use openomsi_game::testing::launcher::setup::*;
+use omsi_launcher_ui::window::*;
 
 fn tree() -> Node {
     let leaf = |n: &str, b: u64| Node {

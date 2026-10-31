@@ -10,6 +10,19 @@
 //! lists, timetables, profiles, installs, running games) is `omsi-launcher-core`, the same
 //! functions `omsi-launcher --cli` offers a terminal.
 
+/// The frame a page of `omsi_launcher_ui::window` is drawn with, from the launcher `$l`.
+macro_rules! frame {
+    ($l:expr) => {
+        &mut omsi_launcher_ui::Frame {
+            ui: &mut $l.ui,
+            state: &mut $l.state,
+            drop_hover: $l.pages.drop_hover,
+            host: &$crate::launcher::host::GameHost,
+            root: &mut $l.root_ok,
+        }
+    };
+}
+
 pub(crate) mod ai_edit;
 pub(crate) mod ai_traffic;
 pub(crate) mod backdrop;
@@ -18,17 +31,14 @@ pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
 pub(crate) mod host;
-pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
 mod omsi2_map;
-pub(crate) mod original_ui;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
 pub(crate) mod settings;
-pub(crate) mod setup;
 pub(crate) mod start;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -240,7 +250,7 @@ pub struct Launcher {
     shown_once: bool,
     /// Whether the OMSI 2 folder chosen has what the game needs, for that folder (looked at
     /// again when the window gets the focus back: the status bar asks for it every frame).
-    root_ok: Option<(String, bool)>,
+    root_ok: window::RootCheck,
     /// The window's own title bar and edges (see `chrome`).
     chrome: chrome::Chrome,
     /// The accent the sidebar's logo was coloured in.
@@ -331,7 +341,7 @@ impl Launcher {
             ime: false,
             gpu_rest_drop: None,
             shown_once: false,
-            root_ok: None,
+            root_ok: window::RootCheck::default(),
             chrome: Default::default(),
             logo_accent: omsi_ui::theme::current_accent(),
         };
@@ -1115,7 +1125,7 @@ impl Launcher {
     fn set_focus(&mut self, f: bool) {
         self.focused = f;
         if f {
-            self.root_ok = None;
+            self.root_ok.forget();
             // (Windows' "Animation effects" may have changed while the window was away)
             omsi_ui::theme::set_motion(windows_motion());
         }
@@ -1765,35 +1775,13 @@ impl Launcher {
                 Page::Maps => self.maps_page(content),
                 Page::Diagnostics => diagnostics::draw(self, content),
                 Page::Multiplayer => {}
-                Page::Profile => window::profile(
-                    &mut window::Frame {
-                        ui: &mut self.ui,
-                        state: &mut self.state,
-                        drop_hover: self.pages.drop_hover,
-                    },
-                    &mut self.pages.profile,
-                    content,
-                ),
+                Page::Profile => window::profile(frame!(self), &mut self.pages.profile, content),
                 Page::Settings => settings::settings(self, content),
                 Page::Controls => pages::controls(self, content),
-                Page::Mods => window::mods(
-                    &mut window::Frame {
-                        ui: &mut self.ui,
-                        state: &mut self.state,
-                        drop_hover: self.pages.drop_hover,
-                    },
-                    content,
-                ),
-                Page::Tutorials => window::tutorials(
-                    &mut window::Frame {
-                        ui: &mut self.ui,
-                        state: &mut self.state,
-                        drop_hover: self.pages.drop_hover,
-                    },
-                    content,
-                ),
+                Page::Mods => window::mods(frame!(self), content),
+                Page::Tutorials => window::tutorials(frame!(self), content),
                 Page::Timetable => timetable::draw(self, content),
-                Page::Setup => setup::setup(self, content),
+                Page::Setup => self.setup_page(content),
             }
             // the rail over the page (a scrolled page passes under it)
             self.rail();
@@ -1836,22 +1824,15 @@ impl Launcher {
             } else if reset {
                 settings::reset_dialog(self);
             } else if engine {
-                self.draw_engine_dialog();
+                window::engine_dialog(frame!(self));
             } else if self.browser.is_none() && window {
                 start::popup(self);
             } else if self.browser.is_none() && drive {
-                window::drive_dialog(
-                    &mut window::Frame {
-                        ui: &mut self.ui,
-                        state: &mut self.state,
-                        drop_hover: self.pages.drop_hover,
-                    },
-                    &mut self.pages.profile,
-                );
+                window::drive_dialog(frame!(self), &mut self.pages.profile);
             } else if self.browser.is_none() && keys {
                 keyboard::dialog(self);
             } else if self.browser.is_none() && diag {
-                integrity::dialog(self);
+                diagnostics::dialog(self);
             } else {
                 self.draw_browser();
             }
@@ -2530,15 +2511,18 @@ impl Launcher {
     /// Whether the OMSI 2 folder chosen has what the game needs, kept per folder and looked at
     /// again when the window has the focus back (a folder repaired outside the launcher).
     fn root_ok(&mut self) -> bool {
-        let root = &self.state.config.root;
-        match &self.root_ok {
-            Some((r, ok)) if r == root => *ok,
-            _ => {
-                let ok =
-                    omsi_cfg::missing_original_essentials(std::path::Path::new(root)).is_empty();
-                self.root_ok = Some((root.clone(), ok));
-                ok
-            }
+        self.root_ok.ok(&self.state.config.root)
+    }
+
+    /// The Setup page (`omsi_launcher_ui::window::setup`), and what it asks of the window: the
+    /// storage browser for the OMSI 2 folder, the vehicles' pictures of another installation.
+    pub(crate) fn setup_page(&mut self, area: Rect) {
+        window::setup(frame!(self), &mut self.pages.setup, area);
+        if let Some(start) = self.pages.setup.browse_root.take() {
+            self.browse(mobile::Purpose::Root, &start);
+        }
+        if std::mem::take(&mut self.pages.setup.other_root) {
+            self.prerender.looking();
         }
     }
 

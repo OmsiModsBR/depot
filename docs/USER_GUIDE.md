@@ -1,6 +1,6 @@
 # User guide
 
-How to run Project Depot, drive, use the launcher, install mods and play over LAN. For building
+How to run Project Depot, drive, use the launcher, install mods. For building
 from source see [BUILDING.md](BUILDING.md).
 For OpenXR headset setup and controls on Windows, see [VR.md](VR.md).
 
@@ -17,7 +17,7 @@ This loads every content file in the install with the new loaders and reports wh
 ## Running
 
 ```bash
-openomsi --root "/path/to/OMSI 2"
+depot --root "C:\path\to\OMSI 2"
 ```
 
 `--root` is only needed once: the path is remembered, so afterwards the program can be
@@ -109,13 +109,12 @@ wheel button turns the view; each view keeps its own
 direction (turning the outside camera leaves the driver's head where it was), **Space** looks
 ahead again in every view (OMSI's `view_reset_all_directions`), Home recentres the view shown
 where keyboard.cfg does not make it the ticket desk camera.
-The mouse wheel (and **=** / **-**, a pinch on a phone) zooms: outside the camera comes closer,
+The mouse wheel (and **=** / **-**) zooms: outside the camera comes closer,
 inside the bus the view narrows, as in OMSI; **Ctrl**+wheel outside narrows the view instead
 (a telephoto, the camera stays where it is). F1-F4 driver / passenger / outside / map (free) camera, F5-F8 the destination
 sign and roller blind keys as in OMSI, Ctrl+S quick save, F9 write the run into the personnel
 file, WASD+QE in the free camera (**Ctrl**+click on the ground there moves the bus to the
-nearest street), left click on cockpit elements, **V** the chat line in a
-LAN session. Esc opens the game menu: drive the next placed vehicle, place any vehicle of
+nearest street), left click on cockpit elements. Esc opens the game menu: drive the next placed vehicle, place any vehicle of
 the installation in front of the camera (or beside the bus), couple what stands close behind
 the bus and uncouple it again, save the situation or load the quicksave, the next weather, the clock an hour on or back, refuel and wash (only at a
 petrol station, as in OMSI), repair (the team needs the map's travel time when the bus stands
@@ -148,8 +147,7 @@ shadows exactly as in the game, under the light of the chosen time and weather -
 again only when something changes; drag on it to turn the bus, scroll to zoom. Its pages:
 
 * **Drive** - three steps: *Bus* (search, liveries, depot file, number plate), *Day & weather*
-  (time, date, season, traffic, passengers, timetable buses, autostart, *LAN play: host / join*,
-  the weather presets that suit the season) and *Map & duty* (the map, start point, line and
+  (time, date, season, traffic, passengers, timetable buses, autostart, the weather presets that suit the season) and *Map & duty* (the map, start point, line and
   tour - the lines that run on the chosen date - with the roadbook and the IBIS codes, or
   free driving); the summary and **Start the duty** bottom right.
 * **Profile** - hours, experience and level, from OMSI's own `.odr` personnel files plus
@@ -200,11 +198,10 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   (centering and resistance) and *Vibration* separately, then press **Save**. The values are stored
   for that device in the content folder's `Inputs/gamectrler.cfg`; restart a running game to use
   the new values. *Force feedback and vibration* in Settings → Driving remains the global on/off switch.
-* **Sessions** - every game started from the launcher, with its log, a **Stop** that lets
-  it save its run (SIGTERM, up to 8 s, and only a stuck game is killed) and, for a LAN
-  session, the code to copy, who is playing and the chat.
-* **Mods** - installing mods and archives (see *Mods and the content folder*); a folder or
-  .zip dropped on the window is installed (a .zip is never unpacked: it goes to `Archives`).
+* **Sessions** - the game started from the launcher, with its log and a **Stop** that lets
+  it save its run (up to 8 s, and only a stuck game is killed).
+* **Mods** - installing mods and archives (see *Mods and the content folder*); only a `.zip` is installed (chosen,
+  or dropped on the window), and it is used in place from `Archives`, never unpacked.
 * **Timetable** - a map's lines, their tours and trips. Changes stay while you move between
   lines and are saved together (*Save all*); **New line** makes a line, **Repeat** turns a tour
   into a whole day of them (every *n* minutes up to a last departure).
@@ -214,7 +211,7 @@ again only when something changes; drag on it to turn the bus, scroll to zoom. I
   never writes to the game's.
 
 ```bash
-scripts/build-macos.sh   # or build-windows.cmd / build-linux.sh: the game opens the launcher
+scripts\build-windows.cmd   # the game opens the launcher
 ```
 
 Without a person at it: `OMSI_LAUNCHER_PAGE=drive:2` opens a page (and a Drive step;
@@ -222,7 +219,7 @@ Without a person at it: `OMSI_LAUNCHER_PAGE=drive:2` opens a page (and a Drive s
 `OMSI_LAUNCHER_EXIT=secs` closes it,
 `OMSI_LAUNCHER_INPUT="t=2 click 412,60; t=3 type 76; t=4 key Enter; t=5 shot a.png"` works
 it (logical pixels). The data side is `crates/omsi-launcher-core`:
-`openomsi-launcher --cli lines '{"map":"maps/Grundorf/global.cfg"}'` runs any of its commands
+`depot-launcher --cli lines '{"map":"maps/Grundorf/global.cfg"}'` runs any of its commands
 from a terminal - `config`, `maps`, `vehicles`, `weather`, `lines`, `ibis`, `profiles`,
 `profile`, `mods`, `modinfo`, `install`, `instances`, `stop`, `log`, `join`, `settings`,
 `save_settings`, `keybindings`, `save_keybindings`, `preview`, `args`, `launch`. `lines`
@@ -379,8 +376,7 @@ left by default), after the Route Advisor of Euro Truck Simulator 2: small, dark
 transparent, a tilted 3D map that turns with the bus and zooms out with speed - the roads
 of the lane network, the trip's route with arrows along it, coloured stretch by stretch by
 how busy the road is (blue empty, green light, yellow busy, red heavy, dark red jammed; it
-changes as the traffic does), the stops ahead, the other vehicles as blue dots, the other
-players of a LAN session or server as purple arrows with their names (on the city map too), the next
+changes as the traffic does), the stops ahead, the other vehicles as blue dots, the next
 turn with its distance and the street it turns into, and the street the bus is on. It
 routes on the whole map's road network, read from the tile files in the background at the
 start, so the way shows however far the route or the next stop is from the loaded tiles.
@@ -432,7 +428,7 @@ The choice is saved as `right_stick_look=0` (off) or `right_stick_look=1` (on) i
 
 ## Mods and the content folder
 
-The folder of the game binary (`dist/<platform>` in a build; beside `openOMSI.app` on macOS) is laid out like an OMSI 2
+The folder of the game binary (`dist\windows` in a build) is laid out like an OMSI 2
 installation - `Vehicles`, `maps`, `Sceneryobjects`, `Splines`, `Texture`, `Fonts`,
 `Plugins`, `TicketPacks`, `Drivers`, `Weather`, … - and is searched *before* the original
 folder (`omsi_cfg::content_roots`): whatever a mod puts there is found exactly as if it had
@@ -445,7 +441,7 @@ vehicle folder and `HOFs/` contain the same file name, the vehicle's own copy ta
 priority (the launcher's depot list shows the shared ones after the bus's own).
 
 Installing a mod: the launcher's **Mods** page installs a mod's **`.zip`**: its
-**Choose a .zip file** button opens the system's file picker (Finder, Explorer, GTK), a
+**Choose a .zip file** button opens the system's file picker (Explorer), a
 `.zip` can be dropped on the window, or put into `Mods/` in the content folder (the page
 lists what is in it). The launcher works out what is in it and installs it in place (see
 below). **Loose folders are never installed by the launcher**: the page's *Loose files*
@@ -453,7 +449,7 @@ part opens the two folders to copy them into by hand, the original OMSI 2 folder
 then works in OMSI 2 and in the Depot) or the Depot's content folder (the Depot only). A
 folder in `Mods/`, or one dropped on the window, is left where it is.
 
-From a shell, `openomsi-launcher --cli install '{"path":"/path/to/mod.zip"}'` installs a
+From a shell, `depot-launcher --cli install '{"path":"/path/to/mod.zip"}'` installs a
 `.zip`, and `--cli mods` installs the `.zip` files in `Mods/`, as the page does (`--cli poll`
 with `watch` likewise). `--cli install` refuses a folder too. **`.rar` and `.7z` archives are
 not supported** (unpack them with your own tool and copy the folder by hand), and **a `.zip`
@@ -564,7 +560,7 @@ station` line at all means the bus's radio sets neither variable.
 ## Performance
 
 `OMSI_PROFILE=1 … --exit-after N` prints the frame split (render, mirrors, traffic, people,
-scripted objects, LAN), counts frames over 50 ms and logs the GPU and CPU memory by kind
+scripted objects), counts frames over 50 ms and logs the GPU and CPU memory by kind
 every ten seconds; the per-draw buffers are updated in contiguous runs and appended to as
 cars and people spawn (no full rebuild), everything behind the fog is culled, culling runs
 on all cores, the main pass is recorded as render bundles on helper threads, and the AI
@@ -640,13 +636,11 @@ Environment variables, all off unless set. The useful ones:
 | `OMSI_NO_PUDDLE_REFLECTIONS=1` | leave wet-road scene reflections out for a screenshot or performance comparison |
 | `OMSI_NO_SPRAY=1` | leave the tyres' spray on wet roads out (A/B); `OMSI_DEBUG_RAIN=1` logs how many tyres throw water |
 | `OMSI_DEBUG_ENHANCED`, `OMSI_DEBUG_SKY`, `OMSI_DEBUG_EXPOSURE`, `OMSI_METER=…` | the enhanced renderer's lamps, sky, adaptation and metering |
-| `OMSI_DEBUG_TRAFFIC`, `OMSI_DEBUG_PAX`, `OMSI_DEBUG_PHYSICS`, `OMSI_DEBUG_LAN`, `OMSI_DEBUG_IBIS`, `OMSI_DEBUG_VARS=a,b` | why a car, a passenger, a wheel, a peer, an IBIS or a script variable does what it does |
+| `OMSI_DEBUG_TRAFFIC`, `OMSI_DEBUG_PAX`, `OMSI_DEBUG_PHYSICS`, `OMSI_DEBUG_IBIS`, `OMSI_DEBUG_VARS=a,b` | why a car, a passenger, a wheel, an IBIS or a script variable does what it does |
 | `OMSI_CHECK_ROADS=1`, `OMSI_ROAD_PHOTO=1`, `OMSI_CHECK_ENTRIES=1` | walk the lanes as a bus wheel, photograph the carriageway from above, check every entry point |
 | `OMSI_CONTENT=/dir`, `OMSI_CONTENT_ZIP=a.zip:b.zip`, `OMSI_ROOT=/dir` | where the content folder, the archives and the original installation are |
 | `OMSI_DEBUG_CONES`, `OMSI_NO_LIGHT_MAP`, `OMSI_DEBUG_LIGHT_GRID` | the lamps' fog cones and halos, the tiles' night light maps left out, lights a full grid cell leaves out |
 | `OMSI_PARKED_PULL_OUT=p` | the chance per population pass (about 2 s) that a parked car drives off (0.035 by default), with a log of why one does not |
-| `OMSI_NO_BRIDGE=1` | a LAN host leaves the internet alone (no UPnP port forward, no address posting) - for tests |
-| `OMSI_NO_LAN_MODS=1` | a LAN host serves no mods and a joining game fetches none |
 | `OMSI_BACKEND=vulkan\|dx12\|gl` | the graphics interface to ask first (the log lists every adapter each one offers) |
 | `OMSI_GPU_LIMITS=default\|downlevel` | pretend the graphics card can only do this much (tests of old cards) |
 | `OMSI_GPU_ARRAYS=textures\|nostorage` | read the scene's arrays from textures, as on OpenGL chips without storage buffers in the vertex shader (or without any: no per-pixel lamp light) - tests of old cards |
@@ -656,82 +650,11 @@ Environment variables, all off unless set. The useful ones:
 | `OMSI_DEBUG_REPEATERS=1` | list the spline object rows whose start the map and the spline chain disagree about |
 | `OMSI_TRACE_STEER=file.csv` | write mouse steering, frame by frame (cursor, target, wheel, speed) |
 
-`OMSI_MUTE`, `OMSI_LAN_AUDIO` and `OMSI_LAN_SAY` are the LAN tests' switches; the rest are
+`OMSI_MUTE` is a test switch; the rest are
 listed in [ENVIRONMENT.md](ENVIRONMENT.md), made from the register in `omsi_cfg::flags`.
 
-## LAN play
+## Platform
 
-`--lan-host [port]` hosts a session (UDP, port 27015 by default), `--lan-join <where>`
-joins one and `--lan-name` is your name. The launcher's Drive page has the same as *LAN
-play: host / join*.
-
-A host prints a **session code** - `OMSI-7Q4K-2M9X-HD3P-R8TZ-KC5W-NB6E`, a base-32
-alphabet without look-alike characters, the scrambled session id first and the host's
-addresses hidden under a mask drawn from it, so two codes of one host share nothing. The
-code carries up to three addresses of the host, a VPN's first: Hamachi (25.x.x.x), Radmin
-VPN (26.x.x.x), ZeroTier, Tailscale (100.64.0.0/10), then the LAN's - never the loopback,
-a 169.254 address or a bridge of virtual machines. The joining game says hello to all of
-them at once and takes the one that answers; with no answer within 10 s it gives up and
-says why that may be (not the same network, a firewall). A host that is busy (a dedicated
-server loading its map, a game loading a heavy part of one) answers from a thread of its own
-while it loads, and the joining game waits up to 8 s for it before it loads anything. The
-joining game plays on the host's map whatever map was chosen before joining, when that map is
-installed (or comes with the host's mods, below); one that is not is said in the HUD. The
-launcher's Sessions page and
-the HUD list the same addresses with the network they belong to, for joining by hand.
-`--lan-join` takes that code, an `ip`, `ip:port`, a host name, a bare port (a host on this
-machine) or `auto` (find a host on the local network by broadcast). Over the internet both
-players need the same VPN network; the host's firewall must let the game receive UDP on
-port 27015 (Windows counts a Hamachi network as public).
-
-Everybody sends the state of their own bus up to twenty times a second (five while nothing
-changes, about 60 bytes: a bit-packed datagram with the pose, pedals, lights, indicators,
-doors, wheel travel, the rear sections of an articulated bus and the vehicle's own lamp,
-switch and sound variables); everything else is text. The host relays and owns the world:
-a joining player takes its date, time, weather and season, and its clock keeps everybody
-in step. The other players' buses run their own AI scripts with the sender's inputs, are
-drawn and heard where they stand, and are obstacles for the AI traffic like your own bus -
-as long as that bus type is installed locally, otherwise your own type stands in for it.
-**V** opens the chat line (Enter sends, Esc drops it); joining and leaving are announced
-there. The chat grows with the window like the rest of the interface, and has a size of
-its own on top: **Ctrl + the mouse wheel** over it, or Settings → General → Chat size (50-300 %). The host checks everything it takes in and limits how much a player may send.
-
-**Every variable of the other buses.** Besides the pose, each game sends all script
-variables of its bus (floats and strings: a gearbox's state, a display's or an IBIS's text,
-a ticket printer, what a plugin or `setvar` set): ten times a second the ones that changed,
-and all of them in turn in between, so a lost datagram is mended within seconds and a
-player who joins late sees the whole state. The copy of another player's bus takes them over
-its own scripts' results (the ones its parts move smoothly by stay smooth); a copy made from
-other files than the sender's (another version of the bus) takes nothing. `OMSI_NO_VAR_SYNC=1`
-switches it off, `OMSI_DEBUG_VAR_SYNC=<variable>` logs what arrives for one variable.
-
-**The host's mods.** What the host's session uses that is not in the OMSI 2 folder itself
-(its map, bus, objects, splines, AI vehicles and people from the content folder or archives,
-also a content folder inside the OMSI 2 folder) is listed with a SHA-256 per file and served
-over TCP on the session's port; a joining game fetches what it lacks before it loads the map
-and keeps the downloads for the next time (`~/.depot/lan-store`). Listing a big add-on map
-takes the host a while after it starts (Novi Sad, 27 000 files: 20 s on a fast computer); a joining game waits
-for it. Maps installed straight into the OMSI 2 folder are not passed on: both players need
-them.
-
-**One world.** The host simulates the AI traffic, the timetable buses, the people on the
-pavements and at the stops, the riders of the timetable buses and the traffic lights for
-everybody, around every player (it loads the ground and fills the streets around the
-others too). A client simulates none of that: it draws the host's world, 160 ms in the
-past so that it glides between the host's frames (`crates/omsi-app/src/lan_world.rs`,
-`crates/omsi-net/src/world.rs`). Only its own bus and the passengers who board it are its
-own: when its bus stands at a stop with a door open, it asks the host for the people
-waiting there; the host hands over those still waiting and keeps those who meanwhile went
-for another bus, so nobody is ever on two buses. The people walking up to a client's bus
-and those getting off are sent back up, so the host sees them too. Money and the timetable
-of your own duty stay local - but the host's timetable leaves the tour each player drives to
-that player (its AI bus goes, and comes back from the next departure when the player leaves),
-and everybody sees the passengers in everybody's bus: the riders of a player's bus travel
-with the world frames and sit in that bus in every other game (protocol 5). `crates/omsi-net` is the transport, the same on every
-platform.
-
-Windows, macOS and Linux run the same code (wgpu, winit, cpal, std UDP);
-paths are resolved case-insensitively so Windows-style `\` references in mods work
-everywhere; settings live under `$HOME` / `%USERPROFILE%`. The same `cargo build --release`
-produces `openomsi.exe` / `openomsi`, and the scripts in `scripts/` build the launcher tools alongside it. Stopping a game from the launcher uses `WM_CLOSE` on Windows where it
-sends SIGTERM elsewhere.
+Project Depot is built and supported for Windows x64 only (see the [README](../README.md#download)).
+Paths are resolved case-insensitively so Windows-style `\` references in mods work; settings live under
+`%USERPROFILE%`. Stopping a game from the launcher uses `WM_CLOSE`.

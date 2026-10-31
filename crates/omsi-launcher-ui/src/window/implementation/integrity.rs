@@ -3,110 +3,19 @@
 //! for OMSI 2 and DirectX 9. The result has a tab for each kind of file, filters by severity
 //! and by text, and goes out as a plain text report. Nothing on it changes a file.
 
-use super::ui::Key;
-use super::Launcher;
+use super::super::domain::check::{CheckView, Done, Export, Row, Run};
+use super::super::domain::frame::Frame;
+use super::super::interface::output::State;
+use super::dialog::{dialog, dialog_foot};
+use crate::kit::{action, clipped, dot, text, Status};
+use crate::look::*;
 use omsi_integrity::{Category, Progress, Report, Severity, TextOptions};
-use omsi_launcher_ui::kit::{action, clipped, dot, text, Status};
-use omsi_launcher_ui::look::*;
 use omsi_ui::paint::Align;
-use omsi_ui::widgets::ButtonKind;
+use omsi_ui::widgets::{ButtonKind, Key};
 use omsi_ui::{Rect, Weight};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
-
-pub struct DiagView {
-    /// The page's tab: 0 the overview, 1 the integrity check, 2 the AI traffic.
-    pub tab: usize,
-    /// What is checked: 0 a map, 1 a vehicle.
-    kind: usize,
-    item: usize,
-    /// The map or vehicle compared with (0: none; k: the list's k - 1th).
-    compare: usize,
-    run: Option<Run>,
-    done: Option<Done>,
-    /// The result's tab: 0 all, k the kind of file `tabs(..)[k - 1]`.
-    cat: usize,
-    /// Errors, warnings, not optimized: which are shown.
-    show: [bool; 3],
-    search: String,
-    /// The export window, while it is open.
-    export: Option<Export>,
-    /// The AI traffic tab.
-    pub(super) ai: super::ai_traffic::AiView,
-}
-
-impl Default for DiagView {
-    fn default() -> Self {
-        DiagView {
-            tab: 0,
-            kind: 0,
-            item: 0,
-            compare: 0,
-            run: None,
-            done: None,
-            cat: 0,
-            show: [true; 3],
-            search: String::new(),
-            export: None,
-            ai: Default::default(),
-        }
-    }
-}
-
-impl DiagView {
-    /// A window lies over the page (the page sees no mouse meanwhile).
-    pub fn dialog_open(&self) -> bool {
-        (self.tab == 1 && self.export.is_some()) || (self.tab == 2 && self.ai.dialog_open())
-    }
-
-    /// The AI traffic tab shows one of its vehicles in the preview.
-    pub fn shows_vehicle(&self) -> bool {
-        self.tab == 2 && self.ai.shows_vehicle()
-    }
-}
-
-/// A check running in the background; cancelling it stops it within a file read.
-struct Run {
-    rx: Receiver<Report>,
-    progress: Arc<Progress>,
-}
-
-pub struct Done {
-    pub name: String,
-    /// The map's folder or the vehicle's file, as checked.
-    pub target: String,
-    /// The name of what it was compared with.
-    pub compared: Option<String>,
-    /// When it was checked (`YYYY-MM-DD HH:MM`), for the report.
-    pub when: String,
-    pub report: Report,
-}
-
-/// The export window's choices.
-struct Export {
-    severities: [bool; 3],
-    why: bool,
-    used_by: bool,
-    known: bool,
-    /// 0 sections by kind of file, 1 by severity.
-    group: usize,
-    /// 0 every kind, 1 only the result's open tab.
-    only_tab: usize,
-}
-
-/// One line of the result.
-pub enum Row {
-    Head(Severity, usize),
-    Item {
-        severity: Severity,
-        category: Category,
-        file: String,
-        message: String,
-        tip: String,
-        known: bool,
-    },
-}
 
 const ROW: f32 = 28.0;
 
@@ -159,9 +68,9 @@ pub fn tabs(kind: usize, r: &Report) -> Vec<Category> {
 }
 
 /// What can be checked: (shown name, the map's folder or the vehicle's file).
-pub(super) fn items(l: &Launcher, kind: usize) -> Vec<(String, String)> {
+pub fn check_items(state: &State, kind: usize) -> Vec<(String, String)> {
     if kind == 0 {
-        l.state
+        state
             .maps
             .iter()
             .filter_map(|m| {
@@ -176,7 +85,7 @@ pub(super) fn items(l: &Launcher, kind: usize) -> Vec<(String, String)> {
             })
             .collect()
     } else {
-        l.state
+        state
             .vehicles
             .iter()
             .map(|v| {
@@ -304,7 +213,14 @@ pub fn rows_of(r: &Report, only: Option<Category>, show: [bool; 3], search: &str
 }
 
 /// The text a report goes out as: what the export window chose, or the summary alone.
-fn report_text(d: &Done, kind: usize, opts: Option<&Export>, open: Option<Category>) -> String {
+/// `build` is the game's version and build (`Host::build`).
+fn report_text(
+    d: &Done,
+    kind: usize,
+    opts: Option<&Export>,
+    open: Option<Category>,
+    build: &str,
+) -> String {
     let mut header = vec![(
         if kind == 0 { "Map" } else { "Vehicle" }.to_string(),
         format!("{} ({})", d.name, d.target),
@@ -312,14 +228,7 @@ fn report_text(d: &Done, kind: usize, opts: Option<&Export>, open: Option<Catego
     if !d.when.is_empty() {
         header.push(("Checked".into(), d.when.clone()));
     }
-    header.push((
-        "Build".into(),
-        format!(
-            "Project Depot {} ({})",
-            crate::core::startup::VERSION,
-            crate::core::startup::BUILD
-        ),
-    ));
+    header.push(("Build".into(), format!("Project Depot {build}")));
     header.push((
         "Compared".into(),
         d.compared.clone().unwrap_or_else(|| "none".into()),
@@ -363,12 +272,12 @@ pub fn file_name(d: &Done) -> String {
         .replace(" .txt", ".txt")
 }
 
-pub fn draw(l: &mut Launcher, area: Rect) {
+pub fn integrity_check(f: &mut Frame, view: &mut CheckView, area: Rect) {
     // the answer of a running check
-    if let Some(run) = l.pages.diag.run.as_ref() {
+    if let Some(run) = view.run.as_ref() {
         match run.rx.try_recv() {
             Ok(report) => {
-                let d = &mut l.pages.diag;
+                let d = &mut *view;
                 if let Some(done) = d.done.as_mut() {
                     done.report = report;
                     done.when = now_text();
@@ -379,36 +288,36 @@ pub fn draw(l: &mut Launcher, area: Rect) {
                 if !run.progress.cancelled() {
                     log::warn!("integrity check: the check stopped without an answer");
                 }
-                l.pages.diag.run = None;
-                l.pages.diag.done = None;
+                view.run = None;
+                view.done = None;
             }
             Err(TryRecvError::Empty) => {}
         }
     }
-    let kind = l.pages.diag.kind;
-    let list = items(l, kind);
-    let root = PathBuf::from(l.state.config.root.trim());
+    let kind = view.kind;
+    let list = check_items(f.state, kind);
+    let root = PathBuf::from(f.state.config.root.trim());
     let empty = list.is_empty() || root.as_os_str().is_empty();
-    l.pages.diag.item = l.pages.diag.item.min(list.len().saturating_sub(1));
-    l.pages.diag.compare = l.pages.diag.compare.min(list.len());
-    let busy = l.pages.diag.run.is_some();
+    view.item = view.item.min(list.len().saturating_sub(1));
+    view.compare = view.compare.min(list.len());
+    let busy = view.run.is_some();
 
     // what to check
     let h = 36.0;
     let mut k = kind;
     let kind_r = Rect::new(area.x, area.y, 220.0f32.min(area.w), h);
-    if l.ui
+    if f.ui
         .segmented("integrity-kind", kind_r, &mut k, &["Map", "Vehicle"])
         && !busy
     {
-        let d = &mut l.pages.diag;
+        let d = &mut *view;
         d.kind = k;
         d.item = 0;
         d.compare = 0;
         d.done = None;
         d.cat = 0;
     }
-    l.ui.segmented_tips(
+    f.ui.segmented_tips(
         kind_r,
         &[
             "Check a map: its tiles, objects, splines and their files.",
@@ -417,7 +326,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     );
     if empty {
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             "Nothing to verify here.",
             area.x + 4.0,
             area.y + h + 26.0,
@@ -430,22 +339,22 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     }
     let names: Vec<String> = list.iter().map(|x| x.0.clone()).collect();
     let sel_w = ((area.w - 240.0 - 12.0) * 0.5).clamp(160.0, 340.0);
-    let mut item = l.pages.diag.item;
-    if l.ui.select_as_is(
+    let mut item = view.item;
+    if f.ui.select_as_is(
         "integrity-item",
         Rect::new(area.x + 232.0, area.y, sel_w, h),
         &mut item,
         &names,
     ) && !busy
     {
-        l.pages.diag.item = item;
-        l.pages.diag.done = None;
+        view.item = item;
+        view.done = None;
     }
 
     // what to compare with, and the button
     let y2 = area.y + h + 12.0;
     let label_w = text(
-        &mut l.ui,
+        &mut f.ui,
         "Compare with",
         area.x + 4.0,
         y2 + h * 0.5,
@@ -455,47 +364,45 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     );
     let mut opts = vec![omsi_ui::tr("None").to_string()];
     opts.extend(names.iter().cloned());
-    let mut cmp = l.pages.diag.compare;
+    let mut cmp = view.compare;
     let cmp_r = Rect::new(area.x + 16.0 + label_w, y2, sel_w, h);
-    if l.ui
+    if f.ui
         .select_as_is("integrity-compare", cmp_r, &mut cmp, &opts)
         && !busy
     {
-        l.pages.diag.compare = cmp;
+        view.compare = cmp;
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         cmp_r,
         "What another map or vehicle (for example the original of an optimized copy) has too is marked, and only the rest is counted.",
     );
     let bw = 160.0f32;
     let b = Rect::new(area.right() - bw, y2, bw, h);
     if busy {
-        if l.ui.button(
+        if f.ui.button(
             "integrity:cancel",
             b,
             "Cancel",
             Some("o-close"),
             ButtonKind::Normal,
         ) {
-            if let Some(run) = l.pages.diag.run.take() {
+            if let Some(run) = view.run.take() {
                 run.progress.cancel();
             }
             // (the placeholder of the check that was running is not a result)
-            l.pages.diag.done = None;
+            view.done = None;
         }
-        l.ui.tooltip(b, "Stops the check now. What it found so far is dropped.");
+        f.ui.tooltip(b, "Stops the check now. What it found so far is dropped.");
     } else {
-        if action(&mut l.ui, "integrity:verify", b, "VERIFY", "", true) {
-            let target = list[l.pages.diag.item].1.clone();
-            let other = l
-                .pages
-                .diag
+        if action(&mut f.ui, "integrity:verify", b, "VERIFY", "", true) {
+            let target = list[view.item].1.clone();
+            let other = view
                 .compare
                 .checked_sub(1)
                 .map(|k| list[k].clone())
                 .filter(|o| o.1 != target);
             let (rx, progress) = start(root, kind, target.clone(), other.clone().map(|o| o.1));
-            let d = &mut l.pages.diag;
+            let d = &mut *view;
             d.done = Some(Done {
                 name: list[d.item].0.clone(),
                 target,
@@ -505,7 +412,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             });
             d.run = Some(Run { rx, progress });
         }
-        l.ui.tooltip(
+        f.ui.tooltip(
             b,
             "Checks it for what is missing or unreadable, and what works but is wasteful. Nothing is changed.",
         );
@@ -514,12 +421,12 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     // the result
     let top = y2 + h + 16.0;
     let r = Rect::new(area.x, top, area.w, (area.bottom() - top - 8.0).max(160.0));
-    l.ui.solid(r);
-    l.ui.p()
+    f.ui.solid(r);
+    f.ui.p()
         .rounded(r, omsi_ui::theme::RADIUS, omsi_ui::theme::surface(PANEL));
-    l.ui.p()
+    f.ui.p()
         .rounded_border(r, omsi_ui::theme::RADIUS, 1.0, LINE);
-    if let Some(run) = l.pages.diag.run.as_ref() {
+    if let Some(run) = view.run.as_ref() {
         let steps = run.progress.steps();
         let (frac, line) = match steps {
             Some((done, total)) => (
@@ -531,7 +438,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             None => (0.35, omsi_ui::tr("Checking…").to_string()),
         };
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             &line,
             r.x + 19.0,
             r.y + 28.0,
@@ -540,15 +447,15 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             Weight::Regular,
             MUTED,
         );
-        l.ui.progress(
+        f.ui.progress(
             Rect::new(r.x + 19.0, r.y + 46.0, r.w - 38.0, 4.0),
             frac,
             true,
         );
         return;
     }
-    if l.pages.diag.done.is_none() {
-        l.ui.paragraph(
+    if view.done.is_none() {
+        f.ui.paragraph(
             "Checks a map or a vehicle for what is missing or wasteful. Nothing is changed.",
             glam::Vec2::new(r.x + 19.0, r.y + 18.0),
             r.w - 38.0,
@@ -558,12 +465,12 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         );
         return;
     }
-    result(l, r, kind);
+    result(f, view, r, kind);
 }
 
 /// The result of the last check, in the panel `r`.
-fn result(l: &mut Launcher, r: Rect, kind: usize) {
-    let Some(done) = l.pages.diag.done.as_ref() else {
+fn result(f: &mut Frame, view: &mut CheckView, r: Rect, kind: usize) {
+    let Some(done) = view.done.as_ref() else {
         return;
     };
     let rep = &done.report;
@@ -607,11 +514,11 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     let empty = rep.findings.is_empty();
 
     // the heading: what, how it went, and the report's buttons
-    dot(&mut l.ui, r.x + 24.0, r.y + 26.0, dot_status);
-    let tw = l.ui.width(&name, 14.0 * TEXT_SCALE, Weight::Medium);
+    dot(&mut f.ui, r.x + 24.0, r.y + 26.0, dot_status);
+    let tw = f.ui.width(&name, 14.0 * TEXT_SCALE, Weight::Medium);
     let buttons_w = 360.0f32.min(r.w * 0.45);
     let tw = tw.min(r.w - buttons_w - 80.0).max(40.0);
-    l.ui.text_in_as_is(
+    f.ui.text_in_as_is(
         &name,
         Rect::new(r.x + 42.0, r.y + 12.0, tw, 28.0),
         14.0,
@@ -619,7 +526,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
         FG,
     );
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         &summary,
         r.x + 58.0 + tw,
         r.y + 26.0,
@@ -632,21 +539,16 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     let half = (buttons_w - 8.0) * 0.5;
     let export_r = Rect::new(bx, r.y + 11.0, half + 30.0, 32.0);
     let copy_r = Rect::new(export_r.right() + 8.0, r.y + 11.0, half - 30.0, 32.0);
-    if l.ui.button(
+    if f.ui.button(
         "integrity:export",
         export_r,
         "Export report",
         Some("o-save"),
         ButtonKind::Normal,
     ) {
-        let compared = l
-            .pages
-            .diag
-            .done
-            .as_ref()
-            .is_some_and(|d| d.compared.is_some());
-        l.pages.diag.export = Some(Export {
-            severities: l.pages.diag.show,
+        let compared = view.done.as_ref().is_some_and(|d| d.compared.is_some());
+        view.export = Some(Export {
+            severities: view.show,
             why: true,
             used_by: true,
             known: !compared,
@@ -654,24 +556,24 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
             only_tab: 0,
         });
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         export_r,
         "Saves the result as a text file, to keep or to send along.",
     );
-    if l.ui.button(
+    if f.ui.button(
         "integrity:copy",
         copy_r,
         "Copy summary",
         Some("content_copy"),
         ButtonKind::Normal,
     ) {
-        if let Some(d) = l.pages.diag.done.as_ref() {
-            l.ui.clipboard_out = Some(report_text(d, kind, None, None));
-            l.state
+        if let Some(d) = view.done.as_ref() {
+            f.ui.clipboard_out = Some(report_text(d, kind, None, None, &f.host.build()));
+            f.state
                 .set_status("The summary of the check is on the clipboard.", false);
         }
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         copy_r,
         "Puts what was checked and how many findings of each kind there are on the clipboard.",
     );
@@ -680,15 +582,15 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     let sy = r.y + 52.0;
     let cell_w = (r.w - 32.0) / stats.len() as f32;
     let strip = Rect::new(r.x + 16.0, sy, r.w - 32.0, 46.0);
-    l.ui.p().rounded_border(strip, 6.0, 1.0, LINE);
+    f.ui.p().rounded_border(strip, 6.0, 1.0, LINE);
     for (i, (label, n)) in stats.iter().enumerate() {
         let x = strip.x + cell_w * i as f32;
         if i > 0 {
-            l.ui.p()
+            f.ui.p()
                 .rect(Rect::new(x, strip.y + 1.0, 1.0, strip.h - 2.0), LINE);
         }
         text(
-            &mut l.ui,
+            &mut f.ui,
             &n.to_string(),
             x + 14.0,
             strip.y + 17.0,
@@ -697,7 +599,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
             FG,
         );
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             label,
             x + 14.0,
             strip.y + 34.0,
@@ -709,7 +611,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     }
     if rep.cancelled {
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             "The check was stopped before its end: only part of the content was looked at.",
             r.x + 19.0,
             sy + 62.0,
@@ -722,13 +624,13 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
 
     // a tab for each kind of file
     let ty = sy + 58.0;
-    l.pages.diag.cat = l.pages.diag.cat.min(tabs.len());
-    let only = l.pages.diag.cat.checked_sub(1).map(|k| tabs[k]);
-    type_tabs(l, Rect::new(r.x + 8.0, ty, r.w - 16.0, 36.0), &tabs);
+    view.cat = view.cat.min(tabs.len());
+    let only = view.cat.checked_sub(1).map(|k| tabs[k]);
+    type_tabs(f, view, Rect::new(r.x + 8.0, ty, r.w - 16.0, 36.0), &tabs);
 
     if empty {
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             "No problems found.",
             r.x + 19.0,
             ty + 60.0,
@@ -744,9 +646,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     let fy = ty + 46.0;
     let mut x = r.x + 16.0;
     for (i, s) in SEVERITIES.into_iter().enumerate() {
-        let n = l
-            .pages
-            .diag
+        let n = view
             .done
             .as_ref()
             .map(|d| {
@@ -759,13 +659,13 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
             })
             .unwrap_or(0);
         let label = format!("{} {n}", omsi_ui::tr(heading_of(s)));
-        let cw = l.ui.width(&label, 12.0, Weight::Medium) + 40.0;
+        let cw = f.ui.width(&label, 12.0, Weight::Medium) + 40.0;
         let chip = Rect::new(x, fy, cw, 28.0);
-        let on = l.pages.diag.show[i];
+        let on = view.show[i];
         let id = omsi_ui::widgets::id_of(&format!("integrity-sev-{i}"));
-        let (hover, _, clicked) = l.ui.interact_key(id, chip);
+        let (hover, _, clicked) = f.ui.interact_key(id, chip);
         if clicked {
-            l.pages.diag.show[i] = !on;
+            view.show[i] = !on;
         }
         let fill = if on {
             SELECTED_LAYER
@@ -774,8 +674,8 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
         } else {
             PANEL
         };
-        l.ui.p().rounded(chip, 14.0, fill);
-        l.ui.p().rounded_border(
+        f.ui.p().rounded(chip, 14.0, fill);
+        f.ui.p().rounded_border(
             chip,
             14.0,
             1.0,
@@ -785,15 +685,15 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
                 LINE
             },
         );
-        dot(&mut l.ui, chip.x + 15.0, chip.y + 14.0, status_of(s));
-        l.ui.text_in_as_is(
+        dot(&mut f.ui, chip.x + 15.0, chip.y + 14.0, status_of(s));
+        f.ui.text_in_as_is(
             &label,
             Rect::new(chip.x + 26.0, chip.y, cw - 30.0, chip.h),
             12.0,
             Weight::Medium,
             if on { FG } else { MUTED },
         );
-        l.ui.tooltip(
+        f.ui.tooltip(
             chip,
             if on {
                 "Shown. Click to hide these findings."
@@ -805,15 +705,15 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
     }
     let sw = 300.0f32.min(r.right() - 16.0 - x - 8.0).max(120.0);
     let search_r = Rect::new(r.right() - 16.0 - sw, fy - 2.0, sw, 32.0);
-    let mut search = std::mem::take(&mut l.pages.diag.search);
-    l.ui.text_input(
+    let mut search = std::mem::take(&mut view.search);
+    f.ui.text_input(
         "integrity-search",
         search_r,
         &mut search,
         "Filter by file or problem…",
         Some("o-search"),
     );
-    l.pages.diag.search = search;
+    view.search = search;
 
     // the findings
     let list_r = Rect::new(
@@ -822,11 +722,11 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
         r.w - 16.0,
         (r.bottom() - fy - 48.0).max(40.0),
     );
-    let d = &l.pages.diag;
+    let d = &view;
     let rows = rows_of(&d.done.as_ref().unwrap().report, only, d.show, &d.search);
     if rows.is_empty() {
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             "Nothing matches the filter.",
             list_r.x + 11.0,
             list_r.y + 16.0,
@@ -838,7 +738,7 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
         return;
     }
     let with_type = only.is_none();
-    l.ui.scroll_area("integrity-rows", list_r, &mut |ui, v| {
+    f.ui.scroll_area("integrity-rows", list_r, &mut |ui, v| {
         let mut y = v.y;
         for row in &rows {
             let cell = Rect::new(v.x, y, v.w, ROW);
@@ -913,8 +813,8 @@ fn result(l: &mut Launcher, r: Rect, kind: usize) {
 
 /// The result's tab bar: "All" and a tab for each kind of file, with how many findings it
 /// has and a dot in the colour of the worst of them.
-fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
-    let Some(done) = l.pages.diag.done.as_ref() else {
+fn type_tabs(f: &mut Frame, view: &mut CheckView, bar: Rect, tabs: &[Category]) {
+    let Some(done) = view.done.as_ref() else {
         return;
     };
     let mut labels: Vec<(String, usize, Option<Severity>, String)> = Vec::new();
@@ -952,41 +852,41 @@ fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
             ));
         }
     }
-    l.ui.p()
+    f.ui.p()
         .rect(Rect::new(bar.x, bar.bottom() - 1.0, bar.w, 1.0), LINE);
     let px = 12.5;
     // (narrower padding when the tabs do not fit the bar)
     let natural: f32 = labels
         .iter()
         .map(|(t, n, _, _)| {
-            l.ui.width(t, px, Weight::Medium)
-                + l.ui.width(&n.to_string(), 11.0, Weight::Medium)
+            f.ui.width(t, px, Weight::Medium)
+                + f.ui.width(&n.to_string(), 11.0, Weight::Medium)
                 + 46.0
         })
         .sum();
     let squeeze = (bar.w / natural).min(1.0);
     let mut x = bar.x;
     for (i, (label, n, worst, tip)) in labels.iter().enumerate() {
-        let lw = l.ui.width(label, px, Weight::Medium);
-        let nw = l.ui.width(&n.to_string(), 11.0, Weight::Medium) + 12.0;
+        let lw = f.ui.width(label, px, Weight::Medium);
+        let nw = f.ui.width(&n.to_string(), 11.0, Weight::Medium) + 12.0;
         let w = (lw + nw + 46.0) * squeeze;
         let cell = Rect::new(x, bar.y, w, bar.h);
         let id = omsi_ui::widgets::id_of(&format!("integrity-cat-{i}"));
-        let (hover, _, clicked) = l.ui.interact_key(id, cell);
+        let (hover, _, clicked) = f.ui.interact_key(id, cell);
         if clicked {
-            l.pages.diag.cat = i;
+            view.cat = i;
         }
-        let on = l.pages.diag.cat == i;
+        let on = view.cat == i;
         if hover && !on {
-            l.ui.p().rounded(cell.inset(1.0), 4.0, HOVER_LAYER);
+            f.ui.p().rounded(cell.inset(1.0), 4.0, HOVER_LAYER);
         }
         let st = worst.map(status_of).unwrap_or(Status::Found);
         if *n > 0 {
-            dot(&mut l.ui, x + 12.0 * squeeze + 4.0, bar.y + bar.h * 0.5, st);
+            dot(&mut f.ui, x + 12.0 * squeeze + 4.0, bar.y + bar.h * 0.5, st);
         }
         let tx = x + 12.0 * squeeze + 14.0;
         let room = (w - (tx - x) - nw - 6.0).max(10.0);
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             label,
             Rect::new(tx, bar.y, room, bar.h),
             px,
@@ -999,8 +899,8 @@ fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
             nw,
             18.0,
         );
-        l.ui.p().rounded(badge, 9.0, PANEL_2);
-        l.ui.text_in(
+        f.ui.p().rounded(badge, 9.0, PANEL_2);
+        f.ui.text_in(
             &n.to_string(),
             badge,
             11.0,
@@ -1009,56 +909,43 @@ fn type_tabs(l: &mut Launcher, bar: Rect, tabs: &[Category]) {
             Align::Center,
         );
         if on {
-            l.ui.p().rounded(
+            f.ui.p().rounded(
                 Rect::new(cell.x + 8.0, bar.bottom() - 3.0, cell.w - 16.0, 3.0),
                 1.5,
                 omsi_ui::theme::accent(),
             );
         }
-        l.ui.tooltip(cell, tip);
+        f.ui.tooltip(cell, tip);
         x += w;
     }
 }
 
 /// The export window over the page: what goes into the report, a preview, and where it goes.
-pub fn dialog(l: &mut Launcher) {
-    if l.pages.diag.tab == 2 {
-        super::ai_edit::dialog(l);
-        return;
-    }
-    let Some(mut e) = l.pages.diag.export.take() else {
+pub fn integrity_export(f: &mut Frame, view: &mut CheckView) {
+    let Some(mut e) = view.export.take() else {
         return;
     };
-    if l.ui.input.keys.contains(&Key::Escape) {
+    if f.ui.input.keys.contains(&Key::Escape) {
         return;
     }
-    let kind = l.pages.diag.kind;
-    let open = l.pages.diag.done.as_ref().and_then(|d| {
+    let kind = view.kind;
+    let open = view.done.as_ref().and_then(|d| {
         let t = tabs(kind, &d.report);
-        l.pages
-            .diag
-            .cat
-            .checked_sub(1)
-            .and_then(|k| t.get(k).copied())
+        view.cat.checked_sub(1).and_then(|k| t.get(k).copied())
     });
-    let Some(name) = l.pages.diag.done.as_ref().map(|d| d.name.clone()) else {
+    let Some(name) = view.done.as_ref().map(|d| d.name.clone()) else {
         return;
     };
     let note = format!("{name} · {}", omsi_ui::tr("plain text"));
-    let inside = super::start::dialog(l, 1060.0, 680.0, "Export the report", &note);
-    let (buttons, body) = super::start::dialog_foot(l, inside);
-    let compared = l
-        .pages
-        .diag
-        .done
-        .as_ref()
-        .is_some_and(|d| d.compared.is_some());
+    let inside = dialog(f.ui, 1060.0, 680.0, "Export the report", &note);
+    let (buttons, body) = dialog_foot(f.ui, inside);
+    let compared = view.done.as_ref().is_some_and(|d| d.compared.is_some());
 
     // the choices
     let cw = 320.0f32.min(body.w * 0.4);
     let mut y = body.y;
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         "Include",
         body.x,
         y + 8.0,
@@ -1085,12 +972,12 @@ pub fn dialog(l: &mut Launcher) {
     }
     for (label, id, v) in toggles {
         let tr = Rect::new(body.x, y, cw, 30.0);
-        l.ui.toggle(id, tr, v, label);
+        f.ui.toggle(id, tr, v, label);
         y += 32.0;
     }
     y += 10.0;
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         "Group by",
         body.x,
         y + 8.0,
@@ -1101,13 +988,13 @@ pub fn dialog(l: &mut Launcher) {
     );
     y += 20.0;
     let group_r = Rect::new(body.x, y, cw, 34.0);
-    l.ui.segmented(
+    f.ui.segmented(
         "integrity-ex-group",
         group_r,
         &mut e.group,
         &["Kind of file", "Severity"],
     );
-    l.ui.segmented_tips(
+    f.ui.segmented_tips(
         group_r,
         &[
             "A section for each kind of file: tiles, objects, textures...",
@@ -1116,7 +1003,7 @@ pub fn dialog(l: &mut Launcher) {
     );
     y += 50.0;
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         "Kind of file",
         body.x,
         y + 8.0,
@@ -1128,13 +1015,13 @@ pub fn dialog(l: &mut Launcher) {
     y += 20.0;
     let only_r = Rect::new(body.x, y, cw, 34.0);
     if open.is_some() {
-        l.ui.segmented(
+        f.ui.segmented(
             "integrity-ex-only",
             only_r,
             &mut e.only_tab,
             &["All", "Only the open tab"],
         );
-        l.ui.segmented_tips(
+        f.ui.segmented_tips(
             only_r,
             &[
                 "Every kind of file.",
@@ -1144,7 +1031,7 @@ pub fn dialog(l: &mut Launcher) {
     } else {
         e.only_tab = 0;
         clipped(
-            &mut l.ui,
+            &mut f.ui,
             "All",
             body.x + 4.0,
             y + 17.0,
@@ -1154,7 +1041,7 @@ pub fn dialog(l: &mut Launcher) {
             FG,
         );
     }
-    l.ui.paragraph(
+    f.ui.paragraph(
         "Saved as UTF-8 text with Windows line endings, so Notepad and the forums show it as it is. Nothing in the map or vehicle is changed.",
         glam::Vec2::new(body.x, body.bottom() - 54.0),
         cw,
@@ -1167,7 +1054,7 @@ pub fn dialog(l: &mut Launcher) {
     let px = body.x + cw + 24.0;
     let pw = body.right() - px;
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         "Preview",
         px,
         body.y + 8.0,
@@ -1177,19 +1064,19 @@ pub fn dialog(l: &mut Launcher) {
         MUTED,
     );
     let pr = Rect::new(px, body.y + 20.0, pw, body.h - 46.0);
-    l.ui.p()
+    f.ui.p()
         .rounded(pr, 6.0, omsi_ui::Color::rgba(0, 0, 0, 0.25));
-    l.ui.p().rounded_border(pr, 6.0, 1.0, LINE);
-    let Some(d) = l.pages.diag.done.as_ref() else {
+    f.ui.p().rounded_border(pr, 6.0, 1.0, LINE);
+    let Some(d) = view.done.as_ref() else {
         return;
     };
-    let report = report_text(d, kind, Some(&e), open);
+    let report = report_text(d, kind, Some(&e), open, &f.host.build());
     let fname = file_name(d);
     let lines: Vec<String> = report
         .split("\r\n")
         .map(|s| s.replace(' ', "\u{2007}").to_string())
         .collect();
-    l.ui.scroll_area("integrity-ex-preview", pr.inset(10.0), &mut |ui, v| {
+    f.ui.scroll_area("integrity-ex-preview", pr.inset(10.0), &mut |ui, v| {
         let mut yy = v.y;
         for line in &lines {
             ui.text_in_as_is(
@@ -1204,7 +1091,7 @@ pub fn dialog(l: &mut Launcher) {
         yy - v.y
     });
     clipped(
-        &mut l.ui,
+        &mut f.ui,
         &omsi_ui::tr("File name: %{name}").replace("%{name}", &fname),
         px,
         pr.bottom() + 14.0,
@@ -1219,22 +1106,22 @@ pub fn dialog(l: &mut Launcher) {
     let copy_r = Rect::new(buttons.x, buttons.y, bw + 30.0, buttons.h);
     let save_r = Rect::new(buttons.right() - bw, buttons.y, bw, buttons.h);
     let cancel_r = Rect::new(save_r.x - 8.0 - 120.0, buttons.y, 120.0, buttons.h);
-    if l.ui.button(
+    if f.ui.button(
         "integrity-ex-copy",
         copy_r,
         "Copy to clipboard",
         Some("content_copy"),
         ButtonKind::Normal,
     ) {
-        l.ui.clipboard_out = Some(report.clone());
-        l.state.set_status("The report is on the clipboard.", false);
+        f.ui.clipboard_out = Some(report.clone());
+        f.state.set_status("The report is on the clipboard.", false);
         return;
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         copy_r,
         "Puts the whole report on the clipboard, to paste where you send it.",
     );
-    if l.ui.button(
+    if f.ui.button(
         "integrity-ex-cancel",
         cancel_r,
         "Cancel",
@@ -1243,8 +1130,8 @@ pub fn dialog(l: &mut Launcher) {
     ) {
         return;
     }
-    l.ui.tooltip(cancel_r, "Closes this window without saving.");
-    if l.ui.button(
+    f.ui.tooltip(cancel_r, "Closes this window without saving.");
+    if f.ui.button(
         "integrity-ex-save",
         save_r,
         "Save as…",
@@ -1255,19 +1142,19 @@ pub fn dialog(l: &mut Launcher) {
             match std::fs::write(&path, report.as_bytes()) {
                 Ok(()) => {
                     log::info!("integrity check: report saved to {}", path.display());
-                    l.state.set_status("The report is saved.", false);
+                    f.state.set_status("The report is saved.", false);
                 }
                 Err(err) => {
                     log::warn!(
                         "integrity check: the report could not be saved to {}: {err}",
                         path.display()
                     );
-                    l.state.set_status("The report could not be saved.", true);
+                    f.state.set_status("The report could not be saved.", true);
                 }
             }
             return;
         }
     }
-    l.ui.tooltip(save_r, "Chooses where to save the report as a text file.");
-    l.pages.diag.export = Some(e);
+    f.ui.tooltip(save_r, "Chooses where to save the report as a text file.");
+    view.export = Some(e);
 }

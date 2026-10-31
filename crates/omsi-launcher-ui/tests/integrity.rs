@@ -1,8 +1,10 @@
+//! The Integrity tab's check, its comparison and its result rows.
+
 use omsi_integrity::Category;
 use omsi_integrity::Progress;
 use omsi_integrity::Report;
 use omsi_integrity::Severity;
-use openomsi_game::testing::launcher::integrity::*;
+use omsi_launcher_ui::window::*;
 
 /// Cancel while the compared one is read: that read sees it and nothing is sent.
 #[test]

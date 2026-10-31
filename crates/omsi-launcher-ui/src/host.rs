@@ -1,5 +1,5 @@
 //! What the launcher asks of the game it runs in: the parts only the game has (its
-//! translations, the log of a phone's previous run). The game implements `Host` and hands
+//! translations, the log of a phone's previous run, opening a web page, a phone's gallery). The game implements `Host` and hands
 //! it to the launcher; the tests hand a quiet one.
 
 /// The game's side of the launcher.
@@ -13,4 +13,17 @@ pub trait Host {
     fn previous_run_crash(&self) -> Option<(String, String)> {
         None
     }
+
+    /// A page of the project's repository opened in the browser (the game opens no other).
+    fn open_url(&self, url: &str);
+
+    /// Microsoft's download page of the .NET 6 runtimes OmsiLaunch needs opened in the browser.
+    fn open_dotnet_download(&self);
+
+    /// A phone's gallery kept out of the content folder just chosen, before its media scanner
+    /// lists the textures as photos. Nothing elsewhere.
+    fn hide_content_from_gallery(&self) {}
+
+    /// The game's version and build, as a report names them: `0.3.1 (abc1234)`.
+    fn build(&self) -> String;
 }

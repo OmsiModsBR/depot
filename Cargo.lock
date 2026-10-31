@@ -2864,6 +2864,7 @@ dependencies = [
  "libc",
  "log",
  "omsi-cfg",
+ "omsi-integrity",
  "omsi-launcher-core",
  "omsi-ui",
  "pollster",
