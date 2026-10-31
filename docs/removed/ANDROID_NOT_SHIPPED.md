@@ -1,4 +1,8 @@
-# Project Depot on Android
+# Project Depot on Android - inherited, not shipped
+
+> **Archived.** Depot has no Android build, no Android package and no plan for one: the supported
+> platform is Windows x64 only. This page keeps the inherited openOMSI notes for the record
+> and is not a description of any Depot release.
 
 Depot 0.2.17 was a rebranding-only release, and neither it nor 0.2.52 or 0.3.0 includes an Android package.
 This document describes inherited Android support and build instructions,

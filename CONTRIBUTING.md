@@ -8,7 +8,7 @@ Thanks for helping! A few rules keep the project healthy:
 * **Compatibility first.** A change must not break a stock map or a mod that worked. Run
   `cargo run --release -p omsi-check -- "/path/to/OMSI 2"` before and after larger changes.
 * **One change per pull request**, with a message that says what the player notices.
-* `cargo test --workspace` and `cargo build --release` must pass (CI checks all platforms).
+* `cargo test --workspace` and `cargo build --release` must pass (CI builds and tests Windows x64, the only supported platform).
 * Code style: `rustfmt` defaults, comments explain *why*.
 * Tests live in each crate's `tests/` folder, not in `src/`; what a test needs from inside the
   crate comes through its `testing` module behind the `test-support` feature (see
@@ -75,8 +75,8 @@ with the English text as the key. A pull request that changes it is checked auto
 * One problem or idea per issue, on the latest release. Questions go to the
   [Discord server](https://omsimods.com.br/discord).
 * New issues are sorted automatically: the form's "What is it about?" becomes an `area:`
-  label and the issue gets a first milestone (a regression or a crash: v0.1.x), which the
-  maintainers move when it fits better elsewhere. A crash report with the same panic as an
+  label and the issue gets a first milestone, which the
+  maintainers set and move when it fits better elsewhere. A crash report with the same panic as an
   open issue is closed as its duplicate - add what you were doing to that issue instead.
 * **Security problems are not reported as issues**: see [SECURITY.md](SECURITY.md).
 
@@ -89,5 +89,9 @@ The renderer's domains and the layers they may import from are in
 
 ## Releases
 
-Maintainers bump `MAJOR.MINOR` in the `VERSION` file; everything else is automatic - see
-[docs/VERSIONING.md](docs/VERSIONING.md).
+Releases are made by hand by the maintainers; nothing is published by a push to `main`. The number is
+`MAJOR.MINOR.PATCH`: `MINOR` goes up for a release with new features or removals, `PATCH` for a release that
+only fixes the previous one. A contributor does not change `VERSION`, the release notes or the changelog
+heading; a pull request that changes what the player notices adds a line to **Unreleased** in
+[CHANGELOG.md](CHANGELOG.md) (in the area it belongs to, ending with its `(#number)`). The steps of a release are
+in [docs/VERSIONING.md](docs/VERSIONING.md).
