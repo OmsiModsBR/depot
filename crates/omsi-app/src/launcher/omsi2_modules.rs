@@ -262,6 +262,7 @@ pub fn card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks
                 settings.insert(s.key.into(), json!(s.values[sel]));
                 changed = true;
             }
+            ui.tooltip(ctrl, hint);
         }
         y += ROW;
     }
