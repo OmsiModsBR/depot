@@ -32,7 +32,7 @@ pub struct PagesView {
     pub pads: PadsView,
     pub tt: super::timetable::TimetableView,
     /// The Diagnostics page's tab and its integrity check (`integrity`).
-    pub diag: super::integrity::DiagView,
+    pub diag: super::diagnostics::DiagView,
     /// The keyboard tab on a computer (`keyboard`).
     pub kb: super::keyboard::KeyboardView,
 }

@@ -23,4 +23,7 @@ pub trait Host {
     /// A phone's gallery kept out of the content folder just chosen, before its media scanner
     /// lists the textures as photos. Nothing elsewhere.
     fn hide_content_from_gallery(&self) {}
+
+    /// The game's version and build, as a report names them: `0.3.1 (abc1234)`.
+    fn build(&self) -> String;
 }
