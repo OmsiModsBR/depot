@@ -2861,10 +2861,13 @@ dependencies = [
  "env_logger",
  "glam",
  "image",
+ "libc",
  "log",
+ "omsi-cfg",
  "omsi-launcher-core",
  "omsi-ui",
  "pollster",
+ "serde_json",
  "wgpu",
 ]
 

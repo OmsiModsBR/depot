@@ -364,7 +364,7 @@ impl Renderer {
                 .as_ref()
                 .filter(|v| point_in_vehicle_box(camera.position, v)),
         );
-        self.prepare_smoke(scene, camera.position);
+        self.prepare_smoke(scene, camera.position, exclude_texture.is_some());
         // ambient occlusion only for the real picture, not for the mirrors
         // Enhanced+: the window's picture traces its sun shadow and ambient occlusion (not the
         // mirrors, a headset's eyes or a triple screen's panels: they keep the shadow map)

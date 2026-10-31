@@ -55,6 +55,7 @@ mod scene;
 mod schedule;
 mod schedule_paper;
 mod settings;
+mod showroom;
 mod tiles;
 mod traffic;
 
@@ -185,7 +186,7 @@ pub fn run() -> Result<()> {
         return Ok(());
     };
     if args.preview_helper {
-        return launcher::preview::helper_main();
+        return showroom::helper_main();
     }
     if args.launcher || (bare && !args.menu) {
         // the launcher window (the game started again by it with a full command line);

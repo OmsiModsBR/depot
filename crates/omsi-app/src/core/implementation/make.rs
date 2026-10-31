@@ -291,6 +291,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         vr_zoom_active: false,
         hover: None,
         hover_part: None,
+        hover_split: Default::default(),
         hover_hand: false,
         head_idle_hold: Default::default(),
         input_script: parse_input_script(),

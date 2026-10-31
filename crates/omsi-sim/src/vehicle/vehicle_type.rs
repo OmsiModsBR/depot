@@ -10,12 +10,12 @@ use crate::anim::pivot_from_mesh;
 use anyhow::{Context, Result};
 use glam::{Mat4, Vec3};
 use hashbrown::HashMap;
-use omsi_geometry::{mesh_from_o3d, MeshData};
+use omsi_geometry::{mesh_from_o3d, MeshData, TriTree};
 use omsi_model::{MaterialDef, Model};
 use omsi_script::{compile, CompileInput, Program};
 use omsi_vehicle::Vehicle;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// A bone of a `[smoothskin]` mesh: the model mesh whose animation moves it (`[setbone]
 /// name id`, the id counting the meshes of the model's first level of detail - the GN92's and
@@ -45,6 +45,49 @@ pub struct VehicleMesh {
     pub skin: Vec<SkinBone>,
     /// A backwards mesh drawn as wound after all (its pack's exporter, see `load`).
     pub keep_winding: bool,
+    /// The tree over the triangles that rays (the cursor in the cockpit) look through, once
+    /// [`VehicleType::build_trees`] has made it; until then they test every triangle.
+    pub tree: OnceLock<TriTree>,
+}
+
+impl VehicleMesh {
+    /// The nearest hit of a ray on the mesh (see [`omsi_geometry::ray_mesh_inv`]), through
+    /// its tree when it has one: the same answer. `tested` counts the triangles looked at.
+    pub fn ray_inv(&self, origin: Vec3, dir: Vec3, inv: &Mat4, tested: &mut u64) -> Option<f32> {
+        match self.tree() {
+            Some(tree) => tree.ray_mesh_inv(origin, dir, &self.data, inv, tested),
+            None => {
+                *tested += (self.data.indices.len() / 3) as u64;
+                omsi_geometry::ray_mesh_inv(origin, dir, &self.data, inv)
+            }
+        }
+    }
+
+    /// The triangles near a cone (see [`omsi_geometry::cone_triangles_inv`]), through the
+    /// mesh's tree when it has one: the same triangles.
+    pub fn cone_inv(
+        &self,
+        origin: Vec3,
+        axis: Vec3,
+        tan_half: f32,
+        inv: &Mat4,
+        tested: &mut u64,
+    ) -> Vec<u32> {
+        match self.tree() {
+            Some(tree) => tree.cone_triangles_inv(origin, axis, tan_half, &self.data, inv, tested),
+            None => {
+                *tested += (self.data.indices.len() / 3) as u64;
+                omsi_geometry::cone_triangles_inv(origin, axis, tan_half, &self.data, inv)
+            }
+        }
+    }
+
+    /// The tree, when it is built and holds this mesh's triangles.
+    fn tree(&self) -> Option<&TriTree> {
+        self.tree
+            .get()
+            .filter(|t| t.triangles() == self.data.indices.len() / 3)
+    }
 }
 
 pub struct VehicleType {
@@ -137,6 +180,17 @@ struct LodMeshes {
 impl VehicleType {
     pub fn load(root: &Path, bus_file: &Path) -> Result<VehicleType> {
         Self::load_with(root, bus_file, true)
+    }
+
+    /// Build the tree of every mesh that keeps its vertices (the player's vehicle; an AI
+    /// type keeps none), for the cursor. A few tens of milliseconds for a full cockpit: run it
+    /// off the frame (see `omsi-app`'s player spawn), the rays test every triangle until then.
+    pub fn build_trees(&self) {
+        for m in &self.meshes {
+            if !m.data.positions.is_empty() && !m.data.indices.is_empty() {
+                m.tree.get_or_init(|| TriTree::build(&m.data));
+            }
+        }
     }
 
     /// The box the whole model takes (least, greatest corner; y forward), None without
@@ -310,6 +364,7 @@ impl VehicleType {
                             viewpoint: md.viewpoint,
                             skin,
                             keep_winding: false,
+                            tree: OnceLock::new(),
                         })
                     }
                     Err(e) => match omsi_cfg::missing_vehicle_pack(&p) {

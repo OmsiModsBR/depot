@@ -8,8 +8,10 @@ use omsi_scenery::Spline;
 
 mod hole_rims;
 mod terrain_walls;
+mod tri_tree;
 pub mod util;
 pub use terrain_walls::terrain_hole_walls;
+pub use tri_tree::TriTree;
 
 /// A renderable triangle mesh with one texture per material slot.
 #[derive(Debug, Clone, Default)]
@@ -2409,8 +2411,13 @@ pub fn ray_near_sphere(origin: Vec3, dir: Vec3, c: Vec3, r: f32) -> bool {
 }
 
 pub fn ray_mesh(origin: Vec3, dir: Vec3, mesh: &MeshData, transform: &Mat4) -> Option<f32> {
+    ray_mesh_inv(origin, dir, mesh, &transform.inverse())
+}
+
+/// [`ray_mesh`] with the transform's inverse already worked out, for many rays at one mesh
+/// (the cursor's rings): the same `t`, bit for bit.
+pub fn ray_mesh_inv(origin: Vec3, dir: Vec3, mesh: &MeshData, inv: &Mat4) -> Option<f32> {
     // transform the ray into mesh space (cheaper than transforming every vertex)
-    let inv = transform.inverse();
     let o = inv.transform_point3(origin);
     let d = inv.transform_vector3(dir);
     let scale = d.length();
@@ -2442,7 +2449,17 @@ pub fn cone_triangles(
     mesh: &MeshData,
     transform: &Mat4,
 ) -> Vec<u32> {
-    let inv = transform.inverse();
+    cone_triangles_inv(origin, axis, tan_half, mesh, &transform.inverse())
+}
+
+/// [`cone_triangles`] with the transform's inverse already worked out.
+pub fn cone_triangles_inv(
+    origin: Vec3,
+    axis: Vec3,
+    tan_half: f32,
+    mesh: &MeshData,
+    inv: &Mat4,
+) -> Vec<u32> {
     let o = inv.transform_point3(origin);
     let a = inv.transform_vector3(axis).normalize_or_zero();
     let mut out = Vec::new();
@@ -2452,23 +2469,28 @@ pub fn cone_triangles(
             mesh.positions[tri[1] as usize],
             mesh.positions[tri[2] as usize],
         );
-        let c = (p0 + p1 + p2) / 3.0;
-        let r = (p0 - c)
-            .length()
-            .max((p1 - c).length())
-            .max((p2 - c).length());
-        let w = c - o;
-        let along = w.dot(a);
-        if along < -r {
-            continue;
+        if cone_keeps(o, a, tan_half, p0, p1, p2) {
+            out.push((k * 3) as u32);
         }
-        let across = (w - a * along).length();
-        if across > (along + r).max(0.0) * tan_half + r + 1e-3 {
-            continue;
-        }
-        out.push((k * 3) as u32);
     }
     out
+}
+
+/// Does the triangle's sphere (round its centre) reach into the cone from `o` along `a`?
+fn cone_keeps(o: Vec3, a: Vec3, tan_half: f32, p0: Vec3, p1: Vec3, p2: Vec3) -> bool {
+    let c = (p0 + p1 + p2) / 3.0;
+    let r = (p0 - c)
+        .length()
+        .max((p1 - c).length())
+        .max((p2 - c).length());
+    let w = c - o;
+    let along = w.dot(a);
+    if along < -r {
+        return false;
+    }
+    let across = (w - a * along).length();
+    // (written as the scan always had it: a NaN keeps the triangle)
+    !(across > (along + r).max(0.0) * tan_half + r + 1e-3)
 }
 
 pub fn ray_triangles(
@@ -2478,7 +2500,18 @@ pub fn ray_triangles(
     transform: &Mat4,
     tris: &[u32],
 ) -> Option<f32> {
-    let inv = transform.inverse();
+    ray_triangles_inv(origin, dir, mesh, &transform.inverse(), tris)
+}
+
+/// [`ray_triangles`] with the transform's inverse already worked out: the same `t`, bit for
+/// bit.
+pub fn ray_triangles_inv(
+    origin: Vec3,
+    dir: Vec3,
+    mesh: &MeshData,
+    inv: &Mat4,
+    tris: &[u32],
+) -> Option<f32> {
     let o = inv.transform_point3(origin);
     let d = inv.transform_vector3(dir);
     let scale = d.length();

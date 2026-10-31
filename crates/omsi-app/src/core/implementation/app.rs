@@ -245,6 +245,11 @@ impl App {
             self.service_msg = Some((format!("Graphics driver is slow ({upload:.0} MB/s): the game will stutter. Restarting the computer usually fixes it."), 30.0));
         }
         crate::lights::load_smoke_texture(&mut renderer, &self.args.root);
+        crate::lights::set_smoke_options(
+            self.settings.smoke,
+            self.settings.smoke_user_only,
+            self.settings.smoke_max,
+        );
         crate::lights::set_corona_root(&self.args.root);
         let size = window.inner_size();
         let surface = if backend == Backend::D3d9 {

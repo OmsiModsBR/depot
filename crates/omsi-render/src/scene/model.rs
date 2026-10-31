@@ -158,6 +158,9 @@ pub struct Scene {
     pub smoke: Vec<SmokeParticle>,
     pub(crate) smoke_buf: Option<wgpu::Buffer>,
     pub(crate) smoke_count: u32,
+    /// This frame's smoke as the sprite list the second renderer draws (kept only while it
+    /// mirrors the frame: `Scene::frame_smoke`): OMSI's own particles, farthest first.
+    pub(crate) last_smoke: Vec<[f32; 20]>,
     /// Runs of this frame's coronas by picture: (texture, first, count).
     /// (and whether the run belongs to the vehicle the camera is in, drawn after it)
     pub(crate) corona_runs: Vec<(u16, u32, u32, bool)>,

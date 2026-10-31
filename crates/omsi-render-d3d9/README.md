@@ -33,6 +33,7 @@ not yet.
 | `d3d9` interface layer | Windows | Each `omsi-ui` Gpu's pictures, atlas and vertex lists (`ui_image`, `ui_atlas`, `ui_vertices`), `draw_ui` and `draw_overlays`, with the interface shader (`shaders/ui.hlsl`, a port of `omsi-ui`'s) |
 | `d3d9` corona pass | Windows | `set_corona_texture`, and in `draw_scene` the light coronas over the scene (`shaders/corona.hlsl`) |
 | `d3d9` sky pass | Windows | The sky dome behind the scene (`SceneFrame::sky`, `shaders/sky.hlsl`), drawn first without depth |
+| `d3d9` smoke pass | Windows | `set_smoke_texture`, and in `draw_scene` the smoke and particles over the world's batches (`shaders/smoke.hlsl`) |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -129,9 +130,26 @@ glow. The `OMSI_NO_CORONAS` flag turns them off here too. A device that cannot m
 draws the scene without coronas and says so once in the log. Rain streaks and snowflakes the
 renderer draws as coronas come with them; the snowfall's own pass is not here.
 
+Smoke and particles: the `[smoke]` and `[particle_emitter]` systems of vehicles and scenery
+(exhaust, chimneys, fireworks, wheel smoke). Each particle is a camera-facing square of the
+game's smoke picture (`MirrorEvent::SmokeTexture`, `D3d9Device::set_smoke_texture`; the
+picture's alpha is the mask), alpha-blended with `SRCALPHA / INVSRCALPHA`, tested against the
+depth and not writing it, the farthest first as the renderer sorted them
+(`Scene::frame_smoke`, the corona sprite record with the kind 3). A pass of its own with its
+own shaders (`shaders/smoke.hlsl`, a port of the smoke branch of the default renderer's corona
+shader; the scene's pixel shader keeps its slots, the smoke one takes about a dozen): drawn after
+the world's batches and before its coronas, so the vehicle the camera is in covers it. The
+light on a particle is the ambient plus 0.6 of the sun's, at most 1.2, as in the default
+renderer's vanilla picture; it fades out into the ground it was thrown up from. The game's
+tyre spray on wet roads is not OMSI smoke and is left out of `Scene::frame_smoke`. The four
+smoke options (the systems on, the player's vehicle only, the most particles per system, none
+in mirrors) act before the list is made, so they hold here as in every graphics API; the
+`OMSI_NO_SMOKE` flag turns the pass off. A device that cannot make the pass, or has no smoke
+picture, draws the scene without smoke (the pass says so once in the log).
+
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), smoke,
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass),
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
@@ -228,6 +246,6 @@ frame plan and asset events to this crate. In order:
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface, the
    HUD's pictures, the minimap and the city map).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
-   specular highlight, the lamps, the tile light maps and the light coronas), then shadows, smoke and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
+   specular highlight, the lamps, the tile light maps and the light coronas, smoke and particles), then shadows and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.

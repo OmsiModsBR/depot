@@ -187,7 +187,7 @@ pub struct Args {
     /// Day of year override (set by --situation).
     #[arg(long, hide = true)]
     pub day_of_year: Option<i32>,
-    /// The launcher's bus preview, drawn for it with no window (see `launcher::preview`).
+    /// The launcher's bus preview, drawn for it with no window (see `showroom`).
     #[arg(long, hide = true)]
     pub preview_helper: bool,
     /// The program that started the launcher (`depot-launcher`): the launcher ends with it.
