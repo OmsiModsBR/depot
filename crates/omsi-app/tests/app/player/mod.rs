@@ -2,6 +2,7 @@ mod auto_shift;
 mod door_action;
 mod driver_head_look;
 mod held_repeat;
+mod hover_golden;
 mod indicator;
 mod kept_indicator;
 mod mouse;

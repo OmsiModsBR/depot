@@ -460,8 +460,8 @@ fn export(l: &mut Launcher, t: &AiTraffic, map: &(String, String)) {
         "Build".into(),
         format!(
             "Project Depot {} ({})",
-            crate::startup::VERSION,
-            crate::startup::BUILD
+            crate::core::startup::VERSION,
+            crate::core::startup::BUILD
         ),
     ));
     match std::fs::write(&path, t.to_text(&header)) {
@@ -769,7 +769,7 @@ pub(super) fn vehicle_view(
         l.ui.text_in(why, top, 12.5, Weight::Regular, MUTED, Align::Center);
     } else {
         let c = &l.state.choice;
-        let look = super::showroom::Look {
+        let look = crate::showroom::Look {
             root: PathBuf::from(l.state.config.root.trim()),
             map: l.pages.diag.ai.map_file.clone(),
             bus: file.to_string(),

@@ -95,6 +95,11 @@ pub enum MirrorEvent<'a> {
         id: u16,
         image: &'a omsi_texture::Image,
     },
+    /// The picture of a smoke particle (`Renderer::set_smoke_texture`): RGBA8, straight
+    /// alpha, sRGB colours; its alpha is the particle's mask.
+    SmokeTexture {
+        image: &'a omsi_texture::Image,
+    },
 }
 
 /// Receives the asset events; see [`MirrorEvent`].
@@ -195,6 +200,9 @@ pub struct FramePlan {
     /// The sky dome's light: x the sun's azimuth (radians, clockwise from north), yzw the
     /// weights of the day, twilight and night pictures ([`crate::Scene::sky_textures`]).
     pub sky: [f32; 4],
+    /// The cloud layer: x the cover (0 none .. 1 closed), yz the drift with the wind in
+    /// fractions of the picture's tile, w the layer's base height in metres.
+    pub clouds: [f32; 4],
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -237,6 +245,12 @@ pub(crate) fn plan_of(
         clear: f.lighting.sky_color.extend(1.0).to_array(),
         rain: (f.lighting.rain - f.lighting.snowfall).clamp(0.0, 1.0),
         sky: cu.sky,
+        clouds: [
+            f.lighting.cloud_density,
+            f.lighting.cloud_offset[0],
+            f.lighting.cloud_offset[1],
+            f.lighting.cloud_height,
+        ],
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists
@@ -258,6 +272,12 @@ impl crate::scene::Scene {
     /// the game has set them.
     pub fn sky_textures(&self) -> Option<[TextureId; 3]> {
         self.sky_textures
+    }
+
+    /// The picture of the weather's cloud type for a renderer that draws the clouds itself
+    /// (white, the clouds in its alpha), once the game has set it.
+    pub fn sky_cloud_picture(&self) -> Option<TextureId> {
+        self.sky_cloud_picture
     }
 
     /// The lights of the last frame as this renderer's shaders read them, four vectors each:
@@ -295,6 +315,17 @@ impl crate::scene::Scene {
     /// one that reached the mirror as [`MirrorEvent::CoronaTexture`].
     pub fn frame_corona_runs(&self) -> &[(u16, u32, u32, bool)] {
         &self.corona_runs
+    }
+
+    /// The last frame's smoke particles, farthest first (they are blended over each other):
+    /// the sprites the default renderer draws with its smoke shader, in the same 20 floats as
+    /// [`Scene::frame_coronas`] with the kind (the last) 3: position and size; colour and
+    /// alpha; the cosine and sine of the particle's spin; the ground it fades into and the
+    /// z offset towards the eye. Only OMSI's `[smoke]` and `[particle_emitter]` particles: the
+    /// game's own tyre spray is left out. Empty in a mirror's picture when the options leave
+    /// the smoke out of mirrors. Only kept while an asset mirror is set.
+    pub fn frame_smoke(&self) -> &[[f32; 20]] {
+        &self.last_smoke
     }
 }
 

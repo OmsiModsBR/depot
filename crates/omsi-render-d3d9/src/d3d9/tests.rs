@@ -89,6 +89,26 @@ fn clear_and_read_back() {
 }
 
 #[test]
+fn depth_is_24_bit_with_or_without_stencil_and_targets_follow() {
+    let Some(mut dev) = device() else { return };
+    assert!([D3DFMT_D24S8, D3DFMT_D24X8].contains(&dev.depth_format));
+    // the off-screen depth surface is made in the device's format
+    dev.begin_frame(&frame([0., 0., 1., 1.])).unwrap();
+    let mut desc = D3DSURFACE_DESC::default();
+    // SAFETY: the surface is live and the out-parameter is a local.
+    unsafe {
+        dev.offscreen
+            .as_ref()
+            .unwrap()
+            .depth
+            .GetDesc(&mut desc)
+            .unwrap()
+    };
+    assert_eq!(desc.Format, dev.depth_format);
+    assert!(all_near(&dev.end_frame().unwrap(), [0, 0, 255, 255], 0));
+}
+
+#[test]
 fn quality_options_are_taken_as_far_as_the_card_goes() {
     let Some(mut dev) = device() else { return };
     // (an off-screen device has no window picture to multisample)

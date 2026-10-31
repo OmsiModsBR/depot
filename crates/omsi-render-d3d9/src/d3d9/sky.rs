@@ -3,7 +3,9 @@
 //! hemisphere (a little more) that rides with the camera, so it never shows parallax and
 //! turns with the camera's orientation; it is drawn without depth, before anything else, and
 //! the scene is drawn over it. Without the pictures (none set, or not put up) the picture
-//! keeps its clear colour.
+//! keeps its clear colour. Over the pictures the same pass draws the stars (at night) and the
+//! weather's layer of clouds from the cloud type's own picture (when the frame has one and it
+//! is put up); both are in the sky's pixel shader, a pass of its own.
 //!
 //! It is a pass of its own, with its own small shaders, so the scene's pixel shader keeps its
 //! instruction slots. A device that cannot make it (the pass is tried once) draws the scene
@@ -16,8 +18,8 @@ use super::{map_err, shader, some, D3d9Device};
 use crate::scene::SceneFrame;
 use crate::{BackendError, Result};
 
-/// The pixel shader's registers of the sky's light and of the fog (the scene's own, below 32,
-/// are left alone).
+/// The pixel shader's registers of the sky's light, of the fog and of what the clouds are lit
+/// by and drawn from (the scene's own, below 32, are left alone).
 const SKY_REGISTER: u32 = 200;
 /// The dome's latitude rings and the segments of each, as the default renderer's.
 const RINGS: u32 = 12;
@@ -176,16 +178,38 @@ impl D3d9Device {
         let (Some(p), Some(ids)) = (&self.scene.sky.pipeline, frame.sky.textures) else {
             return Ok(());
         };
-        let mut pictures = Vec::with_capacity(3);
+        let mut pictures = Vec::with_capacity(4);
         for id in ids {
             match self.scene_texture(id) {
                 Some(t) => pictures.push(t),
                 None => return Ok(()),
             }
         }
+        // the cloud layer: its picture, or (no clouds) any other picture with a cover of 0
+        let mut clouds = frame.sky.clouds.params;
+        match frame
+            .sky
+            .clouds
+            .texture
+            .and_then(|id| self.scene_texture(id))
+        {
+            Some(t) => pictures.push(t),
+            None => {
+                clouds[0] = 0.0;
+                pictures.push(pictures[0]);
+            }
+        }
         let d = &self.device;
         let light = &frame.light;
-        let ps = [frame.sky.params, light.fog];
+        let ps = [
+            frame.sky.params,
+            light.fog,
+            light.sun_dir,
+            light.sun_color,
+            light.ambient,
+            light.sky_color,
+            clouds,
+        ];
         let vs = [light.cam_pos, pixel_offset];
         // SAFETY: plain calls on a live device; the constant arrays outlive the calls; the
         // buffers and textures belong to this device.
@@ -210,9 +234,24 @@ impl D3d9Device {
                 for (state, value) in [
                     (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
                     (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_MIPFILTER, D3DTEXF_NONE.0 as u32),
+                    // (the clouds' picture is laid flat and far away: it takes its mips)
+                    (
+                        D3DSAMP_MIPFILTER,
+                        if stage == 3 {
+                            D3DTEXF_LINEAR.0 as u32
+                        } else {
+                            D3DTEXF_NONE.0 as u32
+                        },
+                    ),
                     (D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP.0 as u32),
-                    (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
+                    (
+                        D3DSAMP_ADDRESSV,
+                        if stage == 3 {
+                            D3DTADDRESS_WRAP.0 as u32
+                        } else {
+                            D3DTADDRESS_CLAMP.0 as u32
+                        },
+                    ),
                     (D3DSAMP_SRGBTEXTURE, 0),
                 ] {
                     d.SetSamplerState(stage, state, value).map_err(map_err)?;

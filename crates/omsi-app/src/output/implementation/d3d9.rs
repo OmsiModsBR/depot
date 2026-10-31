@@ -10,8 +10,8 @@
 //! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
 //! frame is done.
 //!
-//! What the plan does not carry yet is not drawn in this mode: shadows, smoke and
-//! pictures drawn on the GPU into textures (the navigator's maps; see the crate's README).
+//! What the plan does not carry yet is not drawn in this mode: shadows and pictures
+//! drawn on the GPU into textures (the navigator's maps; see the crate's README).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -22,9 +22,9 @@ use omsi_render::{
 };
 use omsi_render_d3d9::d3d9::D3d9Device;
 use omsi_render_d3d9::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneCoronas, SceneFrame,
-    SceneLamps, SceneLight, SceneMaterial, SceneRain, SceneSky, SceneTexture, TexAddress,
-    TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneClouds, SceneCoronas,
+    SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneRain, SceneSky, SceneSmoke,
+    SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -124,6 +124,13 @@ impl Inner {
                     make_mips: true,
                 },
             ),
+            MirrorEvent::SmokeTexture { image } => self.device.set_smoke_texture(&SceneTexture {
+                width: image.width,
+                height: image.height,
+                format: TexFormat::Rgba8,
+                levels: std::slice::from_ref(&image.rgba),
+                make_mips: true,
+            }),
             MirrorEvent::LightMapTile { slot, rgba } => self.device.set_tile_light_map(
                 omsi_render::LM_ATLAS_TILES * omsi_render::LM_TILE_PX,
                 omsi_render::LM_TILE_PX,
@@ -214,6 +221,15 @@ impl Inner {
                     runs: scene.frame_corona_runs(),
                 }
             },
+            // (OMSI's own particles; the renderer leaves the mirrors' out when the options say
+            // so, and the game's tyre spray is no OMSI smoke: it is not among them)
+            smoke: if omsi_cfg::flags::NO_SMOKE.is_set() {
+                SceneSmoke::default()
+            } else {
+                SceneSmoke {
+                    sprites: scene.frame_smoke(),
+                }
+            },
             lamps: SceneLamps {
                 lights: &lights,
                 grid: scene.frame_light_grid(),
@@ -228,6 +244,10 @@ impl Inner {
             sky: SceneSky {
                 textures: scene.sky_textures(),
                 params: plan.sky,
+                clouds: SceneClouds {
+                    texture: scene.sky_cloud_picture(),
+                    params: plan.clouds,
+                },
             },
         };
         let material = |id: usize| {

@@ -166,13 +166,14 @@ fn package_files(def: &ModuleDef, zip: &[u8]) -> Result<Vec<(usize, String, u64)
         if f.is_dir() {
             continue;
         }
+        let name = f.name()?;
         if f.unix_mode()
             .map(|m| m & 0o170000 == 0o120000)
             .unwrap_or(false)
         {
-            bail!("the package holds a link ({})", f.name());
+            bail!("the package holds a link ({name})");
         }
-        names.push((i, f.name().to_string(), f.size()));
+        names.push((i, name.into_owned(), f.size()));
     }
     let wrapped = !names.is_empty() && names.iter().all(|(_, n, _)| n.starts_with(&prefix));
     let mut out = Vec::new();

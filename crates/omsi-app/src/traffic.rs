@@ -25,6 +25,7 @@ use omsi_sim::vehicle::AiFrame;
 use omsi_sim::{VehicleInstance, VehicleType};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// How many of a type's paint schemes the AI uses: every scheme is a full upload of the
 /// bus's textures the first time it appears, which used to cost a frame of 100-200 ms
@@ -530,6 +531,33 @@ fn street_lane_weight(l: &omsi_sim::traffic::Lane) -> Option<f64> {
         .then(|| l.length() as f64 * l.density.clamp(0.05, 4.0) as f64)
 }
 
+/// How long (s) a population pass of the game may spend putting cars on the road (see
+/// `Traffic::populate_budget`): a few cars, then the rest a tenth of a second later.
+pub const POPULATE_BUDGET: f64 = 0.003;
+
+/// Where a population pass (`Traffic::populate_seen`) spent its time (s), and what it did.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PopulateSplit {
+    /// Taking away the cars out of range or with no ground under them, and sending them
+    /// to sleep.
+    pub despawn: f64,
+    /// Waking the sleeping cars that came into range again.
+    pub wake: f64,
+    /// The target and the sleeping cars of the rest of the map.
+    pub fill: f64,
+    /// Looking for places and putting new cars there.
+    pub spawn: f64,
+    /// Of `wake` and `spawn`: making the cars (body, scripts, render set).
+    pub create: f64,
+    /// Parked cars pulling out and cars parking.
+    pub parked: f64,
+    /// Cars put on the road (woken or new), and places tried for new ones.
+    pub created: u32,
+    pub tried: u32,
+    /// The pass stopped at its budget with cars still missing.
+    pub cut: bool,
+}
+
 pub struct Traffic {
     pub net: Network,
     /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
@@ -689,6 +717,17 @@ pub struct Traffic {
     /// Where the last `tick` spent its time (s, OMSI_PROFILE): who is on which lane and the
     /// light programs, every car's plan, the bodies and scripts on the workers.
     pub tick_split: [f64; 3],
+    /// Where the last population pass spent its time and what it did (OMSI_PROFILE).
+    pub populate_split: PopulateSplit,
+    /// How long (s) a population pass may spend putting cars on the road, after the first
+    /// one; None: until the target is met (the default, kept by the tests and the
+    /// offscreen pictures). A pass cut short says so in `populate_split.cut`, and the game
+    /// comes back for the rest a moment later: creating every car missing at once held a
+    /// frame for 30 to 60 ms after the start, and for 250 to 500 ms on reaching a dense
+    /// area (#43).
+    pub populate_budget: Option<f64>,
+    /// When the pass under way has to stop putting cars on the road.
+    pub spawn_deadline: Option<Instant>,
     /// Seconds each of them has stood still.
     pub others_still: HashMap<u32, f32>,
     /// Per car: `AiCar::geo_block` of the frame before (who waits for whom by geometry).
@@ -1634,6 +1673,9 @@ impl Traffic {
             drivers: HashMap::new(),
             driver_pool: Vec::new(),
             tick_split: [0.0; 3],
+            populate_split: PopulateSplit::default(),
+            populate_budget: None,
+            spawn_deadline: None,
             others_still: HashMap::new(),
             geo_prev: Vec::new(),
             index_of: HashMap::new(),
@@ -2257,9 +2299,16 @@ impl Traffic {
         center: DVec3,
         view: Option<DVec3>,
     ) {
+        self.populate_split = PopulateSplit::default();
         if self.mirror {
             return;
         }
+        let started = Instant::now();
+        // (the first pass is the world as it loads: all of it at once)
+        self.spawn_deadline = self
+            .populate_budget
+            .filter(|_| !self.initial)
+            .map(|b| started + std::time::Duration::from_secs_f64(b));
         if self.viewer.is_none() {
             if let Some(f) = view {
                 self.viewer = Some(Viewer {
@@ -2425,6 +2474,7 @@ impl Traffic {
         if (asleep > 0 || !self.dormant.is_empty()) && self.debug_population {
             log::info!("population t={:.1}: {asleep} cars went out of range and drive on unseen; {} on the map out of range, {} in range", self.time, self.dormant.len(), self.cars.len());
         }
+        self.populate_split.despawn = started.elapsed().as_secs_f64();
         if self.types.is_empty() || self.net.lanes.is_empty() {
             self.initial = false;
             return;
@@ -2468,10 +2518,15 @@ impl Traffic {
             as usize)
             .min(self.max_random as usize);
         // the cars that come into range again, where they have got to
+        let t = Instant::now();
         self.wake_dormant(world, renderer, scene, center, street_target);
+        self.populate_split.wake = t.elapsed().as_secs_f64();
         // the whole map's population: as dense as around the player, on every street the
         // map has shown so far (sleeping where the player is not)
+        let t = Instant::now();
         self.fill_map(center, street_target);
+        self.populate_split.fill = t.elapsed().as_secs_f64();
+        let t = Instant::now();
         for (kind, target) in [
             (LaneKind::Street, street_target),
             (LaneKind::Air, if has_air { 3 } else { 0 }),
@@ -2485,11 +2540,47 @@ impl Traffic {
             self.populate_kind(world, renderer, scene, center, kind, target);
         }
         self.populate_lan_centers(world, renderer, scene, center, street_target);
+        self.populate_split.spawn = t.elapsed().as_secs_f64();
+        let t = Instant::now();
         if !self.initial {
             self.pull_out_parked(world, renderer, scene, center);
             self.park_in(world, center);
         }
+        self.populate_split.parked = t.elapsed().as_secs_f64();
         self.initial = false;
+        self.spawn_deadline = None;
+    }
+
+    /// The pass under way has used up its budget: it stops putting cars on the road.
+    fn out_of_budget(&mut self) -> bool {
+        let over = self.spawn_deadline.is_some_and(|d| Instant::now() >= d);
+        self.populate_split.cut |= over;
+        over
+    }
+
+    /// [`Traffic::create_car`], counted in `populate_split`.
+    #[allow(clippy::too_many_arguments)]
+    fn create_counted(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        center: DVec3,
+        kind: LaneKind,
+        lane: usize,
+        s: f32,
+        ty: Arc<VehicleType>,
+        seed: u64,
+        scheme: Option<Option<usize>>,
+        id: Option<u64>,
+        speed: Option<f32>,
+    ) {
+        let t = Instant::now();
+        self.create_car(
+            world, renderer, scene, center, kind, lane, s, ty, seed, scheme, id, speed, None,
+        );
+        self.populate_split.create += t.elapsed().as_secs_f64();
+        self.populate_split.created += 1;
     }
 
     /// Now and then a car near the player parks: a space at the kerb that a parked car has
@@ -2833,7 +2924,11 @@ impl Traffic {
         };
         let mut count = unscheduled;
         while count < target && attempts < target * 12 {
+            if self.out_of_budget() {
+                break;
+            }
             attempts += 1;
+            self.populate_split.tried += 1;
             let x = self.rand_f() as f32 * total_w;
             let lane = candidates[cumulative
                 .partition_point(|&c| c < x)
@@ -2900,8 +2995,8 @@ impl Traffic {
                 continue;
             }
             let seed = self.rand();
-            self.create_car(
-                world, renderer, scene, center, kind, lane, s, ty, seed, None, None, None, None,
+            self.create_counted(
+                world, renderer, scene, center, kind, lane, s, ty, seed, None, None, None,
             );
             count += 1;
         }
@@ -3006,6 +3101,9 @@ impl Traffic {
             .collect();
         let mut i = 0;
         while i < self.dormant.len() && budget > 0 {
+            if self.out_of_budget() {
+                break;
+            }
             let (p, h, ty) = {
                 let d = &self.dormant[i];
                 let l = &self.net.lanes[d.lane];
@@ -3028,7 +3126,7 @@ impl Traffic {
                 && self.spawn_clear(&ty, p, h);
             if ok {
                 let d = self.dormant.swap_remove(i);
-                self.create_car(
+                self.create_counted(
                     world,
                     renderer,
                     scene,
@@ -3041,7 +3139,6 @@ impl Traffic {
                     Some(d.scheme),
                     Some(d.id),
                     Some(d.speed),
-                    None,
                 );
                 budget -= 1;
             } else {
@@ -7421,7 +7518,8 @@ impl Traffic {
                                 ),
                             );
                         }
-                        ss.master = crate::startup::sound_gain(&crate::startup::SOUND_AI);
+                        ss.master =
+                            crate::core::startup::sound_gain(&crate::core::startup::SOUND_AI);
                         c.vehicle.host.snapshot_triggers =
                             ss.curve_triggers().into_iter().collect();
                         c.sounds = Some(ss);

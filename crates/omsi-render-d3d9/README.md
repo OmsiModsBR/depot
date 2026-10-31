@@ -35,6 +35,7 @@ not yet.
 | `glass_rain` | all | Raindrops on glass as a state and a picture: how far the drops have formed along a pane (rain builds them up, dry weather dries them, the wiper's stroke wipes the places it passes), and the tiling picture of drops; `SceneRain` carries the rain and the wiper into a frame |
 | `d3d9` glass rain pass | Windows | In `draw_scene`, the drops over the panes of materials with a `[matl_raindropmap]` (`shaders/glass_rain.hlsl`) |
 | `d3d9` sky pass | Windows | The sky dome behind the scene (`SceneFrame::sky`, `shaders/sky.hlsl`), drawn first without depth |
+| `d3d9` smoke pass | Windows | `set_smoke_texture`, and in `draw_scene` the smoke and particles over the world's batches (`shaders/smoke.hlsl`) |
 | `d3d9::shader` | Windows | HLSL compilation at run time through the system's `d3dcompiler_47.dll` |
 | `examples/d3d9_window.rs` | Windows | A window showing the three alpha modes side by side |
 
@@ -122,7 +123,9 @@ and a small pixel shader of its own (the drops' picture is made here; red the dr
 forms, blue how it catches the light). The scene's pixel shader keeps its slots; a device that cannot make the
 pass draws the world without drops. The vehicle the camera is in (`cab`) follows the player's wiper; every other pane, the player's seen from outside included, has the drops of the weather alone (known limit: a frame carries one wiper). A mirror's picture draws the drops where they are and does not move them
 on. Not part of it: refraction, running streaks and condensation on glass (not part of OMSI 2).
-The sky: the background of every picture, the window's and the mirrors' (`SceneFrame::sky`, `shaders/sky.hlsl`, `d3d9/sky.rs`). A dome (a hemisphere and a little below the horizon, as the default renderer's) centred on the camera, so it never shows parallax and turns with the camera; it is drawn first, before the scene and without depth, so it replaces only what was the flat clear colour. Its colour is the map's three sky pictures (`envir.cfg`'s `[sky_textures]`: day, twilight, night), read along the azimuth relative to the sun (the brighter glow sits toward the sun) and from the zenith (top) to the horizon (bottom), blended in linear light by the weights the sun's altitude gives (the twilight picture counts for 0.8 of its light, the night's for 0.6, as the default renderer), and mixed with the fog's colour near the horizon and, in a thick fog, over the whole sky, so far geometry fades into it without a seam. The game sends the picture ids (`Scene::sky_textures`) and the sun's azimuth and weights (`FramePlan::sky`). Always on in this mode; with no pictures set, or one not put up, the picture keeps its clear colour. No clouds, stars or sun glow (later), no atmosphere and no gradients of its own: the vanilla picture only. Its pixel shader is a pass of its own and takes far fewer than the scene's slots.
+The sky: the background of every picture, the window's and the mirrors' (`SceneFrame::sky`, `shaders/sky.hlsl`, `d3d9/sky.rs`). A dome (a hemisphere and a little below the horizon, as the default renderer's) centred on the camera, so it never shows parallax and turns with the camera; it is drawn first, before the scene and without depth, so it replaces only what was the flat clear colour. Its colour is the map's three sky pictures (`envir.cfg`'s `[sky_textures]`: day, twilight, night), read along the azimuth relative to the sun (the brighter glow sits toward the sun) and from the zenith (top) to the horizon (bottom), blended in linear light by the weights the sun's altitude gives (the twilight picture counts for 0.8 of its light, the night's for 0.6, as the default renderer), and mixed with the fog's colour near the horizon and, in a thick fog, over the whole sky, so far geometry fades into it without a seam. The game sends the picture ids (`Scene::sky_textures`) and the sun's azimuth and weights (`FramePlan::sky`). Always on in this mode; with no pictures set, or one not put up, the picture keeps its clear colour. No atmosphere and no gradients of its own: the vanilla picture only. Its pixel shader is a pass of its own and takes far fewer than the scene's slots.
+
+Over the sky's pictures the same pass draws two things, both in `shaders/sky.hlsl`. *Stars*: at night only (the night picture's weight above 0.35, in full at 1), above the horizon, small points of their own brightness laid out on the six faces of a cube (about 0.3 degrees a cell, a share of the cells holding one) so they are the same at every frame and every size of picture; they stay where they are in the world and do not turn with the hours (**provisional**: their count, brightness and turning are not observed yet). *Clouds*: the weather's one layer (`SceneSky::clouds`): the cloud type's picture (`Scene::sky_cloud_picture`, white with the clouds in its alpha; an Overcast type's brightness is its cover), laid flat at the weather's base height (`FramePlan::clouds`: cover, the wind's drift in tiles, height; a tile is 2500 m) as seen from the camera, so the clouds ride with it and only the wind moves them; no clouds for clear weather or a type without a picture, fading out above the horizon and none below it, lit by the scene's light (`SceneLight`, as the default renderer's classic sky), the closed deck greyed, covering the stars, and under the fog like the rest of the sky. Nothing procedural, no moon, no lens flare, no bloom.
 
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
@@ -138,9 +141,26 @@ glow. The `OMSI_NO_CORONAS` flag turns them off here too. A device that cannot m
 draws the scene without coronas and says so once in the log. Rain streaks and snowflakes the
 renderer draws as coronas come with them; the snowfall's own pass is not here.
 
+Smoke and particles: the `[smoke]` and `[particle_emitter]` systems of vehicles and scenery
+(exhaust, chimneys, fireworks, wheel smoke). Each particle is a camera-facing square of the
+game's smoke picture (`MirrorEvent::SmokeTexture`, `D3d9Device::set_smoke_texture`; the
+picture's alpha is the mask), alpha-blended with `SRCALPHA / INVSRCALPHA`, tested against the
+depth and not writing it, the farthest first as the renderer sorted them
+(`Scene::frame_smoke`, the corona sprite record with the kind 3). A pass of its own with its
+own shaders (`shaders/smoke.hlsl`, a port of the smoke branch of the default renderer's corona
+shader; the scene's pixel shader keeps its slots, the smoke one takes about a dozen): drawn after
+the world's batches and before its coronas, so the vehicle the camera is in covers it. The
+light on a particle is the ambient plus 0.6 of the sun's, at most 1.2, as in the default
+renderer's vanilla picture; it fades out into the ground it was thrown up from. The game's
+tyre spray on wet roads is not OMSI smoke and is left out of `Scene::frame_smoke`. The four
+smoke options (the systems on, the player's vehicle only, the most particles per system, none
+in mirrors) act before the list is made, so they hold here as in every graphics API; the
+`OMSI_NO_SMOKE` flag turns the pass off. A device that cannot make the pass, or has no smoke
+picture, draws the scene without smoke (the pass says so once in the log).
+
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky's clouds, stars and sun glow, smoke,
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass), the sky's sun glow,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
@@ -237,6 +257,6 @@ frame plan and asset events to this crate. In order:
 3. The UI (menus, the Alt bar, the HUD) on this renderer (done: the new interface, the
    HUD's pictures, the minimap and the city map).
 4. The OMSI material features (done: night, light and environment maps, bump maps, the
-   specular highlight, the lamps, the tile light maps and the light coronas), then shadows, smoke and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
+   specular highlight, the lamps, the tile light maps and the light coronas, smoke and particles), then shadows and the sky. Mirrors are drawn: `D3d9Device::draw_scene_into` draws a picture of the scene into a render texture (a mirror's, under the game's texture id, with a depth surface of its own), and the renderer's plan sink hands those pictures over with `FramePlan::target` set.
 5. The alpha-test cut and the other parity items from the maintainer's observation of the
    original.

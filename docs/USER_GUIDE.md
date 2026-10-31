@@ -374,7 +374,7 @@ OMSI, and the puddles' spray on top. Spray is thrown
 within 100 m of the camera (less of it farther off), at most 1400 puffs at once; none shows
 inside the bus the camera is in.
 
-The vanilla look stays the default. The navigator (`crates/omsi-app/src/nav/`) sits in a corner of the screen (lower
+The vanilla look stays the default. The navigator (`crates/omsi-app/src/hud/implementation/nav/`) sits in a corner of the screen (lower
 left by default), after the Route Advisor of Euro Truck Simulator 2: small, dark and half
 transparent, a tilted 3D map that turns with the bus and zooms out with speed - the roads
 of the lane network, the trip's route with arrows along it, coloured stretch by stretch by

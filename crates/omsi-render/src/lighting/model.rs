@@ -116,6 +116,9 @@ pub struct SmokeParticle {
     /// World z of the ground under it (the road its vehicle stands on): it fades out
     /// towards it, and one wholly under it is left out. `None`: drawn as it is.
     pub ground: Option<f64>,
+    /// Tyre spray on a wet road, which the game adds (`[smoke]` systems are OMSI's): the
+    /// Direct3D 9 renderer, which draws only what OMSI 2 has, leaves it out.
+    pub spray: bool,
 }
 
 /// The light map atlas: tiles a side and pixels a tile.
@@ -215,6 +218,8 @@ pub struct Lighting {
     /// Cloud layer: density 0..1 and the texture offset (wind drift), 0 = no clouds.
     pub cloud_density: f32,
     pub cloud_offset: [f32; 2],
+    /// The cloud layer's base height in metres (the weather's `[clouds]` number), 0 = unset.
+    pub cloud_height: f32,
     /// Sun shadow map (off in mirrors and at night).
     pub shadows: bool,
     /// How wet the roads are (0..1): rain darkens them and makes them mirror the sky.
@@ -345,6 +350,7 @@ impl Default for Lighting {
             sky_weights: [1.0, 0.0, 0.0],
             cloud_density: 0.0,
             cloud_offset: [0.0; 2],
+            cloud_height: 0.0,
             shadows: true,
             snowfall: 0.0,
             wind: Vec3::ZERO,

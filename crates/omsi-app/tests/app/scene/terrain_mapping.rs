@@ -107,7 +107,7 @@ fn mapped_splines_and_objects_use_uncut_base_while_ground_keeps_paint() {
             ..Default::default()
         },
     });
-    let instance = testing::startup::graphics_instance();
+    let instance = testing::core::startup::graphics_instance();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
@@ -254,7 +254,7 @@ fn a_maps_own_route_arrow_shows_only_with_the_route_arrows() {
         .object_type("arrow.sco")
         .expect("synthetic route arrow must load");
     assert!(object.sco.is_help_arrow);
-    let instance = testing::startup::graphics_instance();
+    let instance = testing::core::startup::graphics_instance();
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,

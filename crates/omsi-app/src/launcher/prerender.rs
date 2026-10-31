@@ -1,19 +1,18 @@
 //! Pictures of the library's vehicles drawn ahead of time, for the Vehicles page's small
 //! pictures of each paint.
 //!
-//! The pictures are drawn by a preview helper of their own (`preview::Preview`, so the
+//! The pictures are drawn by a preview helper of their own (`showroom::Preview`, so the
 //! interface fallback and the watchdog on a helper that says nothing are the same ones the
 //! page's live preview has; it keeps its own mark of the bus it reads, so it and the live
 //! helper never take each other's for a bus that hung), one vehicle paint after another, in the
 //! background. It is stopped when a game starts and while the window is hidden (`suspend`), and
 //! goes on afterwards. Each picture is kept by the helper as any settled picture is, small and
-//! at one fixed shape (`preview::thumb_shape`), in a folder of its own, so the page finds it
+//! at one fixed shape (`showroom::thumb_shape`), in a folder of its own, so the page finds it
 //! whatever the size of its own preview: only what is not kept yet is drawn. The run starts when another OMSI 2 folder is saved under Setup (once the
 //! content is read) and from the Vehicles page's button, which reads the content again first
 //! so that new vehicles are found; it can be cancelled.
 
-use super::preview::{self, Preview, Shape};
-use super::showroom::Look;
+use crate::showroom::{self as preview, Look, Preview, Shape};
 use omsi_launcher_ui::vehicles::{PrerenderPhase, PrerenderStatus};
 use std::collections::VecDeque;
 use std::sync::mpsc::{channel, Receiver};

@@ -1726,7 +1726,8 @@ fn reload_pads(l: &mut Launcher, backup: bool) -> Result<Option<usize>, String> 
             d.ff_scale = None;
         }
     }
-    let own_file = crate::startup::content_dir().map(|d| d.join("Inputs").join("gamectrler.cfg"));
+    let own_file =
+        crate::core::startup::content_dir().map(|d| d.join("Inputs").join("gamectrler.cfg"));
     let mut devices = match &own_file {
         Some(f) if f.is_file() => {
             omsi_content::input::gamectrler::read(f).map_err(|e| e.to_string())?

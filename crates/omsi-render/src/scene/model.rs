@@ -162,6 +162,9 @@ pub struct Scene {
     pub glass_wiper: Option<f32>,
     pub(crate) smoke_buf: Option<wgpu::Buffer>,
     pub(crate) smoke_count: u32,
+    /// This frame's smoke as the sprite list the second renderer draws (kept only while it
+    /// mirrors the frame: `Scene::frame_smoke`): OMSI's own particles, farthest first.
+    pub(crate) last_smoke: Vec<[f32; 20]>,
     /// Runs of this frame's coronas by picture: (texture, first, count).
     /// (and whether the run belongs to the vehicle the camera is in, drawn after it)
     pub(crate) corona_runs: Vec<(u16, u32, u32, bool)>,
@@ -181,6 +184,8 @@ pub struct Scene {
     pub(crate) sky_bind_group: Option<wgpu::BindGroup>,
     /// The sky's day, twilight and night pictures, as set by `Renderer::set_sky_textures`.
     pub(crate) sky_textures: Option<[TextureId; 3]>,
+    /// The picture of the weather's cloud type, as set by `Renderer::set_sky_cloud_picture`.
+    pub(crate) sky_cloud_picture: Option<TextureId>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the

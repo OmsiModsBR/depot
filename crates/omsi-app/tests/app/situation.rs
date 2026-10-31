@@ -1,6 +1,6 @@
 use clap::Parser;
 use openomsi_game::testing;
-use openomsi_game::testing::cli::Args;
+use openomsi_game::testing::core::cli::Args;
 use openomsi_game::testing::situation::*;
 use std::path::PathBuf;
 
@@ -104,7 +104,7 @@ fn situation_others_preserve_their_colorscheme() {
         ],
         ..Default::default()
     };
-    let mut args = testing::cli::Args::parse_from(["depot"]);
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
     apply_situation_parsed(&sit, &mut args);
     assert_eq!(args.paint.as_deref(), Some("1"));
     assert_eq!(args.situation_odometer_km, Some(10001.125));
@@ -131,7 +131,7 @@ fn a_saved_duty_goes_on_at_its_trip() {
         }],
         ..Default::default()
     };
-    let mut args = testing::cli::Args::parse_from(["depot"]);
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
     apply_situation_parsed(&sit, &mut args);
     assert_eq!(
         (
@@ -147,7 +147,7 @@ fn a_saved_duty_goes_on_at_its_trip() {
 
 #[test]
 fn legacy_and_invalid_saved_stop_fields_keep_legacy_selection() {
-    let mut args = testing::cli::Args::parse_from(["depot"]);
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
     for fields in [
         vec!["109", "65104", "16"],
         vec!["109", "65104", "16", "-1"],
@@ -170,7 +170,7 @@ fn legacy_and_invalid_saved_stop_fields_keep_legacy_selection() {
 
 #[test]
 fn a_string_only_snapshot_is_a_resume() {
-    let mut args = testing::cli::Args::parse_from(["depot"]);
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
     assert!(!args.is_resuming());
     args.situation_strvars
         .push(("destination".into(), "Manual".into()));

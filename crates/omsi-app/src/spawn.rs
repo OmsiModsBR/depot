@@ -1,6 +1,6 @@
 //! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
 
-use crate::cli::{parse_triggers, Args};
+use crate::core::cli::{parse_triggers, Args};
 use crate::player::Player;
 use crate::scene::{self, World};
 use crate::situation::{find_hof, start_clock};
@@ -69,7 +69,7 @@ pub(crate) fn next_coupled(
 /// Load the `[couple_back]` chain behind `vehicle` (articulated rear sections, trailers),
 /// each file resolved from the folder of the part before it in whichever content root
 /// holds it.
-pub(crate) fn load_coupled_parts(
+pub fn load_coupled_parts(
     root: &Path,
     vehicle: &mut omsi_sim::VehicleInstance,
 ) -> Vec<Arc<omsi_sim::VehicleType>> {
@@ -175,6 +175,28 @@ fn player_identity(
     };
 
     (number, ident)
+}
+
+/// Build the triangle trees of the player's bus and its coupled parts on a thread of their
+/// own: the cursor's rays test every triangle until a mesh's tree is there (a few tens of
+/// milliseconds for a cockpit, too long for a frame).
+fn build_trees_aside(types: Vec<Arc<omsi_sim::VehicleType>>) {
+    let built = std::thread::Builder::new()
+        .name("mesh-trees".into())
+        .spawn(move || {
+            let t = std::time::Instant::now();
+            for ty in &types {
+                ty.build_trees();
+            }
+            log::info!(
+                "cursor trees of {} vehicle part(s) built in {:.0} ms",
+                types.len(),
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        });
+    if let Err(e) = built {
+        log::warn!("cursor trees: {e}");
+    }
 }
 
 pub(crate) fn spawn_player(
@@ -353,7 +375,13 @@ pub(crate) fn spawn_player(
     }
     let render = world.add_vehicle(renderer, scene, &vt, scheme);
     // coupled rear sections / trailers
-    let trailer_renders: Vec<scene::VehicleRender> = load_coupled_parts(&args.root, &mut vehicle)
+    let parts = load_coupled_parts(&args.root, &mut vehicle);
+    build_trees_aside(
+        std::iter::once(vt.clone())
+            .chain(parts.iter().cloned())
+            .collect(),
+    );
+    let trailer_renders: Vec<scene::VehicleRender> = parts
         .iter()
         .map(|t| {
             world.add_vehicle_part(
@@ -468,7 +496,7 @@ pub(crate) fn spawn_player(
             .map(|c| c.mesh_parts())
             .unwrap_or(0)
     );
-    let bindings = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args.root))
+    let bindings = omsi_content::KeyboardCfg::load(&crate::core::startup::keyboard_cfg(&args.root))
         .map(|k| k.with_game_defaults().vehicles)
         .unwrap_or_default();
     static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);

@@ -1,9 +1,10 @@
 #!/bin/sh
 # Build Project Depot for Android (arm64) as dist/android/depot-<version>.apk: the game and
 # its launcher in one app (NativeActivity + libopenomsi_game.so, see
-# crates/omsi-app/src/android.rs). Needs Rust with the aarch64-linux-android target
-# (rustup target add aarch64-linux-android), the Android SDK (platform 34+, build-tools,
-# the NDK) and a JDK 17; see android/env.sh for where they are looked for.
+# crates/omsi-app/src/core/implementation/android.rs). Needs Rust with the
+# aarch64-linux-android target (rustup target add aarch64-linux-android), the Android SDK
+# (platform 34+, build-tools, the NDK) and a JDK 17; see android/env.sh for where they are
+# looked for.
 #
 #   scripts/build-android.sh            build the APK
 #   scripts/build-android.sh install    ... and install it on the phone attached by USB (adb)
