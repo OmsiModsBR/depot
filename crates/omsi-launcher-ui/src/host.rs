@@ -26,4 +26,7 @@ pub trait Host {
 
     /// The game's version and build, as a report names them: `0.3.1 (abc1234)`.
     fn build(&self) -> String;
+
+    /// The game's version alone, as Diagnostics shows it: `0.3.1`.
+    fn version(&self) -> String;
 }
