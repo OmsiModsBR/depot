@@ -29,6 +29,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Original OMSI 2 mode (hidden, off by default, Windows only)
 
 - **Added.** Settings → Modules (listed only with OMSI 2 as the engine): a card for Omsi Prefetch with its switch, the memory it may use (Auto or 2 to 12 GB), the player's vehicles (none or all) and its monitor window, kept in `~/.depot/omsi2/modules.json` and sent at every start (`/module:`, `/module-setting:`, or `/no-module:` when switched off) only while the module is in the OMSI 2 folder; any value the card does not offer stops the start. The card installs the module (version, license and SHA-256 first, then the file list) and removes what Depot placed, never while a game runs, opens its data folder, and says when it was installed by hand (then Depot does not remove it). Shown even before a release exists (finding out would need the network). Checked by automated tests only; not yet tried with a published release on Windows. Refs #484. (#620)
+- **Added.** Settings → Modules in OMSI 2 mode: a card for openHUD (live radar and a new pause menu) like Omsi Prefetch's, with the radar, its corner, zoom, size and opacity, the new pause menu, units, interface size and language. openHUD joins a session only when asked for, so its card starts switched off and sends nothing until the player turns it on. Every dropdown on a module card has a tooltip. Checked by automated tests only; no openHUD release exists yet. Refs #485. (#622)
 
 ## 0.3.0 - 2026-10-30
 
