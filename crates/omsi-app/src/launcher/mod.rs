@@ -31,7 +31,6 @@ pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
 pub(crate) mod host;
-pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
@@ -1833,7 +1832,7 @@ impl Launcher {
             } else if self.browser.is_none() && keys {
                 keyboard::dialog(self);
             } else if self.browser.is_none() && diag {
-                integrity::dialog(self);
+                diagnostics::dialog(self);
             } else {
                 self.draw_browser();
             }

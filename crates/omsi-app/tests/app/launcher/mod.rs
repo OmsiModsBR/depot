@@ -5,7 +5,6 @@ mod chrome;
 mod diagnostics;
 mod dialogs;
 mod drive;
-mod integrity;
 mod keyboard;
 mod mapview;
 mod pages;

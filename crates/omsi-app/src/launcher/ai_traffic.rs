@@ -103,7 +103,7 @@ pub(super) fn keep(i: usize, n: usize) -> usize {
 
 pub fn draw(l: &mut Launcher, area: Rect) {
     l.pages.diag.ai.showing = false;
-    let list = super::integrity::items(l, 0);
+    let list = omsi_launcher_ui::window::check_items(&l.state, 0);
     let root = PathBuf::from(l.state.config.root.trim());
     if list.is_empty() || root.as_os_str().is_empty() {
         clipped(

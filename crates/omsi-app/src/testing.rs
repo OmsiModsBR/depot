@@ -244,9 +244,6 @@ pub mod launcher {
     pub mod drive {
         pub use crate::launcher::drive::*;
     }
-    pub mod integrity {
-        pub use crate::launcher::integrity::*;
-    }
     pub mod keyboard {
         pub use crate::launcher::keyboard::*;
     }
