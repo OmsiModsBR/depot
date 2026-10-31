@@ -1874,6 +1874,8 @@ pub struct Humans {
     /// counted against it instead.
     pub max_people: usize,
     stroll_timer: f32,
+    /// `time` of the last crowd diagnostics line (see the strolling target below).
+    crowd_log_at: f64,
     /// Passengers pay the exact fare: no change is ever due.
     pub exact_fare: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
@@ -2124,6 +2126,7 @@ impl Humans {
             pedestrians: 14,
             max_people: people_limit,
             stroll_timer: 0.0,
+            crowd_log_at: f64::NEG_INFINITY,
             exact_fare: true,
             boarding: "auto".into(),
             give_ticket: false,
@@ -3248,6 +3251,22 @@ impl Humans {
                     .count())
             .saturating_sub(self.pool_used()),
         );
+        if log::log_enabled!(log::Level::Debug) && self.time - self.crowd_log_at >= 10.0 {
+            // (investigating #613: how the people count is derived from the options)
+            self.crowd_log_at = self.time;
+            log::debug!(
+                "crowd: base_pedestrians={} pavement_lanes={} crowd={:.2} density={:.2} \
+                 cap_people={} cap_walkers={} pool_used={} target_walkers={}",
+                self.pedestrians,
+                lanes.len(),
+                crowd,
+                self.density,
+                self.max_people,
+                self.max_people / 2,
+                self.pool_used(),
+                target,
+            );
+        }
         let have = self
             .people
             .iter()

@@ -21,6 +21,14 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+
+### AI traffic and people
+
+- **Added** Diagnostics for #613 (traffic and people not getting denser with every option at its
+  maximum): with `RUST_LOG=debug`, `~/.depot/game.log` gets one `traffic density:` line and one
+  `crowd:` line every 10 seconds, showing how each population target is derived from the start
+  dialog count, the options and the map. Nothing about the population itself changes. (#PR)
+
 ### DirectX 9 renderer (D3D9Ex)
 
 - **Changed.** "DirectX9 (D3D9Ex)" now draws the weather's clouds and the night's stars over its sky. The clouds are the weather's own: its cloud type (`Weather/clouds.cfg`: Cumulus 1 to 3, Overcast) picks the picture, drawn as one flat layer at the weather's base height (the number beside the type) over the sky and moved by the wind; clear weather draws none (no fair-weather clouds are added in this mode), the layer fades out towards the horizon, is lit by the scene's own light (white by day, warm at the sun's rise, hardly lighter than the sky at night, the Overcast deck greyed) and goes into the fog like the rest of the sky. The stars are small points that appear with the dusk, are there all night and fade out with the dawn above the horizon; they stay where they are (they do not turn with the hours), and the clouds hide them. Both are drawn by the sky's own pass (its own shaders: the scene's pixel shader keeps its slots) and also show in the mirrors. The Clouds setting stays locked to "as OMSI 2"; other graphics APIs are unchanged. No new strings. Still to compare with the original in the game: how many stars there are and how bright, whether they turn, how the clouds move and how thick they look, and the sun glow (a later change). (#582)
