@@ -18,6 +18,47 @@ impl Renderer {
         lighting: &Lighting,
         rig: Option<&TripleScreen>,
     ) -> Result<Vec<u8>> {
+        self.render_image_with(scene, width, height, camera, lighting, rig, true)
+    }
+
+    /// `render_image`; with `with_interface` false the picture holds the scene alone: the HUD
+    /// overlays and the overlay hook's layer are left out (and put back after the frame).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_image_with(
+        &mut self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+        camera: &Camera,
+        lighting: &Lighting,
+        rig: Option<&TripleScreen>,
+        with_interface: bool,
+    ) -> Result<Vec<u8>> {
+        let held = (!with_interface).then(|| {
+            (
+                std::mem::take(&mut scene.overlays),
+                std::mem::take(&mut scene.overlay_res),
+                self.overlay_hook.take(),
+            )
+        });
+        let out = self.render_image_inner(scene, width, height, camera, lighting, rig);
+        if let Some((overlays, overlay_res, hook)) = held {
+            scene.overlays = overlays;
+            scene.overlay_res = overlay_res;
+            self.overlay_hook = hook;
+        }
+        out
+    }
+
+    fn render_image_inner(
+        &mut self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+        camera: &Camera,
+        lighting: &Lighting,
+        rig: Option<&TripleScreen>,
+    ) -> Result<Vec<u8>> {
         let tex = target_2d(
             &self.device,
             "offscreen",
