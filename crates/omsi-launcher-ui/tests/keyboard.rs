@@ -1,8 +1,44 @@
 use omsi_content::input::gamectrler::DeviceCfg;
+use omsi_launcher_ui::window::*;
 use omsi_ui::Rect;
-use openomsi_game::testing::launcher::keyboard::*;
 use serde_json::json;
 use serde_json::Value;
+
+/// A game that names a key only by its scan code.
+struct Keys;
+
+impl omsi_launcher_ui::Host for Keys {
+    fn set_language(&self, _: &str) {}
+    fn open_url(&self, _: &str) {}
+    fn open_dotnet_download(&self) {}
+    fn version(&self) -> (&'static str, &'static str) {
+        ("0", "")
+    }
+    fn repo_url(&self) -> &'static str {
+        ""
+    }
+    fn helper_log(&self) -> std::path::PathBuf {
+        std::path::PathBuf::new()
+    }
+    fn action_text(&self, _: &str, _: &str, action: &str) -> String {
+        action.into()
+    }
+    fn actions(&self, _: &str, _: &str) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    fn key_name(&self, scan: i64, _: i64) -> String {
+        format!("game's {scan}")
+    }
+    fn dik_code(&self, _: winit::keyboard::KeyCode) -> Option<i32> {
+        None
+    }
+    fn controllers_file(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+    fn save_controllers(&self, _: &[DeviceCfg]) -> Result<(), String> {
+        Ok(())
+    }
+}
 
 fn kb(vehicles: Value, game: Value) -> Value {
     json!({ "vehicles": vehicles, "game": game })
@@ -174,17 +210,18 @@ fn the_originals_controllers_go_in_by_name() {
 }
 
 /// The game's key names (`.kyb`) name a key, with its Shift / Ctrl / Alt; a key the table
-/// lacks keeps the Depot's name.
+/// lacks keeps the game's name for it.
 #[test]
 fn keys_are_named_from_the_language_table() {
     let names = KeyNames(vec![(72, "Num 8".into()), (42, "Shift (left)".into())]);
-    assert_eq!(names.name((72, 0)), "Num 8");
+    let host = Keys;
+    assert_eq!(names.name(&host, (72, 0)), "Num 8");
     assert_eq!(
-        names.name((72, omsi_content::input::KEY_CTRL as i64)),
+        names.name(&host, (72, omsi_content::input::KEY_CTRL as i64)),
         "Ctrl+Num 8"
     );
-    assert_eq!(names.name((17, 0)), "W");
-    assert_eq!(names.list(&[]), "none");
+    assert_eq!(names.name(&host, (17, 0)), "game's 17");
+    assert_eq!(names.list(&host, &[]), "none");
 }
 
 #[test]

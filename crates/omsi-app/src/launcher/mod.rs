@@ -31,10 +31,8 @@ pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
 pub(crate) mod host;
-pub(crate) mod keyboard;
 pub(crate) mod mapview;
 pub mod mobile;
-mod omsi2_map;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
@@ -55,6 +53,7 @@ pub(crate) mod ui;
 use crate::showroom;
 use glam::Vec2;
 use omsi_launcher_lib as core;
+use omsi_launcher_ui::omsi2_map;
 use omsi_launcher_ui::picture::MapPicture;
 use omsi_launcher_ui::window;
 use omsi_launcher_ui::Page as UiPage;
@@ -387,13 +386,13 @@ impl Launcher {
             // (controls:reload, controls:add: the keyboard's windows)
             match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
                 Some("reload") => {
-                    app.pages.kb.dialog = Some(keyboard::Dialog::Reload {
+                    app.pages.kb.dialog = Some(window::Dialog::Reload {
                         backup: true,
                         pads: true,
                     })
                 }
                 Some("add") => {
-                    app.pages.kb.dialog = Some(keyboard::Dialog::Add {
+                    app.pages.kb.dialog = Some(window::Dialog::Add {
                         query: String::new(),
                         chosen: None,
                         key: None,
@@ -1830,7 +1829,10 @@ impl Launcher {
             } else if self.browser.is_none() && drive {
                 window::drive_dialog(frame!(self), &mut self.pages.profile);
             } else if self.browser.is_none() && keys {
-                keyboard::dialog(self);
+                window::keyboard_dialog(frame!(self), &mut self.pages.kb);
+                if std::mem::take(&mut self.pages.kb.pads_read) {
+                    self.pages.pads = Default::default();
+                }
             } else if self.browser.is_none() && diag {
                 diagnostics::dialog(self);
             } else {
