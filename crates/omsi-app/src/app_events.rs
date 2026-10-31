@@ -3333,13 +3333,26 @@ impl ApplicationHandler for App {
                     // what an automated window run draws (also when the window is hidden,
                     // so it does not depend on a frame being acquired)
                     if let Some((path, include_touch)) = shot {
-                        match r.render_to_image(
-                            scene,
-                            s.config.width,
-                            s.config.height,
-                            cam,
-                            &lighting,
-                        ) {
+                        // (a player's screenshot holds the scene alone: no HUD, minimap,
+                        // Alt bar or window; scripted `shot` keeps the interface for tests)
+                        let drawn = if include_touch {
+                            r.render_to_image(
+                                scene,
+                                s.config.width,
+                                s.config.height,
+                                cam,
+                                &lighting,
+                            )
+                        } else {
+                            r.render_scene_to_image(
+                                scene,
+                                s.config.width,
+                                s.config.height,
+                                cam,
+                                &lighting,
+                            )
+                        };
+                        match drawn {
                             Ok(mut px) => match {
                                 // (with the on-screen controls, when there are)
                                 if include_touch {

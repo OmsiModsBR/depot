@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### In-game interface (Esc menu, Alt bar, windows, loading, trip report)
+
+- **Fixed.** A screenshot (Ctrl+Shift+P, F12 or Esc menu > Screenshot) holds the scene alone: the information bar, the minimap/navigator, the Alt bar, its windows and the other HUD are no longer drawn into the saved picture (Vulkan/DX12). The `Screenshot: <path>` notice stays out of it as before. DirectX9 (D3D9Ex) does not save screenshots yet. (#612)
+
 ### DirectX 9 renderer (D3D9Ex)
 
 - **Added.** Under "DirectX9 (D3D9Ex)": raindrops on glass. A pane whose material names a `[matl_raindropmap]` gathers drops while it rains (not while it snows), over the areas that map marks: the harder it rains the faster they gather and the further they spread, they dry in about a minute once the rain stops, and the wiper clears the part of the pane it sweeps (the wiper's place is read from the vehicle's script) while the rain brings the drops back. Drawn as a pass of its own over the panes, after the scene, so the scene's pixel shader keeps its instruction slots (still held to 460 of 512 by a test; the new one takes under 128). The default renderer, other panes and the other graphics APIs are untouched. Not part of it: refraction, running streaks and condensation on glass. Only the vehicle the camera is in follows the player's wiper; the panes of other vehicles, seen from outside, keep their drops (the frame carries one wiper). The wiper sweep is taken as a stroke across the pane's width and the drops' look and timing are the Depot's own; both still to be compared with the original in the game. (#579)
