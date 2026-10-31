@@ -719,6 +719,8 @@ pub struct Traffic {
     pub tick_split: [f64; 3],
     /// Where the last population pass spent its time and what it did (OMSI_PROFILE).
     pub populate_split: PopulateSplit,
+    /// `time` of the last density diagnostics line (see `log_density`).
+    density_log_at: f32,
     /// How long (s) a population pass may spend putting cars on the road, after the first
     /// one; None: until the target is met (the default, kept by the tests and the
     /// offscreen pictures). A pass cut short says so in `populate_split.cut`, and the game
@@ -1674,6 +1676,7 @@ impl Traffic {
             driver_pool: Vec::new(),
             tick_split: [0.0; 3],
             populate_split: PopulateSplit::default(),
+            density_log_at: f32::NEG_INFINITY,
             populate_budget: None,
             spawn_deadline: None,
             others_still: HashMap::new(),
@@ -2549,6 +2552,45 @@ impl Traffic {
         self.populate_split.parked = t.elapsed().as_secs_f64();
         self.initial = false;
         self.spawn_deadline = None;
+        // (after the pass, so `created_in_pass` counts this pass's cars)
+        self.log_density(density, &near_density, street_target);
+    }
+
+    /// Every 10 s of simulated time, one `debug` line saying how the street population is
+    /// derived (investigating #613: do the maximum options really raise the density?):
+    /// the base count asked for (`--traffic`, the start dialog), the hour/option density
+    /// factor, the road-size scale, the resulting target, the `[AIMaxCountRandom]` cap and
+    /// what is on the road now, plus how many cars came and went since the last line (cars
+    /// that appear and disappear in one place show as high churn with a flat population).
+    fn log_density(&mut self, density: f32, near_density: &[f32], street_target: usize) {
+        if !log::log_enabled!(log::Level::Debug) || self.time - self.density_log_at < 10.0 {
+            return;
+        }
+        self.density_log_at = self.time;
+        let random = self
+            .cars
+            .iter()
+            .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
+            .count();
+        let scheduled = self.cars.iter().filter(|c| c.is_bus() && !c.gone).count();
+        log::debug!(
+            "traffic density: base={} map_hour={:.2} unsched_factor={:.2} density={:.2} \
+             road_lanes={} road_scale={:.2} street_target={} cap_random={} \
+             random_on_road={} dormant={} buses_on_road={} cap_scheduled={} created_in_pass={}",
+            self.target,
+            self.street_density_map(),
+            self.unsched_factor,
+            density,
+            near_density.len(),
+            road_scale(near_density),
+            street_target,
+            self.max_random,
+            random,
+            self.dormant.len(),
+            scheduled,
+            self.max_scheduled,
+            self.populate_split.created,
+        );
     }
 
     /// The pass under way has used up its budget: it stops putting cars on the road.
