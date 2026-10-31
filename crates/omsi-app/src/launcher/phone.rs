@@ -1889,7 +1889,15 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         Page::Vehicles | Page::Maps => super::drive::draw(l, content),
         Page::Diagnostics => super::diagnostics::draw(l, content),
         Page::Multiplayer => {}
-        Page::Profile => super::pages::profile(l, content),
+        Page::Profile => omsi_launcher_ui::window::profile(
+            &mut omsi_launcher_ui::Frame {
+                ui: &mut l.ui,
+                state: &mut l.state,
+                drop_hover: l.pages.drop_hover,
+            },
+            &mut l.pages.profile,
+            content,
+        ),
         Page::Settings => super::settings::settings(l, content),
         Page::Controls => super::pages::controls(l, content),
         Page::Mods => omsi_launcher_ui::window::mods(
