@@ -568,7 +568,7 @@ fn result(f: &mut Frame, view: &mut CheckView, r: Rect, kind: usize) {
         ButtonKind::Normal,
     ) {
         if let Some(d) = view.done.as_ref() {
-            f.ui.clipboard_out = Some(report_text(d, kind, None, None, &f.host.build()));
+            f.ui.clipboard_out = Some(report_text(d, kind, None, None, &build_of(f)));
             f.state
                 .set_status("The summary of the check is on the clipboard.", false);
         }
@@ -1070,7 +1070,7 @@ pub fn integrity_export(f: &mut Frame, view: &mut CheckView) {
     let Some(d) = view.done.as_ref() else {
         return;
     };
-    let report = report_text(d, kind, Some(&e), open, &f.host.build());
+    let report = report_text(d, kind, Some(&e), open, &build_of(f));
     let fname = file_name(d);
     let lines: Vec<String> = report
         .split("\r\n")
@@ -1157,4 +1157,10 @@ pub fn integrity_export(f: &mut Frame, view: &mut CheckView) {
     }
     f.ui.tooltip(save_r, "Chooses where to save the report as a text file.");
     view.export = Some(e);
+}
+
+/// The game's version and build as the report names them: `0.3.1 (abc1234)`.
+fn build_of(f: &Frame) -> String {
+    let (version, build) = f.host.version();
+    format!("{version} ({build})")
 }
