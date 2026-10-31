@@ -2520,7 +2520,6 @@ impl Traffic {
         let street_target = ((self.target as f32 * density * road_scale(&near_density)).round()
             as usize)
             .min(self.max_random as usize);
-        self.log_density(density, &near_density, street_target);
         // the cars that come into range again, where they have got to
         let t = Instant::now();
         self.wake_dormant(world, renderer, scene, center, street_target);
@@ -2553,6 +2552,8 @@ impl Traffic {
         self.populate_split.parked = t.elapsed().as_secs_f64();
         self.initial = false;
         self.spawn_deadline = None;
+        // (after the pass, so `created_in_pass` counts this pass's cars)
+        self.log_density(density, &near_density, street_target);
     }
 
     /// Every 10 s of simulated time, one `debug` line saying how the street population is
