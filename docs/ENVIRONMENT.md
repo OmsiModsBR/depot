@@ -215,7 +215,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_PUDDLE_VEHICLE` | switch | `omsi-render::effects::puddles` |  | Puddles reflect no vehicles. |
 | `OMSI_NO_RENDER_POOL` | switch | `omsi-render::gpu::context` |  | The draw lists encoded on the frame's own thread, not on a pool. |
 | `OMSI_NO_RT_FRAME` | switch | `omsi-render::renderer::frame` |  | The ray-traced frame of Enhanced+ left out. |
-| `OMSI_NO_SMOKE` | switch | `omsi-render::passes::main` |  | No smoke. |
+| `OMSI_NO_SMOKE` | switch | `omsi-render::passes::main, omsi-app::output::d3d9` |  | No smoke. |
 | `OMSI_NO_SNOWFALL` | switch | `omsi-render::passes::main` |  | No falling snow. |
 | `OMSI_NO_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The splines drawn one by one. |
 | `OMSI_NO_SPLINE_HOLES` | switch | `omsi-app::scene` |  | No holes cut into the terrain by the splines. |
