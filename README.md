@@ -81,6 +81,237 @@ achieved result.
 > plays on the maps, vehicles and other files of an installed OMSI 2 and **will not start without one**.
 
 
+## Feature highlights
+
+How to read the labels below. **1:1 goal**: the feature is meant to behave like OMSI 2; it is checked by
+automated tests and traces, and is not claimed identical until it has been compared in the game.
+**Deliberate improvement**: it differs from the original on purpose and is recorded as such.
+**Depot addition**: OMSI 2 has nothing equivalent. **Experimental**: new, off by default or not yet
+compared with the original in the game. Every item below is in the 0.3.0 release; the pull request behind
+each line is in the [changelog](CHANGELOG.md#030---2026-10-30).
+
+### Vehicle physics and simulation
+
+*Labels: 1:1 goal for the corrections, deliberate improvement for the articulated-bus work.*
+
+* **The physics refactor is complete.** The vehicle physics is one rigid-body model with a single bridge to the
+  scripts' variables; the older A/B switches and models behind them are gone, and the option `--physics simple`
+  was removed. Bit-exact physics traces guard it, so a change that moves a vehicle by a hair shows up in review.
+  *Before:* several physics models selectable by switches. *Now:* one model, tested against recorded traces.
+* **Articulated buses and trailers, every section a body of its own** *(deliberate improvement, since 0.2.52,
+  refined in 0.3.0).* Each section has its own mass, inertia, axles, springs and brakes and is held by a joint
+  that follows `[coupling_front_character]`. In 0.3.0 a pusher articulated bus no longer folds into an L at
+  30-50 km/h on uneven ground (the rear tyres grip only as much as the road gives), the last ring of the bellows
+  stays on the rear section on a crest or a dip, the bellows no longer open a gap on a grade, and a coupled
+  section with no `[coupling_front_character]` is hitched by a free ball.
+* **Passengers weigh on the player's bus** *(deliberate improvement)*. Each person's `.hum` `[mass]` adds to the
+  section they are in: a full bus sits lower on its springs, accelerates more slowly and needs longer to stop; its
+  pitch and roll damping follow the heavier body.
+* **Steering.** Mouse steering stops at the window's edge and keeps the wheel where the mouse left it (both
+  fixes aim at OMSI 2's behaviour); *steering linearity* is on by default (the keys turn the wheel at one steady
+  pace at any speed; it can be switched off under Driving help) *(deliberate improvement)*. A bus whose file asks
+  for more than 60° of lock now gets it.
+* **The AI's vehicles steer by their own `.bus` files** (turning point, lock, every axle towards the centre of
+  the turn, a lateral-acceleration limit at speed) instead of fixed defaults.
+* **`[momentofintertia]`** is read in OMSI's y-up order for the player's bus again, so a bus no longer turns in
+  too slowly and leans too far in a curve.
+* **Other corrections:** a bus parked under a canopy or a bridge measures the ground under its lift and ramp;
+  destination signs, IBIS screens and ticket-printer output come back with a saved situation; `[mouseevent]`
+  meshes behind another mesh can no longer be clicked through it; `[animparent]` is no longer guessed (a wrong
+  name is logged so the model can be fixed).
+* **Sound.** A sound started by a trigger keeps the loudest volume its curves gave it; a bus arriving no longer
+  plays triggers fired before its sounds existed; the `sound_levels` lint lists what is likely to sound wrong;
+  an optional *Muffle outside sounds* low-pass for the cab *(Depot addition, off by default)*.
+
+*Not claimed:* most of these changes are supported by tests and traces, not by a recorded comparison in the
+game. Treat them as intended to approach OMSI 2, not as demonstrated 1:1.
+
+### Passengers and people
+
+* Passengers use **every door of an articulated bus**: they no longer all wait at the last door with a button.
+* At a stop on the left of a bus with doors on both sides they go to the nearest door on their own side while
+  the doors are shut, and no longer walk across the bus.
+* Passengers who get off at a **high platform (BRT)** keep the height of the platform's path instead of sinking
+  to the road.
+* At night they **complain again that the saloon is too dark** when its light is off; darkness is the sky's light
+  alone, so lit stops no longer hide it.
+
+### DirectX 9 renderer *(experimental, off by default, Windows only)*
+
+* **What it is for.** Compatibility and performance on older hardware, drawing the picture as close as possible
+  to OMSI 2 within the graphics options OMSI 2 itself has: no extras. Settings → Graphics API → "DirectX9
+  (D3D9Ex)"; "Automatic" never picks it, and VR is not available under it.
+* **How it was built.** A separate crate, `omsi-render-d3d9`, with a GPU-less test backend, Direct3D 9Ex device
+  bring-up with loss handling and Shader Model 3.0 shaders compiled at run time; the game's renderer keeps its
+  own books and the DirectX 9 device draws and presents the window.
+* **What it draws:** meshes and textures (RGBA with mip chains, DXT1/3/5), vanilla shading with fog and the alpha
+  kinds, the materials' maps (light maps, night maps, environment reflections with masks, bump maps, specular),
+  the lamps and spots of the map and of vehicles, the tile light maps, the sky dome by time of day with the
+  weather's **clouds and the night's stars**, **mirrors**, **light coronas** (headlights, beacons, street lamps,
+  fog cones), **smoke and particles**, the vehicle shadow, the new interface, the minimap and the city map, and
+  an optional **snowfall**. Multisampling, anisotropic filtering and alpha-to-coverage are handled so that
+  cut-out lettering and fences keep clean edges.
+* **Options follow what OMSI 2 has.** Graphics stays at Vanilla and fixed; quality presets and improvements
+  stay hidden; settings the renderer cannot honour show as fixed lines with the reason.
+* **Honest status.** New in 0.3.0. Its look is still to be compared with the original in the game; the clouds,
+  stars, snow and rain streaks in particular are not yet confirmed. Nothing here widens the supported hardware.
+
+### The launcher, rebuilt in the Windows 11 look
+
+* **How it was built.** A light program of its own (`omsi-launcher-ui`), no web view, that opens at once: it no
+  longer builds the game's 3D renderer before showing its window (that used to take most of a minute on a slow
+  driver). Previews are drawn by the game's own renderer in a helper process, so a bus looks in the launcher
+  exactly as it does in the game.
+* **Look and refinement.** Fluent greys, thin outline icons, rounded cards with hairline strokes, an optional
+  accent (Amber by default, plus eight more), sidebar or top bar, plain-dark or scene background, rounded or square
+  corners, light motion in Windows 11's timings (nothing bounces, nothing moves at rest), a tooltip after one
+  second on every button, no text under 12 physical pixels, and its own minimize, maximize and close.
+* **Pages.** *Maps* (start page: the library, the picture and description, the start card with date, start
+  point, weather, line and tour), *Vehicles* (grouped by manufacturer with rendered previews, paints, depot files
+  and "Use for the next start"), *Timetable* (planning with a map of the real lanes the trips drive, a schematic
+  and the trips), *Profile and Sessions*, *Mods*, *Controls*, *Diagnostics*, *Settings* and *Setup*.
+* **First run and status.** With no OMSI 2 folder saved, Setup opens with an InfoBar that says what to do; Start
+  is dimmed (with the reason in its tooltip) until the folder is complete.
+* **Mods** install from a `.zip` only and are used in place from `Archives`, never unpacked.
+* **One game at a time.** The launcher steps aside to the system tray while a game runs.
+
+### Timetables: planning in the launcher, Skip stop in the game
+
+* **Timetable page (launcher).** A planning page with three tabs:
+  * **Map** draws the map's streets with its lines on the very lanes their trips drive, in both directions and in
+    the lines' colours (lines that share a road run side by side). A stretch whose road the map or its timetable
+    does not have is **left out, never drawn as a straight line from stop to stop**, and the map says so. Each
+    line has a switch (or all at once); you can search a stop by name (even on a map that does not say where its
+    stops stand) or a street by the map's street-name signs, and for a stop you see the lines that serve it and
+    their next departures on the start's date and time, *Show only these lines* and *Edit this line's trips*.
+  * **Schematic** draws the chosen line as a diagram in either direction: the stops it calls at in order, the
+    minutes between them from its trip profile, the other lines at each stop, the whole route's time and a table
+    of interchanges with those lines' next departures.
+  * **Trips** is the editor: the line's tours with new, copy and delete, and each tour's trips with departure,
+    route, first and last stop, profile and **AI group** (chosen from the map's own `ailists.cfg`).
+  Stops, streets and routes are read from the map; only departures change, saved in the content folder, and the
+  original OMSI 2 files are never touched. The page always follows the map chosen on Maps.
+* **Honest times.** A trip's stop times in the line lists (Maps, Drive, Timetable and `--cli lines`) now follow the
+  trip's profile as the game times it, manual arrival and departure times included.
+* **In the game.** The running timetable marks served stops and stops to come with outline icons and a stop
+  skipped or missed with a muted sign of its own, and offers **Skip stop** *(deliberate improvement)*. The end-of-trip report lists every stop with planned and actual times.
+
+| | Before 0.3.0 | Now |
+| --- | --- | --- |
+| Planning a line | A list editor of lines, tours and trips (*Save all*, *New line*, *Repeat*) | Map, Schematic and Trips tabs, the map drawn on the lanes the trips really drive |
+| A new tour's buses | The fixed group name "Busses" | The map's own first depot group, or any AI group of its `ailists.cfg` |
+| In the game | Skip the duty's next stop from the game menu | A running timetable window with served, skipped and missed stops marked and a Skip stop button |
+
+### Setup: free disk space with NTFS compression *(Depot addition)*
+
+* Setup's *Free up space* card can compress the content with NTFS (LZX, Windows' "compact") and undo it, for the
+  Depot's content folder (ticked) and, apart, the OMSI 2 folder (not ticked). It estimates what each would free
+  from a sample of files (marked as an estimate), works in the background with progress and Cancel, and leaves
+  files the game writes, `.zip` archives and already-compressed media alone.
+* It is offered only on a fixed NTFS disk (never in a cloud-sync folder, on a network or removable disk) and says
+  why when it is not. On a hard disk it warns that loading can be much slower and asks to confirm; for the OMSI 2
+  folder it recommends playing through OmsiLaunch with the Omsi Prefetch module. Undo checks the free space first.
+* *Not yet measured:* the effect of compressed files on loading times on real hardware.
+
+### Opening the original OMSI 2 from the launcher *(hidden, off by default, Windows only)*
+
+* **What it is.** A Depot | OMSI 2 switch that starts the original game through the OmsiLaunch tool when it is
+  needed, from the same Maps page, with the OMSI 2 settings the original has (frame-rate limit, object distance,
+  reflections, collisions, ticket selling in its three positions, traffic counts, passenger density, volume and
+  more), kept in a file of their own and shown with OMSI 2's defaults and limits; Controls is read-only there.
+* **How it was built safely.** The OmsiLaunch install takes only the newest official release of its own
+  repository, checks it against the published SHA-256 and its manifest, lists the files for the player to confirm
+  and installs in a staging area; what Depot may overwrite or delete is decided by a record it keeps outside the
+  OMSI 2 folder; the launch is built outside the OMSI 2 folder, planned first, and nothing starts unless it can
+  run (each reason is shown as a sentence). It passed an independent security review. Optional modules (Omsi
+  Prefetch, openHUD) install by the same rules. Texts exist in all 26 languages.
+* **Status.** Hidden unless the maintainers' development switch is set; documented in `docs/ORIGINAL_ENGINE.md`.
+
+### A new in-game interface
+
+* **Esc menu and its pages** drawn by the Depot's own toolkit over the paused picture: Options, Controls, Vehicle
+  options, World options, line and tour with the timetable, and the lists of drivers, fleet numbers, destinations,
+  depot files and more, in the same look, with rounded rows, switches, keycaps and an accent pill.
+* **Alt bar** (a tap of Alt; it never pauses the game): the original's fifteen buttons in their order, five by
+  three, with tinted tiles and outline icons in the accent, a name above the tile under the mouse, a fold-away
+  tab, and keyboard use (Alt+Down, arrows, Enter). Everything on it works from the bar.
+* **Add vehicle** is laid out like the original's vehicle choice, with a live 3D preview of the vehicle in the
+  light of the game's hour, liveries, depot files, fleet number and plate.
+* **Loading screen** with the logo on a photo, a darkened edge so the text reads on bright screenshots, and a
+  progress bar; **end-of-trip report** with the stops served, late arrivals and early departures (it pauses the
+  game); a running timetable with served and skipped stops marked.
+* **Accent colour** for the whole interface, shared by the launcher and every game window.
+
+### Information bar (Shift+Y) *(Depot addition)*
+
+* A dark plate in the interface's look with the time, the speed with the **street's speed limit as a road sign**,
+  the line with its destination, the next stop with the delay, trip distance, odometer, outside and cabin
+  temperature, passengers and the tank, plus a frame-rate part.
+* **Layouts:** Full (default), Two-tier, Split and **Custom**, where each item is switched off one by one; a
+  position (top or bottom) and the frame-rate chip are options in the launcher and in the game's World options.
+
+### Navigator and city map
+
+* **City map (Shift+M):** a compass (Map, North up or Heading up), a **terrain view with contour lines** and their
+  heights (computed on a worker thread so the frame never waits), the street under the pointer and the speed limit
+  of the street the player is on, and a **lines panel** with each line's departures by direction and day and the
+  time at every stop for a chosen departure, from the map's own timetable. It reads map packages
+  (`docs/MAP_PACKAGE.md`) and nothing is added to the map.
+* **Minimap:** an optional **top view** (heading up), a mode that follows the walker or the free camera, and new
+  **rounded vehicle pictograms** (a trolleybus is shown with its two poles).
+* The lines panel is translated into every interface language, and the new look applies to both maps.
+
+### Diagnostics: integrity checks and AI traffic *(Depot addition)*
+
+* **Integrity check** of a map or a vehicle (also from `omsi-check --integrity`): it follows what the content
+  names (tiles, objects, splines, models, meshes, textures, sounds, scripts, paths, passenger cabin) and lists
+  errors, warnings and "not optimized" findings, split in tabs by kind with a dot for the worst one, with why each
+  matters; it can be **compared against an untouched baseline folder** so that what an optimization broke stands
+  out from what was already wrong. Results export to a text report with no personal paths; Cancel really stops it.
+* **AI traffic tab:** shows a map's AI lists as the game takes them on a chosen day, with the Chrono scenarios in
+  force, the chance of each vehicle, and a 3D preview. **Edit lists** changes car groups, weights, parking lists
+  and bus fleets and which AI group a tour takes its buses from; nothing is written until *Save*, which keeps
+  a copy of every changed file, and a backup can be put back safely.
+* A *Detailed log* switch writes every file the game reads, every probe that found nothing and every archive it
+  mounts, to find why content does not load.
+
+| | Before 0.3.0 | Now |
+| --- | --- | --- |
+| Diagnostics page | An overview page | **Overview**, **Integrity** and **AI traffic** tabs |
+| Checking content | `omsi-check` on the command line | The same integrity check from the launcher, by kind, with why each finding matters, and a baseline comparison |
+
+### Controls: mapping, import and conflicts
+
+* **Keyboard page.** Actions in groups on the left (All, Driving, Cab and lights, Doors and tickets, Cameras and
+  views, Game and menus, VR, Advanced; plus *Conflicts*, *Changed by me* and *Not assigned*, each with its count),
+  the group's actions in the middle with a key and a second key (click a key and press the new one; "changed" and
+  "shared key" are marked; the search covers every action) and the chosen action on the right: its key, its key
+  in your OMSI 2 controls file, OMSI 2's key as it comes, *Back to original* and *Clear*. Keys are named in the
+  game's language.
+* **Conflicts are highlighted but saveable.** A key used twice is flagged, never refused, and only when OMSI 2's
+  own layout does not share it that way on purpose (it puts the manual and automatic gears on one key).
+* **Import from OMSI 2.** *Preview changes / Reload from OMSI 2* lists what would change, what is already the same
+  and what only the Depot has (kept as it is), makes a dated backup first and can read the game-controller
+  assignments too, device by device by name. The original's files are only ever read.
+* **Add a control** lists the actions the game knows that have no key yet, waits for the key and warns when
+  another action has it; a bus's own trigger is added when its whole name is typed.
+* **In the game** the Esc menu's Controls pages use the same look, with options that apply at once as switches.
+
+| | Before 0.3.0 | Now |
+| --- | --- | --- |
+| The key list | Click a key, press the new one; clashes shown in red | The same, in groups with counts, a second key, search, a detail panel and *Back to original* |
+| Clashes | Red | Flagged and never refused; keys the original shares on purpose are recognised |
+
+### Content safety, translations and performance
+
+* **Safer content loading.** A content file or map package can no longer point the game at another drive or
+  computer (drives, streams, shares); a map package's icon path stays inside the package; the `zip` library
+  was updated for fixes to unsafe paths and links.
+* **26 languages.** Every interface text the code uses exists in all 26 languages, and a check keeps it so.
+* **No more drop to a few frames a second while paused in traffic**, and a graphics device the driver gives up
+  in the middle of a frame no longer closes the game.
+* **Removed:** LAN play, the dedicated server, voice chat and plugins, switched off since the first Depot release.
+
 ## The launcher and the interface at a glance
 
 Project Depot opens a light launcher of its own, in the Windows 11 look (optionally a sidebar or a top bar,
