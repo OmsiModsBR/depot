@@ -640,3 +640,38 @@ fn the_depot_graphics_api_does_not_limit_the_original_omsi2() {
     let at = chosen(o, &st, &mut options);
     assert_eq!(options[at].0, "eco");
 }
+
+/// The Performance section gathers existing options (each key is one option of another
+/// section) and is offered under DirectX9 only.
+#[test]
+fn the_performance_section_is_directx9s_and_owns_no_option() {
+    let mut seen = std::collections::HashSet::new();
+    for (key, _) in PERFORMANCE_OPTS {
+        assert!(seen.insert(*key), "{key} is listed twice");
+        assert!(OPTS.iter().any(|o| o.key == *key), "{key} is not an option");
+    }
+    assert!(OPTS.iter().all(|o| o.sec != PERFORMANCE));
+    let drawn = |api: &str, id: &str| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            PERFORMANCE,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of(id))
+    };
+    // (the section in the list on the left, and under DirectX9 its rows)
+    let entry = format!("set-sec-{PERFORMANCE}");
+    assert!(!drawn("vulkan", &entry));
+    assert_eq!(drawn("d3d9", &entry), cfg!(windows));
+    if cfg!(windows) {
+        for key in ["mirror_size", "max_obj_dist", "ai_max_random", "max_fps", "vsync"] {
+            assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
+        }
+    }
+}
