@@ -106,11 +106,7 @@ pub fn local_dir(base: &Path, rel: &str) -> PathBuf {
         .split(['/', '\\'])
         .filter(|c| !c.is_empty() && *c != "." && *c != "..")
     {
-        let direct = cur.join(comp);
-        if direct.exists() {
-            cur = direct;
-            continue;
-        }
+        // (the spelling on disk: a case-insensitive file system answers `exists` for any)
         let found = std::fs::read_dir(&cur).ok().and_then(|rd| {
             rd.flatten()
                 .map(|e| e.file_name())
