@@ -444,8 +444,8 @@ pub struct SceneLamps<'a> {
     /// Where the tile light map atlas ([`crate::d3d9::D3d9Device::set_tile_light_map`]) lies:
     /// x, y its south-west corner (render-origin relative), z its side, w 1 when it is set.
     pub tile_map: [f32; 4],
-    /// At most this many of a cell's lamps are looked up by the shader (0 = all of them: the
-    /// "Fewer night lights" option). The first of the cell's places are the ones kept.
+    /// At most this many map lamps a cell names are kept (0 = all of them: the "Fewer night
+    /// lights" option), the first of its places; the vehicles' own lights are always kept.
     pub cell_cap: usize,
 }
 
@@ -483,14 +483,38 @@ impl SceneLamps<'_> {
     }
 
     /// The grid as the shader reads it: each place's light index, -1 where it is empty or
-    /// names a light past the first `kept`.
+    /// names a light past the first `kept`. With a `cell_cap`, a cell keeps its first
+    /// `cell_cap` map lamps and every vehicle light (a headlight's stand-in, which lights
+    /// every surface), in their order and packed to the front, the rest of the places empty:
+    /// the shader stops at the first empty place.
     pub fn grid_texels(&self, kept: usize, out: &mut Vec<f32>) {
         out.clear();
-        out.extend(
-            self.grid
-                .iter()
-                .map(|&i| if (i as usize) < kept { i as f32 } else { -1.0 }),
-        );
+        let valid = |i: u32| (i as usize) < kept;
+        let Some((_, places)) = self.grid_shape().filter(|_| self.cell_cap > 0) else {
+            out.extend(
+                self.grid
+                    .iter()
+                    .map(|&i| if valid(i) { i as f32 } else { -1.0 }),
+            );
+            return;
+        };
+        let vehicle = |i: u32| {
+            let dir = self.lights[i as usize * 4 + 2];
+            dir[3] < -1.5 && dir[0] > 0.5
+        };
+        for cell in self.grid.chunks(places) {
+            let mut maps = 0;
+            let before = out.len();
+            for &i in cell.iter().take_while(|&&i| valid(i)) {
+                if vehicle(i) {
+                    out.push(i as f32);
+                } else if maps < self.cell_cap {
+                    maps += 1;
+                    out.push(i as f32);
+                }
+            }
+            out.resize(before + cell.len(), -1.0);
+        }
     }
 }
 
@@ -950,6 +974,30 @@ mod tests {
         assert_eq!(env_bits(1.0), [1.0, 0.0]);
         assert_eq!(env_bits(2.0), [0.0, 1.0]);
         assert_eq!(env_bits(3.0), [1.0, 1.0]);
+    }
+
+    #[test]
+    fn a_cell_cap_keeps_the_first_map_lamps_and_every_vehicle_light() {
+        let map = [[0.0; 4], [0.0; 4], [0.0, 0.0, 0.0, -2.0], [0.0; 4]];
+        let car = [[0.0; 4], [0.0; 4], [1.0, 0.0, 0.0, -2.0], [0.0; 4]];
+        // lights 0, 1, 2 map lamps, 3 a vehicle's, 4 a map lamp; one cell of 6 places
+        let lights: Vec<[f32; 4]> = [map, map, map, car, map].concat();
+        let grid = [0, 1, 2, 3, 4, u32::MAX];
+        let mut lamps = SceneLamps {
+            lights: &lights,
+            grid: &grid,
+            place: [0.0, 0.0, 1.0, 1.0],
+            ..Default::default()
+        };
+        let mut out = Vec::new();
+        lamps.grid_texels(5, &mut out);
+        assert_eq!(out, [0.0, 1.0, 2.0, 3.0, 4.0, -1.0]);
+        lamps.cell_cap = 2;
+        lamps.grid_texels(5, &mut out);
+        assert_eq!(out, [0.0, 1.0, 3.0, -1.0, -1.0, -1.0]);
+        // (lights past the first `kept` are gone, as without a cap)
+        lamps.grid_texels(2, &mut out);
+        assert_eq!(out, [0.0, 1.0, -1.0, -1.0, -1.0, -1.0]);
     }
 
     #[test]
