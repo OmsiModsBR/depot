@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 11] = [
+pub const SECTIONS: [&str; 12] = [
     "General",
     "Simulation",
     "Graphics",
@@ -29,6 +29,7 @@ pub const SECTIONS: [&str; 11] = [
     "Plug-ins",
     "Presets and files",
     "Interface",
+    "Modules",
 ];
 pub const GENERAL: usize = 0;
 const SIMULATION: usize = 1;
@@ -41,6 +42,13 @@ pub const DEVICES: usize = 7;
 const PLUGINS: usize = 8;
 pub const PRESETS: usize = 9;
 pub const INTERFACE: usize = 10;
+/// OmsiLaunch's optional modules: OMSI 2 mode only (the Depot has none).
+pub const MODULES: usize = 11;
+
+/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine.
+fn section_shown(sec: usize, omsi2: bool) -> bool {
+    sec != MODULES || omsi2
+}
 
 /// What the page remembers: the section shown, the search, "changed only".
 #[derive(Default)]
@@ -2398,6 +2406,7 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
             INTERFACE => &["preview"],
+            MODULES if omsi2 => &["omsi-prefetch"],
             _ => &[],
         };
         // (the Depot's own radio stations, plug-ins and profiles are not OMSI 2's)
@@ -2415,9 +2424,15 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
 pub struct Outside {
     pub reset: bool,
     pub controls: Option<usize>,
+    /// A module's install or removal (Modules, OMSI 2 mode).
+    pub modules: super::omsi2_modules::Asks,
 }
 
 pub fn settings(l: &mut Launcher, area: Rect) {
+    // (Modules goes with OMSI 2 mode: back to the first section without it)
+    if !section_shown(l.pages.set.sec, l.state.omsi2_engine()) {
+        l.pages.set.sec = GENERAL;
+    }
     let sec = l.pages.set.sec.min(SECTIONS.len() - 1);
     let (_, title, line) = UiPage::Settings.heading().unwrap_or_default();
     let searching = !l.pages.set.query.trim().is_empty();
@@ -2433,6 +2448,8 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let omsi2 = l.state.omsi2_engine();
     let mut start = start_values(&l.state.choice);
     let mut out = Outside::default();
+    out.modules.idle =
+        !l.state.in_game() && matches!(l.state.original.flow, omsi_launcher_ui::state::Flow::Idle);
     let narrow = body.w < 760.0;
     let view = &mut l.pages.set;
     let ui = &mut l.ui;
@@ -2526,8 +2543,11 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let mixed = !q.trim().is_empty() || view.changed_only;
     // the sections: a list on the left, a dropdown on a narrow window
     let content = if narrow {
-        let mut s = sec;
-        let names: Vec<String> = SECTIONS.iter().map(|s| s.to_string()).collect();
+        let shown: Vec<usize> = (0..SECTIONS.len())
+            .filter(|&i| section_shown(i, omsi2))
+            .collect();
+        let mut s = shown.iter().position(|&i| i == sec).unwrap_or(0);
+        let names: Vec<String> = shown.iter().map(|&i| SECTIONS[i].to_string()).collect();
         if ui.select(
             "set-section",
             Rect::new(
@@ -2539,7 +2559,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
             &mut s,
             &names,
         ) {
-            view.sec = s;
+            view.sec = shown[s];
             view.query.clear();
             view.changed_only = false;
         }
@@ -2547,7 +2567,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     } else {
         let lw = omsi_launcher_ui::kit::fit(230.0, body.w);
         let nav = Rect::new(body.x, y, lw, (body.bottom() - y).max(0.0));
-        if let Some(s) = sections_card(ui, nav, sec, mixed, &per_sec) {
+        if let Some(s) = sections_card(ui, nav, sec, mixed, &per_sec, omsi2) {
             view.sec = s;
             view.query.clear();
             view.changed_only = false;
@@ -2604,6 +2624,12 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     }
     if out.reset {
         l.pages.confirm_reset = true;
+    }
+    if let Some(id) = out.modules.look {
+        l.state.module_look(id);
+    }
+    if let Some(id) = out.modules.remove {
+        l.state.module_ask_remove(id);
     }
     if let Some(t) = out.controls {
         l.pages.controls_tab = t;
@@ -2683,13 +2709,19 @@ fn sections_card(
     sec: usize,
     mixed: bool,
     per_sec: &[(usize, bool)],
+    omsi2: bool,
 ) -> Option<usize> {
     ui.panel(r);
     let mut picked = None;
     let x = r.x + 12.0;
     let w = r.w - 24.0;
+    let mut k = 0;
     for (i, name) in SECTIONS.iter().enumerate() {
-        let rr = Rect::new(x, r.y + 12.0 + i as f32 * 37.0, w, 33.0);
+        if !section_shown(i, omsi2) {
+            continue;
+        }
+        let rr = Rect::new(x, r.y + 12.0 + k as f32 * 37.0, w, 33.0);
+        k += 1;
         let on = i == sec && !mixed;
         let (hover, _, clicked) = ui.interact_key(id_of(&format!("set-sec-{i}")), rr);
         if on {
@@ -2729,7 +2761,7 @@ fn sections_card(
     let note = "Keys and controllers are on the Controls page.";
     let nh = ui.paragraph_height(note, w, 12.0, Weight::Regular);
     let ny = r.bottom() - 14.0 - nh;
-    if ny > r.y + 12.0 + SECTIONS.len() as f32 * 37.0 {
+    if ny > r.y + 12.0 + k as f32 * 37.0 {
         ui.paragraph(note, Vec2::new(x, ny), w, 12.0, Weight::Regular, TEXT_DIM);
     }
     picked
@@ -3067,6 +3099,9 @@ fn own_card(
             y + 34.0 + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
+        "omsi-prefetch" => {
+            super::omsi2_modules::card(ui, r, "omsi-prefetch", root, &mut out.modules)
+        }
         "oop" => option_presets_card(ui, r, st, root),
         "preview" => preview_card(ui, r),
         "profiles" => profiles_card(ui, r, st),
