@@ -833,6 +833,50 @@ fn white_lit(u: &[[f32; 4]; MATERIAL_VECTORS]) -> SceneMaterial<'_> {
 }
 
 #[test]
+fn the_cell_cap_keeps_only_the_first_lamps_of_a_cell() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let u = uniform(0.0);
+    // the cell's first place names a lamp far from the quad (it lights nothing there), the
+    // second one the lamp above its middle
+    let mut lights = lamp([500.0, 500.0, 1.5, 1.0], POINT, [0.0; 4]).to_vec();
+    lights.extend(lamp([0.0, 0.0, 1.5, 100.0], POINT, [0.0; 4]));
+    let lamps = SceneLamps {
+        lights: &lights,
+        grid: &[0, 1],
+        place: ONE_CELL,
+        ..Default::default()
+    };
+    // no cap (the default): every place is looked up
+    let px = draw_lamps(&mut dev, white_lit(&u), SECOND, dark(), lamps);
+    assert!(all(&px, [255, 255, 255, 255], 1), "no cap: {:?}", &px[..4]);
+    // a cap above the places changes nothing
+    let px = draw_lamps(
+        &mut dev,
+        white_lit(&u),
+        SECOND,
+        dark(),
+        SceneLamps {
+            cell_cap: 8,
+            ..lamps
+        },
+    );
+    assert!(all(&px, [255, 255, 255, 255], 1), "cap 8: {:?}", &px[..4]);
+    // a cap of one place: the second lamp is left out
+    let px = draw_lamps(
+        &mut dev,
+        white_lit(&u),
+        SECOND,
+        dark(),
+        SceneLamps {
+            cell_cap: 1,
+            ..lamps
+        },
+    );
+    assert!(all(&px, [0, 0, 0, 255], 1), "cap 1: {:?}", &px[..4]);
+}
+
+#[test]
 fn the_maps_lamps_light_what_takes_them() {
     let Some(mut dev) = device() else { return };
     rgba(&mut dev, 0, [255, 255, 255, 255]);

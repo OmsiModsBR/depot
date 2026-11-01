@@ -235,6 +235,7 @@ impl Inner {
                 grid: scene.frame_light_grid(),
                 place: plan.light_grid,
                 tile_map: plan.light_map,
+                cell_cap: plan.lamp_cap as usize,
             },
             rain: SceneRain {
                 intensity: plan.rain,

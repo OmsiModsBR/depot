@@ -1061,6 +1061,14 @@ pub static OPTS: &[Opt] = &[
         "Snow",
         "Snowflakes fall in snow weather",
     ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "fewer_night_lights",
+        "Fewer night lights",
+        "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
+    ),
     // Advanced graphics
     special(
         ADVANCED,
@@ -2096,6 +2104,7 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        "fewer_night_lights" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),

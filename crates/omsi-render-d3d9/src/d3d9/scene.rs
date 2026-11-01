@@ -1224,7 +1224,11 @@ impl D3d9Device {
             }
         }
         let places = grid_info[3] as i32;
-        self.bind_lamp_counts(kept, places)?;
+        let looked_up = match lamps.cell_cap {
+            0 => places,
+            cap => places.min(cap as i32),
+        };
+        self.bind_lamp_counts(kept, looked_up)?;
         // the cell of a point is floor(xy / side - corner / side)
         let [x, y, side, cells] = lamps.place;
         let place = if places > 0 && side > 0.0 {

@@ -191,6 +191,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `wheel_lock` | yes | yes | yes | yes |
 | `wheel_range` | yes | yes | yes | yes, known difference (launcher>game) |
 | `sun_glow` | yes | yes | yes | yes |
+| `fewer_night_lights` | yes | yes | yes | yes |
 | `windy_trees` | yes | yes | yes | yes |
 
 ## Keys with no UI string match (6), checked by hand

@@ -503,6 +503,7 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "windy_trees" => s.windy_trees,
         "sun_glow" => s.sun_glow,
         "dx9_snow" => s.dx9_snow,
+        "fewer_night_lights" => s.fewer_night_lights,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
         "texture_compression" => s.texture_compression,
@@ -792,6 +793,10 @@ pub(in crate::hud) fn toggle_set(
         "dx9_snow" => {
             app.settings.dx9_snow = on;
             Some(("dx9_snow", bit))
+        }
+        "fewer_night_lights" => {
+            app.settings.fewer_night_lights = on;
+            Some(("fewer_night_lights", bit))
         }
         "fullscreen" => {
             app.settings.fullscreen = on;

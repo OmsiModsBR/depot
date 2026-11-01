@@ -444,6 +444,9 @@ pub struct SceneLamps<'a> {
     /// Where the tile light map atlas ([`crate::d3d9::D3d9Device::set_tile_light_map`]) lies:
     /// x, y its south-west corner (render-origin relative), z its side, w 1 when it is set.
     pub tile_map: [f32; 4],
+    /// At most this many of a cell's lamps are looked up by the shader (0 = all of them: the
+    /// "Fewer night lights" option). The first of the cell's places are the ones kept.
+    pub cell_cap: usize,
 }
 
 impl SceneLamps<'_> {

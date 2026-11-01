@@ -205,6 +205,8 @@ pub struct FramePlan {
     pub clouds: [f32; 4],
     /// Whether the glow around the sun is wanted (the `sun_glow` setting).
     pub sun_glow: bool,
+    /// Map lamps one spot of the ground takes into its light (0 = all).
+    pub lamp_cap: u32,
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
     /// second renderer that ports them with the same layout.
     pub camera: Vec<[f32; 4]>,
@@ -254,6 +256,7 @@ pub(crate) fn plan_of(
             f.lighting.cloud_height,
         ],
         sun_glow: f.lighting.sun_glow,
+        lamp_cap: f.lighting.lamp_cap,
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
         main: lists

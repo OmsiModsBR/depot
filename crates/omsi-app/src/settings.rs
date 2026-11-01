@@ -13,6 +13,9 @@ pub(crate) fn data_dir() -> Option<PathBuf> {
 /// Version of the settings file (`version=`); files without it are version 1.
 pub const SETTINGS_VERSION: u32 = 3;
 
+/// Map lamps a spot of the ground keeps with "Fewer night lights" (the grid holds up to 32).
+pub const NIGHT_LIGHT_CAP: u32 = 8;
+
 /// The items of the information bar the `custom` layout can switch one by one (settings
 /// keys `info_item_<name>`).
 pub const INFO_ITEM_KEYS: [&str; 9] = [
@@ -246,6 +249,9 @@ pub struct Settings {
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
     /// snow without it.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: each spot of the ground takes at most [`NIGHT_LIGHT_CAP`] map
+    /// lamps into its light (a deliberate saving for weak graphics cards; off = all, as before).
+    pub fewer_night_lights: bool,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -544,6 +550,7 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: false,
+            fewer_night_lights: false,
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -916,6 +923,7 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "fewer_night_lights" => s.fewer_night_lights = b(v),
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')
@@ -1471,6 +1479,16 @@ impl Settings {
     /// The graphics backend these settings choose for the game window (see `Backend::of`).
     pub(crate) fn backend(&self) -> crate::output::Backend {
         crate::output::Backend::of(self)
+    }
+
+    /// How many map lamps one spot of the ground may take into its light under "DirectX9
+    /// (D3D9Ex)" with the Fewer night lights option on; 0 = all of them.
+    pub fn night_light_cap(&self) -> u32 {
+        if self.fewer_night_lights && self.backend() == crate::output::Backend::D3d9 {
+            NIGHT_LIGHT_CAP
+        } else {
+            0
+        }
     }
 
     /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only

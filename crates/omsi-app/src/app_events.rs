@@ -3301,6 +3301,7 @@ impl ApplicationHandler for App {
                 lighting.detail = self.settings.detail_textures;
                 lighting.windy_trees = self.settings.windy_trees();
                 lighting.sun_glow = self.settings.sun_glow;
+                lighting.lamp_cap = self.settings.night_light_cap();
                 lighting.glass_wind = self
                     .player
                     .as_ref()
