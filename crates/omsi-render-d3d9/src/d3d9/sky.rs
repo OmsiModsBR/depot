@@ -299,6 +299,7 @@ impl D3d9Device {
             .sky
             .clouds
             .texture
+            .filter(|_| !frame.sky.no_cloud_layer)
             .and_then(|id| self.scene_texture(id))
         {
             Some(t) => pictures.push(t),

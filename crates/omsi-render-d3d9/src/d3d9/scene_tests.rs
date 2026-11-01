@@ -1701,6 +1701,7 @@ fn dark_sky(
         clouds,
         sun_glow: false,
         no_stars: false,
+        no_cloud_layer: false,
     }
 }
 
@@ -1743,6 +1744,45 @@ fn no_cloud_without_a_cover_a_picture_or_a_shape() {
         let px = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
         assert!(all(&px, [0, 0, 0, 255], 2), "{clouds:?}: {:?}", &px[..4]);
     }
+}
+
+#[test]
+fn the_cloud_layer_is_left_out_when_the_option_says_so_but_still_thins_the_glow() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    let clouds = crate::scene::SceneClouds {
+        texture: Some(4),
+        params: [0.5, 0.0, 0.0, 1500.0],
+    };
+    let sky = dark_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], clouds);
+    let with = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
+    assert!(!all(&with, [0, 0, 0, 255], 2), "the layer should show");
+    let hidden = crate::scene::SceneSky {
+        no_cloud_layer: true,
+        ..sky
+    };
+    let px = draw_sky_with(&mut dev, hidden, LOOK_NORTH, light([0.0; 4]), (W, H));
+    assert!(all(&px, [0, 0, 0, 255], 2), "{:?}", &px[..4]);
+    // the glow keeps the cover's thinning with the layer hidden
+    let sun = [0.0, 1.0, 0.05, 1.0];
+    let glow = |dev: &mut D3d9Device, sky: crate::scene::SceneSky| {
+        let sky = crate::scene::SceneSky {
+            sun_glow: true,
+            ..sky
+        };
+        peak(
+            &draw_sky_with(dev, sky, LOOK_NORTH, sunny(sun), (W, H)),
+            W / 2,
+            H / 2,
+        )
+    };
+    let shown = glow(&mut dev, sky);
+    let without_layer = glow(&mut dev, hidden);
+    assert!(shown > 0);
+    assert!(
+        without_layer.abs_diff(shown) <= 2,
+        "glow {without_layer} with the layer hidden, {shown} with it"
+    );
 }
 
 #[test]

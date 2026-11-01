@@ -886,6 +886,7 @@ impl RenderBackend for D3d9Device {
         let generation = self.generation.wrapping_add(1);
         let vsync = self.vsync;
         let (msaa, anisotropy) = (self.msaa.0, self.anisotropy);
+        let texture_limit = self.texture_limit;
         let fresh = Self::open_with(self.target, w, h)?;
         // (the scene's meshes and textures go up again from their copies: the game does not
         // send them twice)
@@ -893,6 +894,7 @@ impl RenderBackend for D3d9Device {
         let owners = std::mem::take(&mut self.ui.owners);
         *self = fresh;
         self.generation = generation;
+        self.texture_limit = texture_limit;
         let restored = self.restore_scene(copies).and(self.restore_ui(owners));
         let quality = self.set_quality(msaa, anisotropy);
         self.set_vsync(vsync).and(restored).and(quality)
