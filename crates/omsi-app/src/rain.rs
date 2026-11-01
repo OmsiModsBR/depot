@@ -13,6 +13,134 @@ pub struct Rain {
     /// own option); otherwise the renderer draws its snowfall itself.
     flakes: bool,
     rng: u64,
+    wiper: WiperWatch,
+}
+
+/// Where the wiper of the vehicle the player drives is, 0..1 across its sweep, read from the
+/// vehicle's script: the variable its scripts publish for the wiper's position (the first
+/// whose name says wiper and a position or an angle). Its range is not known beforehand, so
+/// it is taken from the values seen so far; until the wiper has moved there is no position.
+#[derive(Default)]
+struct WiperWatch {
+    /// The vehicle type the slot was looked up for (the address of its `Arc`; only compared:
+    /// two vehicles of one type share their variables' layout), and the
+    /// slot, `None` when it has no such variable.
+    of: usize,
+    slot: Option<usize>,
+    range: Option<(f32, f32)>,
+}
+
+/// The smallest swing, in the script's own units, taken for a wiper's stroke.
+const LEAST_SWING: f32 = 0.05;
+
+impl WiperWatch {
+    fn is_position(name: &str) -> bool {
+        let wiper = name.contains("wiper") || name.contains("wischer");
+        let position = ["pos", "angle", "winkel", "deg"]
+            .iter()
+            .any(|p| name.contains(p));
+        let other = [
+            "speed", "mode", "run", "switch", "lever", "sound", "delay", "time",
+        ]
+        .iter()
+        .any(|o| name.contains(o))
+            || name.ends_with("_on");
+        wiper && position && !other
+    }
+
+    fn position(&mut self, v: &omsi_sim::VehicleInstance) -> Option<f32> {
+        // (keyed by the vehicle's type, not by where the vehicle sits: the player's vehicle is
+        // stored inline, so the next bus the player takes lies at the same address)
+        self.retarget(std::sync::Arc::as_ptr(&v.ty) as usize, || {
+            v.var_slot_where(Self::is_position)
+        });
+        let value = v.var_by_slot(self.slot?).filter(|x| x.is_finite())?;
+        self.seen(value)
+    }
+
+    /// Forgets the slot and the range when `key` is not the vehicle type they were learnt for.
+    fn retarget(&mut self, key: usize, slot: impl FnOnce() -> Option<usize>) {
+        if self.of != key {
+            *self = WiperWatch {
+                of: key,
+                slot: slot(),
+                range: None,
+            };
+        }
+    }
+
+    /// `value` as a share of the range seen so far (none until the range is a stroke).
+    fn seen(&mut self, value: f32) -> Option<f32> {
+        let (lo, hi) = self.range.get_or_insert((value, value));
+        *lo = lo.min(value);
+        *hi = hi.max(value);
+        let swing = *hi - *lo;
+        (swing >= LEAST_SWING).then(|| ((value - *lo) / swing).clamp(0.0, 1.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_position_variable_is_told_from_the_wipers_other_variables() {
+        for yes in [
+            "wiper_pos",
+            "wiperangle",
+            "wischer_winkel",
+            "wiper_left_pos",
+        ] {
+            assert!(WiperWatch::is_position(yes), "{yes}");
+        }
+        for no in [
+            "wiper_running",
+            "wiper_mode",
+            "wiper_speed_pos",
+            "wiper_switch",
+            "wiper_on",
+            "engine_pos",
+            "washer_angle",
+        ] {
+            assert!(!WiperWatch::is_position(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn the_range_is_learnt_from_the_strokes_seen() {
+        let mut w = WiperWatch::default();
+        // (at rest: no stroke seen yet, so no position)
+        assert_eq!(w.seen(0.0), None);
+        assert_eq!(w.seen(0.0), None);
+        // the first stroke widens the range as it goes
+        assert_eq!(w.seen(30.0), Some(1.0));
+        assert_eq!(w.seen(60.0), Some(1.0));
+        assert_eq!(w.seen(30.0), Some(0.5));
+        assert_eq!(w.seen(0.0), Some(0.0));
+        assert_eq!(w.seen(75.0), Some(1.0));
+        assert_eq!(w.seen(15.0), Some(0.2));
+    }
+
+    #[test]
+    fn another_vehicle_starts_from_nothing() {
+        let mut w = WiperWatch::default();
+        w.retarget(1, || Some(7));
+        w.seen(0.0);
+        assert_eq!(w.seen(40.0), Some(1.0));
+        // the same vehicle again: kept
+        w.retarget(1, || panic!("looked up again"));
+        assert_eq!((w.slot, w.range), (Some(7), Some((0.0, 40.0))));
+        // another: its own slot (here none), no range
+        w.retarget(2, || None);
+        assert_eq!((w.slot, w.range), (None, None));
+    }
+
+    #[test]
+    fn a_flicker_is_no_stroke() {
+        let mut w = WiperWatch::default();
+        assert_eq!(w.seen(1.0), None);
+        assert_eq!(w.seen(1.01), None);
+    }
 }
 
 /// The boxes a vehicle keeps the weather out of, as `Rain::tick` takes them: its own
@@ -40,7 +168,13 @@ impl Rain {
             rate: 0.0,
             flakes: false,
             rng: 0xABCDEF12345,
+            wiper: WiperWatch::default(),
         }
+    }
+
+    /// Where the wiper of `vehicle` is, 0..1 across its sweep (see [`WiperWatch`]).
+    pub fn wiper_position(&mut self, vehicle: &omsi_sim::VehicleInstance) -> Option<f32> {
+        self.wiper.position(vehicle)
     }
 
     fn rand(&mut self) -> f32 {

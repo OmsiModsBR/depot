@@ -145,14 +145,21 @@ impl Renderer {
                 envmap.map(|e| e.1).unwrap_or(0.0),
                 moisture,
                 // bit 1: a [matl_envmap_mask]; bit 2: a [matl_transmap]; bit 4: a vehicle's
-                // part that may be metal (see the shaders)
+                // part that may be metal (see the shaders); bit 8: a [matl_raindropmap], its texture
+                // number times 16 above (only the Direct3D 9 renderer reads it)
                 (if env_mask.is_some() { 1.0 } else { 0.0 })
                     + if extra.transmap_declared || transmap.is_some() {
                         2.0
                     } else {
                         0.0
                     }
-                    + if extra.metal_ok { 4.0 } else { 0.0 },
+                    + if extra.metal_ok { 4.0 } else { 0.0 }
+                    // (the map itself above bit 8, so panes with other maps look apart;
+                    // exact in an f32 for any texture number below 2^19)
+                    + extra
+                        .raindrop_map
+                        .filter(|&t| t < 1 << 19)
+                        .map_or(0.0, |t| 8.0 + 16.0 * (t as f32 + 1.0)),
             ],
             emissive: [
                 emissive[0],
@@ -279,6 +286,7 @@ impl Renderer {
             lightmap,
             envmap,
             env_mask,
+            raindrop_map: extra.raindrop_map,
             bump,
             emissive,
             transmap,

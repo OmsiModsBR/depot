@@ -83,6 +83,21 @@ impl VehicleInstance {
             .map(|i| self.state.vars[i as usize])
     }
 
+    /// The slot of the first variable, in the order the scripts declare them, whose lower-case
+    /// name satisfies `pred`.
+    pub fn var_slot_where(&self, pred: impl Fn(&str) -> bool) -> Option<usize> {
+        self.var_index
+            .iter()
+            .filter(|(name, _)| pred(name))
+            .map(|(_, &i)| i as usize)
+            .min()
+    }
+
+    /// The value of the script variable in `slot` (see [`Self::var_slot`]).
+    pub fn var_by_slot(&self, slot: usize) -> Option<f32> {
+        self.state.vars.get(slot).copied()
+    }
+
     /// Whether variable `name` was declared in the vehicle's script set (as opposed to built-in host variables).
     pub fn has_script_var(&self, name: &str) -> bool {
         self.ty.program.has_script_var(name)

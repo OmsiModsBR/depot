@@ -99,6 +99,9 @@ pub struct Material {
     /// `[matl_envmap_mask]`: the reflection mask is this texture's alpha instead of the
     /// diffuse texture's.
     pub env_mask: Option<TextureId>,
+    /// `[matl_raindropmap]`: the areas of a pane where raindrops can gather. Only the
+    /// Direct3D 9 renderer draws it (as a pass of its own over the glass).
+    pub raindrop_map: Option<TextureId>,
     /// `[matl_bumpmap]` height map and factor.
     pub bump: Option<(TextureId, f32)>,
     pub emissive: [f32; 3],
@@ -135,6 +138,7 @@ impl Material {
             || self.envmap.map(|e| e.0) == Some(id)
             || self.transmap.map(|t| t.0) == Some(id)
             || self.env_mask == Some(id)
+            || self.raindrop_map == Some(id)
             || self.bump.map(|b| b.0) == Some(id)
     }
 
@@ -198,6 +202,8 @@ impl MaterialDesc {
 pub struct MaterialExtra {
     /// `[matl_envmap_mask]`
     pub env_mask: Option<TextureId>,
+    /// `[matl_raindropmap]` (see [`Material::raindrop_map`])
+    pub raindrop_map: Option<TextureId>,
     /// `[matl_noZwrite]`
     pub no_z_write: bool,
     /// A slot `no_z_write` marks as a see-through layer (a pane, a dirt film, a sticker

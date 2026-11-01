@@ -10,6 +10,7 @@
 //! Shader Model 3.0 is the floor.
 
 mod coronas;
+mod glass_rain;
 mod scene;
 pub mod shader;
 mod sky;

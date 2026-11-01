@@ -32,11 +32,15 @@ impl omsi_launcher_ui::Host for GameHost {
         crate::core::android::hide_content_from_gallery();
     }
 
-    fn build(&self) -> String {
-        format!(
-            "{} ({})",
-            crate::core::startup::VERSION,
-            crate::core::startup::BUILD
-        )
+    fn version(&self) -> (&'static str, &'static str) {
+        (crate::core::startup::VERSION, crate::core::startup::BUILD)
+    }
+
+    fn repo_url(&self) -> &'static str {
+        crate::about::REPO_URL
+    }
+
+    fn helper_log(&self) -> std::path::PathBuf {
+        crate::showroom::helper_log()
     }
 }

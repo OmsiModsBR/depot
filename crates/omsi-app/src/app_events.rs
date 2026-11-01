@@ -2630,6 +2630,11 @@ impl ApplicationHandler for App {
                             scene,
                             &buses,
                         );
+                        // where the player's wiper is, for the raindrops on glass (Direct3D 9)
+                        scene.glass_wiper = self
+                            .player
+                            .as_ref()
+                            .and_then(|p| self.rain.wiper_position(&p.vehicle));
                         // the player's bus's cabin air and the condensation on its glass
                         if let Some(p) = self.player.as_ref() {
                             let (riders, doors) = self
@@ -3295,6 +3300,7 @@ impl ApplicationHandler for App {
                     .collect();
                 lighting.detail = self.settings.detail_textures;
                 lighting.windy_trees = self.settings.windy_trees();
+                lighting.sun_glow = self.settings.sun_glow;
                 lighting.glass_wind = self
                     .player
                     .as_ref()
@@ -3328,13 +3334,26 @@ impl ApplicationHandler for App {
                     // what an automated window run draws (also when the window is hidden,
                     // so it does not depend on a frame being acquired)
                     if let Some((path, include_touch)) = shot {
-                        match r.render_to_image(
-                            scene,
-                            s.config.width,
-                            s.config.height,
-                            cam,
-                            &lighting,
-                        ) {
+                        // (a player's screenshot holds the scene alone: no HUD, minimap,
+                        // Alt bar or window; scripted `shot` keeps the interface for tests)
+                        let drawn = if include_touch {
+                            r.render_to_image(
+                                scene,
+                                s.config.width,
+                                s.config.height,
+                                cam,
+                                &lighting,
+                            )
+                        } else {
+                            r.render_scene_to_image(
+                                scene,
+                                s.config.width,
+                                s.config.height,
+                                cam,
+                                &lighting,
+                            )
+                        };
+                        match drawn {
                             Ok(mut px) => match {
                                 // (with the on-screen controls, when there are)
                                 if include_touch {
