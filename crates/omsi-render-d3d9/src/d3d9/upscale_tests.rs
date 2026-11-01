@@ -156,7 +156,10 @@ fn bilinear_is_the_small_picture_stretched_with_the_cards_filter() {
             worst = worst.max((red(&big, w, x, y) as f32 - want).abs().round() as i32);
         }
     }
-    assert!(worst <= 3, "off by {worst} from the stretched small picture");
+    assert!(
+        worst <= 3,
+        "off by {worst} from the stretched small picture"
+    );
 }
 
 #[test]
@@ -201,7 +204,10 @@ fn the_sharper_upscale_keeps_an_edge_tighter_than_bilinear_and_in_range() {
     );
     // the edge stays where it was (the half-way point within a pixel of the bilinear one)
     let half = |r: &[u8]| r.iter().position(|&v| v < 128).unwrap();
-    assert!(half(&sharp).abs_diff(half(&soft)) <= 1, "{sharp:?}\n{soft:?}");
+    assert!(
+        half(&sharp).abs_diff(half(&soft)) <= 1,
+        "{sharp:?}\n{soft:?}"
+    );
     // white to black, with no wild ringing
     assert!(sharp[0] >= 240 && sharp[w as usize - 1] <= 12, "{sharp:?}");
 }
@@ -279,7 +285,12 @@ fn the_interface_is_drawn_at_the_pictures_size_over_the_scaled_scene() {
     .unwrap();
     let p = dev.end_frame().unwrap();
     // exactly one pixel column is white, the next ones black: not smeared by the up-scaling
-    assert_eq!(red(&p, w, 3, 4), 255, "{:?}", (0..w).map(|x| red(&p, w, x, 4)).collect::<Vec<_>>());
+    assert_eq!(
+        red(&p, w, 3, 4),
+        255,
+        "{:?}",
+        (0..w).map(|x| red(&p, w, x, 4)).collect::<Vec<_>>()
+    );
     assert_eq!(red(&p, w, 2, 4), 0);
     assert_eq!(red(&p, w, 4, 4), 0);
 }

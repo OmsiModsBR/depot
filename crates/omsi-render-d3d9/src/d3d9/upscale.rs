@@ -229,7 +229,9 @@ impl D3d9Device {
         if self.scale.pipeline.is_none() {
             match build_pipeline(&self.device) {
                 Ok(p) => self.scale.pipeline = Some(p),
-                Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
+                Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => {
+                    return Err(e)
+                }
                 Err(e) => {
                     log::warn!("d3d9: the render scale cannot be used on this device: {e}");
                     self.scale.unsupported = true;
@@ -263,7 +265,11 @@ impl D3d9Device {
     pub(super) fn fsr_in_use(&self) -> bool {
         self.scale.upscale == Upscale::Fsr1
             && !self.scale.fsr_unsupported
-            && self.scale.pipeline.as_ref().is_some_and(|p| p.fsr.is_some())
+            && self
+                .scale
+                .pipeline
+                .as_ref()
+                .is_some_and(|p| p.fsr.is_some())
     }
 
     /// The targets for a frame of `native` size drawn at `small`, made if they are not there.
@@ -304,7 +310,11 @@ impl D3d9Device {
             small.1,
             native.0,
             native.1,
-            if fsr { "sharper up-scaling" } else { "bilinear" }
+            if fsr {
+                "sharper up-scaling"
+            } else {
+                "bilinear"
+            }
         );
         self.scale.targets = Some(Targets {
             native,

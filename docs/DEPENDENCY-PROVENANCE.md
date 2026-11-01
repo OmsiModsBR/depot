@@ -20,3 +20,9 @@ other forked git dependencies listed in the upstream report (`wgpu-openomsi`, `a
 ## Steam redistributables
 
 See `assets/steam_redist/README.md` (hashes recorded and verified in CI; origin and SDK version still undocumented).
+
+## AMD FidelityFX Super Resolution 1 (adapted shader code)
+
+Not a dependency: two pixel shaders of `omsi-render-d3d9` are adapted from AMD's MIT-licensed
+FSR 1 source. Tag, commit, licence, changes, trademarks and the open patent question are in
+[THIRD_PARTY.md](../THIRD_PARTY.md).

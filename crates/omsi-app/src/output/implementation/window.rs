@@ -84,6 +84,17 @@ impl Output {
         }
     }
 
+    /// The render scale option of "DirectX9 (D3D9Ex)": the fraction of the window the scene
+    /// is drawn at (0 = the window's size) and whether the sharper up-scaling is used. Under
+    /// wgpu the renderer has its own render scale and this does nothing.
+    #[cfg_attr(not(windows), allow(unused_variables))]
+    pub(crate) fn set_render_scale(&self, scale: f32, sharp: bool) {
+        #[cfg(windows)]
+        if let Some(d) = self.d3d9.as_ref() {
+            d.set_render_scale(scale, sharp);
+        }
+    }
+
     /// Shows the picture the renderer drew this frame (under wgpu the surface does).
     pub(crate) fn present(&self) {
         #[cfg(windows)]

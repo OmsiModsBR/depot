@@ -246,6 +246,11 @@ pub struct Settings {
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
     /// snow without it.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: how the picture is brought up when the render scale draws it
+    /// smaller than the window: `bilinear` (the card's filter) or `fsr1` (AMD's FidelityFX
+    /// Super Resolution 1, adapted). A performance option that moves the picture away from
+    /// OMSI 2's; nothing happens at a render scale of Auto or 100 %.
+    pub dx9_upscale: String,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -544,6 +549,7 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: false,
+            dx9_upscale: "bilinear".into(),
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -916,6 +922,12 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "dx9_upscale" => {
+                    s.dx9_upscale = match v.to_ascii_lowercase().as_str() {
+                        "fsr1" | "fsr" | "sharp" => "fsr1".into(),
+                        _ => "bilinear".into(),
+                    }
+                }
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')
@@ -1479,6 +1491,22 @@ impl Settings {
         self.dx9_snow && self.backend() == crate::output::Backend::D3d9
     }
 
+    /// The fraction of the window the "DirectX9 (D3D9Ex)" renderer draws the scene at (0 =
+    /// the window's own size: Auto, or another graphics API, whose scale the default renderer
+    /// takes). Chosen by the player, never automatic: no governor works on this one.
+    pub fn dx9_render_scale(&self) -> f32 {
+        if self.backend() == crate::output::Backend::D3d9 && self.render_scale < 0.995 {
+            self.render_scale.max(0.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Whether the scaled picture is brought up with the sharper pass (`dx9_upscale`).
+    pub fn dx9_sharp_upscale(&self) -> bool {
+        self.dx9_upscale == "fsr1"
+    }
+
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when
     /// clouds are on): an addition OMSI 2 does not make, so not under "DirectX9 (D3D9Ex)".
     pub fn fair_weather_clouds(&self) -> bool {
@@ -1502,8 +1530,8 @@ impl Settings {
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
-        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
-        self.render_scale = 0.0;
+        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
+        // the render scale it does, see `dx9_render_scale`: kept as saved)
         self.post_aa = "off".into();
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
@@ -1580,7 +1608,13 @@ impl Settings {
             anisotropy: self.anisotropy,
             shadow_size: self.shadow_size,
             ssao: self.ssao,
-            render_scale: self.render_scale,
+            // ("DirectX9 (D3D9Ex)" scales its own picture, see `dx9_render_scale`; the renderer
+            // behind it draws on a device that shows nothing)
+            render_scale: if self.backend() == crate::output::Backend::D3d9 {
+                0.0
+            } else {
+                self.render_scale
+            },
             compress_textures: self.texture_compression,
             fxaa: self.post_aa != "off",
             min_obj_size: self.min_obj_size,

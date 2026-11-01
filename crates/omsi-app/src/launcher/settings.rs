@@ -878,6 +878,15 @@ pub static OPTS: &[Opt] = &[
             ("0.5", "50%"),
         ],
     ),
+    // (DirectX9 only, and only below 100 %, see `shown`)
+    pick(
+        GRAPHICS,
+        "Picture",
+        "dx9_upscale",
+        "Upscaling",
+        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper (FSR 1) is AMD's FidelityFX Super Resolution 1 and keeps edges tighter. Both differ from OMSI 2's picture.",
+        &[("bilinear", "Bilinear"), ("fsr1", "Sharper (FSR 1)")],
+    ),
     pick(
         GRAPHICS,
         "Picture",
@@ -2096,6 +2105,15 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
+        "dx9_upscale" => {
+            let scale = st.get("render_scale");
+            let scale = scale
+                .as_str()
+                .and_then(|t| t.trim().parse::<f64>().ok())
+                .or_else(|| scale.as_f64());
+            fixed && scale.is_some_and(|x| x > 0.0 && x < 0.995)
+        }
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),

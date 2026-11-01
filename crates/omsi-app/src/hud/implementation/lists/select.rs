@@ -60,6 +60,7 @@ pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static s
             ("0.67", "67%"),
             ("0.5", "50%"),
         ],
+        "dx9_upscale" => vec![("bilinear", "Bilinear"), ("fsr1", "Sharper (FSR 1)")],
         "anisotropy" => vec![
             ("1", "Off"),
             ("2", "2x"),
