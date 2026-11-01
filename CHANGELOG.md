@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### In-game interface (Esc menu, Alt bar, windows, loading, trip report)
+
+- **Fixed.** A screenshot (Ctrl+Shift+P, F12 or Esc menu > Screenshot) holds the scene alone: the information bar, the minimap/navigator, the Alt bar, its windows and the other HUD are no longer drawn into the saved picture (Vulkan/DX12). The `Screenshot: <path>` notice stays out of it as before. DirectX9 (D3D9Ex) does not save screenshots yet. (#612)
+
 ### DirectX 9 renderer (D3D9Ex)
 
 - **Added.** "DirectX9 (D3D9Ex)" now draws the sun's glow, with a new Sun glow option (Graphics → Effects in the launcher and in the in-game options, shown only with that graphics API, on by default, as OMSI 2's Sun Glow is). With it on, a bright glow is added around the sun while it is above the horizon and in view; it fades out as the sun sets, is thinner under cloud, is gone when the weather hides the sun (an Overcast cover) or in a thick fog, and is hidden where something stands in front of the sun (a building, a hill, the vehicle the camera is in; glass lets it through). It also shows in the mirrors. A pass of its own, so the scene's pixel shader keeps its slots; other graphics APIs are unchanged. Two new texts, in all 26 languages. Still to compare with the original in the game: the glow's size and shape (here about 7 degrees either side of the sun) and whether a cloud in front of the sun hides it (here the cloud cover only thins it, except a closed Overcast deck, which hides it). (#584)
