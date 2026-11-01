@@ -1329,13 +1329,16 @@ fn log_line(line: &str) {
 /// in the content folder's copy of the vehicle's folder: the OMSI 2 folder is never written
 /// to. Once per run of the launcher; meant for a background thread. See [`hof_sync`].
 pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
+    // (set before looking: a folder changed under Setup meanwhile is taken up at the next start)
     static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return None;
     }
     let (root, content) = (root().ok()?, content_dir()?);
-    if content == root {
-        // no folder of our own: the installation is not touched
+    // (links resolved: the check is on the real folders, whatever their spelling or links)
+    let (real_root, real_content) = (resolved(&root), resolved(&content));
+    if within(&real_content, &real_root) {
+        log_line("hof sync: skipped, the content folder is in the OMSI 2 folder (which is never written to)");
         return None;
     }
     let sources = hof_sync::source_files(&[content.clone(), root.clone()]);
@@ -1343,15 +1346,15 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
         return None;
     }
     let bases: Vec<PathBuf> = bases();
+    let mut refused = 0;
     let dirs: Vec<hof_sync::VehicleDir> = vehicles
         .iter()
         .filter_map(|v| {
             let rel = v.file.rsplit_once('/')?.0;
-            let overlay = hof_sync::local_dir(&content, rel);
-            // (never a folder of the installation)
-            if !overlay.starts_with(&content) || overlay.starts_with(&root) {
+            let Some(overlay) = sync_destination(&content, &real_content, &real_root, rel) else {
+                refused += 1;
                 return None;
-            }
+            };
             let existing = bases
                 .iter()
                 .map(|b| hof_sync::local_dir(b, rel))
@@ -1361,8 +1364,27 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
         })
         .collect();
     let sum = hof_sync::sync(&sources, &dirs);
-    log_line(&sum.line());
+    let note = if refused > 0 {
+        format!(" ({refused} folder(s) refused: they lead into the OMSI 2 folder)")
+    } else {
+        String::new()
+    };
+    log_line(&(sum.line() + &note));
     Some(sum)
+}
+
+/// The folder of the vehicle folder `rel` in the content folder, where synced depot files go;
+/// None when it (links resolved) is not inside the content folder or is inside the OMSI 2
+/// folder, e.g. a folder of the content folder that is a link into the installation.
+fn sync_destination(
+    content: &Path,
+    real_content: &Path,
+    real_root: &Path,
+    rel: &str,
+) -> Option<PathBuf> {
+    let overlay = hof_sync::local_dir(content, rel);
+    let real = resolved(&overlay);
+    (within(&real, real_content) && !within(&real, real_root)).then_some(overlay)
 }
 
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {
@@ -6618,5 +6640,51 @@ mod original_keys_tests {
             "[ctrl]\r\nPedals\r\n"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod hof_sync_guard_tests {
+    use super::*;
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("depot-guard-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_folder_under_the_content_folder_is_a_destination() {
+        let (omsi, depot) = (tmp("plain-omsi"), tmp("plain-depot"));
+        let (ro, dc) = (resolved(&omsi), resolved(&depot));
+        let d = sync_destination(&depot, &dc, &ro, "Vehicles/Bus").unwrap();
+        assert_eq!(d, depot.join("Vehicles/Bus"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_into_the_omsi_folder_is_refused() {
+        let (omsi, depot) = (tmp("link-omsi"), tmp("link-depot"));
+        std::fs::create_dir_all(omsi.join("Vehicles/Bus")).unwrap();
+        std::fs::create_dir_all(depot.join("Vehicles")).unwrap();
+        std::os::unix::fs::symlink(omsi.join("Vehicles/Bus"), depot.join("Vehicles/Bus")).unwrap();
+        let (ro, dc) = (resolved(&omsi), resolved(&depot));
+        assert!(sync_destination(&depot, &dc, &ro, "Vehicles/Bus").is_none());
+    }
+
+    #[test]
+    fn the_depot_inside_the_omsi_folder_is_refused_whatever_the_case() {
+        let omsi = tmp("inside-omsi");
+        let depot = omsi.join("depot");
+        std::fs::create_dir_all(&depot).unwrap();
+        let (ro, dc) = (resolved(&omsi), resolved(&depot));
+        assert!(within(&dc, &ro));
+        assert!(sync_destination(&depot, &dc, &ro, "Vehicles/Bus").is_none());
+        // (Windows spells the same folder in any case)
+        let upper = PathBuf::from(ro.to_string_lossy().to_ascii_uppercase());
+        if cfg!(windows) {
+            assert!(within(&dc, &upper));
+        }
     }
 }

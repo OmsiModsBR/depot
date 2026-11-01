@@ -177,3 +177,47 @@ fn a_local_folder_never_resolves_into_another_root() {
         depot.join("vehicles/bus")
     );
 }
+
+#[test]
+fn a_mods_own_differing_file_in_a_vehicle_folder_is_never_replaced() {
+    let depot = tmp("mod-depot");
+    let src = tmp("mod-src");
+    put(&depot.join("Vehicles/ModBus/mod.bus"), "bus");
+    put(&depot.join("Vehicles/ModBus/Map.hof"), "the mod's");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    put(&src.join("hofs/Map.hof"), "root, newer");
+    let s = sync(
+        &source_files(&[src]),
+        &[VehicleDir {
+            overlay: depot.join("Vehicles/ModBus"),
+            existing: vec![],
+        }],
+    );
+    assert_eq!((s.updated, s.kept), (0, 1));
+    assert_eq!(
+        std::fs::read_to_string(depot.join("Vehicles/ModBus/Map.hof")).unwrap(),
+        "the mod's"
+    );
+}
+
+#[test]
+fn a_replaced_overlay_file_is_kept_as_a_backup_and_no_temp_is_left() {
+    let depot = tmp("bak-depot");
+    let src = tmp("bak-src");
+    put(&depot.join("Vehicles/Bus/Map.hof"), "old");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    put(&src.join("hof/Map.hof"), "new");
+    let s = sync(
+        &source_files(&[src]),
+        &[VehicleDir {
+            overlay: depot.join("Vehicles/Bus"),
+            existing: vec![],
+        }],
+    );
+    assert_eq!(s.updated, 1);
+    assert_eq!(
+        std::fs::read_to_string(depot.join("Vehicles/Bus/Map.hof.bak")).unwrap(),
+        "old"
+    );
+    assert!(!depot.join("Vehicles/Bus/Map.hof.tmp").exists());
+}

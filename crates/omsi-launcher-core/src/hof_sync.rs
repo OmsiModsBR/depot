@@ -39,6 +39,8 @@ pub struct Summary {
     pub kept: usize,
     /// Files that could not be written (read-only, no space ...).
     pub failed: usize,
+    /// The first few failures, with the reason.
+    pub failures: Vec<String>,
 }
 
 impl Summary {
@@ -46,7 +48,7 @@ impl Summary {
         format!(
             "hof sync: {} depot file(s) for {} vehicle folder(s): {} created, {} updated, {} already there, {} kept, {} failed",
             self.sources, self.vehicles, self.created, self.updated, self.identical, self.kept, self.failed
-        )
+        ) + &self.failures.iter().map(|f| format!("; failed: {f}")).collect::<String>()
     }
 }
 
@@ -153,7 +155,26 @@ fn newer(src: &Path, dest: &Path) -> bool {
     }
 }
 
+/// Whether `dir` holds a vehicle (a `.bus` or `.ovh` file): a folder of a bus is somebody's
+/// files, not ours, and no file in it is ever replaced.
+fn holds_vehicle(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|rd| {
+        rd.flatten().any(|e| {
+            let p = e.path();
+            p.extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("bus") || x.eq_ignore_ascii_case("ovh"))
+        })
+    })
+}
+
 /// Puts every file of `sources` into every vehicle folder of `vehicles` that does not have it.
+///
+/// Nothing is deleted or lost: a file the vehicle has already (byte for byte) is skipped; a
+/// differing file of the same name in the overlay is replaced only when the source is newer,
+/// never in a folder that holds a vehicle (a mod's own files), and the file it replaces is
+/// kept beside it as `<name>.hof.bak`. A bus's own differing file in its other folders is
+/// not touched (the overlay copy is put beside it and, the game reading the overlay first,
+/// takes effect: whether the bus's own should win is open).
 pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
     let mut sum = Summary {
         sources: sources.len(),
@@ -165,39 +186,55 @@ pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
             continue;
         }
         sum.vehicles += 1;
+        let own = holds_vehicle(&v.overlay);
         for src in sources {
             let name = src.file_name().unwrap_or_default().to_string_lossy();
             let in_overlay = find_in(&v.overlay, &name);
+            let others: Vec<PathBuf> = v
+                .existing
+                .iter()
+                .filter_map(|d| find_in(d, &name))
+                .collect();
             if in_overlay.as_deref().is_some_and(|p| same_bytes(src, p))
-                || v.existing
-                    .iter()
-                    .filter_map(|d| find_in(d, &name))
-                    .any(|p| same_bytes(src, &p))
+                || others.iter().any(|p| same_bytes(src, p))
             {
                 sum.identical += 1;
                 continue;
             }
             let replacing = in_overlay.is_some();
             if let Some(p) = &in_overlay {
-                if !newer(src, p) {
+                if own || !newer(src, p) {
                     sum.kept += 1;
                     continue;
                 }
             }
-            let dest = in_overlay.unwrap_or_else(|| v.overlay.join(name.as_ref()));
+            let dest = in_overlay
+                .clone()
+                .unwrap_or_else(|| v.overlay.join(name.as_ref()));
             let r = std::fs::create_dir_all(&v.overlay).and_then(|_| {
+                if replacing {
+                    let bak = PathBuf::from(format!("{}.bak", dest.display()));
+                    if !bak.exists() {
+                        std::fs::copy(&dest, &bak)?;
+                    }
+                }
                 // (a temporary name first: a game started meanwhile never reads half a file)
-                let tmp = dest.with_extension("hof.tmp");
-                std::fs::copy(src, &tmp).and_then(|_| {
-                    std::fs::rename(&tmp, &dest).inspect_err(|_| {
+                let tmp = PathBuf::from(format!("{}.tmp", dest.display()));
+                std::fs::copy(src, &tmp)
+                    .and_then(|_| std::fs::rename(&tmp, &dest))
+                    .inspect_err(|_| {
                         let _ = std::fs::remove_file(&tmp);
                     })
-                })
             });
             match (r, replacing) {
                 (Ok(()), false) => sum.created += 1,
                 (Ok(()), true) => sum.updated += 1,
-                (Err(_), _) => sum.failed += 1,
+                (Err(e), _) => {
+                    sum.failed += 1;
+                    if sum.failures.len() < 3 {
+                        sum.failures.push(format!("{}: {e}", dest.display()));
+                    }
+                }
             }
         }
     }
