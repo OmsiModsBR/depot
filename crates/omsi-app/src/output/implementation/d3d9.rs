@@ -531,14 +531,17 @@ impl D3d9Output {
         }
     }
 
-    /// The options that take effort off the picture (what they leave out is left out from the
-    /// next picture on; the texture ceiling holds for the textures put up from now on).
+    /// The options that take effort off the picture: what they leave out is left out from the
+    /// next picture on. The texture size limit is not among them: it is read once, when the
+    /// device is opened (a limit changed in the game's options takes effect at the next start,
+    /// so one session never mixes sharp and soft textures).
     pub(crate) fn set_effects(&self, effects: Dx9Effects) {
         let mut inner = self.lock();
-        if inner.effects != effects {
-            inner.device.set_texture_limit(effects.texture_limit);
-            inner.effects = effects;
-        }
+        let texture_limit = inner.effects.texture_limit;
+        inner.effects = Dx9Effects {
+            texture_limit,
+            ..effects
+        };
     }
 
     /// Ends and shows the frame the renderer's picture began (none: nothing happens).
