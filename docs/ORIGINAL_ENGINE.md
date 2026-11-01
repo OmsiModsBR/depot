@@ -79,6 +79,28 @@ OmsiLaunch install above applied to one module at a time:
 * removal takes away the files Depot installed (its record), all or none; what the module
   learned or the player added to its folder stays, and so does the folder then.
 
+In OMSI 2 mode, Settings has a **Modules** section (shown only in that mode) with a card for
+each module Depot offers (Omsi Prefetch for now). The card is shown whether or not a release
+exists: finding out would need the network, and Depot goes online only when the player asks
+("Download and install…" looks the release up and says so when there is none). The card:
+
+* installs the module through the dialog above (version, license and SHA-256 first, then the
+  file list) and removes what Depot placed, after a confirmation; both are refused while a
+  game runs. A module found in the folder without Depot's record is shown as "Installed, not
+  by Depot" and is never removed by Depot;
+* keeps the player's choices in `~/.depot/omsi2/modules.json`
+  (`{"<id>": {"enabled": bool, "settings": {"<key>": "<value>"}}}`). At every start, for each
+  module whose `module.json` is in the OMSI 2 folder, a module switched on sends
+  `/module:<id>` and one `/module-setting:<id>.<key>=<value>` per saved choice, and one
+  switched off sends `/no-module:<id>` (Omsi Prefetch joins every session by itself
+  otherwise). A module that is not in the folder sends nothing;
+* offers only a few of a module's settings, and only the values listed in
+  `modules::card_settings`; any other key or value saved in the file stops the start with a
+  plain message. For Omsi Prefetch: `ram_budget_mb` (`auto`, 2048, 4096, 6144, 8192, 12288),
+  `user_vehicles` (`none`, `all`; the `list` choice needs a vehicle picker and is not
+  offered) and `monitor`; its other settings keep the module's defaults;
+* opens the module's data folder (`.omsilaunch/module-data/<id>/`) and never writes there.
+
 ## The settings table
 
 OmsiLaunch applies the settings of its own catalog (`/set:<key>=<value>`). Depot keeps one

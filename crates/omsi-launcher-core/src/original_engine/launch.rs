@@ -2,7 +2,7 @@
 //! `~/.depot/omsi2/launch/`, never inside the OMSI 2 folder) and the command line made from
 //! it, the saved settings and the enabled modules.
 
-use super::{catalog, config};
+use super::{catalog, config, modules};
 use anyhow::{bail, Result};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -125,20 +125,30 @@ fn value_text(v: &Value) -> Option<String> {
     (t.len() <= 256 && !t.chars().any(|c| c.is_control())).then_some(t)
 }
 
-/// `/module:<id>` and `/module-setting:<id>.<key>=<value>` for every enabled module.
-pub fn module_args(modules: &Map<String, Value>) -> Result<Vec<String>> {
+/// What the module choices (`modules.json`) send for the modules found in the OMSI 2 folder
+/// (`root`): `/module:<id>` and `/module-setting:<id>.<key>=<value>` for one switched on,
+/// `/no-module:<id>` for one switched off (a module may join every session by itself). A
+/// module that is not there sends nothing: OmsiLaunch would refuse a start that asks for it.
+/// Only the values the module's card offers are sent; anything else stops the start.
+pub fn module_args(modules: &Map<String, Value>, root: &Path) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for (id, m) in modules {
         if !word_ok(id) {
             bail!("{id} is not a module name");
         }
-        if !m.get("enabled").and_then(Value::as_bool).unwrap_or(false) {
+        if !modules::present(root, id) {
+            continue;
+        }
+        if !m.get("enabled").and_then(Value::as_bool).unwrap_or(true) {
+            out.push(format!("/no-module:{id}"));
             continue;
         }
         out.push(format!("/module:{id}"));
         if let Some(s) = m.get("settings").and_then(Value::as_object) {
             for (k, v) in s {
-                let t = value_text(v).filter(|_| word_ok(k));
+                let t = value_text(v)
+                    .filter(|_| word_ok(k))
+                    .filter(|t| modules::setting_allowed(id, k, t));
                 match t {
                     Some(t) => out.push(format!("/module-setting:{id}.{k}={t}")),
                     None => bail!("{id}: the setting {k} cannot be sent"),
@@ -160,7 +170,7 @@ pub fn build(
 ) -> Result<Launch> {
     let spec = spec_json(root, world)?;
     let mut args = catalog::launch_args(settings)?;
-    args.extend(module_args(modules)?);
+    args.extend(module_args(modules, root)?);
     let file = config::launch_file_in(data, id);
     config::write_atomic(&file, &serde_json::to_vec_pretty(&spec)?)?;
     let mut all = vec![format!("/spec:{}", file.display())];
@@ -271,11 +281,7 @@ mod tests {
         let mut modules = Map::new();
         modules.insert(
             "omsi-prefetch".into(),
-            json!({"enabled": true, "settings": {"ramBudgetMb": 2048}}),
-        );
-        modules.insert(
-            "openhud".into(),
-            json!({"enabled": false, "settings": {"x": 1}}),
+            json!({"enabled": true, "settings": {"ram_budget_mb": 4096}}),
         );
         let l = build(
             &data,
@@ -294,11 +300,8 @@ mod tests {
         assert_eq!(l.args[0], format!("/spec:{}", l.spec_file.display()));
         assert_eq!(l.args[1], "/new");
         assert!(l.args.contains(&"/set:graphics.maxFPS=60".to_string()));
-        assert!(l.args.contains(&"/module:omsi-prefetch".to_string()));
-        assert!(l
-            .args
-            .contains(&"/module-setting:omsi-prefetch.ramBudgetMb=2048".to_string()));
-        assert!(!l.args.iter().any(|a| a.contains("openhud")));
+        // (the module is not in this OMSI 2 folder: nothing is asked of it)
+        assert!(!l.args.iter().any(|a| a.contains("module")));
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
         config::remove_launch_file(&l.spec_file);
         assert!(!l.spec_file.exists());
@@ -306,22 +309,124 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// Module `id` placed in `root` as OmsiLaunch finds it.
+    fn place(root: &Path, id: &str) {
+        let dir = root.join(modules::module_dir(id));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("module.json"),
+            format!(r#"{{"id":"{id}","version":"1.0.0-beta.1"}}"#),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn prefetch_choices_become_its_arguments() {
+        let root = tmp("pf");
+        place(&root, "omsi-prefetch");
+        let mut m = Map::new();
+        m.insert(
+            "omsi-prefetch".into(),
+            json!({"enabled": true, "settings": {
+                "ram_budget_mb": "auto", "user_vehicles": "all", "monitor": true}}),
+        );
+        assert_eq!(
+            module_args(&m, &root).unwrap(),
+            [
+                "/module:omsi-prefetch",
+                "/module-setting:omsi-prefetch.monitor=true",
+                "/module-setting:omsi-prefetch.ram_budget_mb=auto",
+                "/module-setting:omsi-prefetch.user_vehicles=all",
+            ]
+        );
+        // a number saved as a number is sent as the same text
+        m.insert(
+            "omsi-prefetch".into(),
+            json!({"enabled": true, "settings": {"ram_budget_mb": 6144}}),
+        );
+        assert_eq!(
+            module_args(&m, &root).unwrap(),
+            [
+                "/module:omsi-prefetch",
+                "/module-setting:omsi-prefetch.ram_budget_mb=6144"
+            ]
+        );
+        // switched off: kept out of the session (it would join by itself), no settings
+        m.insert(
+            "omsi-prefetch".into(),
+            json!({"enabled": false, "settings": {"monitor": true}}),
+        );
+        assert_eq!(
+            module_args(&m, &root).unwrap(),
+            ["/no-module:omsi-prefetch"]
+        );
+        // no choice saved yet: on, with the module's own defaults
+        m.insert("omsi-prefetch".into(), json!({}));
+        assert_eq!(module_args(&m, &root).unwrap(), ["/module:omsi-prefetch"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn only_the_values_a_card_offers_are_sent() {
+        let root = tmp("strict");
+        place(&root, "omsi-prefetch");
+        place(&root, "openhud");
+        for bad in [
+            json!({"ram_budget_mb": 100}),
+            json!({"ram_budget_mb": "lots"}),
+            json!({"user_vehicles": "list"}),
+            json!({"tile_radius": 6}),
+            json!({"monitor": "maybe"}),
+        ] {
+            let mut m = Map::new();
+            m.insert(
+                "omsi-prefetch".into(),
+                json!({"enabled": true, "settings": bad}),
+            );
+            assert!(module_args(&m, &root).is_err(), "{m:?}");
+        }
+        // a module without a card yet takes no settings from Depot
+        let mut m = Map::new();
+        m.insert(
+            "openhud".into(),
+            json!({"enabled": true, "settings": {"radar": true}}),
+        );
+        assert!(module_args(&m, &root).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_module_that_is_not_there_is_not_asked_for() {
+        let root = tmp("absent");
+        let mut m = Map::new();
+        m.insert("omsi-prefetch".into(), json!({"enabled": true}));
+        m.insert("openhud".into(), json!({"enabled": false}));
+        assert!(module_args(&m, &root).unwrap().is_empty());
+        // a folder without the module's manifest is not the module
+        std::fs::create_dir_all(root.join(modules::module_dir("omsi-prefetch"))).unwrap();
+        assert!(module_args(&m, &root).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn module_arguments_cannot_carry_extra_flags() {
+        let root = tmp("flags");
+        place(&root, "ok");
         let mut m = Map::new();
         m.insert("a b".into(), json!({"enabled": true}));
-        assert!(module_args(&m).is_err());
+        assert!(module_args(&m, &root).is_err());
         let mut m = Map::new();
         m.insert(
             "ok".into(),
             json!({"enabled": true, "settings": {"k": "v\n/new"}}),
         );
-        assert!(module_args(&m).is_err());
+        assert!(module_args(&m, &root).is_err());
         let mut m = Map::new();
         m.insert(
             "ok".into(),
             json!({"enabled": true, "settings": {"k=v": 1}}),
         );
-        assert!(module_args(&m).is_err());
+        assert!(module_args(&m, &root).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

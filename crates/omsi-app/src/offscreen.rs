@@ -1225,6 +1225,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     .collect();
                 lighting.detail = settings.detail_textures;
                 lighting.windy_trees = settings.windy_trees();
+                lighting.sun_glow = settings.sun_glow;
                 lighting.night_brightness = settings.night_brightness;
                 world.finish_texture_upgrades(&renderer, &mut scene);
                 let pixels = renderer.render_to_image(&mut scene, w, h, &cam, &lighting)?;
@@ -2613,6 +2614,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         .collect();
     lighting.detail = settings.detail_textures;
     lighting.windy_trees = settings.windy_trees();
+    lighting.sun_glow = settings.sun_glow;
     lighting.night_brightness = settings.night_brightness;
     lighting.glass_wind = player_ref
         .as_ref()
