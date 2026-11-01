@@ -841,7 +841,13 @@ fn the_cell_cap_keeps_the_first_map_lamps_and_every_vehicle_light() {
     // surface that takes them (the plain material below)
     let far = lamp([500.0, 500.0, 1.5, 1.0], POINT, [0.0; 4]);
     let near = lamp([0.0, 0.0, 1.5, 100.0], POINT, [0.0; 4]);
-    let headlight = lamp([0.0, 0.0, 1.5, 100.0], [1.0, 0.0, 0.0, -2.0], [0.0; 4]);
+    // a headlight: a spot pointing down at the quad (direction, outer cone cosine; inner cone
+    // cosine, core radius, radius of full light squared)
+    let headlight = lamp(
+        [0.0, 0.0, 1.5, 100.0],
+        [0.0, 0.0, -1.0, 0.5],
+        [0.9, 1.0, 100.0, 0.0],
+    );
     let two: Vec<[f32; 4]> = [far, near].concat();
     let three: Vec<[f32; 4]> = [far, near, headlight].concat();
     let draw =
@@ -871,11 +877,15 @@ fn the_cell_cap_keeps_the_first_map_lamps_and_every_vehicle_light() {
     assert!(all(&px, [0, 0, 0, 255], 1), "cap 1: {:?}", &px[..4]);
     // the vehicle's light after the two map lamps still lights, past the cap
     let px = draw(&mut dev, &three, &[0, 1, 2], 1, white_lit(&no_map));
+    // (a spot's light is less than a point lamp's: lit, not saturated)
     assert!(
-        all(&px, [255, 255, 255, 255], 1),
+        px[..3].iter().all(|&c| c > 150),
         "headlight: {:?}",
         &px[..4]
     );
+    // and the same headlight is cut by nothing: without it, past the cap, the quad is dark
+    let px = draw(&mut dev, &three, &[0, 1, u32::MAX], 1, white_lit(&no_map));
+    assert!(all(&px, [0, 0, 0, 255], 1), "no headlight: {:?}", &px[..4]);
 }
 
 #[test]

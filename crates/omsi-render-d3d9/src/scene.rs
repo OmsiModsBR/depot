@@ -484,8 +484,8 @@ impl SceneLamps<'_> {
 
     /// The grid as the shader reads it: each place's light index, -1 where it is empty or
     /// names a light past the first `kept`. With a `cell_cap`, a cell keeps its first
-    /// `cell_cap` map lamps and every vehicle light (a headlight's stand-in, which lights
-    /// every surface), in their order and packed to the front, the rest of the places empty:
+    /// `cell_cap` map lamps and every vehicle light (a spot, or a point that lights every
+    /// surface), in their order and packed to the front, the rest of the places empty:
     /// the shader stops at the first empty place.
     pub fn grid_texels(&self, kept: usize, out: &mut Vec<f32>) {
         out.clear();
@@ -500,7 +500,9 @@ impl SceneLamps<'_> {
         };
         let vehicle = |i: u32| {
             let dir = self.lights[i as usize * 4 + 2];
-            dir[3] < -1.5 && dir[0] > 0.5
+            // (a spot - a vehicle's headlight; the map's lamps are all points, -2 - or the older
+            // headlight stand-in, a point that lights every surface)
+            dir[3] > -1.5 || dir[0] > 0.5
         };
         for cell in self.grid.chunks(places) {
             let mut maps = 0;
@@ -979,10 +981,12 @@ mod tests {
     #[test]
     fn a_cell_cap_keeps_the_first_map_lamps_and_every_vehicle_light() {
         let map = [[0.0; 4], [0.0; 4], [0.0, 0.0, 0.0, -2.0], [0.0; 4]];
-        let car = [[0.0; 4], [0.0; 4], [1.0, 0.0, 0.0, -2.0], [0.0; 4]];
+        // (a headlight is a spot: a direction and the cosine of its outer cone)
+        let car = [[0.0; 4], [0.0; 4], [0.0, 0.0, -1.0, 0.5], [0.0; 4]];
+        let old_car = [[0.0; 4], [0.0; 4], [1.0, 0.0, 0.0, -2.0], [0.0; 4]];
         // lights 0, 1, 2 map lamps, 3 a vehicle's, 4 a map lamp; one cell of 6 places
-        let lights: Vec<[f32; 4]> = [map, map, map, car, map].concat();
-        let grid = [0, 1, 2, 3, 4, u32::MAX];
+        let lights: Vec<[f32; 4]> = [map, map, map, car, map, old_car].concat();
+        let grid = [0, 1, 2, 3, 4, 5, u32::MAX];
         let mut lamps = SceneLamps {
             lights: &lights,
             grid: &grid,
@@ -990,14 +994,14 @@ mod tests {
             ..Default::default()
         };
         let mut out = Vec::new();
-        lamps.grid_texels(5, &mut out);
-        assert_eq!(out, [0.0, 1.0, 2.0, 3.0, 4.0, -1.0]);
+        lamps.grid_texels(6, &mut out);
+        assert_eq!(out, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, -1.0]);
         lamps.cell_cap = 2;
-        lamps.grid_texels(5, &mut out);
-        assert_eq!(out, [0.0, 1.0, 3.0, -1.0, -1.0, -1.0]);
+        lamps.grid_texels(6, &mut out);
+        assert_eq!(out, [0.0, 1.0, 3.0, 5.0, -1.0, -1.0, -1.0]);
         // (lights past the first `kept` are gone, as without a cap)
         lamps.grid_texels(2, &mut out);
-        assert_eq!(out, [0.0, 1.0, -1.0, -1.0, -1.0, -1.0]);
+        assert_eq!(out, [0.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0]);
     }
 
     #[test]
