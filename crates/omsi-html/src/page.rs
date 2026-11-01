@@ -123,19 +123,14 @@ pub fn rebase_css_urls(css: &str, prefix: &str) -> String {
     let mut i = 0;
     while let Some(p) = lower[i..].find("url(") {
         let inner = i + p + 4;
-        let Some(e) = css[inner..].find(')').map(|e| inner + e) else {
-            break;
-        };
+        let Some(e) = css[inner..].find(')').map(|e| inner + e) else { break };
         out.push_str(&css[i..inner]);
         let raw = css[inner..e].trim();
         let (quote, path) = match raw.chars().next() {
             Some(c @ ('"' | '\'')) => (c.to_string(), raw.trim_matches(c)),
             _ => (String::new(), raw),
         };
-        let absolute = path.is_empty()
-            || path.starts_with(['/', '\\', '#'])
-            || path.starts_with("data:")
-            || path.contains("://");
+        let absolute = path.is_empty() || path.starts_with(['/', '\\', '#']) || path.starts_with("data:") || path.contains("://");
         if absolute {
             out.push_str(&css[inner..e]);
         } else {

@@ -123,15 +123,12 @@ pub(crate) enum Stmt {
     Continue,
 }
 
+
 pub(crate) fn fmt_num(n: f64) -> String {
     if n.is_nan() {
         "NaN".into()
     } else if n.is_infinite() {
-        if n > 0.0 {
-            "Infinity".into()
-        } else {
-            "-Infinity".into()
-        }
+        if n > 0.0 { "Infinity".into() } else { "-Infinity".into() }
     } else if n.fract() == 0.0 && n.abs() < 1e15 {
         format!("{}", n as i64)
     } else {
@@ -166,12 +163,7 @@ pub(crate) fn arr_join(a: &ArrRef, sep: &str) -> String {
     join_inner(a, sep, &mut seen, &mut budget)
 }
 
-fn join_inner(
-    a: &ArrRef,
-    sep: &str,
-    seen: &mut Vec<*const Mutex<Vec<Val>>>,
-    budget: &mut usize,
-) -> String {
+fn join_inner(a: &ArrRef, sep: &str, seen: &mut Vec<*const Mutex<Vec<Val>>>, budget: &mut usize) -> String {
     let ptr = Arc::as_ptr(a);
     if seen.contains(&ptr) {
         return String::new();
@@ -280,10 +272,5 @@ pub(crate) fn kebab(s: &str) -> String {
 }
 
 pub(crate) fn obj_of(props: &[(&str, Val)]) -> ObjRef {
-    Arc::new(Mutex::new(
-        props
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect(),
-    ))
+    Arc::new(Mutex::new(props.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()))
 }
