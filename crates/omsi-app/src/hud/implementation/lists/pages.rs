@@ -83,6 +83,9 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
         switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
         limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
+        // (only "DirectX9 (D3D9Ex)" draws a sun glow)
+        switch_row(app, "sun_glow", "Sun glow", "The bright glow around the sun")
+            .filter(|_| app.output.backend() == crate::output::Backend::D3d9),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
         // (DirectX9 only: the other APIs draw their own snowfall)
         (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
