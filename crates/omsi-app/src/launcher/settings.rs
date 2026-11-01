@@ -892,8 +892,8 @@ pub static OPTS: &[Opt] = &[
         "Picture",
         "dx9_upscale",
         "Upscaling",
-        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper (FSR 1) is AMD's FidelityFX Super Resolution 1 and keeps edges tighter. Both differ from OMSI 2's picture.",
-        &[("bilinear", "Bilinear"), ("fsr1", "Sharper (FSR 1)")],
+        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper keeps edges tighter. Both differ from OMSI 2's picture.",
+        &[("bilinear", "Bilinear"), ("fsr1", "Sharper")],
     ),
     pick(
         GRAPHICS,

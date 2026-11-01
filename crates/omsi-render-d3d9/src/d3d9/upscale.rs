@@ -220,7 +220,9 @@ impl D3d9Device {
     pub(super) fn scene_size_for(&self, native: (u32, u32)) -> Option<(u32, u32)> {
         let scale = self.scale.scale.filter(|_| !self.scale.unsupported)?;
         let small = scaled_size(native.0, native.1, scale);
-        (small != native && small.0.max(small.1) <= self.caps.max_texture_size).then_some(small)
+        // (the sharper pass keeps a picture-sized target too: both sizes must be textures)
+        let limit = self.caps.max_texture_size;
+        (small != native && native.0.max(native.1) <= limit).then_some(small)
     }
 
     /// Builds the passes if they are not there. A pass that cannot be made is remembered, and
@@ -345,7 +347,21 @@ impl D3d9Device {
             }
             return Err(e);
         }
-        self.ensure_scale_targets(native, small)?;
+        match self.ensure_scale_targets(native, small) {
+            Ok(()) => {}
+            Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
+            Err(e) => {
+                // (out of video memory, say: the scene is drawn at the picture's size from now
+                // on, not left out every frame)
+                log::warn!(
+                    "d3d9: the render scale's targets cannot be made, the scene is drawn at the \
+                     picture's size: {e}"
+                );
+                self.scale.unsupported = true;
+                self.scale.targets = None;
+                return self.draw_scene_inner(frame, material, native.0, native.1, self.coverage());
+            }
+        }
         let targets = self.scale.targets.as_ref().expect("made above");
         let (scene_texture, depth) = (targets.scene.clone(), targets.depth.clone());
         // SAFETY: plain calls on a live device; the surfaces belong to it. What was bound is

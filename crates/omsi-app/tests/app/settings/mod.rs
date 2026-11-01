@@ -499,3 +499,22 @@ fn the_wheels_tremble_and_its_fade_out_survive_a_save() {
     let bad = Settings::from_text("ff_road_vib=loud\nff_fade=\n");
     assert_eq!((bad.ff_road_vib, bad.ff_fade), (1.0, 0.28));
 }
+
+/// After a lost graphics device the lighter settings never pick a DirectX 9 render scale for
+/// the player: that picture is only ever scaled by the player's own choice. The other APIs
+/// still get their automatic 75 %.
+#[test]
+fn a_lost_device_never_scales_the_d3d9_picture() {
+    use openomsi_game::testing::settings::Settings;
+    let mut other = Settings::from_text("graphics_api=vulkan\n");
+    other.apply_safe_gpu(2);
+    assert_eq!(other.render_scale, 0.75);
+    if cfg!(windows) {
+        let mut dx9 = Settings::from_text("graphics_api=d3d9\n");
+        dx9.apply_safe_gpu(2);
+        assert_eq!(dx9.render_scale, 0.0);
+        let mut chosen = Settings::from_text("graphics_api=d3d9\nrender_scale=0.5\n");
+        chosen.apply_safe_gpu(3);
+        assert_eq!(chosen.render_scale, 0.5);
+    }
+}

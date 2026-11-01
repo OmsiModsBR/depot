@@ -1591,11 +1591,15 @@ impl Settings {
         if n >= 2 {
             self.shadows = false;
             self.shadow_size = 1024;
-            self.render_scale = if self.render_scale > 0.0 {
-                self.render_scale.min(0.75)
-            } else {
-                0.75
-            };
+            // ("DirectX9 (D3D9Ex)" has no automatic scale: its picture is only ever scaled by
+            // the player's choice)
+            if self.backend() != crate::output::Backend::D3d9 {
+                self.render_scale = if self.render_scale > 0.0 {
+                    self.render_scale.min(0.75)
+                } else {
+                    0.75
+                };
+            }
             self.texture_memory = self.texture_memory.min(700);
             self.mirror_size = self.mirror_size.min(128);
         }

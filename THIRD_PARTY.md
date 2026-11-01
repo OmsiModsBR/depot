@@ -9,7 +9,7 @@ from other projects that was **adapted into this repository's own files**.
 
 | | |
 | --- | --- |
-| Used for | The optional "Sharper (FSR 1)" up-scaling of the render scale under "DirectX9 (D3D9Ex)" |
+| Used for | The optional "Sharper" up-scaling of the render scale under "DirectX9 (D3D9Ex)" |
 | Where | `crates/omsi-render-d3d9/src/d3d9/shaders/upscale.hlsl`, entry points `ps_easu` and `ps_rcas` |
 | Source | https://github.com/GPUOpen-Effects/FidelityFX-FSR, tag `v1.0.2` |
 | Commit | `a21ffb8f6c13233ba336352bdff293894c706575` (2021-08-20) |
@@ -39,7 +39,8 @@ The licence text, as it must stay with the adapted code, is in the header of `up
 
 **Trademarks.** "FidelityFX" and "FSR" are trademarks of Advanced Micro Devices, Inc. They are
 used here only to say which published algorithm the option is adapted from; Project Depot is not
-affiliated with or endorsed by AMD.
+affiliated with or endorsed by AMD. The marks are AMD's and are not displayed in the program's
+interface: the option is labelled "Sharper" there.
 
 **Patents: not assessed.** The MIT licence AMD publishes carries no patent grant or patent
 notice, and nothing in the repository mentions patents. Whether any patent covers the
