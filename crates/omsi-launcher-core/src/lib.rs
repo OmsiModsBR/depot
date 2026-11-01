@@ -9,6 +9,7 @@
 
 pub mod compress;
 pub mod disk;
+pub mod hof_sync;
 pub mod index;
 pub mod install;
 pub mod instances;
@@ -1321,6 +1322,43 @@ fn log_line(line: &str) {
             .unwrap_or(0);
         let _ = writeln!(f, "{now} {line}");
     }
+}
+
+/// Puts the depot files of the root folders `hof`/`hofs` (any letter case) beside every
+/// playable vehicle in `vehicles` (the buses `list_vehicles` returned; never AI-only ones),
+/// in the content folder's copy of the vehicle's folder: the OMSI 2 folder is never written
+/// to. Once per run of the launcher; meant for a background thread. See [`hof_sync`].
+pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    let (root, content) = (root().ok()?, content_dir()?);
+    if content == root {
+        // no folder of our own: the installation is not touched
+        return None;
+    }
+    let sources = hof_sync::source_files(&[content.clone(), root.clone()]);
+    if sources.is_empty() {
+        return None;
+    }
+    let bases: Vec<PathBuf> = bases();
+    let dirs: Vec<hof_sync::VehicleDir> = vehicles
+        .iter()
+        .filter_map(|v| {
+            let rel = v.file.rsplit_once('/')?.0;
+            let overlay = omsi_cfg::resolve_path(&content, rel);
+            let existing = bases
+                .iter()
+                .map(|b| omsi_cfg::resolve_path(b, rel))
+                .filter(|p| p != &overlay && p.is_dir())
+                .collect();
+            Some(hof_sync::VehicleDir { overlay, existing })
+        })
+        .collect();
+    let sum = hof_sync::sync(&sources, &dirs);
+    log_line(&sum.line());
+    Some(sum)
 }
 
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {

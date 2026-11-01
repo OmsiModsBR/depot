@@ -33,6 +33,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Launcher
 
+- **Added.** After the launcher has read the content lists, it syncs in the background (once per run, nothing waits for it) every `.hof` file found in the `hof` or `hofs` folders of the game root (any letter case) into every playable vehicle, so copying depot files into bus folders by hand is no longer needed. AI-only vehicles are not touched. The OMSI 2 folder is never written to: a vehicle that lives there gets a folder of the same path in the Depot's own content folder (`Vehicles/<bus>/`) holding only the synced `.hof` files, and the game merges both folders of a vehicle when it loads, the Depot copy taking effect. Nothing is deleted; a file the vehicle already has byte for byte is skipped; a Depot copy that differs is replaced only when the source is newer; read-only or failing targets are counted and do not stop the rest. A one-line summary goes to `launcher.log`. Always on, no setting. Checked by automated tests of the sync.
 - **Fixed.** The Setup page's "Game program" line, when the program is found next to the launcher, now shows the running game's version (the same one Diagnostics shows) instead of `0.1.0`. Checked by an automated test only. (#617)
 
 ## 0.3.0 - 2026-10-30
