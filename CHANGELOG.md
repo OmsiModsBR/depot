@@ -34,6 +34,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Launcher
 
 - **Fixed.** The Setup page's "Game program" line, when the program is found next to the launcher, now shows the running game's version (the same one Diagnostics shows) instead of `0.1.0`. Checked by an automated test only. (#617)
+- **Changed.** Smoke options polish. "Most particles per system" now moves 1 to 100 in steps of 1, the whole range `smoke_max` accepts (it moved 10 to 100 in tens). "Smoke in mirrors" now has a tooltip (new text in all 26 languages). The `OMSI_NO_SMOKE` flag's owner in `docs/ENVIRONMENT.md` now names the DirectX9 output as well. The default of 100 and the particle lighting still need an in-game check on a real GPU. (#594)
 
 ## 0.3.0 - 2026-10-30
 

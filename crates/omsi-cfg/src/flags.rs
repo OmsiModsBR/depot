@@ -670,7 +670,7 @@ flags! {
     /// No glare from the sun.
     NO_GLARE = "OMSI_NO_GLARE", Switch, Diagnostic, "omsi-render::passes::fog_lamps";
     /// No smoke.
-    NO_SMOKE = "OMSI_NO_SMOKE", Switch, Diagnostic, "omsi-render::passes::main";
+    NO_SMOKE = "OMSI_NO_SMOKE", Switch, Diagnostic, "omsi-render::passes::main, omsi-app::output::d3d9";
     /// No falling snow.
     NO_SNOWFALL = "OMSI_NO_SNOWFALL", Switch, Diagnostic, "omsi-render::passes::main";
     /// No rain drawn on the glass.
