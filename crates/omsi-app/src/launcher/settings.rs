@@ -1022,6 +1022,7 @@ pub static OPTS: &[Opt] = &[
         ],
     ),
     toggle(GRAPHICS, "Effects", "clouds", "Clouds", ""),
+    toggle(GRAPHICS, "Effects", "sun_glow", "Sun glow", ""),
     toggle(
         GRAPHICS,
         "Effects",
@@ -1049,7 +1050,7 @@ pub static OPTS: &[Opt] = &[
         "smoke_max",
         "Most particles per system",
         "Each smoke system keeps at most this many",
-        (10.0, 100.0, 10.0),
+        (1.0, 100.0, 1.0),
         count,
         integer,
     ),
@@ -1058,7 +1059,7 @@ pub static OPTS: &[Opt] = &[
         "Effects",
         "smoke_in_mirrors",
         "Smoke in mirrors",
-        "",
+        "Smoke and particles also show in the mirrors",
     ),
     // (DirectX9 only, see `shown`)
     toggle(
@@ -2097,6 +2098,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         | "led_mips" => !classic,
         "ssao" | "shadows" => !classic && !traced,
         "reflections" => !traced,
+        // (only "DirectX9 (D3D9Ex)" draws it; the other APIs have no sun glow to switch)
+        "sun_glow" => fixed,
         "fov" => !triple,
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
@@ -2353,7 +2356,7 @@ enum Card<'a> {
 
 impl Card<'_> {
     fn wide(&self) -> bool {
-        matches!(self, Card::Api(_) | Card::Own("plugins"))
+        matches!(self, Card::Api(_) | Card::Own("plugins" | "omsi2-plugins"))
     }
 
     fn height(&self) -> f32 {
@@ -2400,6 +2403,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
         let own: &[&str] = match sec {
             SOUND => &["radio"],
             DEVICES => &["controls"],
+            // (in OMSI 2 mode: its own plug-ins, each switched on or off)
+            PLUGINS if omsi2 => &["omsi2-plugins"],
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
             INTERFACE => &["preview"],
@@ -2421,6 +2426,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
 pub struct Outside {
     pub reset: bool,
     pub controls: Option<usize>,
+    /// (in) A game runs: the OMSI 2 folder's plug-ins are not switched meanwhile.
+    pub game_runs: bool,
     /// A module's install or removal (Modules, OMSI 2 mode).
     pub modules: super::omsi2_modules::Asks,
 }
@@ -2445,6 +2452,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let omsi2 = l.state.omsi2_engine();
     let mut start = start_values(&l.state.choice);
     let mut out = Outside::default();
+    out.game_runs = l.state.in_game();
     out.modules.idle =
         !l.state.in_game() && matches!(l.state.original.flow, omsi_launcher_ui::state::Flow::Idle);
     let narrow = body.w < 760.0;
@@ -3096,6 +3104,7 @@ fn own_card(
             y + 34.0 + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
+        "omsi2-plugins" => super::omsi2_plugins::card(ui, r, root, out.game_runs),
         "omsi-prefetch" => {
             super::omsi2_modules::card(ui, r, "omsi-prefetch", root, &mut out.modules)
         }

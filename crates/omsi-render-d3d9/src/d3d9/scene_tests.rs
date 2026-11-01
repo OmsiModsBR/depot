@@ -1543,7 +1543,7 @@ fn draw_sky(
     let sky = crate::scene::SceneSky {
         textures,
         params,
-        clouds: Default::default(),
+        ..Default::default()
     };
     draw_sky_with(dev, sky, LOOK_NORTH, light(fog), (W, H))
 }
@@ -1699,6 +1699,7 @@ fn dark_sky(
         textures: Some([0, 1, 2]),
         params,
         clouds,
+        sun_glow: false,
     }
 }
 
@@ -1791,6 +1792,127 @@ fn the_stars_show_at_night_and_not_by_day() {
     );
     // and they stay put from one frame to the next
     assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
+}
+
+/// The light of a camera looking north: the sun towards `sun` (w its strength), white.
+fn sunny(sun: [f32; 4]) -> SceneLight {
+    SceneLight {
+        sun_dir: sun,
+        sun_color: [1.0, 1.0, 1.0, 0.0],
+        cam_right: [1.0, 0.0, 0.0, 0.0],
+        cam_up: [0.0, 0.0, 1.0, 0.0],
+        ..light([0.0; 4])
+    }
+}
+
+fn glow_sky(dev: &mut D3d9Device, on: bool) -> crate::scene::SceneSky {
+    crate::scene::SceneSky {
+        sun_glow: on,
+        ..dark_sky(dev, [0.0, 1.0, 0.0, 0.0], Default::default())
+    }
+}
+
+/// The brightest channel of the pixel at (x, y) of a W x H picture.
+fn peak(px: &[u8], x: u32, y: u32) -> u8 {
+    let i = ((y * W + x) * 4) as usize;
+    px[i].max(px[i + 1]).max(px[i + 2])
+}
+
+#[test]
+fn the_sun_glow_is_added_around_the_sun_when_it_is_on() {
+    let Some(mut dev) = device() else { return };
+    let sun = [0.0, 1.0, 0.05, 1.0];
+    let off = glow_sky(&mut dev, false);
+    let px = draw_sky_with(&mut dev, off, LOOK_NORTH, sunny(sun), (W, H));
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+    let on = glow_sky(&mut dev, true);
+    let px = draw_sky_with(&mut dev, on, LOOK_NORTH, sunny(sun), (W, H));
+    // the sun stands just above the view's middle: bright there, and fading away from it
+    let (near, far) = (peak(&px, 3, 1), peak(&px, 0, 3));
+    assert!(near > 60 && near > far + 20, "near {near} far {far}");
+}
+
+#[test]
+fn the_sun_glow_is_not_drawn_without_the_sun() {
+    let Some(mut dev) = device() else { return };
+    for sun in [
+        // below the horizon
+        [0.0, 1.0, -0.3, 1.0],
+        // no light (overcast, night)
+        [0.0, 1.0, 0.05, 0.0],
+        // behind the camera
+        [0.0, -1.0, 0.05, 1.0],
+    ] {
+        let on = glow_sky(&mut dev, true);
+        let px = draw_sky_with(&mut dev, on, LOOK_NORTH, sunny(sun), (W, H));
+        assert!(all(&px, [0, 0, 0, 255], 0), "{sun:?}: {:?}", &px[..4]);
+    }
+    // a thick fog takes it, and so does a missing sun colour
+    let on = glow_sky(&mut dev, true);
+    let mut l = sunny([0.0, 1.0, 0.05, 1.0]);
+    l.fog = [0.0, 0.0, 0.0, 1.0];
+    let px = draw_sky_with(&mut dev, on, LOOK_NORTH, l, (W, H));
+    assert!(peak(&px, 3, 1) < 4, "{:?}", &px[..4]);
+    let mut l = sunny([0.0, 1.0, 0.05, 1.0]);
+    l.sun_color = [0.0; 4];
+    let on = glow_sky(&mut dev, true);
+    let px = draw_sky_with(&mut dev, on, LOOK_NORTH, l, (W, H));
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+}
+
+#[test]
+fn something_in_front_of_the_sun_hides_its_glow() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 5, [10, 220, 30, 255]);
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(3, &v, &i).unwrap();
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.0, 0.0, 1.0, 1.0],
+    })
+    .unwrap();
+    let batches = [batch(DrawKind::Opaque, 3, 0, 0..1)];
+    let params = [VISIBLE, SECOND];
+    let mut frame = quad_frame(&batches, &[IDENTITY], &params, &[0]);
+    frame.sky = glow_sky(&mut dev, true);
+    frame.light = sunny([0.0, 1.0, 0.05, 1.0]);
+    let u = uniform(0.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(5),
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    let px = dev.end_frame().unwrap();
+    // (the quad covers the whole picture and stands nearer than the sun)
+    assert!(all(&px, [10, 220, 30, 255], 1), "{:?}", &px[..4]);
+}
+
+#[test]
+fn the_sun_glow_fades_with_the_horizon_the_clouds_and_the_fog() {
+    use super::sky::glow_strength;
+    let l = |z: f32, w: f32, fog: f32| SceneLight {
+        sun_dir: [0.0, 1.0, z, w],
+        fog: [0.0, 0.0, 0.0, fog],
+        ..Default::default()
+    };
+    // high sun, clear: full
+    assert!((glow_strength(&l(0.5, 1.0, 0.0), 0.0) - 1.0).abs() < 1e-6);
+    // a sun that gives no light, or sets below the horizon: none
+    assert_eq!(glow_strength(&l(0.5, 0.0, 0.0), 0.0), 0.0);
+    assert_eq!(glow_strength(&l(-0.1, 1.0, 0.0), 0.0), 0.0);
+    // at the horizon: between
+    let low = glow_strength(&l(0.0, 1.0, 0.0), 0.0);
+    assert!(low > 0.0 && low < 1.0, "{low}");
+    // clouds thin it, a thick fog takes it
+    let cloudy = glow_strength(&l(0.5, 1.0, 0.0), 0.7);
+    assert!(cloudy > 0.0 && cloudy < 0.7, "{cloudy}");
+    // a closed deck (Overcast) hides it even when the light still carries some sun
+    assert_eq!(glow_strength(&l(0.5, 0.15, 0.0), 1.0), 0.0);
+    assert_eq!(glow_strength(&l(0.5, 1.0, 0.01), 0.0), 0.0);
 }
 
 #[test]
