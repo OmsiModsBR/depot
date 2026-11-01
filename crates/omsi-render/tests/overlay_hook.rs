@@ -76,3 +76,58 @@ fn the_hook_draws_over_the_picture_at_full_size_and_can_be_taken_away() {
     assert_eq!(calls.lock().unwrap().len(), 1);
     assert_eq!(after, before);
 }
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_scene_only_picture_skips_the_hook_and_keeps_it_for_the_next_frame() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let Ok(mut renderer) = pollster::block_on(Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        Default::default(),
+    )) else {
+        eprintln!("no graphics adapter: skipped");
+        return;
+    };
+    let mut scene = renderer.new_scene();
+    let (w, h) = (96, 54);
+    let plain = renderer
+        .render_to_image(&mut scene, w, h, &camera(), &Lighting::default())
+        .expect("frame");
+    let calls: Arc<Mutex<u32>> = Arc::default();
+    let seen = calls.clone();
+    renderer.set_overlay_hook(Some(Box::new(move |_, _, encoder, target, _| {
+        *seen.lock().unwrap() += 1;
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("test overlay"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+    })));
+    let scene_only = renderer
+        .render_scene_to_image(&mut scene, w, h, &camera(), &Lighting::default())
+        .expect("frame");
+    assert_eq!(
+        *calls.lock().unwrap(),
+        0,
+        "the hook must not draw into a screenshot"
+    );
+    assert_eq!(scene_only, plain);
+    // (the next window frame has its interface again)
+    renderer
+        .render_to_image(&mut scene, w, h, &camera(), &Lighting::default())
+        .expect("frame");
+    assert_eq!(*calls.lock().unwrap(), 1);
+}
