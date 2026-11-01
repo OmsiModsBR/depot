@@ -317,6 +317,7 @@ impl D3d9Device {
             light.ambient,
             light.sky_color,
             clouds,
+            [if frame.sky.no_stars { 0.0 } else { 1.0 }, 0.0, 0.0, 0.0],
         ];
         let vs = [light.cam_pos, pixel_offset];
         // SAFETY: plain calls on a live device; the constant arrays outlive the calls; the

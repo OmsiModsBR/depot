@@ -1009,7 +1009,10 @@ mod tests {
             entry_rel("plugins\\OmsiLaunch.Plugin.opl").as_deref(),
             Some("plugins/OmsiLaunch.Plugin.opl")
         );
-        assert_eq!(entry_rel("OmsiLaunch.exe").as_deref(), Some("OmsiLaunch.exe"));
+        assert_eq!(
+            entry_rel("OmsiLaunch.exe").as_deref(),
+            Some("OmsiLaunch.exe")
+        );
         for bad in ["..\\x", "a\\..\\..\\x", "\\abs", "C:\\x", "a\\..\\..", ""] {
             assert!(entry_rel(bad).is_none(), "{bad}");
         }
@@ -1020,7 +1023,13 @@ mod tests {
         let z = w.finish().unwrap().into_inner();
         assert!(plan_install(&tmp("esc-bs"), &tmp("esc-bsd"), &z).is_err());
         // device and reserved names stay refused when spelled with a backslash
-        for bad in ["plugins\\NUL", "plugins\\aux.dll", "COM1", "docs\\x.", "docs\\a<b"] {
+        for bad in [
+            "plugins\\NUL",
+            "plugins\\aux.dll",
+            "COM1",
+            "docs\\x.",
+            "docs\\a<b",
+        ] {
             assert!(entry_rel(bad).is_none(), "{bad}");
         }
     }

@@ -106,6 +106,9 @@ pub struct D3d9Device {
     scene: scene::SceneStore,
     /// What the scene layer may use beyond the floor.
     scene_caps: scene::SceneCaps,
+    /// The player's ceiling on a scene texture's size (texels a side, 0 = none): see
+    /// [`D3d9Device::set_texture_limit`].
+    texture_limit: u32,
     /// The game's interface ([`crate::ui`]), under each owner's ids.
     ui: ui::UiStore,
     /// Presents wait for the display's refresh.
@@ -391,6 +394,7 @@ impl D3d9Device {
                 frame: None,
                 scene: scene::SceneStore::default(),
                 scene_caps,
+                texture_limit: 0,
                 ui: ui::UiStore::default(),
                 vsync: true,
                 msaa: (1, 1),

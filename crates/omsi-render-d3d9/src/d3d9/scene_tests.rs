@@ -1700,6 +1700,7 @@ fn dark_sky(
         params,
         clouds,
         sun_glow: false,
+        no_stars: false,
     }
 }
 
@@ -1792,6 +1793,73 @@ fn the_stars_show_at_night_and_not_by_day() {
     );
     // and they stay put from one frame to the next
     assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
+}
+
+#[test]
+fn the_stars_are_left_out_when_the_option_says_so() {
+    let Some(mut dev) = device() else { return };
+    let size = (128, 128);
+    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
+    let night = [0.0, 0.0, 0.0, 1.0];
+    let on = dark_sky(&mut dev, night, Default::default());
+    let with = draw_sky_with(&mut dev, on, LOOK_UP, light([0.0; 4]), size);
+    assert!(lit(&with) > 0);
+    let off = crate::scene::SceneSky {
+        no_stars: true,
+        ..dark_sky(&mut dev, night, Default::default())
+    };
+    let without = draw_sky_with(&mut dev, off, LOOK_UP, light([0.0; 4]), size);
+    assert_eq!(lit(&without), 0);
+}
+
+/// The size of the first level of scene texture `id`.
+fn put_up_size(dev: &D3d9Device, id: usize) -> (u32, u32) {
+    let mut desc = D3DSURFACE_DESC::default();
+    // SAFETY: plain query on a live texture with an out-parameter that is a live local.
+    unsafe {
+        dev.scene.textures[id]
+            .as_ref()
+            .unwrap()
+            .GetLevelDesc(0, &mut desc)
+    }
+    .unwrap();
+    (desc.Width, desc.Height)
+}
+
+#[test]
+fn a_texture_ceiling_puts_larger_pictures_up_smaller() {
+    let Some(mut dev) = device() else { return };
+    let put = |dev: &mut D3d9Device, id: usize, side: u32, mips: bool| {
+        let levels = vec![[10u8, 20, 30, 255].repeat((side * side) as usize)];
+        dev.set_scene_texture(
+            id,
+            &SceneTexture {
+                width: side,
+                height: side,
+                format: TexFormat::Rgba8,
+                levels: &levels,
+                make_mips: mips,
+            },
+        )
+        .unwrap();
+    };
+    // no ceiling: the picture goes up as it is
+    put(&mut dev, 0, 64, true);
+    assert_eq!(put_up_size(&dev, 0), (64, 64));
+    // a ceiling of 16: a larger one goes up at 16, a smaller one is left alone
+    dev.set_texture_limit(16);
+    put(&mut dev, 1, 64, true);
+    put(&mut dev, 2, 8, true);
+    assert_eq!(put_up_size(&dev, 1), (16, 16));
+    assert_eq!(put_up_size(&dev, 2), (8, 8));
+    // a picture that cannot make its own smaller levels is halved all the same
+    put(&mut dev, 3, 64, false);
+    assert_eq!(put_up_size(&dev, 3), (16, 16));
+    // what is already up keeps its size, and 0 lifts the ceiling again
+    assert_eq!(put_up_size(&dev, 0), (64, 64));
+    dev.set_texture_limit(0);
+    put(&mut dev, 4, 64, true);
+    assert_eq!(put_up_size(&dev, 4), (64, 64));
 }
 
 /// The light of a camera looking north: the sun towards `sun` (w its strength), white.

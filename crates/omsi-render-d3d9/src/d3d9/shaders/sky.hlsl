@@ -54,6 +54,8 @@ float4 sky_color : register(c205);
 // x the cloud cover (0: no clouds), yz the drift with the wind in tiles, w the layer's base
 // height in metres
 float4 clouds : register(c206);
+// x 1 draws the stars, 0 leaves them out
+float4 options : register(c207);
 
 // One tile of the cloud picture, in metres: the wind's drift (`clouds.yz`) is counted in them.
 static const float CLOUD_TILE = 2500.0;
@@ -118,7 +120,7 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     // the stars: only at night (fading in with the dusk), above the horizon
     float pixel = length(float2(length(ddx(d)), length(ddy(d))));
     float night = smoothstep(0.35, 1.0, sky.w);
-    c += float3(0.85, 0.9, 1.0) * stars(d, pixel) * night * saturate(elev * 8.0);
+    c += float3(0.85, 0.9, 1.0) * stars(d, pixel) * night * saturate(elev * 8.0) * options.x;
     // the cloud layer, flat at its base height: the ground point under the view ray, in
     // tiles, the wind's drift added; none below the horizon, fading into it above
     float t = clouds.w / max(d.z, 0.02);

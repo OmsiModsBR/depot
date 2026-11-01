@@ -246,6 +246,18 @@ pub struct Settings {
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
     /// snow without it.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only, and ours (OMSI 2 has no such options): leave out what takes
+    /// effort to draw. All on (and no texture ceiling) draws what the renderer draws without
+    /// them. Raindrops on glass:
+    pub dx9_glass_rain: bool,
+    /// The glow round the lights (headlights, lamps, beacons).
+    pub dx9_coronas: bool,
+    /// The night's stars.
+    pub dx9_stars: bool,
+    /// The weather's clouds over the sky; the light they give the scene stays.
+    pub dx9_cloud_picture: bool,
+    /// The most texels a side of a texture is loaded at (0 = no ceiling).
+    pub dx9_texture_limit: u32,
     /// How many people wait and ride, against the map's own numbers (OMSI's `AIPassFactor`,
     /// 1 = 100 %).
     pub pax_density: f32,
@@ -544,6 +556,11 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: false,
+            dx9_glass_rain: true,
+            dx9_coronas: true,
+            dx9_stars: true,
+            dx9_cloud_picture: true,
+            dx9_texture_limit: 0,
             pax_density: 1.0,
             vol_ai: 1.0,
             vol_scenery: 1.0,
@@ -916,6 +933,17 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "dx9_glass_rain" => s.dx9_glass_rain = b(v),
+                "dx9_coronas" => s.dx9_coronas = b(v),
+                "dx9_stars" => s.dx9_stars = b(v),
+                "dx9_cloud_picture" => s.dx9_cloud_picture = b(v),
+                // (the sizes the page offers; anything else is no ceiling)
+                "dx9_texture_limit" => {
+                    s.dx9_texture_limit = match v.parse::<u32>() {
+                        Ok(n @ (512 | 1024 | 2048)) => n,
+                        _ => 0,
+                    }
+                }
                 "pax_density" | "aipassfactor" => {
                     s.pax_density = v
                         .trim_end_matches('%')
@@ -1477,6 +1505,17 @@ impl Settings {
     /// under that API (the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
         self.dx9_snow && self.backend() == crate::output::Backend::D3d9
+    }
+
+    /// The effort-saving options of "DirectX9 (D3D9Ex)", for the device.
+    pub(crate) fn dx9_effects(&self) -> crate::output::Dx9Effects {
+        crate::output::Dx9Effects {
+            glass_rain: self.dx9_glass_rain,
+            coronas: self.dx9_coronas,
+            stars: self.dx9_stars,
+            cloud_picture: self.dx9_cloud_picture,
+            texture_limit: self.dx9_texture_limit,
+        }
     }
 
     /// Whether a clear sky with no weather chosen may get a few fair-weather clouds (when

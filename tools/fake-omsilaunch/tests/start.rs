@@ -109,7 +109,10 @@ fn a_start_plans_first_and_leaves_nothing_behind() {
         start(&client, &data, &root, "s6", &world(), &hostile, &none),
         Err(StartError::Invalid(_))
     ));
-    assert_eq!(std::fs::read_to_string(&log).unwrap().lines().count(), before);
+    assert_eq!(
+        std::fs::read_to_string(&log).unwrap().lines().count(),
+        before
+    );
     assert_eq!(leftovers(&data), 0);
     let _ = std::fs::remove_dir_all(&dir);
 }

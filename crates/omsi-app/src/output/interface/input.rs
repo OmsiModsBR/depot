@@ -3,7 +3,7 @@
 //! limits, the mirrors drawn for the bus and laid over the picture, the driver's idle head and
 //! the navigator's placements in VR.
 
-pub(crate) use super::super::domain::backend::Backend;
+pub(crate) use super::super::domain::backend::{Backend, Dx9Effects};
 pub(crate) use super::super::domain::head_idle::{standstill, HeadIdle, Hold};
 pub(crate) use super::super::domain::mirror_hud::MirrorHud;
 pub(crate) use super::super::domain::vr_navigator::{Editing, Profiles};

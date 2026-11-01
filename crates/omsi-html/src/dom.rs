@@ -45,7 +45,9 @@ pub(crate) struct Dom {
     pub(crate) gen: u64,
 }
 
-pub(crate) const VOID: &[&str] = &["br", "img", "hr", "meta", "link", "input", "area", "base", "col", "source", "wbr"];
+pub(crate) const VOID: &[&str] = &[
+    "br", "img", "hr", "meta", "link", "input", "area", "base", "col", "source", "wbr",
+];
 
 pub(crate) fn decode_entities(s: &str) -> String {
     if !s.contains('&') {
@@ -151,7 +153,10 @@ impl Dom {
 
     pub(crate) fn parse(html: &str) -> Dom {
         let mut dom = Dom::default();
-        dom.nodes.push(Node { tag: "#root".into(), ..Node::default() });
+        dom.nodes.push(Node {
+            tag: "#root".into(),
+            ..Node::default()
+        });
         let mut stack: Vec<usize> = vec![0];
         let mut css = String::new();
         let b = html.as_bytes();
@@ -203,19 +208,32 @@ impl Dom {
                     None => (inner, ""),
                 };
                 let name = name.to_ascii_lowercase();
-                if name.is_empty() || !name.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                if name.is_empty()
+                    || !name
+                        .chars()
+                        .next()
+                        .map_or(false, |c| c.is_ascii_alphabetic())
+                {
                     continue;
                 }
-                let mut node = Node { tag: name.clone(), parent: stack.last().copied(), ..Node::default() };
+                let mut node = Node {
+                    tag: name.clone(),
+                    parent: stack.last().copied(),
+                    ..Node::default()
+                };
                 for (k, v) in parse_attrs(attrs) {
                     match k.as_str() {
                         "id" => node.id = v,
-                        "class" => node.classes = v.split_whitespace().map(str::to_string).collect(),
+                        "class" => {
+                            node.classes = v.split_whitespace().map(str::to_string).collect()
+                        }
                         "style" => node.inline = parse_style_attr(&v),
                         "src" => node.src = v,
                         "width" => node.attr_w = v,
                         "height" => node.attr_h = v,
-                        e if e.len() > 2 && e.starts_with("on") => node.on.push((e[2..].to_string(), v)),
+                        e if e.len() > 2 && e.starts_with("on") => {
+                            node.on.push((e[2..].to_string(), v))
+                        }
                         _ => {}
                     }
                 }
@@ -252,7 +270,12 @@ impl Dom {
                 }
                 let parent = *stack.last().unwrap();
                 let idx = dom.nodes.len();
-                dom.nodes.push(Node { tag: "#text".into(), text: Some(text), parent: Some(parent), ..Node::default() });
+                dom.nodes.push(Node {
+                    tag: "#text".into(),
+                    text: Some(text),
+                    parent: Some(parent),
+                    ..Node::default()
+                });
                 dom.nodes[parent].kids.push(idx);
             }
         }
@@ -266,7 +289,11 @@ impl Dom {
         if let Some(t) = &n.text {
             return t.clone();
         }
-        n.kids.iter().map(|&k| self.text_of(k)).collect::<Vec<_>>().join("")
+        n.kids
+            .iter()
+            .map(|&k| self.text_of(k))
+            .collect::<Vec<_>>()
+            .join("")
     }
 
     pub(crate) fn set_text(&mut self, idx: usize, s: String) {
@@ -280,14 +307,22 @@ impl Dom {
             }
         }
         let t = self.nodes.len();
-        self.nodes.push(Node { tag: "#text".into(), text: Some(s), parent: Some(idx), ..Node::default() });
+        self.nodes.push(Node {
+            tag: "#text".into(),
+            text: Some(s),
+            parent: Some(idx),
+            ..Node::default()
+        });
         self.nodes[idx].kids = vec![t];
         self.gen += 1;
     }
 
     /// A new element that hangs nowhere yet (`document.createElement`).
     pub(crate) fn create(&mut self, tag: &str) -> usize {
-        self.nodes.push(Node { tag: tag.to_string(), ..Node::default() });
+        self.nodes.push(Node {
+            tag: tag.to_string(),
+            ..Node::default()
+        });
         self.nodes.len() - 1
     }
 
@@ -356,11 +391,15 @@ impl Dom {
     }
 
     pub(crate) fn by_id(&self, id: &str) -> Option<usize> {
-        self.nodes.iter().position(|n| n.text.is_none() && !n.id.is_empty() && n.id == id)
+        self.nodes
+            .iter()
+            .position(|n| n.text.is_none() && !n.id.is_empty() && n.id == id)
     }
 
     pub(crate) fn matches(&self, idx: usize, chain: &Chain) -> bool {
-        let Some((last, rest)) = chain.split_last() else { return false };
+        let Some((last, rest)) = chain.split_last() else {
+            return false;
+        };
         if !self.matches_simple(idx, last) {
             return false;
         }
@@ -413,7 +452,10 @@ pub(crate) fn parse_attrs(s: &str) -> Vec<(String, String)> {
             i += 1;
             continue;
         }
-        let key: String = chars[start..i].iter().collect::<String>().to_ascii_lowercase();
+        let key: String = chars[start..i]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
         while i < chars.len() && chars[i].is_whitespace() {
             i += 1;
         }
@@ -479,7 +521,11 @@ pub(crate) fn parse_chain(sel: &str) -> Chain {
 pub(crate) fn specificity(chain: &Chain) -> u32 {
     chain
         .iter()
-        .map(|s| (s.id.is_some() as u32) * 10_000 + (s.classes.len() as u32) * 100 + s.tag.is_some() as u32)
+        .map(|s| {
+            (s.id.is_some() as u32) * 10_000
+                + (s.classes.len() as u32) * 100
+                + s.tag.is_some() as u32
+        })
         .sum()
 }
 
@@ -499,7 +545,9 @@ pub(crate) fn parse_css(src: &str) -> Vec<Rule> {
     let mut s = clean.as_str();
     while let Some(open) = s.find('{') {
         let head = s[..open].trim();
-        let Some(close) = s[open..].find('}') else { break };
+        let Some(close) = s[open..].find('}') else {
+            break;
+        };
         let body = &s[open + 1..open + close];
         s = &s[open + close + 1..];
         if head.starts_with('@') {
@@ -511,7 +559,11 @@ pub(crate) fn parse_css(src: &str) -> Vec<Rule> {
             }
             continue;
         }
-        let sels: Vec<Chain> = head.split(',').map(parse_chain).filter(|c| !c.is_empty()).collect();
+        let sels: Vec<Chain> = head
+            .split(',')
+            .map(parse_chain)
+            .filter(|c| !c.is_empty())
+            .collect();
         let decls = parse_style_attr(body);
         if !sels.is_empty() {
             let order = rules.len();

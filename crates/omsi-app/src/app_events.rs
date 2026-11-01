@@ -441,6 +441,7 @@ impl ApplicationHandler for App {
                     desktop_vsync,
                     self.settings.msaa,
                     u32::from(self.settings.anisotropy),
+                    self.settings.dx9_effects(),
                 );
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
