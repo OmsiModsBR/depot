@@ -665,10 +665,15 @@ fn the_performance_section_is_directx9s_and_owns_no_option() {
         );
         ui.drawn.contains_key(&id_of(id))
     };
-    // (the section in the list on the left, and under DirectX9 its rows)
-    let entry = format!("set-sec-{PERFORMANCE}");
-    assert!(!drawn("vulkan", &entry));
-    assert_eq!(drawn("d3d9", &entry), cfg!(windows));
+    // (the page offers the section only under the Depot's DirectX9)
+    let offered = |api: &str, omsi2: bool| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        performance_offered(&s, omsi2)
+    };
+    assert!(!offered("vulkan", false));
+    assert_eq!(offered("d3d9", false), cfg!(windows));
+    assert!(!offered("d3d9", true));
     if cfg!(windows) {
         for key in ["mirror_size", "max_obj_dist", "ai_max_random", "max_fps", "vsync"] {
             assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
