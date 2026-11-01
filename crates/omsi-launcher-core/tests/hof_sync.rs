@@ -158,3 +158,22 @@ fn a_read_only_target_is_counted_not_fatal() {
     // (running as root can write anyway)
     assert_eq!(s.created + s.failed, 1);
 }
+
+#[test]
+fn a_local_folder_never_resolves_into_another_root() {
+    let omsi = tmp("local-omsi");
+    let depot = tmp("local-depot");
+    put(&omsi.join("Vehicles/Bus/bus.bus"), "bus");
+    // missing in the depot: stays under the depot, whatever the case of the name
+    assert_eq!(
+        local_dir(&depot, "Vehicles/Bus"),
+        depot.join("Vehicles/Bus")
+    );
+    assert!(local_dir(&depot, "Vehicles/../../x").starts_with(&depot));
+    // present with another case: that spelling is used
+    put(&depot.join("vehicles/bus/a.hof"), "a");
+    assert_eq!(
+        local_dir(&depot, "Vehicles/Bus"),
+        depot.join("vehicles/bus")
+    );
+}

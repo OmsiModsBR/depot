@@ -97,6 +97,30 @@ pub fn source_files(roots: &[PathBuf]) -> Vec<PathBuf> {
     out
 }
 
+/// `rel` (slash separated) below `base`, matching existing folder names in any letter case
+/// and staying inside `base`: unlike `omsi_cfg::resolve_path`, a folder that is missing here
+/// is never looked for in another content root, so the result is always under `base`.
+pub fn local_dir(base: &Path, rel: &str) -> PathBuf {
+    let mut cur = base.to_path_buf();
+    for comp in rel
+        .split(['/', '\\'])
+        .filter(|c| !c.is_empty() && *c != "." && *c != "..")
+    {
+        let direct = cur.join(comp);
+        if direct.exists() {
+            cur = direct;
+            continue;
+        }
+        let found = std::fs::read_dir(&cur).ok().and_then(|rd| {
+            rd.flatten()
+                .map(|e| e.file_name())
+                .find(|n| n.to_string_lossy().eq_ignore_ascii_case(comp))
+        });
+        cur = cur.join(found.unwrap_or_else(|| comp.into()));
+    }
+    cur
+}
+
 /// The file of `dir` called `name` (any letter case).
 fn find_in(dir: &Path, name: &str) -> Option<PathBuf> {
     let direct = dir.join(name);

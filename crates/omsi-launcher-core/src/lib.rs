@@ -1347,10 +1347,14 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
         .iter()
         .filter_map(|v| {
             let rel = v.file.rsplit_once('/')?.0;
-            let overlay = omsi_cfg::resolve_path(&content, rel);
+            let overlay = hof_sync::local_dir(&content, rel);
+            // (never a folder of the installation)
+            if !overlay.starts_with(&content) || overlay.starts_with(&root) {
+                return None;
+            }
             let existing = bases
                 .iter()
-                .map(|b| omsi_cfg::resolve_path(b, rel))
+                .map(|b| hof_sync::local_dir(b, rel))
                 .filter(|p| p != &overlay && p.is_dir())
                 .collect();
             Some(hof_sync::VehicleDir { overlay, existing })
