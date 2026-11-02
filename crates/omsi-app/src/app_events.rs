@@ -3359,8 +3359,17 @@ impl ApplicationHandler for App {
                                 &lighting,
                             )
                         };
+                        // ("DirectX9 (D3D9Ex)": the renderer's own picture is blank - it runs
+                        // on a device that draws nothing - so the picture is the one the
+                        // Direct3D 9Ex device just drew for it, read back before it could be
+                        // shown)
+                        let drawn = match self.output.capture_window() {
+                            Some(Ok(picture)) => Ok(picture),
+                            Some(Err(e)) => Err(e),
+                            None => drawn.map(|px| (s.config.width, s.config.height, px)),
+                        };
                         match drawn {
-                            Ok(mut px) => match {
+                            Ok((pic_w, pic_h, mut px)) => match {
                                 // (with the on-screen controls, when there are)
                                 if include_touch {
                                     if let Some(over) =
@@ -3372,8 +3381,8 @@ impl ApplicationHandler for App {
                                 image::save_buffer(
                                     &path,
                                     &px,
-                                    s.config.width,
-                                    s.config.height,
+                                    pic_w,
+                                    pic_h,
                                     image::ColorType::Rgba8,
                                 )
                             } {

@@ -16,7 +16,7 @@ is a product decision.
 A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
 pictures and leaves the frame open, the new interface (the Esc menu, the Alt bar, the
 loading screen, drawn by `omsi-ui`) is mirrored into it, and the game presents it when its
-frame is done. Not drawn in that mode yet: smoke, triple screen, screenshots, pictures the
+frame is done. Not drawn in that mode yet: smoke, triple screen, pictures the
 GPU draws into textures (the navigator's maps, mirrors), and what "The scene layer" lists as
 not yet.
 
@@ -217,6 +217,10 @@ has it back at the owner's next draw.
 Known differences: no MSAA on the interface (`omsi-ui` draws the in-game overlay without it
 too), and a picture `omsi-ui` takes from a render target (`add_view`) draws nothing.
 
+## Screenshots (`D3d9Device::capture_window_frame`)
+
+The renderer's own off-screen picture is blank in this mode (it runs on wgpu's noop device, which draws nothing). The game's screenshot instead asks the renderer for its scene-only picture, which makes the plan sink draw the scene into the window's open frame, and then calls `capture_window_frame`: the frame is ended, its back buffer is read (resolved first when it is multisampled), the pixels come back as RGBA8 at the back buffer's size with alpha 255, and the frame is closed **without being presented**, so the saved picture holds the scene alone (no interface, which is drawn after) and nothing flashes on the screen. The scene is at the window's size even under a render scale. Triple screen is not drawn in this mode, so neither is it in a screenshot.
+
 ## The render scale (`d3d9/upscale.rs`, `render_scale.rs`, `shaders/upscale.hlsl`)
 
 An option for slower graphics chips, **off by default** and a **deliberate deviation from OMSI 2**, which always draws at the window's size. `D3d9Device::set_render_scale(scale, upscale)` (the game calls it every frame from its settings: `render_scale` and `dx9_upscale`) makes `draw_scene` draw the scene into a render target of `scale` times the frame's size (0.5 to 1; rounded, never beyond the frame) with a depth surface of its own and **without multisampling**, and then bring it up into the frame's picture before `draw_overlays` and the interface are drawn over it at the picture's own size, so text, the Alt bar and the HUD stay sharp.
@@ -228,7 +232,7 @@ An option for slower graphics chips, **off by default** and a **deliberate devia
 - The scale is the player's: there is no automatic governor under this API (Auto means 100 %).
 - It does not widen the hardware matrix: Shader Model 3.0 and the other floors stand, and it saves pixels, not memory (the targets add a few megabytes).
 
-Not done: screenshots are not drawn in this mode at all yet (see above), so which picture one would capture (the stretched one the player sees, or a full-size re-render) is still to be decided; it has no effect today.
+A screenshot under a render scale holds the picture the player sees (the scene brought up to the window's size, see "Screenshots" below), not a full-size re-render.
 
 ## Dependencies and provenance
 

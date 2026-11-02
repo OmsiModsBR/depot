@@ -677,6 +677,20 @@ impl D3d9Device {
             .as_ref()
             .expect("off-screen frame has targets")
             .color;
+        self.read_surface(color, w, h, D3DFMT_A8R8G8B8, false)
+    }
+
+    /// A render target's pixels as RGBA8, `w` by `h` (a 32-bit format, `format`, that is not
+    /// multisampled). With `opaque` the alpha is made 255 (a back buffer's alpha is not
+    /// defined).
+    fn read_surface(
+        &self,
+        color: &IDirect3DSurface9,
+        w: u32,
+        h: u32,
+        format: D3DFORMAT,
+        opaque: bool,
+    ) -> Result<Vec<u8>> {
         // SAFETY: as in `upload_texture`, reading instead of writing.
         unsafe {
             let mut sysmem = None;
@@ -684,7 +698,7 @@ impl D3d9Device {
                 .CreateOffscreenPlainSurface(
                     w,
                     h,
-                    D3DFMT_A8R8G8B8,
+                    format,
                     D3DPOOL_SYSTEMMEM,
                     &mut sysmem,
                     std::ptr::null_mut(),
@@ -705,11 +719,69 @@ impl D3d9Device {
                     w as usize * 4,
                 );
                 for px in row.chunks_exact(4) {
-                    out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+                    out.extend_from_slice(&[px[2], px[1], px[0], if opaque { 255 } else { px[3] }]);
                 }
             }
             let _ = sysmem.UnlockRect();
             Ok(out)
+        }
+    }
+
+    /// The picture drawn so far into the window's open frame (what the player would see of it
+    /// if it were shown now) as RGBA8, back-buffer sized, alpha 255; the frame is then closed
+    /// **without being shown**, so a screenshot does not flash on the screen. An off-screen device
+    /// or no open frame is an error (and leaves any frame as it was). The picture holds what was drawn
+    /// before the call: the scene at the picture's size, whatever the render scale, and none of
+    /// the interface if that comes after.
+    pub fn capture_window_frame(&mut self) -> Result<(u32, u32, Vec<u8>)> {
+        if !matches!(self.target, Target::Window(_)) {
+            return Err(BackendError::InvalidArgument("not a window device".into()));
+        }
+        if self.frame.take().is_none() {
+            return Err(BackendError::InvalidArgument("no frame".into()));
+        }
+        // SAFETY: plain calls on a live device with live surfaces; out-parameters are locals.
+        unsafe {
+            let ended = self.device.EndScene().map_err(map_err);
+            ended.and_then(|_| {
+                let back = self
+                    .device
+                    .GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO)
+                    .map_err(map_err)?;
+                let mut desc = D3DSURFACE_DESC::default();
+                back.GetDesc(&mut desc).map_err(map_err)?;
+                let (w, h) = (desc.Width, desc.Height);
+                if desc.MultiSampleType == D3DMULTISAMPLE_NONE {
+                    self.read_surface(&back, w, h, desc.Format, true)
+                } else {
+                    // (a multisampled picture cannot be read: resolved into a plain one first)
+                    let mut plain = None;
+                    self.device
+                        .CreateRenderTarget(
+                            w,
+                            h,
+                            desc.Format,
+                            D3DMULTISAMPLE_NONE,
+                            0,
+                            false,
+                            &mut plain,
+                            std::ptr::null_mut(),
+                        )
+                        .map_err(map_err)?;
+                    let plain = some(plain, "resolve target")?;
+                    self.device
+                        .StretchRect(
+                            &back,
+                            std::ptr::null(),
+                            &plain,
+                            std::ptr::null(),
+                            D3DTEXF_NONE,
+                        )
+                        .map_err(map_err)?;
+                    self.read_surface(&plain, w, h, desc.Format, true)
+                }
+                .map(|px| (w, h, px))
+            })
         }
     }
 

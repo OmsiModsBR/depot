@@ -304,3 +304,70 @@ fn recover_rebuilds_the_device_and_rejects_old_handles() {
     dev.draw(&batch(new)).unwrap();
     assert!(all_near(&dev.end_frame().unwrap(), [0, 255, 0, 255], 1));
 }
+
+/// A window device on a window nobody sees (a plain system-class window).
+fn window_device() -> Option<D3d9Device> {
+    use windows::core::w;
+    use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, WINDOW_EX_STYLE, WS_POPUP};
+    // SAFETY: a system class window, never shown; it outlives the test's device by being leaked.
+    let hwnd = unsafe {
+        CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            w!("STATIC"),
+            w!("capture test"),
+            WS_POPUP,
+            0,
+            0,
+            W as i32,
+            H as i32,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+    .ok()?;
+    // SAFETY: the window is live for the whole process.
+    match unsafe { D3d9Device::open_window(hwnd, W, H) } {
+        Ok(dev) => Some(dev),
+        Err(BackendError::Unsupported(why)) => {
+            eprintln!("no usable Direct3D 9Ex device here ({why}); skipping");
+            None
+        }
+        Err(e) => panic!("opening the window device failed: {e}"),
+    }
+}
+
+#[test]
+fn the_open_window_frame_is_captured_and_never_shown() {
+    let Some(mut dev) = window_device() else {
+        return;
+    };
+    for msaa in [1, 4] {
+        dev.set_quality(msaa, 1).unwrap();
+        dev.begin_frame(&frame([1., 0., 0., 1.])).unwrap();
+        let (w, h, px) = dev.capture_window_frame().unwrap();
+        assert_eq!(px.len(), (w * h * 4) as usize);
+        assert!(w > 0 && h > 0);
+        // (opaque red, whatever the back buffer's alpha says)
+        assert!(
+            all_near(&px, [255, 0, 0, 255], 1),
+            "msaa {msaa}: {:?}",
+            &px[..4]
+        );
+        // the frame is closed: a new one can begin, and a second capture has nothing to take
+        assert!(dev.capture_window_frame().is_err());
+        dev.begin_frame(&frame([0., 0., 1., 1.])).unwrap();
+        let (_, _, px) = dev.capture_window_frame().unwrap();
+        assert!(all_near(&px, [0, 0, 255, 255], 1));
+    }
+}
+
+#[test]
+fn an_off_screen_device_has_no_window_frame_to_capture() {
+    let Some(mut dev) = device() else { return };
+    dev.begin_frame(&frame([0., 1., 0., 1.])).unwrap();
+    assert!(dev.capture_window_frame().is_err());
+    // (the frame it refused to take is still open)
+    assert!(all_near(&dev.end_frame().unwrap(), [0, 255, 0, 255], 0));
+}

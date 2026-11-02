@@ -563,6 +563,20 @@ impl D3d9Output {
         self.lock().present();
     }
 
+    /// The picture drawn into the open frame so far (a screenshot's: the scene alone, drawn
+    /// by the renderer's picture for it) as window-sized RGBA8. The frame is closed and never
+    /// shown, so nothing flashes and the game's next picture starts clean.
+    pub(crate) fn capture(&self) -> Result<(u32, u32, Vec<u8>)> {
+        let mut inner = self.lock();
+        if !std::mem::take(&mut inner.open) {
+            return Err(anyhow!("no DirectX9 picture was drawn for the screenshot"));
+        }
+        inner
+            .device
+            .capture_window_frame()
+            .map_err(|e| anyhow!("DirectX9 (D3D9Ex) screenshot: {e}"))
+    }
+
     /// A mirror for an `omsi-ui` Gpu that draws over the window's picture: its pictures,
     /// vertex lists and draws go to this device too, under an owner of their own.
     pub(crate) fn ui_mirror(&self) -> omsi_ui::UiMirror {
