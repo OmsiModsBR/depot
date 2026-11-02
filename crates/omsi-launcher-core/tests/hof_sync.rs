@@ -221,3 +221,52 @@ fn a_replaced_overlay_file_is_kept_as_a_backup_and_no_temp_is_left() {
     );
     assert!(!depot.join("Vehicles/Bus/Map.hof.tmp").exists());
 }
+
+#[test]
+fn a_bus_own_newer_file_is_not_overridden_by_the_root_one() {
+    let omsi = tmp("newer-omsi");
+    let depot = tmp("newer-depot");
+    let src = tmp("newer-src");
+    put(&omsi.join("Vehicles/Bus/bus.bus"), "bus");
+    put(&src.join("hofs/Map.hof"), "root, older");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    put(&omsi.join("Vehicles/Bus/Map.hof"), "the bus's own, newer");
+    let s = sync(
+        &source_files(&[src]),
+        &[VehicleDir {
+            overlay: depot.join("Vehicles/Bus"),
+            existing: vec![omsi.join("Vehicles/Bus")],
+        }],
+    );
+    assert_eq!((s.created, s.updated, s.own_newer), (0, 0, 1));
+    assert!(s.changed.is_empty());
+    assert!(!depot.join("Vehicles/Bus/Map.hof").exists());
+}
+
+#[test]
+fn an_older_bus_file_is_overridden_and_only_that_folder_is_listed_as_changed() {
+    let omsi = tmp("older-omsi");
+    let depot = tmp("older-depot");
+    let src = tmp("older-src");
+    put(&omsi.join("Vehicles/A/a.bus"), "bus");
+    put(&omsi.join("Vehicles/A/Map.hof"), "the bus's own, older");
+    put(&omsi.join("Vehicles/B/b.bus"), "bus");
+    put(&omsi.join("Vehicles/B/Map.hof"), "same");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    put(&src.join("hof/Map.hof"), "same");
+    let a = VehicleDir {
+        overlay: depot.join("Vehicles/A"),
+        existing: vec![omsi.join("Vehicles/A")],
+    };
+    let b = VehicleDir {
+        overlay: depot.join("Vehicles/B"),
+        existing: vec![omsi.join("Vehicles/B")],
+    };
+    let s = sync(&source_files(&[src]), &[a, b]);
+    assert_eq!((s.created, s.identical, s.own_newer), (1, 1, 0));
+    assert_eq!(s.changed, vec![depot.join("Vehicles/A")]);
+    assert_eq!(
+        std::fs::read_to_string(depot.join("Vehicles/A/Map.hof")).unwrap(),
+        "same"
+    );
+}

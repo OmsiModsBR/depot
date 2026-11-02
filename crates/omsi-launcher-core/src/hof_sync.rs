@@ -41,13 +41,21 @@ pub struct Summary {
     pub failed: usize,
     /// The first few failures, with the reason.
     pub failures: Vec<String>,
+    /// Files left alone because the bus's own file in another folder differs and is newer than
+    /// the source (a bus's own, newer depot file is never overridden by the root's).
+    pub own_newer: usize,
+    /// The overlay folders where a file was written (created or replaced).
+    pub changed: Vec<PathBuf>,
+    /// The vehicle folders (by name, as the vehicle list has them) of the vehicles whose
+    /// overlay changed: only these are read again. Filled by the launcher, not by `sync`.
+    pub folders: Vec<String>,
 }
 
 impl Summary {
     pub fn line(&self) -> String {
         format!(
-            "hof sync: {} depot file(s) for {} vehicle folder(s): {} created, {} updated, {} already there, {} kept, {} failed",
-            self.sources, self.vehicles, self.created, self.updated, self.identical, self.kept, self.failed
+            "hof sync: {} depot file(s) for {} vehicle folder(s): {} created, {} updated, {} already there, {} kept, {} left to a newer bus file, {} failed",
+            self.sources, self.vehicles, self.created, self.updated, self.identical, self.kept, self.own_newer, self.failed
         ) + &self.failures.iter().map(|f| format!("; failed: {f}")).collect::<String>()
     }
 }
@@ -173,8 +181,9 @@ fn holds_vehicle(dir: &Path) -> bool {
 /// differing file of the same name in the overlay is replaced only when the source is newer,
 /// never in a folder that holds a vehicle (a mod's own files), and the file it replaces is
 /// kept beside it as `<name>.hof.bak`. A bus's own differing file in its other folders is
-/// not touched (the overlay copy is put beside it and, the game reading the overlay first,
-/// takes effect: whether the bus's own should win is open).
+/// not touched, and when it is newer than the source nothing is put beside it (the bus's
+/// newer file wins); when it is older, the overlay copy is put beside it and, the game
+/// reading the overlay first, takes effect.
 pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
     let mut sum = Summary {
         sources: sources.len(),
@@ -199,6 +208,11 @@ pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
                 || others.iter().any(|p| same_bytes(src, p))
             {
                 sum.identical += 1;
+                continue;
+            }
+            // (the bus's own file, when it is newer than the root's, is the one that stays)
+            if others.iter().any(|p| newer(p, src)) {
+                sum.own_newer += 1;
                 continue;
             }
             let replacing = in_overlay.is_some();
@@ -226,6 +240,9 @@ pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
                         let _ = std::fs::remove_file(&tmp);
                     })
             });
+            if r.is_ok() && !sum.changed.contains(&v.overlay) {
+                sum.changed.push(v.overlay.clone());
+            }
             match (r, replacing) {
                 (Ok(()), false) => sum.created += 1,
                 (Ok(()), true) => sum.updated += 1,

@@ -28,6 +28,8 @@ pub enum Msg {
         done: usize,
         total: usize,
     },
+    /// Some vehicles read again after the depot files were synced into their folders.
+    VehiclesRefreshed(Vec<core::VehicleInfo>),
     Lines {
         map: String,
         date: String,

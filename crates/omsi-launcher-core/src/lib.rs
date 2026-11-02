@@ -1347,6 +1347,7 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
     }
     let bases: Vec<PathBuf> = bases();
     let mut refused = 0;
+    let mut overlay_folder: Vec<(PathBuf, String)> = Vec::new();
     let dirs: Vec<hof_sync::VehicleDir> = vehicles
         .iter()
         .filter_map(|v| {
@@ -1360,10 +1361,17 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
                 .map(|b| hof_sync::local_dir(b, rel))
                 .filter(|p| p != &overlay && p.is_dir())
                 .collect();
+            overlay_folder.push((overlay.clone(), v.folder.clone()));
             Some(hof_sync::VehicleDir { overlay, existing })
         })
         .collect();
-    let sum = hof_sync::sync(&sources, &dirs);
+    let mut sum = hof_sync::sync(&sources, &dirs);
+    // (only the vehicles whose folder got a file are read again)
+    for (overlay, folder) in &overlay_folder {
+        if sum.changed.contains(overlay) && !sum.folders.contains(folder) {
+            sum.folders.push(folder.clone());
+        }
+    }
     let note = if refused > 0 {
         format!(" ({refused} folder(s) refused: they lead into the OMSI 2 folder)")
     } else {
@@ -1385,6 +1393,29 @@ fn sync_destination(
     let overlay = hof_sync::local_dir(content, rel);
     let real = resolved(&overlay);
     (within(&real, real_content) && !within(&real, real_root)).then_some(overlay)
+}
+
+/// The buses of the vehicle folders `folders` (by name), read again: after the depot files
+/// were synced into some of them, only these are read, not every vehicle folder.
+pub fn reread_vehicles(folders: &[String]) -> Vec<VehicleInfo> {
+    let lang = content_language();
+    let shared_hofs = shared_depot_names();
+    let mut out = Vec::new();
+    for (folder, dirs) in merged_folders("Vehicles") {
+        if !folders.iter().any(|f| f.eq_ignore_ascii_case(&folder)) {
+            continue;
+        }
+        let (mut list, _) = read_vehicle_folder(&folder, &dirs, &lang);
+        for v in list.iter_mut() {
+            for name in &shared_hofs {
+                if !v.hofs.iter().any(|h| h.eq_ignore_ascii_case(name)) {
+                    v.hofs.push(name.clone());
+                }
+            }
+        }
+        out.extend(list);
+    }
+    out
 }
 
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {

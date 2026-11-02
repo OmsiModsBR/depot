@@ -32,6 +32,13 @@ impl State {
                     false,
                 );
             }
+            Msg::VehiclesRefreshed(fresh) => {
+                for v in fresh {
+                    if let Some(old) = self.vehicles.iter_mut().find(|o| o.file == v.file) {
+                        *old = v;
+                    }
+                }
+            }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
                     return;
@@ -44,8 +51,14 @@ impl State {
                 // background (once per run; nothing waits for it)
                 {
                     let playable = vehicles.clone();
+                    let tx = self.tx.clone();
                     std::thread::spawn(move || {
-                        let _ = core::auto_sync_hofs(&playable);
+                        // (only the vehicles that got a file are read again)
+                        if let Some(sum) = core::auto_sync_hofs(&playable) {
+                            if !sum.folders.is_empty() {
+                                let _ = tx.send(Msg::VehiclesRefreshed(core::reread_vehicles(&sum.folders)));
+                            }
+                        }
                     });
                 }
                 let known: std::collections::HashSet<String> = self
