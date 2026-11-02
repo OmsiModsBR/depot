@@ -20,9 +20,10 @@ identifies you beyond what any web request carries (your IP address and the prog
 ## Steam
 
 On builds that include the Steam library (Windows x64, Linux x64, macOS), the program connects to
-the Steam client **if it is running**, as the game with Steam app id 252530. Steam itself then shows
-that you are playing, to the people Steam lets see it. Depot sends no data of its own through it
-and does nothing when Steam is not running.
+the Steam client **if it is running**, as the game with Steam app id 252530. This is deliberate: it
+lets Steam count the game as running and show the in-game overlay. Steam itself then shows that you
+are playing, to the people your Steam privacy settings let see it. Depot sends no data of its own
+through it and does nothing when Steam is not running.
 
 The program does not check for updates, does not install anything by itself and has no
 multiplayer or "playing now" feature: those were removed (see [CHANGELOG](../CHANGELOG.md)).
@@ -37,12 +38,10 @@ and edit; nothing is posted until you submit it yourself. Check the text for per
 
 ## The website
 
-The project's website is static, with no cookies or analytics. Opening it makes your browser
-contact two third parties, which see your IP address:
+The project's website is static, with no cookies or analytics, and its fonts are served from the
+site itself. Opening it makes your browser contact one third party, which sees your IP address:
 
 * **GitHub** (`api.github.com`), to read the latest release and the issue list.
-* **Google Fonts** (`fonts.googleapis.com`, `fonts.gstatic.com`), to load the page's fonts. We
-  intend to host the fonts ourselves so the page no longer calls Google; this note will change when it does.
 
 ## Questions
 

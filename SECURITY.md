@@ -24,8 +24,8 @@ Examples of what we want to hear about:
   files outside the game's folders, or run code, just by being loaded;
 * the **launcher's downloads** (the OmsiLaunch and module installers of the hidden original OMSI 2 mode): anything that
   could make it fetch or run something it should not;
-* the crash reporter or the logs sending or showing more than they say (passwords, tokens,
-  personal paths beyond the user name).
+* the local logs (`~/.depot`) recording more than they should (passwords, tokens, personal paths
+  beyond the user name). The program has no crash reporter and sends no logs: they stay on your computer.
 
 Not a vulnerability: a content file that only makes the game
 crash, which is a normal bug and goes into an [issue](https://github.com/OmsiModsBR/depot/issues/new/choose).
