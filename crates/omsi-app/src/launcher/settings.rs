@@ -886,6 +886,15 @@ pub static OPTS: &[Opt] = &[
             ("0.5", "50%"),
         ],
     ),
+    // (DirectX9 only, and only below 100 %, see `shown`)
+    pick(
+        GRAPHICS,
+        "Picture",
+        "dx9_upscale",
+        "Upscaling",
+        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper keeps edges tighter. Both differ from OMSI 2's picture.",
+        &[("bilinear", "Bilinear"), ("fsr1", "Sharper")],
+    ),
     pick(
         GRAPHICS,
         "Picture",
@@ -1069,6 +1078,35 @@ pub static OPTS: &[Opt] = &[
         "Snow",
         "Snowflakes fall in snow weather",
     ),
+    // (DirectX9 only, our own ways to ease its work, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_glass_rain",
+        "Raindrops on glass",
+        "Drops gather on the panes in the rain",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_coronas",
+        "Light coronas",
+        "The glow round lamps and headlights",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_stars",
+        "Stars",
+        "The points of light in the night sky",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_cloud_picture",
+        "Cloud picture",
+        "The clouds drawn over the sky; their light on the scene stays",
+    ),
     // Advanced graphics
     special(
         ADVANCED,
@@ -1077,6 +1115,20 @@ pub static OPTS: &[Opt] = &[
         "Texture memory",
         "How much the textures may take",
         Kind::TexMem,
+    ),
+    // (DirectX9 only, see `shown`)
+    pick(
+        ADVANCED,
+        "Textures",
+        "dx9_texture_limit",
+        "Texture size limit",
+        "Larger pictures load smaller: less memory, a softer image",
+        &[
+            ("0", "No limit"),
+            ("2048", "2048 px"),
+            ("1024", "1024 px"),
+            ("512", "512 px"),
+        ],
     ),
     toggle(
         ADVANCED,
@@ -2104,6 +2156,18 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
+        "dx9_upscale" => {
+            let scale = st.get("render_scale");
+            let scale = scale
+                .as_str()
+                .and_then(|t| t.trim().parse::<f64>().ok())
+                .or_else(|| scale.as_f64());
+            fixed && scale.is_some_and(|x| x > 0.0 && x < 0.995)
+        }
+        // (and our own ways to ease its work: DirectX9 draws what they leave out)
+        "dx9_glass_rain" | "dx9_coronas" | "dx9_stars" | "dx9_cloud_picture"
+        | "dx9_texture_limit" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),

@@ -1,6 +1,9 @@
 //! What the launcher asks of the game it runs in: the parts only the game has (its
-//! translations, the log of a phone's previous run, opening a web page, a phone's gallery). The game implements `Host` and hands
-//! it to the launcher; the tests hand a quiet one.
+//! translations, the log of a phone's previous run, opening a web page, a phone's gallery,
+//! its key names and controllers file). The game implements `Host` and hands it to the
+//! launcher; the tests hand a quiet one.
+
+use omsi_content::input::gamectrler::DeviceCfg;
 
 /// The game's side of the launcher.
 pub trait Host {
@@ -32,4 +35,26 @@ pub trait Host {
 
     /// Where the preview helper writes its log.
     fn helper_log(&self) -> std::path::PathBuf;
+
+    /// An action's name as the Controls page shows it, in the language `lang` (OMSI 2's
+    /// three letters) of the OMSI 2 folder `root`.
+    fn action_text(&self, root: &str, lang: &str, action: &str) -> String;
+
+    /// The actions the game knows (its language files' and the mods' event tables) and their
+    /// names, as `action_text` names them.
+    fn actions(&self, root: &str, lang: &str) -> Vec<(String, String)>;
+
+    /// A key and its Shift / Ctrl / Alt as the game names them ("Ctrl+D"), for a key the
+    /// language's own table does not name.
+    fn key_name(&self, scan: i64, modifier: i64) -> String;
+
+    /// The DirectInput scan code the game reads for a key pressed; None for a key it has none
+    /// for.
+    fn dik_code(&self, key: winit::keyboard::KeyCode) -> Option<i32>;
+
+    /// The Depot's own game controllers file (`Inputs/gamectrler.cfg` in its content folder).
+    fn controllers_file(&self) -> Option<std::path::PathBuf>;
+
+    /// The game controllers saved to the Depot's own file.
+    fn save_controllers(&self, devices: &[DeviceCfg]) -> Result<(), String>;
 }

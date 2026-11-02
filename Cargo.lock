@@ -2864,12 +2864,15 @@ dependencies = [
  "libc",
  "log",
  "omsi-cfg",
+ "omsi-content",
  "omsi-integrity",
  "omsi-launcher-core",
+ "omsi-map",
  "omsi-ui",
  "pollster",
  "serde_json",
  "wgpu",
+ "winit",
 ]
 
 [[package]]
