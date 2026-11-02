@@ -13,7 +13,7 @@ mod open;
 mod timers;
 mod util;
 
-pub use caps::{gl_backend, poll_gpu, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
+pub use caps::{gl_backend, note_adapter, poll_gpu, wait_gpu, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB};
 pub use errors::{catch, catching};
 pub use formats::{DEPTH_FORMAT, MSAA};
 #[cfg(test)]

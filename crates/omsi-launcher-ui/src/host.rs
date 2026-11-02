@@ -65,6 +65,12 @@ pub trait Host {
     /// the game's texture budget reads it.
     fn adapter_texture_mb(&self) -> i64;
 
+    /// The most a chosen texture budget may come to on that adapter, in MB (0: not known
+    /// yet): a budget above it is taken down to it.
+    fn texture_ceiling_mb(&self) -> i64 {
+        0
+    }
+
     /// The bus radios' internet stations the player keeps (`radio.cfg`; the game's default
     /// list while there is none), each its name and address.
     fn own_stations(&self) -> Vec<(String, String)>;

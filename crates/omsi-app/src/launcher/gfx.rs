@@ -29,6 +29,8 @@ impl Gfx {
 
     fn open(adapter: wgpu::Adapter, surface: &wgpu::Surface<'static>) -> Result<Gfx> {
         let info = adapter.get_info();
+        // (the Settings page tells what the game's textures may take on it)
+        omsi_render::note_adapter(&adapter);
         let caps = surface.get_capabilities(&adapter);
         // (sRGB, as the interface's colours are given; else what the window offers first)
         let format = caps

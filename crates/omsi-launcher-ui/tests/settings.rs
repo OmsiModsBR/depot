@@ -282,6 +282,7 @@ fn frame(
         start_changed: false,
         omsi2: false,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     let opts = listed(sec, query, false, &st);
     section_body(
@@ -359,6 +360,7 @@ fn every_shown_option_has_its_control() {
             start_changed: false,
             omsi2: false,
             adapter_mb: 0,
+            ceiling_mb: 0,
         };
         for o in OPTS
             .iter()
@@ -464,6 +466,7 @@ fn directx9_offers_only_the_choices_it_allows() {
         start_changed: false,
         omsi2: false,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     for (key, want, now) in [
         ("mirror_size", vec!["0", "128", "256", "512"], "128"),
@@ -512,6 +515,7 @@ fn a_search_finds_options_in_any_section() {
         start_changed: false,
         omsi2: false,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     let found: Vec<&str> = listed(GENERAL, "doppler", false, &st)
         .iter()
@@ -583,6 +587,7 @@ fn the_interface_options_are_searched_counted_and_reset() {
         start_changed: false,
         omsi2: false,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     let keys = |q: &str, st: &Store| {
         listed(0, q, false, st)
@@ -603,6 +608,7 @@ fn the_interface_options_are_searched_counted_and_reset() {
         start_changed: false,
         omsi2: false,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     let changed_keys: Vec<&str> = listed(0, "", true, &st).iter().map(|o| o.key).collect();
     assert!(
@@ -681,6 +687,7 @@ fn the_original_omsi2_lists_only_what_it_has() {
         start_changed: false,
         omsi2: true,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     for (key, want) in [
         ("max_fps", Shown::Row),
@@ -714,6 +721,7 @@ fn the_depot_graphics_api_does_not_limit_the_original_omsi2() {
         start_changed: false,
         omsi2: true,
         adapter_mb: 0,
+        ceiling_mb: 0,
     };
     let o = OPTS.iter().find(|o| o.key == "mirror_refresh").unwrap();
     assert_eq!(shown(o, &st), Shown::Row);

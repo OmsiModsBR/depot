@@ -155,6 +155,7 @@ pub fn settings(f: &mut Frame, view: &mut SettingsView, area: Rect) -> Outside {
         start_changed: false,
         omsi2,
         adapter_mb: f.host.adapter_texture_mb(),
+        ceiling_mb: f.host.texture_ceiling_mb(),
     };
     // the bar: the search, all or the changed ones, how many are changed, the presets
     let bar_h = 34.0;
@@ -488,6 +489,20 @@ fn group_card(ui: &mut Ui, r: Rect, title: &str, rows: &[&Opt], st: &mut Store) 
     }
 }
 
+/// What the texture memory row says in place of its hint when the chosen amount is more than
+/// the graphics adapter holds (the game then takes it down, see `memory::texture_budget`):
+/// DirectX9 sees little of the card's memory, so a chosen amount can be above it.
+fn texture_notice(o: &Opt, st: &Store) -> Option<String> {
+    if !matches!(o.kind, Kind::TexMem) || st.ceiling_mb <= 0 {
+        return None;
+    }
+    let chosen = st.get(o.key).as_i64().filter(|m| *m > 0)?;
+    (chosen > st.ceiling_mb).then(|| {
+        omsi_ui::tr("The graphics card holds about %{size}: the game uses that much")
+            .replace("%{size}", &mb(st.ceiling_mb))
+    })
+}
+
 /// One option: its name (a dot when changed), what it does and when it takes effect, its
 /// control, and the way back to the default.
 fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
@@ -540,7 +555,7 @@ fn option_row(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
             .split_once(" - ")
             .map(|x| x.1.to_string())
             .unwrap_or_default(),
-        None => omsi_ui::tr(o.hint).into_owned(),
+        None => texture_notice(o, st).unwrap_or_else(|| omsi_ui::tr(o.hint).into_owned()),
     };
     let mut wx = x;
     if !hint.is_empty() {

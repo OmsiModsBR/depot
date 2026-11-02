@@ -12,6 +12,48 @@ pub static ADAPTER_TEXTURE_MB: std::sync::atomic::AtomicU64 = std::sync::atomic:
 /// discrete card), see `Renderer::new`.
 pub static ADAPTER_VRAM_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Take what the textures may take on `adapter` (wgpu does not tell a card's memory), see
+/// `ADAPTER_TEXTURE_MB`: the renderer does it as it opens, the launcher for its own device.
+pub fn note_adapter(adapter: &wgpu::Adapter) {
+    let info = adapter.get_info();
+    // What the textures may take on this adapter (wgpu does not tell a card's memory):
+    // a discrete card is taken for one of 2-4 GB, whose rest the pictures (the render
+    // targets, the shadow maps) and the driver need; an integrated one shares the
+    // system's memory, Apple's generously
+    let vram = dedicated_vram_mb(&info).or_else(|| vulkan_vram_mb(adapter));
+    let guess_mb: u64 = match info.device_type {
+        // (a card of 2 or 3 GB, where Windows says: half of it - 1600 MB of a GTX 1050's
+        // 2 GB left too little for the rest, and its Vulkan device was lost at the start;
+        // a card of 2 GB a third of it - with half, 4x MSAA, SSAO and the shadows its
+        // DirectX 12 device still ran out of memory on Grundorf within seconds, #114)
+        wgpu::DeviceType::DiscreteGpu => vram.filter(|v| *v >= 512).map_or(1600, |v| {
+            if v <= 2560 {
+                v * 35 / 100
+            } else if v <= 6144 {
+                (v / 2).min(1600)
+            } else {
+                v * 3 / 10
+            }
+        }),
+        wgpu::DeviceType::IntegratedGpu if info.backend == wgpu::Backend::Metal => 3000,
+        wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::VirtualGpu => 1000,
+        _ => 800,
+    };
+    ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
+    let discrete_vram = vram
+        .filter(|_| info.device_type == wgpu::DeviceType::DiscreteGpu)
+        .unwrap_or(0);
+    ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
+    log::info!(
+        "graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB",
+        info.name,
+        info.device_type,
+        info.backend,
+        vram.map(|v| format!(", {v} MB of its own"))
+            .unwrap_or_default()
+    );
+}
+
 /// The device runs on OpenGL (set in `Renderer::new`).
 pub(crate) static GL_BACKEND: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);

@@ -2071,6 +2071,8 @@ pub struct Store<'a> {
     pub omsi2: bool,
     /// (in) What the graphics adapter is taken to hold for textures, in MB (0: not known).
     pub adapter_mb: i64,
+    /// (in) The most a chosen texture budget may come to on it, in MB (0: not known).
+    pub ceiling_mb: i64,
 }
 
 impl Store<'_> {

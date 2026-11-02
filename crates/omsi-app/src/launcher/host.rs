@@ -77,6 +77,10 @@ impl omsi_launcher_ui::Host for GameHost {
         omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64
     }
 
+    fn texture_ceiling_mb(&self) -> i64 {
+        crate::core::memory::card_ceiling_mb().map_or(0, |m| m as i64)
+    }
+
     fn own_stations(&self) -> Vec<(String, String)> {
         crate::radio::own_stations()
     }
