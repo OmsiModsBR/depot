@@ -383,3 +383,51 @@ fn each_section_carries_the_people_in_it() {
     v.set_payload(&[]);
     assert_eq!(masses(&v), (8_000.0, 7_200.0));
 }
+
+/// A saved bend comes back: the rear section put at its heading stands there on the joint,
+/// standing and after the bodies are stepped, and the bus does not pull it straight.
+#[test]
+fn a_saved_bend_puts_the_rear_section_back() {
+    let (front, rear) = sections();
+    let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+    v.contact = Some(flat());
+    v.attach_trailer(rear);
+    v.enable_rigid_body();
+    frames(&mut v, 1.0, &|_| 0.0);
+    let bent = v.heading + 25.0;
+    v.bend_trailers(&[bent]);
+    // (where the part stands at once, before any step: on the joint, turned)
+    assert!(gap(&v) < 0.02, "{}", gap(&v));
+    assert!((v.trailers[0].heading - bent.rem_euclid(360.0)).abs() < 1e-6);
+    frames(&mut v, 2.0, &|_| 0.0);
+    let alpha = ((v.heading - v.trailers[0].heading + 540.0) % 360.0) - 180.0;
+    assert!((alpha + 25.0).abs() < 1.0, "alpha {alpha}");
+    assert!(gap(&v) < 0.02, "{}", gap(&v));
+    // a heading left out leaves the part as it is
+    v.bend_trailers(&[]);
+    let again = ((v.heading - v.trailers[0].heading + 540.0) % 360.0) - 180.0;
+    assert!((again - alpha).abs() < 1e-9);
+}
+
+/// The steering is found back from the axles' angles the physics hands the scripts for it
+/// (`Axle_Steering_<axle>_L/R`, as a situation saves them).
+#[test]
+fn the_steering_comes_back_from_the_axle_angles() {
+    let (front, rear) = sections();
+    let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+    v.contact = Some(flat());
+    v.attach_trailer(rear);
+    v.enable_rigid_body();
+    for steering in [0.6f32, -0.35, 0.0] {
+        frames(&mut v, 0.2, &|_| steering);
+        let rb = v.rigid().expect("the bus has a body");
+        // (the wheels axle by axle, the left one first)
+        let angle = |name: &str| {
+            let axle: usize = name.split('_').nth(2)?.parse().ok()?;
+            Some(rb.axle_steer(axle * 2))
+        };
+        let back = v.steering_for_axle_angles(angle).expect("the bus steers");
+        assert!((back - steering).abs() < 1e-3, "{back} for {steering}");
+    }
+    assert_eq!(v.steering_for_axle_angles(|_| None), None);
+}

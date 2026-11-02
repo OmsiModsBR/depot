@@ -52,6 +52,28 @@ impl VehicleInstance {
         self.trailers = trailers;
     }
 
+    /// Put the coupled parts back at the headings they had (degrees clockwise from north,
+    /// the way each part travels; one per part, from the front, a part left out stays as it
+    /// is): each hangs on the coupling of the part in front as that one now stands, turned
+    /// to its heading, and its body is hung there again at the next step. A saved situation
+    /// gives them, so an articulated bus comes back bent as it was left.
+    pub fn bend_trailers(&mut self, headings: &[f64]) {
+        let mut lead = (self.position, self.body_rotation());
+        for (t, &heading) in self.trailers.iter_mut().zip(headings) {
+            if !heading.is_finite() {
+                break;
+            }
+            let c = t.coupling_point(lead.0, lead.1);
+            t.heading = heading.rem_euclid(360.0);
+            let rot = t.body_rotation();
+            t.position = c - rot.transform_point3(t.coupling_front).as_dvec3();
+            let h = t.heading.to_radians();
+            t.place_pivot(c - DVec3::new(h.sin(), h.cos(), 0.0) * t.length as f64);
+            t.axle_z = None;
+            lead = (t.position, rot);
+        }
+    }
+
     /// Couple a vehicle behind this one (`[couple_back]`).
     pub fn attach_trailer(&mut self, ty: Arc<VehicleType>) {
         self.attach_trailer_ex(ty, false);

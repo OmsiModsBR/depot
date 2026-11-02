@@ -112,6 +112,52 @@ pub fn load_coupled_parts(
     parts
 }
 
+/// What a saved situation keeps beyond the scripts' own state, put back on a vehicle just
+/// spawned from it: the driver's brake pedal (`Brake`, or `brake_pedal`) and steering (from
+/// the axles' saved `Axle_Steering_*`, see `VehicleInstance::steering_for_axle_angles`) -
+/// each frame the controls write those variables again, so restored as variables alone the
+/// brake came off and the wheels went straight at once - and how the coupled parts stood
+/// against the vehicle (`bends`, degrees, from the front: `situation::coupled_bends`).
+pub(crate) fn restore_saved_controls(p: &mut Player, vars: &[(String, f32)], bends: &[f64]) {
+    let saved = |name: &str| {
+        vars.iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, x)| *x)
+            .filter(|x| x.is_finite())
+    };
+    if let Some(b) = saved("Brake").or_else(|| saved("brake_pedal")) {
+        p.axes.brake = b.clamp(0.0, 1.0);
+    }
+    if let Some(s) = p.vehicle.steering_for_axle_angles(saved) {
+        p.axes.steering = s;
+    }
+    let c = p.vehicle.controls();
+    p.vehicle.set_controls(omsi_sim::Controls {
+        brake: p.axes.brake,
+        steering: p.axes.steering,
+        ..c
+    });
+    if !bends.is_empty() {
+        let lead = p.vehicle.heading;
+        let headings: Vec<f64> = p
+            .vehicle
+            .trailers
+            .iter()
+            .zip(bends)
+            .map(|(t, b)| {
+                // (a part turned round was saved as its body faces)
+                let turned = if omsi_sim::vehicle::body_reversed(&t.ty.def, t.reversed) {
+                    180.0
+                } else {
+                    0.0
+                };
+                lead + b - turned
+            })
+            .collect();
+        p.vehicle.bend_trailers(&headings);
+    }
+}
+
 /// Choose the player's fleet number and registration before the script VM runs `{init}`.
 /// Manual plates win, free registrations come from the map, otherwise the selected number
 /// is paired with the bus's registration rules.
@@ -579,6 +625,7 @@ pub(crate) fn spawn_player(
         if let Some(km) = args.situation_odometer_km {
             p.vehicle.set_odometer_km(km);
         }
+        restore_saved_controls(&mut p, &args.situation_vars, &args.situation_trailers);
         // (after the scripts' init, which starts the textures afresh)
         if let Some(prefix) = &args.situation_script_textures {
             let n = crate::situation::restore_script_textures(&mut p.vehicle, prefix);
