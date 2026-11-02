@@ -50,6 +50,11 @@ pub fn ramp_progress_for(side: f32, clear: f32) -> f32 {
     hi
 }
 
+/// How much faster than the limit an emergency vehicle drives (50 km/h road: 75).
+pub const EMERGENCY_SPEED_FACTOR: f32 = 1.5;
+/// The most an emergency vehicle drives on any road (km/h).
+pub const EMERGENCY_MAX_KMH: f32 = 80.0;
+
 /// Hardest braking of an AI driver (m/s²): an emergency stop.
 pub const MAX_BRAKE: f32 = 8.0;
 
@@ -113,10 +118,19 @@ impl AiState {
         let (a, b) = (self.accel.max(0.1), self.decel.max(0.5));
         let v = self.speed;
         let limit = |l: &Lane| {
-            (l.speed_limit_kmh * self.desire)
+            let normal = (l.speed_limit_kmh * self.desire)
                 .min(self.max_speed_kmh)
-                .max(3.0)
-                / 3.6
+                .max(3.0);
+            // an emergency vehicle drives well above the limit, 75 km/h on a 50 road,
+            // never above `EMERGENCY_MAX_KMH` and never below what it would drive anyway
+            let kmh = if self.emergency {
+                (l.speed_limit_kmh * EMERGENCY_SPEED_FACTOR)
+                    .min(EMERGENCY_MAX_KMH)
+                    .max(normal)
+            } else {
+                normal
+            };
+            kmh / 3.6
         };
         let mut v0 = limit(lane);
         // a lower limit on the lanes ahead (a junction's turning lanes, a 30 zone) is

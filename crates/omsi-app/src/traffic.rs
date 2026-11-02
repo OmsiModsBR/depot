@@ -5025,7 +5025,10 @@ impl Traffic {
                     go
                 }
             };
-            if !go {
+            // an emergency vehicle goes through a red light; the right of way at the junction
+            // (`junction_stop`) still makes it wait for what is physically in its way, and
+            // the cross traffic gives way to it
+            if !go && !car.state.emergency {
                 stop = Some(d);
                 break;
             }
@@ -6562,6 +6565,13 @@ impl Traffic {
             }
             let merge_wait = self.plan_route_change(i, &by_lane);
             let way = self.way_lanes(&self.cars[i].state, 200.0);
+            // an emergency vehicle: faster than the limit, and no stop at a red light
+            // (`light_stop`); the one lookup per car and frame is all it costs
+            let emergency = self.cars[i]
+                .vehicle
+                .var("TrafficPriority")
+                .is_some_and(|v| v > 0.5);
+            self.cars[i].state.emergency = emergency;
             // traffic lights
             let light = if self.net.lanes[self.cars[i].state.lane].kind == LaneKind::Air {
                 None
