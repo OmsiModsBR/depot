@@ -110,6 +110,68 @@ fn arriving_ai_uses_the_timetable_stop_not_a_neighbour() {
     );
 }
 
+/// The destination window's "Make everyone get off": nobody on board means nothing to empty,
+/// and an emptied bus is registered as forced wherever it stands, no stop needed, only that
+/// bus; with nobody left on board the order ends by itself.
+#[test]
+fn emptying_a_bus_needs_riders_and_marks_only_that_bus() {
+    let dir = std::env::temp_dir().join(format!("omsi-empty-bus-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("test.bus"),
+        "[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("paths.cfg"),
+        "[pathpnt]\n1\n0\n0\n[pathpnt]\n0\n0\n0\n[pathlink]\n0\n1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("cabin.cfg"),
+        "[entry]\n0\n[exit]\n0\n[passpos]\n0\n0\n0.9\n0.45\n0\n",
+    )
+    .unwrap();
+    let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
+    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+    std::fs::remove_dir_all(&dir).unwrap();
+    let bus = |id| BusNow {
+        id,
+        next_stop: None,
+        cabin: cabin.clone(),
+        pos: DVec3::ZERO,
+        rot: Mat4::IDENTITY,
+        heading: 0.0,
+        speed: 0.0,
+        entry_open: vec![true],
+        exit_open: vec![true],
+        walk_open: None,
+        interior: 0.0,
+        air: CabinAir::default(),
+        half: DVec2::new(1.25, 6.0),
+        centre: DVec2::ZERO,
+        accel: DVec2::ZERO,
+        trailers: Vec::new(),
+        terminus: None,
+        takes: Takes::Terminus,
+        places_off: Vec::new(),
+        served: None,
+    };
+    let mut humans = Humans::new(Path::new("/nonexistent"));
+    // (nobody on board: nothing to empty, nothing marked)
+    assert_eq!(humans.force_disembark(BusId::Player), 0);
+    assert!(humans.empty_bus.is_empty());
+    let buses = [bus(BusId::Player), bus(BusId::Ai(1))];
+    let at = humans.register_buses(&buses, 0.0);
+    assert!(!at[&BusId::Player].forced && !at[&BusId::Ai(1)].forced);
+    // (an order for the player's bus, away from every stop)
+    humans.empty_bus.insert(BusId::Player);
+    let at = humans.register_buses(&buses, 0.0);
+    assert!(at[&BusId::Player].forced, "the emptied bus is forced");
+    assert!(!at[&BusId::Ai(1)].forced, "another bus is not");
+    assert_eq!(at[&BusId::Player].next, None, "with no stop to leave at");
+}
+
 /// A timetable bus waits for the people walking up to its doors from its stop and for
 /// those on their way out of it - not for the people still at the gather point, who
 /// held a full bus at the stop for good (#767).

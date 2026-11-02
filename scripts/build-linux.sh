@@ -16,4 +16,5 @@ cp assets/icons/app/depot-256.png "$out/depot.png"
 # (Steam's library, x86-64 only: an ARM build has no Steam, see crates/omsi-app/build.rs)
 [ "$(uname -m)" = x86_64 ] && cp assets/steam_redist/libsteam_api.so "$out/"
 cp scripts/linux/openomsi.desktop "$out/depot.desktop"
+cp THIRD_PARTY.md "$out/THIRD_PARTY.txt"
 printf '\nProject Depot %s built in %s\n' "$OPENOMSI_VERSION" "$out"
