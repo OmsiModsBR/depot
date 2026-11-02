@@ -422,6 +422,18 @@ impl VehicleType {
         }
     }
 
+    /// The paint schemes of a vehicle file in their order (the `Colorscheme` variable's
+    /// numbers), read from its model's `[CTC]` files without loading its meshes: what the
+    /// vehicle loaded in full has as `paint_schemes`. Empty when the model cannot be read.
+    pub fn paint_schemes_of(def: &Vehicle) -> Vec<PaintScheme> {
+        let dir = def.dir().to_path_buf();
+        def.model
+            .as_ref()
+            .and_then(|m| Model::load(&omsi_cfg::resolve_path(&dir, m)).ok())
+            .map(|model| Self::paint_schemes(&dir, &model))
+            .unwrap_or_default()
+    }
+
     /// The paint schemes of the model's `.cti` files, then of its own items.
     fn paint_schemes(dir: &Path, model: &Model) -> Vec<PaintScheme> {
         let mut paint_schemes = Vec::new();

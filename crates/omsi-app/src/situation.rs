@@ -197,6 +197,7 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
         }
         args.situation_strvars = v.string_vars.clone();
         args.situation_script_textures = script_texture_prefix(&sit.path, i);
+        args.situation_trailers = coupled_bends(&sit.vehicles, i);
         log::info!(
             "situation: player {} at {:?} line {:?} tour {:?} hof {:?}, {} vars",
             v.file,
@@ -233,6 +234,7 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
                 strvars: v.string_vars.clone(),
                 odometer_km: saved_odometer_km(v, legacy_odometer_ids),
                 script_textures: script_texture_prefix(&sit.path, i),
+                trailers: coupled_bends(&sit.vehicles, i),
             }
         })
         .collect();
@@ -242,6 +244,29 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
             args.situation_others.len()
         );
     }
+}
+
+/// How the parts coupled behind vehicle `lead` of a situation stood against it: each part's
+/// heading less the vehicle's (degrees, -180..180), from the front. The parts are the
+/// vehicles listed after it whose `[coupledWith]` names the one before them (the number is
+/// where that one is in the list, counted from the part itself: -1).
+pub fn coupled_bends(
+    vehicles: &[omsi_content::situation::SituationVehicle],
+    lead: usize,
+) -> Vec<f64> {
+    let Some(front) = vehicles.get(lead) else {
+        return Vec::new();
+    };
+    let heading = situation_heading(&front.orientation);
+    vehicles
+        .iter()
+        .enumerate()
+        .skip(lead + 1)
+        .take_while(|(j, v)| v.coupled_with.map(|c| *j as i64 + c as i64) == Some(*j as i64 - 1))
+        .map(|(_, v)| {
+            (situation_heading(&v.orientation) - heading + 540.0).rem_euclid(360.0) - 180.0
+        })
+        .collect()
 }
 
 /// The files of a vehicle's `[scripttexture]` images saved with a situation, as OMSI
@@ -268,6 +293,11 @@ fn script_texture_file(prefix: &Path, texture: usize) -> PathBuf {
 /// earlier save under the same name go first: a later bus does not get another's. The
 /// number of images written.
 pub fn save_script_textures(osn: &Path, vehicles: &[&omsi_sim::VehicleInstance]) -> usize {
+    // (each vehicle's coupled parts are written after it, and counted)
+    let vehicles: Vec<Option<&omsi_sim::VehicleInstance>> = vehicles
+        .iter()
+        .flat_map(|v| std::iter::once(Some(*v)).chain(v.trailers.iter().map(|_| None)))
+        .collect();
     if let (Some(dir), Some(name)) = (
         osn.parent(),
         osn.file_name().map(|n| n.to_string_lossy().into_owned()),
@@ -291,7 +321,7 @@ pub fn save_script_textures(osn: &Path, vehicles: &[&omsi_sim::VehicleInstance])
     }
     let mut written = 0;
     for (v, vehicle) in vehicles.iter().enumerate() {
-        let Some(prefix) = script_texture_prefix(osn, v) else {
+        let (Some(vehicle), Some(prefix)) = (vehicle, script_texture_prefix(osn, v)) else {
             continue;
         };
         for (i, st) in vehicle.host.script_textures.iter().enumerate() {
@@ -431,12 +461,26 @@ pub(crate) fn build_situation(
             .to_string_lossy()
             .replace('/', "\\")
     };
+    // the body's rotation as OMSI writes it: a quaternion (x, y, z, w) about the up axis,
+    // then three more numbers (zero for a standing vehicle)
+    let orientation = |heading: f64| {
+        let h = heading.to_radians() / 2.0;
+        [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0]
+    };
+    // the tile and the place in it: x, height, y (a height under the world - the vehicle
+    // fell through an unloaded tile - is not saved: the ground of the place is, #33)
+    let place = |p: glam::DVec3| {
+        let (tile, (lx, ly)) = omsi_map::world_to_tile_local(p.x, p.y);
+        let z = if plausible_height(p.z) {
+            p.z
+        } else {
+            world.ground_height(p.x, p.y).unwrap_or(0.0)
+        };
+        (tile, [lx, z, ly])
+    };
     let vehicle_record = |v: &omsi_sim::VehicleInstance, mine: bool| -> SituationVehicle {
-        let (tile, (lx, ly)) = omsi_map::world_to_tile_local(v.position.x, v.position.y);
-        // the body's rotation as OMSI writes it: a quaternion (x, y, z, w) about the up axis,
-        // then three more numbers (zero for a standing vehicle)
-        let h = v.heading.to_radians() / 2.0;
-        let orientation = [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0];
+        let (tile, pos) = place(v.position);
+        let orientation = orientation(v.heading);
         let vars: Vec<(String, f64)> =
             v.ty.program
                 .var_names
@@ -461,18 +505,9 @@ pub(crate) fn build_situation(
                     )
                 })
                 .collect();
-        // (a height under the world - the vehicle fell through an unloaded tile - is not
-        // saved: the ground of the place is, #33)
-        let z = if plausible_height(v.position.z) {
-            v.position.z
-        } else {
-            world
-                .ground_height(v.position.x, v.position.y)
-                .unwrap_or(0.0)
-        };
         SituationVehicle {
             file: rel(&v.ty.def.path),
-            pos: [lx, z, ly],
+            pos,
             orientation,
             tile,
             odometer_km: v.odometer_km(),
@@ -488,6 +523,33 @@ pub(crate) fn build_situation(
             string_vars,
             timetable: Vec::new(),
         }
+    };
+    // the parts coupled behind a vehicle (an articulated bus's rear sections), each where it
+    // stands and turned as it is, after the vehicle and coupled to the one before it
+    // (`[coupledWith]` -1): loaded, the bus comes back bent as it was left. They keep no
+    // variables of their own (the vehicle's scripts work them).
+    let trailer_records = |v: &omsi_sim::VehicleInstance| -> Vec<SituationVehicle> {
+        v.trailers
+            .iter()
+            .map(|t| {
+                let (tile, pos) = place(t.position);
+                SituationVehicle {
+                    file: rel(&t.ty.def.path),
+                    pos,
+                    orientation: orientation(t.body_heading()),
+                    tile,
+                    odometer_km: v.odometer_km(),
+                    paint: v
+                        .host
+                        .hof
+                        .as_ref()
+                        .map(|h| h.name.clone())
+                        .unwrap_or_default(),
+                    coupled_with: Some(-1),
+                    ..Default::default()
+                }
+            })
+            .collect()
     };
     let mut vehicles = Vec::new();
     let mut my = -1;
@@ -507,11 +569,13 @@ pub(crate) fn build_situation(
             ];
         }
         vehicles.push(rec);
+        vehicles.extend(trailer_records(&p.vehicle));
     }
     // and the vehicles placed besides it, standing where they are (only the driven one was
     // written: a session continued with the last one alone, #139)
     for q in placed {
         vehicles.push(vehicle_record(&q.vehicle, false));
+        vehicles.extend(trailer_records(&q.vehicle));
     }
     let (cam_tile, cam_local) = omsi_map::world_to_tile_local(camera.position.x, camera.position.y);
     Situation {

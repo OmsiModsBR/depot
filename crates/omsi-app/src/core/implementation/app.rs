@@ -484,6 +484,7 @@ impl App {
                         situation_odometer_km: o.odometer_km,
                         situation_script_textures: o.script_textures.clone(),
                         situation_others: Vec::new(),
+                        situation_trailers: o.trailers.clone(),
                         line: None,
                         tour: None,
                         trip: None,

@@ -1,0 +1,11 @@
+[package]
+name = "omsi-devtools-link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The link between the game and the launcher's developer tools: handshake, non-blocking queues and the two ends, over any pair of byte streams (no operating-system endpoint, no socket)"
+
+[dependencies]
+omsi-devtools-proto = { path = "../omsi-devtools-proto" }
+serde.workspace = true
+thiserror.workspace = true

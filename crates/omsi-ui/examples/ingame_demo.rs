@@ -643,6 +643,7 @@ fn main() {
                 ]),
                 selected: Some(0),
                 empty: String::new(),
+                riders: true,
             }),
         ),
     ];
