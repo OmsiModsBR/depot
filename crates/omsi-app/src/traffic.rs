@@ -522,11 +522,6 @@ pub struct DormantCar {
     pub walk: u64,
 }
 
-fn street_lane_weight(l: &omsi_sim::traffic::Lane) -> Option<f64> {
-    (l.kind == LaneKind::Street && !l.no_cars && l.density > 0.0 && l.length() >= 8.0)
-        .then(|| l.length() as f64 * l.density.clamp(0.05, 4.0) as f64)
-}
-
 /// How long (s) a population pass of the game may spend putting cars on the road (see
 /// `Traffic::populate_budget`): a few cars, then the rest a tenth of a second later.
 pub const POPULATE_BUDGET: f64 = 0.003;
@@ -556,8 +551,6 @@ pub struct PopulateSplit {
 
 pub struct Traffic {
     pub net: Network,
-    /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
-    pub street_weight: f64,
     /// Parked cars standing in or beside a lane: per lane, (distance along it, signed
     /// lateral offset of the car's centre, + = right). A car in the lane's middle is an
     /// obstacle to stop behind; one over the kerb side is passed with a swerve to the left.
@@ -599,7 +592,7 @@ pub struct Traffic {
     /// Where the last spawn pass stopped when it ran out of budget.
     pub spawn_cursor: usize,
     pub rng: u64,
-    /// Target number of cars around the camera.
+    /// Whether random street traffic runs at all (0: none; it no longer sets the density).
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
     /// on the roads - no aircraft, no parked car pulling out - while `target` is 0.
@@ -749,9 +742,6 @@ pub struct Traffic {
     pub keep_clear: Vec<omsi_sim::collision::Obb>,
     /// LAN play: this game draws the host's traffic instead of its own (`lan_world`).
     pub mirror: bool,
-    /// Count only the cars within this distance of this point when filling up (the
-    /// population around a LAN player, `populate_lan_centers`).
-    pub count_near: Option<(DVec3, f64)>,
     /// LAN play: where the other players are (host): the traffic is kept around them too.
     pub lan_centers: Vec<DVec3>,
 }
@@ -1605,10 +1595,8 @@ impl Traffic {
         let light_log = omsi_cfg::flags::DEBUG_LIGHTS.text();
         let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
         let lanes = 0..net.lanes.len();
-        let street_weight = net.lanes.iter().filter_map(street_lane_weight).sum();
         let mut t = Traffic {
             net,
-            street_weight,
             parked,
             parked_waiting: Vec::new(),
             lane_tiles: lane_tiles.into_iter().collect(),
@@ -1690,7 +1678,6 @@ impl Traffic {
             twinned: Default::default(),
             keep_clear: Vec::new(),
             mirror: false,
-            count_near: None,
             lan_centers: Vec::new(),
         };
         t.sort_parked(parked_cars, lanes);
@@ -2267,13 +2254,14 @@ impl Traffic {
     }
 
     /// How many more vehicles without a timetable the options' `[AIMaxCountRandom]` lets on
-    /// the streets (those asleep out of range are not counted: they are not on them).
+    /// the map (those asleep out of range count: they are in circulation).
     fn random_room(&self) -> usize {
         let active = self
             .cars
             .iter()
             .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
-            .count();
+            .count()
+            + self.dormant.len();
         (self.max_random as usize).saturating_sub(active)
     }
 
@@ -2490,13 +2478,16 @@ impl Traffic {
         // Street traffic comes lane by lane (see `spawn_streets`): there is no number of
         // cars asked for around the player, only the options' cap on the whole map
         let dt = (self.time - self.spawn_time).clamp(0.0, 10.0);
-        self.spawn_time = self.time;
         // the cars that come into range again, where they have got to
         let t = Instant::now();
         self.wake_dormant(world, renderer, scene, center);
         self.populate_split.wake = t.elapsed().as_secs_f64();
         let t = Instant::now();
         self.spawn_streets(world, renderer, scene, center, dt);
+        // (a pass cut short by its budget leaves the time owed to the lanes it did not reach)
+        if self.spawn_cursor == 0 {
+            self.spawn_time = self.time;
+        }
         self.populate_split.fill = t.elapsed().as_secs_f64();
         let t = Instant::now();
         self.populate_kind(
@@ -2865,16 +2856,12 @@ impl Traffic {
             .collect();
         let total_w = acc.max(1e-3);
         let mut attempts = 0;
-        let counted_near = self.count_near.take();
         let unscheduled = self
             .cars
             .iter()
             .filter(|c| {
                 !c.is_bus()
                     && !c.gone
-                    && counted_near
-                        .map(|(p, r)| (c.vehicle.position - p).length() < r)
-                        .unwrap_or(true)
                     && self
                         .net
                         .lanes
@@ -3056,7 +3043,7 @@ impl Traffic {
         scene: &mut Scene,
         center: DVec3,
     ) {
-        if self.dormant.is_empty() {
+        if self.dormant.is_empty() || self.target == 0 || self.max_random == 0 {
             return;
         }
         // (the cap counts the cars asleep too: they wake into the cars it already counted)
@@ -3164,11 +3151,13 @@ impl Traffic {
         }
         let curve = self.street_density_map();
         let factor = self.unsched_factor;
-        let centers: Vec<DVec3> = std::iter::once(center)
-            .chain(self.lan_centers.iter().copied())
-            .collect();
         let mut room = spawn_room(self.max_random as usize, self.in_circulation());
-        let start = self.spawn_cursor.min(n);
+        // (from a random lane, so that no lane has a standing claim on the cap)
+        let start = if self.spawn_cursor > 0 {
+            self.spawn_cursor.min(n)
+        } else {
+            self.rand() as usize % n
+        };
         self.spawn_cursor = 0;
         for i in (start..n).chain(0..start) {
             if self.out_of_budget() {
@@ -3202,18 +3191,20 @@ impl Traffic {
                 self.lane_clocks[i] = None;
                 continue;
             }
-            let near = centers
-                .iter()
-                .any(|c| (begin - *c).truncate().length() < self.spawn_radius);
             match self.lane_clocks[i] {
                 None => {
+                    // (a lane the cap left no room for is not marked filled: it is
+                    // filled when room comes)
+                    if room == 0 {
+                        continue;
+                    }
                     let (u1, u2) = (self.rand_f() as f32, self.rand_f() as f32);
                     for _ in 0..initial_count(rate, len, u1, u2) {
                         if room == 0 {
                             break;
                         }
                         let s = (self.rand_f() * (len as f64 - 6.0)) as f32 + 3.0;
-                        if self.place_street_car(world, renderer, scene, center, i, s, near) {
+                        if self.place_street_car(world, renderer, scene, center, i, s) {
                             room -= 1;
                         }
                     }
@@ -3224,7 +3215,7 @@ impl Traffic {
                     if clock.step(dt) && room > 0 {
                         // (at the start of the lane, the way it is driven)
                         let s = 1.0f32.min(len * 0.1);
-                        if self.place_street_car(world, renderer, scene, center, i, s, near) {
+                        if self.place_street_car(world, renderer, scene, center, i, s) {
                             room -= 1;
                             let u = self.rand_f() as f32;
                             if let Some(w) = next_interval(rate, len, u) {
@@ -3239,7 +3230,7 @@ impl Traffic {
     }
 
     /// Put one random vehicle on street lane `lane` at `s`, if nothing stands there: a
-    /// real one in range of a player (`near`), else one asleep (see `DormantCar`).
+    /// real one where a player's range reaches it, else one asleep (see `DormantCar`).
     #[allow(clippy::too_many_arguments)]
     fn place_street_car(
         &mut self,
@@ -3249,9 +3240,11 @@ impl Traffic {
         center: DVec3,
         lane: usize,
         s: f32,
-        near: bool,
     ) -> bool {
         let (p, h) = self.net.lanes[lane].at(s);
+        let near = std::iter::once(center)
+            .chain(self.lan_centers.iter().copied())
+            .any(|c| (p - c).truncate().length() < self.spawn_radius);
         if self
             .cars
             .iter()
@@ -8461,10 +8454,6 @@ impl Traffic {
         let mut added = self.net.lanes.len()..self.net.lanes.len();
         if n > 0 {
             added = self.net.extend(new, 1.5);
-            self.street_weight += self.net.lanes[added.clone()]
-                .iter()
-                .filter_map(street_lane_weight)
-                .sum::<f64>();
             log::debug!(
                 "traffic: {} lanes added ({} in all)",
                 added.len(),

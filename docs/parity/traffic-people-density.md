@@ -13,11 +13,11 @@ to be settled by measurement.
 |---|---|---|
 | 1 | There is no target number of vehicles. Each street lane brings vehicles on by itself, at random intervals; a shorter interval means a denser road. | high |
 | 2 | The only global limit is the "vehicles without a timetable" cap (all of them in circulation, wherever they are). At the cap nobody appears until the count falls. | high |
-| 3 | There is no distance around the player and no "out of sight" rule: vehicles may appear anywhere on the loaded map, in view too. | high |
+| 3 | There is no distance around the player and no "out of sight" rule: vehicles may appear anywhere on the loaded map, in view too. (In the Depot, lanes far from every player are filled with vehicles that drive on unseen and take their bodies when they come near, as before; those near a player appear as real vehicles at once.) | high |
 | 4 | A lane's rate is the product of: its configured density (none = never), the day curve for the hour, the Road Traffic Factor, divided between the lanes of the road running the same way. | high |
 | 5 | The factor multiplies the curve linearly (twice the factor, twice the rate, below the cap). The curve is used as it is: no ceiling is applied inside the calculation. The factor control runs from 1 % to 300 %. | high / medium (curve ceiling) |
-| 6 | Arrivals are at the start of the lane. Refused only when the entry is occupied or the cap is reached. At most one per lane per pass; late timers do not catch up. | high |
-| 7 | When a scenario (or a map tile) loads, every lane without vehicles gets a random number of them, proportional to its rate and length, at random places along it. | high |
+| 6 | Arrivals are at the start of the lane. Refused when the entry is occupied (no room for the vehicle) or the cap is reached. At most one per lane per pass; late timers do not catch up. | high |
+| 7 | When a scenario (or a map tile) loads, every lane without vehicles gets a random number of them, proportional to its rate and length, at random places along it. If the cap is reached first, lanes are served from a random starting lane, and an unserved lane is filled later. | high |
 | 8 | Timetable vehicles do not use the Road Traffic Factor. | high |
 | 9 | People walking the pavements follow the map's people curve and the pavements nearby, never exceed half of the people pool, and are **not** scaled by the passengers factor. That factor only scales people waiting at stops. | high |
 
