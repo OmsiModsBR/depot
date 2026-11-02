@@ -42,7 +42,7 @@ impl Launcher {
         let size = self.ui.size;
         let full = Rect::new(0.0, 0.0, size.x, size.y);
         self.ui.solid(full);
-        self.ui.p().rect(full, super::start::SCRIM);
+        self.ui.p().rect(full, omsi_launcher_ui::window::SCRIM);
         let w = (size.x - 48.0).min(560.0);
         let lead = omsi_ui::tr("The server ended your game. Its message:");
         let th = self
@@ -107,7 +107,7 @@ impl Launcher {
         let size = self.ui.size;
         let full = Rect::new(0.0, 0.0, size.x, size.y);
         self.ui.solid(full);
-        self.ui.p().rect(full, super::start::SCRIM);
+        self.ui.p().rect(full, omsi_launcher_ui::window::SCRIM);
         let w = (size.x - 48.0).min(640.0);
         let lost = what.contains("graphics device was lost");
         let silent = what.contains("closed without a word");

@@ -35,7 +35,6 @@ pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
 mod stage;
-pub(crate) mod start;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::state::crash_of;
@@ -203,7 +202,7 @@ pub struct Launcher {
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
     /// The Maps page's start: its typed date and time, and the window open over the page.
-    start: start::StartView,
+    start: window::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
     pub mapview: mapview::MapView,
     map_rect: Option<Rect>,
@@ -316,7 +315,7 @@ impl Launcher {
             prerender: prerender::Prerender::default(),
             prerender_seen: 0,
             backdrop: backdrop::Backdrop::default(),
-            start: start::StartView::default(),
+            start: window::StartView::default(),
             mapview: mapview::MapView::new(),
             map_rect: None,
             map_tex: None,
@@ -371,13 +370,13 @@ impl Launcher {
             }
             // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
             let popup = match p.split(':').nth(1) {
-                Some("start-point") => Some(start::Popup::StartPoint),
-                Some("weather") => Some(start::Popup::Weather),
-                Some("explore") => Some(start::Popup::Explore),
+                Some("start-point") => Some(window::Popup::StartPoint),
+                Some("weather") => Some(window::Popup::Weather),
+                Some("explore") => Some(window::Popup::Explore),
                 _ => None,
             };
             if let Some(popup) = popup {
-                start::open(&mut app, popup);
+                window::open_start_window(frame!(app), &mut app.start, popup);
             }
             // (controls:reload, controls:add: the keyboard's windows)
             match p.split_once(':').filter(|x| x.0 == "controls").map(|x| x.1) {
@@ -1786,8 +1785,8 @@ impl Launcher {
                 "reset"
             } else if self.browser.is_none() && window {
                 match self.start.popup {
-                    Some(start::Popup::StartPoint) => "start-point",
-                    Some(start::Popup::Weather) => "weather",
+                    Some(window::Popup::StartPoint) => "start-point",
+                    Some(window::Popup::Weather) => "weather",
                     _ => "explore",
                 }
             } else if self.browser.is_none() && drive {
@@ -1815,7 +1814,7 @@ impl Launcher {
             } else if engine {
                 window::engine_dialog(frame!(self));
             } else if self.browser.is_none() && window {
-                start::popup(self);
+                self.start_window();
             } else if self.browser.is_none() && drive {
                 window::drive_dialog(frame!(self), &mut self.pages.profile);
             } else if self.browser.is_none() && keys {
@@ -1915,19 +1914,6 @@ impl Launcher {
         }
     }
 
-    /// The chosen map across `r`, the whole page behind the panels: every road the map has,
-    /// its entry points and the chosen trip's route, read from the tile files (see
-    /// `mapview`), or a word while it is read. `map_interact` gives it the mouse afterwards.
-    pub fn map_background(&mut self, r: Rect) {
-        map::background(
-            &mut self.ui,
-            &self.mapview,
-            self.map_tex,
-            &mut self.map_rect,
-            r,
-        );
-    }
-
     /// The Timetable page in `area`, over the launcher's map.
     pub(super) fn timetable_page(&mut self, area: Rect) {
         let mut map = map::GameMap {
@@ -1938,34 +1924,20 @@ impl Launcher {
         window::timetable(frame!(self), &mut self.pages.tt, &mut map, area);
     }
 
-    /// The mouse over a map inside a window of its own (what it drags, where it zooms, and
-    /// the entry point a click takes): the window's darkened frame claims the whole screen
-    /// (`over_ui`), so only the map's own rectangle decides what the mouse does to it.
-    pub fn map_interact_in_window(&mut self, r: Rect, window: Rect) {
-        let p = mapview::Pointer {
-            at: self.ui.input.mouse,
-            pressed: self.ui.input.pressed,
-            released: self.ui.input.released,
-            down: self.ui.input.down,
-            wheel: self.ui.input.wheel.y,
-            blocked: !r.contains(self.ui.input.mouse),
-        };
-        self.mapview.think(r, window, self.ui.scale, p);
-        if let Some(i) = self.mapview.take_clicked() {
-            if self.state.choice.entry != i as i32 {
-                log::info!(
-                    "launcher map: entry point {} of the map's list taken from the map",
-                    i + 1
-                );
-                self.state.choice.entry = i as i32;
-                self.state.touched();
-            }
-        }
-    }
-
     /// Where the preview's picture comes from, in the lower left of `r` (see `stage::badge`).
     fn preview_badge(&mut self, r: Rect) {
         stage::badge(&mut self.ui, &self.preview, r);
+    }
+
+    /// The start panel's window open over the Maps page (start points, weather, the map to
+    /// explore), over the launcher's map.
+    pub(super) fn start_window(&mut self) {
+        let mut map = map::GameMap {
+            view: &mut self.mapview,
+            tex: self.map_tex,
+            rect: &mut self.map_rect,
+        };
+        window::start_window(frame!(self), &mut self.start, &mut map);
     }
 
     /// The Settings page in `area`, and what it asks of the window: the reset's question, the
@@ -2426,10 +2398,10 @@ impl Launcher {
             self.maps.set_thumb(&file, self.thumbs.get(&file));
         }
         if let Some(r) = self.maps.start_area() {
-            start::card(self, r);
+            window::start_card(frame!(self), &mut self.start, r);
         }
         if self.maps.take_explore() {
-            self.start.popup = Some(start::Popup::Explore);
+            self.start.popup = Some(window::Popup::Explore);
         }
     }
 

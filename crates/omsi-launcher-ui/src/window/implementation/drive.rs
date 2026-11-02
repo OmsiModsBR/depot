@@ -9,9 +9,10 @@
 
 use super::super::domain::drive::*;
 use super::super::domain::frame::Frame;
-use super::super::domain::map::{Map, MapLook, Pointer};
+use super::super::domain::map::{Map, MapLook};
 use super::super::domain::showroom::Showroom;
 use super::super::interface::output::{core, days_text, hhmm, precip_text, State};
+use super::map::map_pointer;
 use glam::{DVec2, Vec2};
 use omsi_content::weather::psychro::dew_point_of_relative as dew_point;
 use omsi_launcher_lib::start::{favourite_key as fav_key, nearest_airport, read_favourites};
@@ -176,7 +177,7 @@ pub fn drive(
     }
     foot(f, dv, lay.foot, tab);
     if tab == 2 {
-        map_pointer(f, mv, lay.view, lay.clear);
+        map_pointer(f, mv, lay.view, lay.clear, true);
     } else {
         room.pointer(f.ui, lay.view);
     }
@@ -2738,28 +2739,4 @@ pub fn selected_weather_as_custom(root: &str, file: &str) -> Option<String> {
     let w = omsi_content::weather::Weather::load(&path).ok()?;
     let wet = (w.ground_wet[0] / 255.0).clamp(0.0, 1.0);
     Some(core::weather::CustomWeather::from_weather(&w, 1.0, wet).encode())
-}
-
-/// The mouse over the map: what it drags, where it zooms, and the entry point a click takes.
-/// Called once the page's panels are drawn - they have the first claim on it.
-fn map_pointer(f: &mut Frame, mv: &mut dyn Map, r: Rect, window: Rect) {
-    let p = Pointer {
-        at: f.ui.input.mouse,
-        pressed: f.ui.input.pressed,
-        released: f.ui.input.released,
-        down: f.ui.input.down,
-        wheel: f.ui.input.wheel.y,
-        blocked: f.ui.over_ui || !r.contains(f.ui.input.mouse),
-    };
-    mv.think(r, window, f.ui.scale, p);
-    if let Some(i) = mv.take_clicked() {
-        if f.state.choice.entry != i as i32 {
-            log::info!(
-                "launcher map: entry point {} of the map's list taken from the map",
-                i + 1
-            );
-            f.state.choice.entry = i as i32;
-            f.state.touched();
-        }
-    }
 }

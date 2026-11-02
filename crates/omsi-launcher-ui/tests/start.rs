@@ -1,4 +1,7 @@
-use openomsi_game::testing::launcher::start::*;
+//! The Maps page's start panel without a window: a typed date and time, the start points' search.
+
+use omsi_launcher_ui::state::date_shown;
+use omsi_launcher_ui::window::*;
 
 #[test]
 fn dates_are_typed_day_first_or_as_the_file_writes_them() {
