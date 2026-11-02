@@ -510,7 +510,7 @@ pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
     // (written whole under another name, then renamed over: a crash while saving, the very
     // case this is for, leaves the old file or the new one, never half of one)
     let tmp = file.with_extension("riders.tmp");
-    let done = std::fs::write(&tmp, t).and_then(|()| std::fs::rename(&tmp, &file));
+    let done = write_synced(&tmp, t.as_bytes()).and_then(|()| std::fs::rename(&tmp, &file));
     match done {
         Ok(()) => riders.len().min(MAX_RIDERS),
         Err(e) => {
@@ -521,6 +521,15 @@ pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
             0
         }
     }
+}
+
+/// Write `bytes` to `path` and flush them to the disk before returning, so a rename of it
+/// over an older file never leaves an empty or half-written one after a crash.
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(path)?;
+    f.write_all(bytes)?;
+    f.sync_all()
 }
 
 /// The riders saved next to `osn`: none without a file; a file that cannot be read, from a

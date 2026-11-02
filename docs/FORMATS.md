@@ -611,7 +611,9 @@ rim the reflection running on away from the camera.
   departure and approach they ask to get off), and when set `dest`, `alt`, `alt_seen`, `alt_m` (`%`, tab and
   line breaks in names written as `%25`, `%09`, `%0A`, `%0D`). Unknown keys and lines without a `seat` are
   skipped; any other first line, a hash that is not the `.osn`'s, or a file above 1 MB, makes the whole file ignored. Deleted or absent: an empty
-  bus on load. Saving over a name rewrites it, or removes it when nobody rides.
+  bus on load. Saving over a name rewrites it, or removes it when nobody rides. The file only
+  works beside its `.osn`, under the same name: copy, move or rename the two together (a situation
+  copied alone loads with an empty bus).
 * Weather `.owt`: `[wind] direction_deg speed_m/s`; `[clouds] type value` with type
   `-1` (clear), `Cumulus 1..3`, `Overcast 1`; the cover is drawn from `Texture\clouds.tga`
   (a grey density map) as a layer ~1500 m up drifting with the wind.
