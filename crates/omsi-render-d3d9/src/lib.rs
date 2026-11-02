@@ -16,6 +16,7 @@
 pub mod backend;
 pub mod caps;
 pub mod glass_rain;
+pub mod render_scale;
 pub mod scene;
 pub mod ui;
 
@@ -28,6 +29,7 @@ pub use backend::{
 };
 pub use caps::{Caps, ShaderModel};
 pub use glass_rain::SceneRain;
+pub use render_scale::Upscale;
 pub use scene::{
     DrawKind, SceneBatch, SceneClouds, SceneCoronas, SceneFrame, SceneLamps, SceneLight,
     SceneMaterial, SceneSky, SceneSmoke, SceneTexture, TexAddress, TexFormat,

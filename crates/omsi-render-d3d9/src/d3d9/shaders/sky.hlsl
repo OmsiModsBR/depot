@@ -54,6 +54,8 @@ float4 sky_color : register(c205);
 // x the cloud cover (0: no clouds), yz the drift with the wind in tiles, w the layer's base
 // height in metres
 float4 clouds : register(c206);
+// x 1 draws the stars, 0 leaves them out
+float4 options : register(c207);
 
 // One tile of the cloud picture, in metres: the wind's drift (`clouds.yz`) is counted in them.
 static const float CLOUD_TILE = 2500.0;
@@ -118,20 +120,31 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     // the stars: only at night (fading in with the dusk), above the horizon
     float pixel = length(float2(length(ddx(d)), length(ddy(d))));
     float night = smoothstep(0.35, 1.0, sky.w);
-    c += float3(0.85, 0.9, 1.0) * stars(d, pixel) * night * saturate(elev * 8.0);
+    // (the Stars option off skips the hash altogether: the condition is a constant)
+    [branch] if (options.x > 0.5) {
+        c += float3(0.85, 0.9, 1.0) * stars(d, pixel) * night * saturate(elev * 8.0);
+    }
     // the cloud layer, flat at its base height: the ground point under the view ray, in
-    // tiles, the wind's drift added; none below the horizon, fading into it above
+    // tiles, the wind's drift added; none below the horizon, fading into it above. With no
+    // cover (clear weather, or the Cloud picture option off) the picture, its lighting and
+    // the sample are skipped: the condition is a constant, and the result is the same as
+    // a cover of 0
     float t = clouds.w / max(d.z, 0.02);
     float2 ground = d.xy * (t / CLOUD_TILE) + clouds.yz;
-    float shape = tex2D(t_clouds, ground).a;
-    float closed = smoothstep(0.8, 1.0, clouds.x);
-    float cover = shape * saturate((d.z - 0.01) * 7.0) * ((clouds.x > 0.001) ? 1.0 : 0.0);
-    // lit as the scene is: white by day, warm at sunrise, at night hardly lighter than the
-    // night sky; the closed deck greys over
-    float sun_up = saturate(sun_dir.z * 4.0 + 0.3);
-    float3 lit = sun_color.rgb * 1.1 * sun_up + ambient.rgb * lerp(0.5, 1.5, sun_up) + sky_color.rgb * 0.3;
-    float3 cloud_col = max(min(lit, 0.97), sky_c * 1.12) * (1.0 - 0.3 * closed);
-    c = lerp(c, cloud_col, cover);
+    // (the gradients out here: a sample inside a branch has no derivatives of its own)
+    float2 ground_dx = ddx(ground);
+    float2 ground_dy = ddy(ground);
+    [branch] if (clouds.x > 0.001) {
+        float shape = tex2Dgrad(t_clouds, ground, ground_dx, ground_dy).a;
+        float closed = smoothstep(0.8, 1.0, clouds.x);
+        float cover = shape * saturate((d.z - 0.01) * 7.0);
+        // lit as the scene is: white by day, warm at sunrise, at night hardly lighter than the
+        // night sky; the closed deck greys over
+        float sun_up = saturate(sun_dir.z * 4.0 + 0.3);
+        float3 lit = sun_color.rgb * 1.1 * sun_up + ambient.rgb * lerp(0.5, 1.5, sun_up) + sky_color.rgb * 0.3;
+        float3 cloud_col = max(min(lit, 0.97), sky_c * 1.12) * (1.0 - 0.3 * closed);
+        c = lerp(c, cloud_col, cover);
+    }
     // fog swallows the horizon, and a thick fog (a few hundred metres of sight) the whole sky
     float horizon = saturate(1.0 - elev / 0.12) * saturate(fog.w * 1500.0);
     float whole = saturate(fog.w * 150.0 - 0.15) * clamp(1.0 - elev / 1.2, 0.35, 1.0);

@@ -242,7 +242,8 @@ as designed; `navigator_opacity` in older files),
 `nav_follow_view` (on foot the maps show a walker icon, in the free camera F4 a camera icon they are centred on; off by default),
 `boarding`, `detail_textures`, `exact_fare`, `enhanced`, `fullscreen`, `vsync`, `volume`
 and `drive_keys`, plus `render_scale` (`auto` or a fraction: the picture is drawn smaller
-and upscaled), `post_aa` (`fxaa`, the enhanced renderer's, or `off`), `view_distance` (m,
+and upscaled; under "DirectX9 (D3D9Ex)" `auto` is the window's size and the fraction is yours,
+with `dx9_upscale` = `bilinear` or `fsr1` choosing how it is brought up), `post_aa` (`fxaa`, the enhanced renderer's, or `off`), `view_distance` (m,
 how far the tiles are kept loaded), `texture_memory` (MB - OMSI's `texmemlimit` is read
 under that name too; an eighth of the machine's memory when unset), `texture_compression`
 (BC1-BC3 on the GPU, on by default), `reflections` (the materials' reflection maps,

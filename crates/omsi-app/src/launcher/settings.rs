@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 12] = [
+pub const SECTIONS: [&str; 13] = [
     "General",
     "Simulation",
     "Graphics",
@@ -30,6 +30,7 @@ pub const SECTIONS: [&str; 12] = [
     "Presets and files",
     "Interface",
     "Modules",
+    "Developer",
 ];
 pub const GENERAL: usize = 0;
 const SIMULATION: usize = 1;
@@ -44,10 +45,17 @@ pub const PRESETS: usize = 9;
 pub const INTERFACE: usize = 10;
 /// OmsiLaunch's optional modules: OMSI 2 mode only (the Depot has none).
 pub const MODULES: usize = 11;
+/// The Depot's developer tools (#500): the Depot engine only.
+pub const DEVELOPER: usize = 12;
 
-/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine.
+/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
+/// while the Depot is.
 fn section_shown(sec: usize, omsi2: bool) -> bool {
-    sec != MODULES || omsi2
+    match sec {
+        MODULES => omsi2,
+        DEVELOPER => !omsi2,
+        _ => true,
+    }
 }
 
 /// What the page remembers: the section shown, the search, "changed only".
@@ -720,6 +728,14 @@ pub static OPTS: &[Opt] = &[
         "The launcher rests while a game runs",
         "Gives the graphics card to the game",
     )),
+    // Developer
+    toggle(
+        DEVELOPER,
+        "Developer mode",
+        "developer_mode",
+        "Enable developer mode",
+        "Tools for people who make or test vehicles and maps. Off by default: while it is off, nothing of them runs. The tools themselves are not in this version yet",
+    ),
     // Simulation
     toggle(
         SIMULATION,
@@ -885,6 +901,15 @@ pub static OPTS: &[Opt] = &[
             ("0.67", "67%"),
             ("0.5", "50%"),
         ],
+    ),
+    // (DirectX9 only, and only below 100 %, see `shown`)
+    pick(
+        GRAPHICS,
+        "Picture",
+        "dx9_upscale",
+        "Upscaling",
+        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper keeps edges tighter. Both differ from OMSI 2's picture.",
+        &[("bilinear", "Bilinear"), ("fsr1", "Sharper")],
     ),
     pick(
         GRAPHICS,
@@ -1069,6 +1094,43 @@ pub static OPTS: &[Opt] = &[
         "Snow",
         "Snowflakes fall in snow weather",
     ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "fewer_night_lights",
+        "Fewer night lights",
+        "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
+    ),
+    // (DirectX9 only, our own ways to ease its work, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_glass_rain",
+        "Raindrops on glass",
+        "Drops gather on the panes in the rain",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_coronas",
+        "Light coronas",
+        "The glow round lamps and headlights",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_stars",
+        "Stars",
+        "The points of light in the night sky",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_cloud_picture",
+        "Cloud picture",
+        "The clouds drawn over the sky; their light on the scene stays",
+    ),
     // Advanced graphics
     special(
         ADVANCED,
@@ -1077,6 +1139,20 @@ pub static OPTS: &[Opt] = &[
         "Texture memory",
         "How much the textures may take",
         Kind::TexMem,
+    ),
+    // (DirectX9 only, see `shown`)
+    pick(
+        ADVANCED,
+        "Textures",
+        "dx9_texture_limit",
+        "Texture size limit",
+        "Larger pictures load smaller: less memory, a softer image",
+        &[
+            ("0", "No limit"),
+            ("2048", "2048 px"),
+            ("1024", "1024 px"),
+            ("512", "512 px"),
+        ],
     ),
     toggle(
         ADVANCED,
@@ -2104,6 +2180,19 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        "fewer_night_lights" => fixed,
+        // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
+        "dx9_upscale" => {
+            let scale = st.get("render_scale");
+            let scale = scale
+                .as_str()
+                .and_then(|t| t.trim().parse::<f64>().ok())
+                .or_else(|| scale.as_f64());
+            fixed && scale.is_some_and(|x| x > 0.0 && x < 0.995)
+        }
+        // (and our own ways to ease its work: DirectX9 draws what they leave out)
+        "dx9_glass_rain" | "dx9_coronas" | "dx9_stars" | "dx9_cloud_picture"
+        | "dx9_texture_limit" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),

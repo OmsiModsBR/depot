@@ -86,7 +86,8 @@ fn the_d3d9_lock_sets_every_option_of_the_table() {
     for l in openomsi_game::testing::api_limits::D3D9 {
         let ok = match l.key {
             "graphics" => s.graphics == "vanilla" && s.classic(),
-            "render_scale" => s.render_scale == 0.0,
+            // (the player's choice, held to the scales the table offers)
+            "render_scale" => s.render_scale == 0.5 && l.allows("0.5"),
             "mirror_size" => {
                 s.mirror_size == 128 && l.allows(&s.mirror_size.to_string()) && s.mirror_hud == 0
             }
@@ -131,8 +132,12 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
             .locked_for_api();
             assert_eq!(
                 (saved.msaa, saved.anisotropy, saved.render_scale),
-                (8, 16, 0.0)
+                (8, 16, 0.5)
             );
+            // (the render scale is DirectX9's own: the picture it draws is scaled there, the
+            // default renderer behind it is not told)
+            assert_eq!(saved.dx9_render_scale(), 0.5);
+            assert_eq!(saved.render_options().render_scale, 0.0);
             // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
             assert_eq!(
                 (
@@ -493,4 +498,23 @@ fn the_wheels_tremble_and_its_fade_out_survive_a_save() {
     // and one that says nonsense is left as it was
     let bad = Settings::from_text("ff_road_vib=loud\nff_fade=\n");
     assert_eq!((bad.ff_road_vib, bad.ff_fade), (1.0, 0.28));
+}
+
+/// After a lost graphics device the lighter settings never pick a DirectX 9 render scale for
+/// the player: that picture is only ever scaled by the player's own choice. The other APIs
+/// still get their automatic 75 %.
+#[test]
+fn a_lost_device_never_scales_the_d3d9_picture() {
+    use openomsi_game::testing::settings::Settings;
+    let mut other = Settings::from_text("graphics_api=vulkan\n");
+    other.apply_safe_gpu(2);
+    assert_eq!(other.render_scale, 0.75);
+    if cfg!(windows) {
+        let mut dx9 = Settings::from_text("graphics_api=d3d9\n");
+        dx9.apply_safe_gpu(2);
+        assert_eq!(dx9.render_scale, 0.0);
+        let mut chosen = Settings::from_text("graphics_api=d3d9\nrender_scale=0.5\n");
+        chosen.apply_safe_gpu(3);
+        assert_eq!(chosen.render_scale, 0.5);
+    }
 }
