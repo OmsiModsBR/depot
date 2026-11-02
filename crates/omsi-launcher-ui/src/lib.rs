@@ -11,6 +11,7 @@ pub mod kit;
 pub mod look;
 pub mod maps;
 pub mod offscreen;
+pub mod omsi2_map;
 pub mod pages;
 pub mod picture;
 pub mod sample;

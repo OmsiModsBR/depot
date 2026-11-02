@@ -925,6 +925,15 @@ pub static OPTS: &[Opt] = &[
             ("0.5", "50%"),
         ],
     ),
+    // (DirectX9 only, and only below 100 %, see `shown`)
+    pick(
+        GRAPHICS,
+        "Picture",
+        "dx9_upscale",
+        "Upscaling",
+        "How the smaller picture is scaled up to the window's size. Bilinear is the plain filter; Sharper keeps edges tighter. Both differ from OMSI 2's picture.",
+        &[("bilinear", "Bilinear"), ("fsr1", "Sharper")],
+    ),
     pick(
         GRAPHICS,
         "Picture",
@@ -1108,6 +1117,35 @@ pub static OPTS: &[Opt] = &[
         "Snow",
         "Snowflakes fall in snow weather",
     ),
+    // (DirectX9 only, our own ways to ease its work, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_glass_rain",
+        "Raindrops on glass",
+        "Drops gather on the panes in the rain",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_coronas",
+        "Light coronas",
+        "The glow round lamps and headlights",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_stars",
+        "Stars",
+        "The points of light in the night sky",
+    ),
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "dx9_cloud_picture",
+        "Cloud picture",
+        "The clouds drawn over the sky; their light on the scene stays",
+    ),
     // Advanced graphics
     special(
         ADVANCED,
@@ -1116,6 +1154,20 @@ pub static OPTS: &[Opt] = &[
         "Texture memory",
         "How much the textures may take",
         Kind::TexMem,
+    ),
+    // (DirectX9 only, see `shown`)
+    pick(
+        ADVANCED,
+        "Textures",
+        "dx9_texture_limit",
+        "Texture size limit",
+        "Larger pictures load smaller: less memory, a softer image",
+        &[
+            ("0", "No limit"),
+            ("2048", "2048 px"),
+            ("1024", "1024 px"),
+            ("512", "512 px"),
+        ],
     ),
     toggle(
         ADVANCED,
@@ -2143,6 +2195,18 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
+        "dx9_upscale" => {
+            let scale = st.get("render_scale");
+            let scale = scale
+                .as_str()
+                .and_then(|t| t.trim().parse::<f64>().ok())
+                .or_else(|| scale.as_f64());
+            fixed && scale.is_some_and(|x| x > 0.0 && x < 0.995)
+        }
+        // (and our own ways to ease its work: DirectX9 draws what they leave out)
+        "dx9_glass_rain" | "dx9_coronas" | "dx9_stars" | "dx9_cloud_picture"
+        | "dx9_texture_limit" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
@@ -2402,7 +2466,10 @@ enum Card<'a> {
 
 impl Card<'_> {
     fn wide(&self) -> bool {
-        matches!(self, Card::Api(_) | Card::Own("plugins" | "performance"))
+        matches!(
+            self,
+            Card::Api(_) | Card::Own("plugins" | "performance" | "omsi2-plugins")
+        )
     }
 
     fn height(&self) -> f32 {
@@ -2458,6 +2525,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
         let own: &[&str] = match sec {
             SOUND => &["radio"],
             DEVICES => &["controls"],
+            // (in OMSI 2 mode: its own plug-ins, each switched on or off)
+            PLUGINS if omsi2 => &["omsi2-plugins"],
             PLUGINS => &["plugins"],
             PRESETS => &["oop", "profiles", "files"],
             INTERFACE => &["preview"],
@@ -2479,6 +2548,8 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
 pub struct Outside {
     pub reset: bool,
     pub controls: Option<usize>,
+    /// (in) A game runs: the OMSI 2 folder's plug-ins are not switched meanwhile.
+    pub game_runs: bool,
     /// A module's install or removal (Modules, OMSI 2 mode).
     pub modules: super::omsi2_modules::Asks,
 }
@@ -2503,6 +2574,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let omsi2 = l.state.omsi2_engine();
     let mut start = start_values(&l.state.choice);
     let mut out = Outside::default();
+    out.game_runs = l.state.in_game();
     out.modules.idle =
         !l.state.in_game() && matches!(l.state.original.flow, omsi_launcher_ui::state::Flow::Idle);
     let narrow = body.w < 760.0;
@@ -3175,6 +3247,7 @@ fn own_card(
             y + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
+        "omsi2-plugins" => super::omsi2_plugins::card(ui, r, root, out.game_runs),
         "omsi-prefetch" => {
             super::omsi2_modules::card(ui, r, "omsi-prefetch", root, &mut out.modules)
         }

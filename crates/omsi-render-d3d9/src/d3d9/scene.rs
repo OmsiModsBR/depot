@@ -700,11 +700,29 @@ impl D3d9Device {
         shift(&mut self.scene.copies.meshes, from, into);
     }
 
+    /// The player's ceiling on the size of the textures put up from now on: one larger than
+    /// `texels` a side goes up smaller (its top mip levels left out, [`SceneTexture::fitted`]),
+    /// which takes less memory and gives a softer picture. 0 puts no ceiling. Textures
+    /// already up keep their size (they change when the scene is loaded again). An option of
+    /// ours, not OMSI 2's.
+    pub fn set_texture_limit(&mut self, texels: u32) {
+        self.texture_limit = texels;
+    }
+
+    /// The largest texture side put up: the device's, or the player's ceiling when lower.
+    fn texture_ceiling(&self) -> u32 {
+        match self.texture_limit {
+            0 => self.caps.max_texture_size,
+            limit => limit.min(self.caps.max_texture_size),
+        }
+    }
+
     /// Puts texture `id` of the game's scene up, replacing what had that id.
-    /// One larger than the device takes goes up smaller ([`SceneTexture::fitted`]).
+    /// One larger than the device takes (or than the player's ceiling) goes up smaller
+    /// ([`SceneTexture::fitted`]).
     pub fn set_scene_texture(&mut self, id: usize, texture: &SceneTexture) -> Result<()> {
         texture.validate(u32::MAX, self.caps.non_pow2_textures)?;
-        if let Some((width, height, levels)) = texture.fitted(self.caps.max_texture_size) {
+        if let Some((width, height, levels)) = texture.fitted(self.texture_ceiling()) {
             return self.set_scene_texture(
                 id,
                 &SceneTexture {
@@ -906,13 +924,21 @@ impl D3d9Device {
         frame.validate()?;
         self.ensure_scene_pipeline()?;
         self.step_glass_rain(frame);
-        let drawn = self.draw_scene_inner(
-            frame,
-            &material,
-            target.width,
-            target.height,
-            self.coverage(),
-        );
+        let native = (target.width, target.height);
+        let drawn = match self.scene_size_for(native) {
+            // (the render scale option: the scene is drawn smaller and brought up; the
+            // interface and the HUD's pictures that follow are drawn at the picture's size)
+            Some(small) => {
+                self.draw_scene_scaled(frame, &material, native, small, target.clear_rgba)
+            }
+            None => self.draw_scene_inner(
+                frame,
+                &material,
+                target.width,
+                target.height,
+                self.coverage(),
+            ),
+        };
         let restored = self.restore_scene_states();
         drawn?;
         restored?;
@@ -945,7 +971,7 @@ impl D3d9Device {
 
     /// Back to the backend's own states after a scene, whatever happened, with depth as the
     /// backend expects it.
-    fn restore_scene_states(&mut self) -> Result<()> {
+    pub(super) fn restore_scene_states(&mut self) -> Result<()> {
         // (the alpha-to-coverage and anisotropic filtering of the scene stay with it)
         self.a2c.set(&self.device, false)?;
         for stage in 0..4 {
@@ -982,7 +1008,7 @@ impl D3d9Device {
     }
 
     /// The alpha-to-coverage switch for a draw to the window's picture: when it is multisampled.
-    fn coverage(&self) -> A2c {
+    pub(super) fn coverage(&self) -> A2c {
         if self.msaa.1 > 1 {
             self.a2c
         } else {
@@ -1270,7 +1296,7 @@ impl D3d9Device {
         }
     }
 
-    fn draw_scene_inner<'m>(
+    pub(super) fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,

@@ -129,6 +129,8 @@ Over the sky's pictures the same pass draws two things, both in `shaders/sky.hls
 
 The sun's glow (`SceneSky::sun_glow`, the `sun_glow` setting, `shaders/sunglow.hlsl`, `d3d9/sky.rs`): a second pass of its own, drawn after the scene's batches (and the cab's): a camera-facing square on the sun's side, about 7 degrees either side of the sun (**provisional**), added to the picture (`ONE, ONE`) with the depth test against the far plane, so whatever stands in front of the sun hides it and glass (which writes no depth) lets it through. How much shows (`sky::glow_strength`): the sun's strength (0 under an Overcast cover), faded out between 2 degrees below and 3 above the horizon, thinned by the cloud cover (to 40 % at a cover of 0.8) and gone under a closed deck, the Overcast types (only when the clouds are drawn) and gone in a thick fog; its colour is the sun's own light. Off when the setting is off; the scene's pixel shader is untouched.
 
+Effort-saving options (all ours, none OMSI 2's, each off or unlimited by default so the default picture is unchanged): `SceneSky::no_stars` leaves the stars out of the sky's pixel shader (register `c207`, x, a constant branch that skips the star hash; a cover of 0 likewise skips the cloud sample and its lighting); `SceneSky::no_cloud_layer` leaves the cloud layer out (the cover still thins the sun glow); the app leaves out the coronas (`SceneFrame::coronas` empty) or the raindrops on glass (a `SceneRain` with no rain and no wiper) by what it hands in the frame; and `D3d9Device::set_texture_limit` makes `set_scene_texture` put a texture larger than the limit up smaller (`SceneTexture::fitted`, its top mip levels left out), for the textures put up from then on.
+
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
 in fog. They are camera-facing sprites the default renderer keeps the books of
@@ -213,11 +215,24 @@ has it back at the owner's next draw.
 Known differences: no MSAA on the interface (`omsi-ui` draws the in-game overlay without it
 too), and a picture `omsi-ui` takes from a render target (`add_view`) draws nothing.
 
+## The render scale (`d3d9/upscale.rs`, `render_scale.rs`, `shaders/upscale.hlsl`)
+
+An option for slower graphics chips, **off by default** and a **deliberate deviation from OMSI 2**, which always draws at the window's size. `D3d9Device::set_render_scale(scale, upscale)` (the game calls it every frame from its settings: `render_scale` and `dx9_upscale`) makes `draw_scene` draw the scene into a render target of `scale` times the frame's size (0.5 to 1; rounded, never beyond the frame) with a depth surface of its own and **without multisampling**, and then bring it up into the frame's picture before `draw_overlays` and the interface are drawn over it at the picture's own size, so text, the Alt bar and the HUD stay sharp.
+
+- `Upscale::Bilinear`: one full-screen pass reading the small picture through the card's bilinear filter.
+- `Upscale::Fsr1`: two passes, the edge-adaptive upsampling (`ps_easu`, twelve point reads) into a picture-sized target of its own, then the sharpening (`ps_rcas`, five reads) into the picture. Adapted to Shader Model 3.0 from AMD's FidelityFX Super Resolution 1 (MIT): source, commit, changes and the unassessed patent question are in [THIRD_PARTY.md](../../THIRD_PARTY.md). Pixel shader slots (the compiler's count, held to 460 by a test): bilinear 5, upsampling 379, sharpening 55. A device whose pixel shaders cannot take them draws with the bilinear filter and says so in the log.
+- At no scale (the default, `0`, or 100 %) nothing runs: no target is made, no pass is drawn, and the scene goes straight into the frame as it did before the option; a test holds the two pictures byte for byte equal. The targets follow the frame's size, are let go of when the device is resized or its depth format changes, and are made again at the next scene.
+- Mirrors (`draw_scene_into`) are not scaled; they have sizes of their own. The coronas, rain on glass, sky, sun glow and smoke are passes of the scene and are drawn in the small picture, with the pixel offset of its size.
+- The scale is the player's: there is no automatic governor under this API (Auto means 100 %).
+- It does not widen the hardware matrix: Shader Model 3.0 and the other floors stand, and it saves pixels, not memory (the targets add a few megabytes).
+
+Not done: screenshots are not drawn in this mode at all yet (see above), so which picture one would capture (the stretched one the player sees, or a full-size re-render) is still to be decided; it has no effect today.
+
 ## Dependencies and provenance
 
 Only the `windows` crate (Microsoft, MIT OR Apache-2.0), already used by `omsi-render`, at the
 workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader features;
-`winit` (workspace version) only for the example. All code is original to this repository.
+`winit` (workspace version) only for the example. All code is original to this repository, except `ps_easu` and `ps_rcas` of `shaders/upscale.hlsl`, which are adapted from AMD's FidelityFX Super Resolution 1 (MIT; see [THIRD_PARTY.md](../../THIRD_PARTY.md)).
 
 ## Testing
 
