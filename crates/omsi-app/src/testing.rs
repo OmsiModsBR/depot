@@ -256,12 +256,6 @@ pub mod launcher {
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }
-    pub mod timetable {
-        pub use crate::launcher::timetable::*;
-    }
-    pub mod timetable_plan {
-        pub use crate::launcher::timetable_plan::*;
-    }
     pub mod tray {
         pub use crate::launcher::tray::*;
     }

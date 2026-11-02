@@ -6,7 +6,7 @@
 //! draws a line on its streets or not at all). Stops are told apart by name (any case): the
 //! two sides of a street are one stop here, as a timetable's stop list has them.
 
-use omsi_launcher_lib as core;
+use super::super::interface::output::core;
 use std::collections::HashMap;
 
 /// A stop of the plan, by name.

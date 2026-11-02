@@ -1896,7 +1896,7 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         Page::Controls => super::pages::controls(l, content),
         Page::Mods => omsi_launcher_ui::window::mods(frame!(l), content),
         Page::Tutorials => omsi_launcher_ui::window::tutorials(frame!(l), content),
-        Page::Timetable => super::timetable::draw(l, content),
+        Page::Timetable => l.timetable_page(content),
         Page::Setup => l.setup_page(content),
     }
     l.ui.pop_clip();

@@ -8,7 +8,6 @@ mod prerender;
 mod settings;
 mod start;
 mod thumbs;
-mod timetable_plan;
 mod tray;
 mod ui;
 
