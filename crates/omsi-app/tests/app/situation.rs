@@ -117,6 +117,62 @@ fn situation_others_preserve_their_colorscheme() {
     );
 }
 
+/// The rear sections saved after a vehicle (`[coupledWith]` -1: the vehicle before them)
+/// come back as their bends against it, for the driven bus and for a placed one; a placed
+/// vehicle after them is not one of its parts.
+#[test]
+fn an_articulated_bus_keeps_its_bend() {
+    use omsi_content::situation::{Situation, SituationVehicle};
+    let turned = |deg: f64| {
+        let h = deg.to_radians() / 2.0;
+        [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0]
+    };
+    let part = |deg: f64| SituationVehicle {
+        file: "Vehicles/MAN_NL_NG/MAN_GN92_trail.bus".into(),
+        orientation: turned(deg),
+        coupled_with: Some(-1),
+        ..Default::default()
+    };
+    let sit = Situation {
+        map: "maps/Berlin/global.cfg".into(),
+        vehicles: vec![
+            SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_GN92_main.bus".into(),
+                orientation: turned(350.0),
+                is_my_vehicle: true,
+                ..Default::default()
+            },
+            part(10.0),
+            SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_GN92_main.bus".into(),
+                orientation: turned(90.0),
+                ..Default::default()
+            },
+            part(70.0),
+            SituationVehicle {
+                file: "Vehicles/MAN_SD200/MAN_SD77.bus".into(),
+                orientation: turned(0.0),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_trailers.len(), 1);
+    assert!(
+        (args.situation_trailers[0] - 20.0).abs() < 1e-6,
+        "{:?}",
+        args.situation_trailers
+    );
+    assert_eq!(args.situation_others.len(), 2);
+    assert_eq!(args.situation_others[0].trailers.len(), 1);
+    assert!((args.situation_others[0].trailers[0] + 20.0).abs() < 1e-6);
+    assert!(args.situation_others[1].trailers.is_empty());
+    assert!(coupled_bends(&sit.vehicles, 4).is_empty());
+    assert!(coupled_bends(&sit.vehicles, 9).is_empty());
+}
+
 /// #653: a saved duty goes on at the trip of the tour it was saved on, with the rest of
 /// the tour after it.
 #[test]

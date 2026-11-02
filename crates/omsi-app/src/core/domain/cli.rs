@@ -212,6 +212,11 @@ pub struct Args {
     /// Saved ordinal in the current timetable trip; absent in older situations.
     #[arg(skip)]
     pub situation_next_stop: Option<usize>,
+    /// How the coupled parts (an articulated bus's rear sections) stood against the bus when
+    /// it was saved: each part's heading less the bus's (degrees, from the front), set by
+    /// --situation and put back after spawning (`VehicleInstance::bend_trailers`).
+    #[arg(skip)]
+    pub situation_trailers: Vec<f64>,
     /// The situation's further vehicles (besides the one driven): each stands where it was
     /// saved with its variables.
     #[arg(skip)]
@@ -340,4 +345,6 @@ pub struct SituationOther {
     pub strvars: Vec<(String, String)>,
     pub odometer_km: Option<f64>,
     pub script_textures: Option<std::path::PathBuf>,
+    /// Its coupled parts' headings less its own (see `Args::situation_trailers`).
+    pub trailers: Vec<f64>,
 }

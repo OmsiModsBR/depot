@@ -246,6 +246,7 @@ impl App {
                 destinations: d.destinations.iter().map(|x| x.1.clone()).collect(),
                 selected: d.selected,
                 empty: d.empty.clone(),
+                riders: self.humans.as_ref().is_some_and(|h| h.riding() > 0),
             }),
             ToolWindow::Service => View::Menu(self.service_menu()),
             ToolWindow::Evaluation { trip } => View::Evaluation(self.evaluation(*trip)),
@@ -718,6 +719,19 @@ impl App {
                         }
                         if let Some(line) = line {
                             lists::set_route_by_hand(self, &line);
+                        }
+                    }
+                    // under the list: everyone on board gets off (for a map whose run ends
+                    // with people still on the bus)
+                    Event::Check(0) => {
+                        let left = self
+                            .humans
+                            .as_mut()
+                            .map_or(0, |h| h.force_disembark(crate::humans::BusId::Player));
+                        if left > 0 {
+                            log::info!("destination window: {left} passengers asked to get off");
+                            self.service_msg =
+                                Some(("Everyone on board is getting off".into(), 3.0));
                         }
                     }
                     _ => {}

@@ -149,6 +149,8 @@ pub struct Destination {
     pub selected: Option<usize>,
     /// Shown while there are no destinations.
     pub empty: String,
+    /// Somebody is on board, so "Make everyone get off" can be pressed.
+    pub riders: bool,
 }
 
 /// The timetable evaluation of the tour being driven: a trip's stops with their planned and
@@ -715,11 +717,18 @@ fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event>
     let y = f.bottom() + 16.0;
     ui.p().rect(Rect::new(r.x + 1.0, y, r.w - 2.0, 1.0), LINE);
     head(ui, "Destination", body.x + 16.0, y + 18.0);
+    // (under the list, the button that empties the bus)
+    let empty_r = Rect::new(
+        body.x + 16.0,
+        lists_bottom(r) - BUTTON_H,
+        body.w - 32.0,
+        BUTTON_H,
+    );
     let area = Rect::new(
         body.x + 4.0,
         y + 35.0,
         body.w - 8.0,
-        lists_bottom(r) - y - 35.0,
+        empty_r.y - 8.0 - y - 35.0,
     );
     let look = ListLook {
         leads: &v.codes,
@@ -732,6 +741,20 @@ fn destination(ui: &mut Ui, r: Rect, v: &Destination, key: u32) -> Option<Event>
     if let Some(i) = list_rows(ui, &name, area, &v.destinations, v.selected, &look) {
         event = Some(Event::Row(0, i));
     }
+    if button(
+        ui,
+        "tool:dest:empty",
+        empty_r,
+        "Make everyone get off",
+        ButtonKind::Normal,
+        v.riders,
+    ) {
+        event = Some(Event::Check(0));
+    }
+    ui.tooltip(
+        empty_r,
+        "Everyone on board leaves by the open doors. For when passengers stay on at the end of the run",
+    );
     let ok = ok_cancel(ui, "tool", r, "OK", true, "Applies to the bus you drive");
     ok.or(event)
 }
@@ -1161,6 +1184,27 @@ mod tests {
         assert_eq!(run(&mut ui, &view, Some(field)), Some(Event::Field(0)));
         let depot = at(&ui, "tool:1:dest:row:1");
         assert_eq!(run(&mut ui, &view, Some(depot)), Some(Event::Row(0, 1)));
+    }
+
+    #[test]
+    fn the_destination_window_empties_the_bus_only_with_people_on_board() {
+        let mut v = Destination {
+            destinations: vec!["Depot".into()],
+            riders: true,
+            ..Default::default()
+        };
+        let mut ui = Ui::new();
+        run(&mut ui, &View::Destination(v.clone()), None);
+        let button = at(&ui, "tool:dest:empty");
+        assert_eq!(
+            run(&mut ui, &View::Destination(v.clone()), Some(button)),
+            Some(Event::Check(0))
+        );
+        v.riders = false;
+        let mut ui = Ui::new();
+        run(&mut ui, &View::Destination(v.clone()), None);
+        let button = at(&ui, "tool:dest:empty");
+        assert_eq!(run(&mut ui, &View::Destination(v), Some(button)), None);
     }
 
     #[test]

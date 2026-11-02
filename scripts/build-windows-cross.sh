@@ -18,4 +18,5 @@ export CARGO_PROFILE_RELEASE_DEBUG=0
 cargo build --locked --release --target x86_64-pc-windows-gnu -p omsi-app -p omsi-launcher-core
 mkdir -p dist/windows   # (the folder is also the content folder: mods stay)
 cp target/x86_64-pc-windows-gnu/release/depot.exe target/x86_64-pc-windows-gnu/release/depot-launcher.exe assets/steam_redist/steam_api64.dll dist/windows/
+cp THIRD_PARTY.md dist/windows/THIRD_PARTY.txt   # (the third-party notice ships in the package as plain text)
 printf '\nProject Depot %s built in dist/windows\n' "$OPENOMSI_VERSION"

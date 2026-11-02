@@ -1802,3 +1802,28 @@ fn wheel_pivot_report_reads_dropped_meshes() {
     assert!(!full.is_empty(), "the F90 has no animated wheels");
     assert_eq!(report(ai), full);
 }
+
+/// A vehicle file's paint schemes come in the order of the `Colorscheme` numbers without
+/// its meshes being loaded (the loading card names a saved situation's livery by its number).
+#[test]
+fn paint_schemes_are_read_from_the_file_alone() {
+    let pack = ScratchPack::new("paint-schemes");
+    let bus = pack.write("Bus/test.bus", "[model]\r\nmodel\\model.cfg\r\n");
+    pack.write(
+        "Bus/model/model.cfg",
+        "[CTC]\r\nColorscheme\r\nTexture\r\n2\r\n",
+    );
+    pack.write(
+        "Bus/Texture/a.cti",
+        "[item]\r\nStadtwerke\r\nbody\r\nsw.bmp\r\n\r\n[item]\r\nSpandau 1994\r\nbody\r\nsp.bmp\r\n",
+    );
+    let def = Vehicle::load(&bus).unwrap();
+    let names: Vec<String> = VehicleType::paint_schemes_of(&def)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert_eq!(names, ["Stadtwerke", "Spandau 1994"]);
+    let mut none = def.clone();
+    none.model = None;
+    assert!(VehicleType::paint_schemes_of(&none).is_empty());
+}

@@ -485,6 +485,7 @@ impl App {
                         situation_script_textures: o.script_textures.clone(),
                         situation_riders: Vec::new(),
                         situation_others: Vec::new(),
+                        situation_trailers: o.trailers.clone(),
                         line: None,
                         tour: None,
                         trip: None,

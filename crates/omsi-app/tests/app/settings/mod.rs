@@ -107,6 +107,31 @@ fn the_d3d9_lock_sets_every_option_of_the_table() {
 }
 
 #[test]
+fn d3d9_takes_the_render_scale_saved_under_another_api() {
+    // (the same key serves every API: a value saved under Vulkan or DirectX12 carries over,
+    // fitted to the steps DirectX9 offers; Auto and 100 % leave the picture at the window's size)
+    for (saved, want) in [
+        ("0.5", 0.5),
+        ("0.6", 0.67),
+        ("0.7", 0.67),
+        ("0.9", 0.85),
+        ("75%", 0.75),
+        ("auto", 0.0),
+    ] {
+        let mut s = Settings::from_text(&format!("graphics_api=d3d9\nrender_scale={saved}\n"));
+        s.lock_vanilla();
+        assert_eq!(s.render_scale, want, "saved {saved}");
+        // (a plain Settings is DirectX9 only on Windows, where its backend is decided)
+        if cfg!(windows) {
+            assert_eq!(s.dx9_render_scale(), want, "saved {saved}");
+        }
+    }
+    let mut full = Settings::from_text("graphics_api=d3d9\nrender_scale=1\n");
+    full.lock_vanilla();
+    assert_eq!(full.dx9_render_scale(), 0.0);
+}
+
+#[test]
 fn d3d9_has_no_graphics_improvements_to_choose() {
     for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
         let text = format!("graphics={g}\ngraphics_api=d3d9\n");

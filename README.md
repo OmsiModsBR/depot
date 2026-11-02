@@ -472,6 +472,7 @@ depot/
 │   ├── omsi-launcher-ui/  the launcher's window and pages
 │   ├── omsi-integrity/  integrity checks of maps, vehicles and AI lists
 │   ├── omsi-html/       the HTML engine behind in-vehicle screens
+│   ├── omsi-devtools-link/   the link for developer tools over any byte stream (not yet used)
 │   ├── omsi-devtools-proto/  messages for developer tools (not yet used by the game)
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)

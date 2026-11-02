@@ -98,10 +98,7 @@ struct Session {
 
 static SESSION: std::sync::Mutex<Option<Session>> = std::sync::Mutex::new(None);
 
-/// Whether a weather choice means this model: `natural`, or none at all.
-pub fn is_natural(choice: Option<&str>) -> bool {
-    choice.is_none_or(|w| w.trim().eq_ignore_ascii_case("natural"))
-}
+pub use omsi_launcher_lib::weather::is_natural;
 
 /// Start the model for a session beginning at `clock` (at the map's place as far as it is
 /// known yet: `refresh` starts it again once the map has told its own) and give its weather.
