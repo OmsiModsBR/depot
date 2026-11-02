@@ -281,7 +281,7 @@ fn a_locked_texture_saves_what_it_shows() {
 
 fn rider(seat: usize, dest: Option<&str>) -> SavedRider {
     SavedRider {
-        seat,
+        seat: Some(seat),
         dest: dest.map(String::from),
         alt: None,
         alt_seen: false,
@@ -303,8 +303,10 @@ fn riders_round_trip_through_their_file() {
     a.alt = Some("Alt\nStop".into());
     a.alt_seen = true;
     a.alt_m = 800.0;
-    let riders = vec![a, rider(7, None), rider(31, Some("Terminal"))];
-    assert_eq!(save_riders(&osn, &riders), 3);
+    let mut leaving = rider(0, Some("Terminal"));
+    leaving.seat = None;
+    let riders = vec![a, rider(7, None), rider(31, Some("Terminal")), leaving];
+    assert_eq!(save_riders(&osn, &riders), 4);
     assert_eq!(
         riders_file(&osn).unwrap().file_name().unwrap(),
         "Slot 1.osn.riders"
@@ -359,7 +361,7 @@ fn missing_or_damaged_rider_files_load_an_empty_bus() {
     .unwrap();
     let got = load_riders(&osn);
     assert_eq!(got.len(), 1);
-    assert_eq!((got[0].seat, got[0].left_km), (2, 0.0));
+    assert_eq!((got[0].seat, got[0].left_km), (Some(2), 0.0));
     assert!((0.0..=1.0).contains(&got[0].request_random));
     // the situation file itself is untouched by any of this
     std::fs::remove_dir_all(&dir).unwrap();
@@ -379,7 +381,7 @@ fn a_rider_keeps_the_ride_that_is_left() {
     x.dest = Some("Central".into());
     // 2 km into the ride at the odometer reading 102
     let r = SavedRider::from_pax(&x, 102.0).unwrap();
-    assert_eq!((r.seat, r.dest.as_deref()), (12, Some("Central")));
+    assert_eq!((r.seat, r.dest.as_deref()), (Some(12), Some("Central")));
     assert!((r.left_km - 4.0).abs() < 1e-4);
     // the same ride at 0 km on the new clock
     let back = r.to_pax(1.1, 0.0);
@@ -394,4 +396,7 @@ fn a_rider_keeps_the_ride_that_is_left() {
     x.inside = Some(testing::humans::BusId::Player);
     x.seat = None;
     assert!(SavedRider::from_pax(&x, 0.0).is_none());
+    // but one on the way to the door gave their place up and is still aboard
+    x.task = Task::InBusToExit;
+    assert_eq!(SavedRider::from_pax(&x, 0.0).unwrap().seat, None);
 }

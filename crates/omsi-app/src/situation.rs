@@ -360,7 +360,9 @@ pub fn restore_script_textures(vehicle: &mut omsi_sim::VehicleInstance, prefix: 
 /// how much of their ride is left. Not kept: who they look like, their ticket, their mood.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SavedRider {
-    pub seat: usize,
+    /// The place held; none for somebody already on the way to the door (they gave their
+    /// place up), who is seated at any free one and asks for the stop again.
+    pub seat: Option<usize>,
     pub dest: Option<String>,
     pub alt: Option<String>,
     pub alt_seen: bool,
@@ -377,7 +379,10 @@ impl SavedRider {
     /// the riders' clock of that bus reads now. None for somebody not aboard with a place.
     pub fn from_pax(x: &crate::humans::pax::Pax, odometer_km: f64) -> Option<SavedRider> {
         x.inside?;
-        let seat = x.seat?;
+        let seat = x.seat;
+        if seat.is_none() && x.task != crate::humans::pax::Task::InBusToExit {
+            return None;
+        }
         Some(SavedRider {
             seat,
             dest: x.dest.clone(),
@@ -395,7 +400,7 @@ impl SavedRider {
         use crate::humans::pax::{Pax, Task};
         let mut p = Pax::new(walk_speed, self.request_random.clamp(0.0, 1.0));
         p.task = Task::SittingInBus;
-        p.seat = Some(self.seat);
+        p.seat = self.seat;
         p.dest = self.dest.clone();
         p.alt = self.alt.clone();
         p.alt_seen = self.alt_seen;
@@ -466,9 +471,10 @@ pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
     }
     let mut t = format!("{RIDERS_HEADER}\n");
     for r in riders.iter().take(MAX_RIDERS) {
+        let seat = r.seat.map_or("none".to_string(), |k| k.to_string());
         t.push_str(&format!(
-            "seat={}\tleft_km={}\trandom={}",
-            r.seat, r.left_km, r.request_random
+            "seat={seat}\tleft_km={}\trandom={}",
+            r.left_km, r.request_random
         ));
         if let Some(d) = &r.dest {
             t.push_str(&format!("\tdest={}", escape(d)));
@@ -536,13 +542,16 @@ pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
                 continue;
             };
             match k {
-                "seat" => match v.parse() {
-                    Ok(x) => {
-                        r.seat = x;
+                "seat" if v == "none" => {
+                    r.seat = None;
+                    seat = true;
+                }
+                "seat" => {
+                    if let Ok(x) = v.parse() {
+                        r.seat = Some(x);
                         seat = true;
                     }
-                    Err(_) => {}
-                },
+                }
                 "left_km" => {
                     r.left_km = v
                         .parse()

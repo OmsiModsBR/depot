@@ -607,7 +607,7 @@ rim the reflection running on away from the camera.
 * Project Depot keeps the passengers of the player's bus in a file beside the situation, `<name>.osn.riders`
   (UTF-8, LF; not part of OMSI 2's format, which neither writes nor reads it). First line `depot-riders 1`, then one
   line per rider of tab-separated `key=value` pairs: `seat` (index of the bus's passenger places, in the order
-  of its `[passpos]` list), `left_km` (kilometres of the ride still to go), `random` (0..1, where between
+  of its `[passpos]` list; `none` for somebody already on the way to the door, who is seated at any free place), `left_km` (kilometres of the ride still to go), `random` (0..1, where between
   departure and approach they ask to get off), and when set `dest`, `alt`, `alt_seen`, `alt_m` (`%`, tab and
   line breaks in names written as `%25`, `%09`, `%0A`, `%0D`). Unknown keys and lines without a `seat` are
   skipped; any other first line, or a file above 1 MB, makes the whole file ignored. Deleted or absent: an empty

@@ -4221,36 +4221,40 @@ impl Humans {
         let km = self.odometer.get(&BusId::Player).copied().unwrap_or(0.0);
         let mut seated = 0;
         for r in riders {
-            let free = cabin.seats.get(r.seat).is_some()
-                && !off.get(r.seat).copied().unwrap_or(false)
-                && !self
-                    .seats
-                    .get(&BusId::Player)
-                    .and_then(|s| s.get(r.seat))
-                    .copied()
-                    .unwrap_or(false);
-            if !free {
-                log::warn!(
-                    "situation: a rider's place {} is not free in this bus; left out",
-                    r.seat
-                );
-                continue;
-            }
             let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
-            let seats = self.seats.entry(BusId::Player).or_default();
-            if seats.len() < cabin.seats.len() {
-                seats.resize(cabin.seats.len(), false);
-            }
-            seats[r.seat] = true;
-            if !self.seat_rider(
-                r.to_pax(walk, km),
-                r.seat,
-                bus,
-                &cabin,
-                world,
-                renderer,
-                scene,
-            ) {
+            let k = match r.seat {
+                Some(k) => {
+                    let free = cabin.seats.get(k).is_some()
+                        && !off.get(k).copied().unwrap_or(false)
+                        && !self
+                            .seats
+                            .get(&BusId::Player)
+                            .and_then(|s| s.get(k))
+                            .copied()
+                            .unwrap_or(false);
+                    if !free {
+                        log::warn!(
+                            "situation: a rider's place {k} is not free in this bus; left out"
+                        );
+                        continue;
+                    }
+                    let seats = self.seats.entry(BusId::Player).or_default();
+                    if seats.len() < cabin.seats.len() {
+                        seats.resize(cabin.seats.len(), false);
+                    }
+                    seats[k] = true;
+                    k
+                }
+                // on the way to the door when saved: any free place, the stop asked for again
+                None => match self.reserve_place(BusId::Player, &cabin.seats, &off) {
+                    Some(k) => k,
+                    None => {
+                        log::warn!("situation: no free place for a rider on the way out; left out");
+                        continue;
+                    }
+                },
+            };
+            if !self.seat_rider(r.to_pax(walk, km), k, bus, &cabin, world, renderer, scene) {
                 break;
             }
             seated += 1;
