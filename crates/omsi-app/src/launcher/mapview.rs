@@ -123,8 +123,30 @@ struct Reply {
     error: Option<String>,
 }
 
-/// The plan (buffer 0): the roads and the route as one vertex list, and what it was built
-/// for - another map, another trip, or another zoom band (whose own thinning it is).
+/// The largest vertex buffer the plan asks for. The launcher's device only promises the
+/// downlevel 256 MB, and a buffer is made at the next power of two above what it holds: a
+/// big map's plan (Mapa Transcol: 7.9 million vertices, 478 MB) asked for 512 MB, was refused
+/// and drew no roads (#536). Half of the promise leaves room for that rounding.
+const MAX_PLAN_BUFFER_BYTES: usize = 128 * 1024 * 1024;
+
+/// The markers' buffer; the plan's pieces follow it, from [`PLAN_FIRST_BUFFER`].
+const MARKS_BUFFER: usize = 0;
+const PLAN_FIRST_BUFFER: usize = 1;
+
+/// Where a list of `total` vertices is cut so that no piece passes `max_bytes`: every cut falls
+/// between whole triangles (a multiple of three vertices), and the pieces drawn in order are
+/// the list drawn at once.
+pub fn plan_pieces(total: usize, max_bytes: usize) -> Vec<std::ops::Range<usize>> {
+    let per = (max_bytes / std::mem::size_of::<Vertex>()).max(3) / 3 * 3;
+    (0..total)
+        .step_by(per)
+        .map(|a| a..(a + per).min(total))
+        .collect()
+}
+
+/// The plan (buffers from [`PLAN_FIRST_BUFFER`]): the roads and the route as one vertex list
+/// drawn in pieces, and what it was built for - another map, another trip, or another zoom
+/// band (whose own thinning it is).
 pub struct Plan {
     pub key: Key,
     pub verts: Vec<Vertex>,
@@ -173,7 +195,7 @@ pub struct MapView {
     hover: Option<usize>,
     pub clicked: Option<usize>,
 
-    /// The plan and the markers (buffers 0 and 1); the markers are built every frame, the
+    /// The plan and the markers (the markers' buffer and the plan's pieces); the markers are built every frame, the
     /// plan only when its key changes.
     pub plan: Option<Plan>,
     gpu: Option<Gpu>,
@@ -743,10 +765,12 @@ impl MapView {
         // everything the drawing needs is read before the GPU is borrowed (the markers are
         // built every frame: the mouse moves what they look like)
         let marks = self.mark_vertices(&roads);
-        let (count, marks_len) = (
-            self.plan.as_ref().map(|p| p.count).unwrap_or(0),
-            marks.len() as u32,
-        );
+        let marks_len = marks.len() as u32;
+        let pieces = self
+            .plan
+            .as_ref()
+            .map(|p| plan_pieces(p.verts.len(), MAX_PLAN_BUFFER_BYTES))
+            .unwrap_or_default();
         let (proj, px_scale) = (self.projection(), self.mpp as f32);
         let target = self.target.as_ref()?.1.clone();
         let device = &renderer.device;
@@ -756,11 +780,13 @@ impl MapView {
             .get_or_insert_with(|| Gpu::new(device, renderer.format(), 1, 64));
         if let Some(p) = self.plan.as_mut() {
             if !p.uploaded {
-                gpu.upload(device, queue, 0, &p.verts);
+                for (k, r) in pieces.iter().enumerate() {
+                    gpu.upload(device, queue, PLAN_FIRST_BUFFER + k, &p.verts[r.clone()]);
+                }
                 p.uploaded = true;
             }
         }
-        gpu.upload(device, queue, 1, &marks);
+        gpu.upload(device, queue, MARKS_BUFFER, &marks);
         let layer = Layer {
             view_proj: proj,
             viewport: [0.0, 0.0, w as f32, h as f32],
@@ -769,20 +795,22 @@ impl MapView {
             opacity: 1.0,
             px_scale,
         };
-        let draws = [
-            Draw {
-                buffer: 0,
-                range: 0..count,
+        let mut draws: Vec<Draw> = pieces
+            .iter()
+            .enumerate()
+            .map(|(k, r)| Draw {
+                buffer: PLAN_FIRST_BUFFER + k,
+                range: 0..(r.end - r.start) as u32,
                 layer: 0,
                 texture: 0,
-            },
-            Draw {
-                buffer: 1,
-                range: 0..marks_len,
-                layer: 0,
-                texture: 0,
-            },
-        ];
+            })
+            .collect();
+        draws.push(Draw {
+            buffer: MARKS_BUFFER,
+            range: 0..marks_len,
+            layer: 0,
+            texture: 0,
+        });
         let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("launcher map"),
         });
@@ -1181,5 +1209,37 @@ fn read_map(look: &Look) -> Roads {
         streets,
         // (after `configure_grid`: the package is put onto this game's grid)
         surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
+    }
+}
+
+#[cfg(test)]
+mod plan_piece_tests {
+    use super::*;
+
+    /// #536: a plan of 7,960,824 vertices (Mapa Transcol) is 478 MB: one buffer of it was
+    /// rounded to 512 MB and refused by a device that promises 256 MB.
+    #[test]
+    fn a_big_plan_is_cut_below_the_buffer_limit() {
+        let total = 7_960_824;
+        let pieces = plan_pieces(total, MAX_PLAN_BUFFER_BYTES);
+        assert!(pieces.len() > 1);
+        let mut at = 0;
+        for r in &pieces {
+            assert_eq!(r.start, at, "no gap, no overlap");
+            at = r.end;
+            let bytes = (r.end - r.start) * std::mem::size_of::<Vertex>();
+            // (the GPU buffer is made at the next power of two)
+            assert!(bytes.next_power_of_two() <= 256 * 1024 * 1024);
+            if r.end != total {
+                assert_eq!((r.end - r.start) % 3, 0, "cuts fall between triangles");
+            }
+        }
+        assert_eq!(at, total);
+    }
+
+    #[test]
+    fn a_small_plan_stays_whole_and_an_empty_one_has_no_pieces() {
+        assert_eq!(plan_pieces(300, MAX_PLAN_BUFFER_BYTES), vec![0..300]);
+        assert!(plan_pieces(0, MAX_PLAN_BUFFER_BYTES).is_empty());
     }
 }
