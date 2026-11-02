@@ -34,7 +34,6 @@ pub mod mobile;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
-pub(crate) mod settings;
 mod stage;
 pub(crate) mod start;
 pub(crate) use omsi_launcher_ui::state;
@@ -456,7 +455,7 @@ impl Launcher {
                 // (the Controls page's second part is its tab, controls:1 the game controllers; the
                 // Settings page's its section, settings:5 Sound)
                 app.pages.controls_tab = step;
-                app.pages.set.sec = step.min(settings::SECTIONS.len() - 1);
+                app.pages.set.sec = step.min(window::SECTIONS.len() - 1);
                 // (and the Timetable page's its tab, timetable:1 the schematic)
                 app.pages.tt.tab = step.min(2);
             }
@@ -1762,7 +1761,7 @@ impl Launcher {
                 Page::Diagnostics => diagnostics::draw(self, content),
                 Page::Multiplayer => {}
                 Page::Profile => window::profile(frame!(self), &mut self.pages.profile, content),
-                Page::Settings => settings::settings(self, content),
+                Page::Settings => self.settings_page(content),
                 Page::Controls => pages::controls(self, content),
                 Page::Mods => window::mods(frame!(self), content),
                 Page::Tutorials => window::tutorials(frame!(self), content),
@@ -1808,7 +1807,11 @@ impl Launcher {
             } else if crash {
                 self.draw_crash_dialog();
             } else if reset {
-                settings::reset_dialog(self);
+                window::reset_dialog(
+                    frame!(self),
+                    &mut self.pages.set,
+                    &mut self.pages.confirm_reset,
+                );
             } else if engine {
                 window::engine_dialog(frame!(self));
             } else if self.browser.is_none() && window {
@@ -1963,6 +1966,19 @@ impl Launcher {
     /// Where the preview's picture comes from, in the lower left of `r` (see `stage::badge`).
     fn preview_badge(&mut self, r: Rect) {
         stage::badge(&mut self.ui, &self.preview, r);
+    }
+
+    /// The Settings page in `area`, and what it asks of the window: the reset's question, the
+    /// Controls page at one of its tabs.
+    pub(super) fn settings_page(&mut self, area: Rect) {
+        let out = window::settings(frame!(self), &mut self.pages.set, area);
+        if out.reset {
+            self.pages.confirm_reset = true;
+        }
+        if let Some(t) = out.controls {
+            self.pages.controls_tab = t;
+            self.go(Page::Controls);
+        }
     }
 
     /// The Drive page in `area`, over the launcher's map or the bus.

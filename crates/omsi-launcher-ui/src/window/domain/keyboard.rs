@@ -22,7 +22,7 @@ pub const GROUPS: [&str; 8] = [
 pub const FILTERS: [&str; 3] = ["Conflicts", "Changed by me", "Not assigned"];
 
 /// The sections of the keys, as `keyboard.cfg` has them (the page's `capturing` counts them so).
-pub(crate) const SECTIONS: [&str; 2] = ["vehicles", "game"];
+pub(crate) const KEY_SECTIONS: [&str; 2] = ["vehicles", "game"];
 
 /// The group (an index of `GROUPS`, never 0) of `action` in the section `sec`.
 pub fn group_of(sec: usize, action: &str) -> usize {
@@ -191,7 +191,7 @@ pub fn rows(
     label: &dyn Fn(&str) -> String,
 ) -> Vec<KeyRow> {
     let mut out: Vec<KeyRow> = Vec::new();
-    for (sec, key) in SECTIONS.iter().enumerate() {
+    for (sec, key) in KEY_SECTIONS.iter().enumerate() {
         let Some(list) = kb.get(*key).and_then(|a| a.as_array()) else {
             continue;
         };
@@ -246,10 +246,10 @@ pub fn rows(
         r.shared = r.keys.iter().any(|k| clash.contains(k));
         let now: Vec<Chord> = r.keys.iter().copied().filter(|k| k.0 != 0).collect();
         let fk = factory_keys(factory, &r.action);
-        r.off_factory = !factory_entries(factory, SECTIONS[r.sec], &r.action).is_empty()
+        r.off_factory = !factory_entries(factory, KEY_SECTIONS[r.sec], &r.action).is_empty()
             && !same_keys(&now, &fk);
         if let Some(o) = original {
-            let key = SECTIONS[r.sec];
+            let key = KEY_SECTIONS[r.sec];
             if has_action(o, key, &r.action) {
                 let now: Vec<Chord> = r.keys.iter().copied().filter(|k| k.0 != 0).collect();
                 r.changed = !same_keys(&now, &keys_of(o, key, &r.action));
@@ -308,7 +308,7 @@ impl KeyNames {
 pub fn reload_plan(current: &Value, original: &Value, label: &dyn Fn(&str) -> String) -> Reload {
     let mut merged = current.clone();
     let (mut identical, mut changes, mut depot_only) = (0, Vec::new(), 0);
-    for key in SECTIONS {
+    for key in KEY_SECTIONS {
         let now: Vec<Value> = current
             .get(key)
             .and_then(|a| a.as_array())
@@ -397,9 +397,9 @@ pub(crate) fn factory_entries(factory: Option<&Value>, key: &str, action: &str) 
 pub fn factory_keys(factory: Option<&Value>, action: &str) -> Vec<Chord> {
     // (the built-in table has no sections: once)
     let keys: &[&str] = if factory.is_some() {
-        &SECTIONS
+        &KEY_SECTIONS
     } else {
-        &SECTIONS[..1]
+        &KEY_SECTIONS[..1]
     };
     keys.iter()
         .flat_map(|key| factory_entries(factory, key, action))
