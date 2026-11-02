@@ -19,14 +19,14 @@ use omsi_ui::{Color, Rect, Weight};
 use serde_json::{json, Value};
 
 /// The actions' names in the game's language (OMSI 2's own texts, the Depot's for its own).
-struct Labels<'a> {
+pub(crate) struct Labels<'a> {
     host: &'a dyn Host,
     root: String,
     lang: String,
 }
 
 impl Labels<'_> {
-    fn text(&self, action: &str) -> String {
+    pub(crate) fn text(&self, action: &str) -> String {
         self.host.action_text(&self.root, &self.lang, action)
     }
 
@@ -35,7 +35,7 @@ impl Labels<'_> {
     }
 }
 
-fn labels<'a>(f: &Frame<'a>) -> Labels<'a> {
+pub(crate) fn labels<'a>(f: &Frame<'a>) -> Labels<'a> {
     Labels {
         host: f.host,
         root: f.state.config.root.clone(),

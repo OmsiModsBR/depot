@@ -2845,6 +2845,7 @@ dependencies = [
  "anyhow",
  "flate2",
  "libc",
+ "log",
  "omsi-cfg",
  "omsi-content",
  "omsi-map",

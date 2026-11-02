@@ -146,9 +146,6 @@ pub mod evdev_buttons {
 pub mod evdev_ff {
     pub use crate::evdev_ff::*;
 }
-pub mod ffb_calibration {
-    pub use crate::ffb_calibration::*;
-}
 pub mod frame_stats {
     pub use crate::frame_stats::*;
 }

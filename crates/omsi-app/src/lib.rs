@@ -72,7 +72,6 @@ mod duty_start;
 mod evdev_buttons;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod evdev_ff;
-mod ffb_calibration;
 mod frame_stats;
 mod ground_gap;
 mod hpattern;

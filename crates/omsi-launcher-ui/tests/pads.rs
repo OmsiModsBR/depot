@@ -1,12 +1,53 @@
+//! The Controls page's game controllers tab without a device: the set-up assistant's findings,
+//! its force feedback step, a device taken out of the list and the buttons shown.
+
 use glam::Vec2;
-use omsi_content::input::gamectrler::DeviceCfg;
-use omsi_content::input::gamectrler::Func;
+use omsi_content::input::gamectrler::{parse as parse_cfg, to_text as cfg_text, DeviceCfg, Func};
+use omsi_launcher_lib::controllers::{Calibration, Connected, PULSE_FORCE};
+use omsi_launcher_ui::window::*;
+use omsi_ui::widgets::{id_of, Ui};
 use omsi_ui::Rect;
-use openomsi_game::testing::launcher::ui::id_of;
-use openomsi_game::testing::launcher::ui::Ui;
-fn feedback_wizard() -> openomsi_game::testing::launcher::pages::Wizard {
-    openomsi_game::testing::launcher::pages::Wizard {
-        step: openomsi_game::testing::launcher::pages::WIZARD_STEPS.len(),
+/// No device at all: what the tab asked of the game is only counted.
+#[derive(Default)]
+struct Quiet {
+    open: bool,
+    opened: usize,
+}
+
+impl Pads for Quiet {
+    fn open(&mut self, _feedback: bool) {
+        self.open = true;
+        self.opened += 1;
+    }
+    fn close(&mut self) {
+        self.open = false;
+    }
+    fn is_open(&self) -> bool {
+        self.open
+    }
+    fn poll(&mut self) -> Vec<(String, usize, bool)> {
+        Vec::new()
+    }
+    fn connected(&self) -> Vec<Connected> {
+        Vec::new()
+    }
+    fn buttons_only(&self, _name: &str) -> bool {
+        false
+    }
+    fn calibration_pulse(&mut self, _name: &str, _axis: usize, _force: f32) -> bool {
+        false
+    }
+    fn read_cfg(&self) -> Vec<DeviceCfg> {
+        Vec::new()
+    }
+    fn held_gears(&self, _devices: &[DeviceCfg]) -> bool {
+        false
+    }
+}
+
+fn feedback_wizard() -> Wizard {
+    Wizard {
+        step: WIZARD_STEPS.len(),
         rest: [Some(0.0); 8],
         at: vec![
             [Some(-1.0), None, None, None, None, None, None, None],
@@ -17,20 +58,15 @@ fn feedback_wizard() -> openomsi_game::testing::launcher::pages::Wizard {
         error: None,
         calibration: None,
         ff_choice: None,
-        test_strength: openomsi_game::testing::ffb_calibration::PULSE_FORCE,
+        test_strength: PULSE_FORCE,
     }
 }
 
-fn click_feedback(
-    name: &str,
-    w: &mut openomsi_game::testing::launcher::pages::Wizard,
-    d: &mut DeviceCfg,
-) -> Option<bool> {
-    use openomsi_game::testing::launcher::pages::*;
+fn click_feedback(name: &str, w: &mut Wizard, d: &mut DeviceCfg) -> Option<bool> {
     let mut ui = Ui::new();
     let size = Vec2::new(900.0, 700.0);
     let area = Rect::new(20.0, 20.0, 700.0, 600.0);
-    let mut io = None;
+    let mut pads = Quiet::default();
     let mut active = false;
     ui.begin(size, 1.0, 0.016);
     feedback_setup(
@@ -40,9 +76,8 @@ fn click_feedback(
         d,
         &[],
         None,
-        &mut io,
+        &mut pads,
         &mut active,
-        None,
         false,
     );
     let rect = ui.drawn[&id_of(name)];
@@ -57,9 +92,8 @@ fn click_feedback(
         d,
         &[],
         None,
-        &mut io,
+        &mut pads,
         &mut active,
-        None,
         false,
     );
     ui.input.pressed = false;
@@ -73,13 +107,12 @@ fn click_feedback(
         d,
         &[],
         None,
-        &mut io,
+        &mut pads,
         &mut active,
-        None,
         false,
     );
     assert!(!active);
-    assert!(io.is_none());
+    assert!(!pads.is_open());
     done
 }
 
@@ -118,25 +151,24 @@ fn disconnected_wheel_cannot_start_a_hardware_test() {
 
 #[test]
 fn cancelling_feedback_releases_io_and_invalidates_the_test() {
-    let mut pads = openomsi_game::testing::launcher::pages::PadsView::default();
+    let mut pads = PadsView::default();
     pads.feedback_test = true;
-    pads.wizard = Some(openomsi_game::testing::launcher::pages::Wizard {
-        step: openomsi_game::testing::launcher::pages::WIZARD_STEPS.len(),
+    pads.wizard = Some(Wizard {
+        step: WIZARD_STEPS.len(),
         rest: [None; 8],
         at: Vec::new(),
         error: None,
-        calibration: Some((
-            std::time::Instant::now(),
-            openomsi_game::testing::ffb_calibration::Calibration::new(
-                openomsi_game::testing::ffb_calibration::PULSE_FORCE,
-            ),
-        )),
+        calibration: Some((std::time::Instant::now(), Calibration::new(PULSE_FORCE))),
         ff_choice: None,
-        test_strength: openomsi_game::testing::ffb_calibration::PULSE_FORCE,
+        test_strength: PULSE_FORCE,
     });
-    pads.cancel_feedback_test();
+    let mut io = Quiet {
+        open: true,
+        ..Default::default()
+    };
+    pads.cancel_feedback_test(&mut io);
     assert!(!pads.feedback_test);
-    assert!(pads.io.is_none());
+    assert!(!io.is_open());
     let test = &pads
         .wizard
         .as_ref()
@@ -150,29 +182,11 @@ fn cancelling_feedback_releases_io_and_invalidates_the_test() {
 }
 
 #[test]
-fn h_pattern_gears_have_a_clear_name() {
-    assert_eq!(
-        openomsi_game::testing::launcher::pages::known_action("kw_s_1_fest").as_deref(),
-        Some("Gear 1 (H-pattern)")
-    );
-    assert_eq!(
-        openomsi_game::testing::launcher::pages::known_action("kw_s_R_fest").as_deref(),
-        Some("Gear R (H-pattern)")
-    );
-}
-
-#[test]
 fn empty_saved_button_slots_do_not_fill_the_controller_list() {
     let mut buttons = vec![(String::new(), "0".to_string()); 131];
     buttons[10].0 = "horn".to_string();
-    assert_eq!(
-        openomsi_game::testing::launcher::pages::shown_button_count(&buttons, 18, None),
-        18
-    );
-    assert_eq!(
-        openomsi_game::testing::launcher::pages::shown_button_count(&buttons, 18, Some(128)),
-        129
-    );
+    assert_eq!(shown_button_count(&buttons, 18, None), 18);
+    assert_eq!(shown_button_count(&buttons, 18, Some(128)), 129);
 }
 
 #[test]
@@ -197,7 +211,7 @@ fn a_wheel_with_three_pedals() {
     brk[2] = Some(-1.0);
     let mut clu = rest;
     clu[5] = Some(-1.0);
-    let a = openomsi_game::testing::launcher::pages::wizard_result(&rest, &[left, thr, brk, clu]);
+    let a = wizard_result(&rest, &[left, thr, brk, clu]);
     assert_eq!(a[0], Some((Func::Steering, false)));
     assert_eq!(a[1], Some((Func::Throttle, true)));
     assert_eq!(a[2], Some((Func::Brake, true)));
@@ -207,7 +221,7 @@ fn a_wheel_with_three_pedals() {
 #[test]
 fn pedals_on_one_axis_and_a_wheel_the_other_way() {
     let rest = [Some(0.0), Some(0.0), None, None, None, None, None, None];
-    let a = openomsi_game::testing::launcher::pages::wizard_result(
+    let a = wizard_result(
         &rest,
         &[
             [Some(0.9), Some(0.0), None, None, None, None, None, None],
@@ -218,4 +232,32 @@ fn pedals_on_one_axis_and_a_wheel_the_other_way() {
     );
     assert_eq!(a[0], Some((Func::Steering, true)));
     assert_eq!(a[1], Some((Func::ThrottleBrake, true)));
+}
+
+/// A device taken out of the list is gone from the file Save writes, and the next one is
+/// shown - the one below it, or above it when it was the last (#636).
+#[test]
+fn a_removed_device_leaves_the_file() {
+    let mut devices = parse_cfg("[ctrl]\r\nSideWinder Joystick\r\n0\r\n\r\n[ctrl]\r\nLogitech G25 Racing Wheel USB\r\n1\r\n\r\n[ctrl]\r\nMOZA R3 Base\r\n0\r\n");
+    let mut sel = 1;
+    assert_eq!(
+        remove_device(&mut devices, &mut sel),
+        "Logitech G25 Racing Wheel USB"
+    );
+    assert_eq!(sel, 1);
+    let names = |text: &str| {
+        parse_cfg(text)
+            .into_iter()
+            .map(|d| d.name)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        names(&cfg_text(&devices)),
+        ["SideWinder Joystick", "MOZA R3 Base"]
+    );
+    assert_eq!(remove_device(&mut devices, &mut sel), "MOZA R3 Base");
+    assert_eq!(sel, 0);
+    assert_eq!(remove_device(&mut devices, &mut sel), "SideWinder Joystick");
+    assert_eq!(sel, 0);
+    assert!(names(&cfg_text(&devices)).is_empty());
 }

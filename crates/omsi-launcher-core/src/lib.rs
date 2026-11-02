@@ -8,6 +8,7 @@
 //! tells the page when they changed, `instances` keeps track of the games started.
 
 pub mod compress;
+pub mod controllers;
 pub mod disk;
 pub mod hof_sync;
 pub mod index;

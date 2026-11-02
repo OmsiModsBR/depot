@@ -2,7 +2,7 @@
 
 pub const PULSE_FORCE: f32 = 0.20;
 pub const MAX_PULSE_FORCE: f32 = 0.50;
-pub(crate) const PULSE_MS: u32 = 250;
+pub const PULSE_MS: u32 = 250;
 
 enum Phase {
     Settle {
