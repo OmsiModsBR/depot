@@ -5,7 +5,7 @@ use super::super::interface::output::{depot_names_with_line, MapInfo, VehicleInf
 
 /// The depot file for the chosen bus `bus` on the chosen map `map` (OMSI 2 in `root`): the
 /// one the map's own buses use on the chosen date (the chrono scenarios change it: Berlin's
-/// 1994 depot has line 137 where 1986's had 92), which the bus has, else its first. With a
+/// 1994 depot has line 137 where 1986's had 92), which the bus has, else its first (see below). With a
 /// line chosen, a depot file of the bus that carries it comes first. Without a bus, the
 /// map's own.
 ///
@@ -19,7 +19,7 @@ pub fn default_hof(
     bus: Option<&VehicleInfo>,
 ) -> String {
     pick(root, choice, map, bus, &|name| {
-        omsi_vehicle::hof::depot_anywhere(name).is_some()
+        omsi_vehicle::hof::depot_anywhere_exists(name)
     })
 }
 
@@ -76,6 +76,7 @@ fn pick(
         .cloned()
         .or_else(|| Some(want.clone()).filter(|w| !w.is_empty() && installed_elsewhere(w)))
         .or_else(|| v.hofs.first().cloned())
+        .or_else(|| Some(want.clone()).filter(|w| !w.is_empty()))
         .unwrap_or_default()
 }
 
@@ -138,6 +139,13 @@ mod tests {
             &[],
         );
         assert_eq!(got, "Habana Oeste");
+    }
+
+    /// No map file given: the bus's first; a bus with no files: the map's name (as before).
+    #[test]
+    fn empty_cases() {
+        assert_eq!(run(&map(""), &bus(&["A", "B"]), &[]), "A");
+        assert_eq!(run(&map("M"), &bus(&[]), &[]), "M");
     }
 
     /// The bus has the file itself: unchanged, and no other folder is consulted.
