@@ -291,7 +291,15 @@ fn an_emergency_vehicle_does_not_stop_at_a_red_light() {
         );
         let c = w.car(w.x.approach[NORTH], 40.0, 10.0, 31, emergency);
         w.route(c, via(&w, NORTH, 0));
+        // an ordinary car behind it still stops at the red
+        let f = w.car(w.x.approach[NORTH], 15.0, 10.0, 32, false);
+        w.route(f, via(&w, NORTH, 0));
         w.run(30.0, |_| {});
+        assert!(
+            !w.through(f),
+            "the follower went through the red: {}",
+            describe(&w, f)
+        );
         assert_eq!(
             w.through(c),
             emergency,
@@ -313,7 +321,7 @@ fn an_emergency_vehicle_drives_faster_than_the_limit() {
         w.run(20.0, |w| top = top.max(w.of(c).state.speed));
         let kmh = top * 3.6;
         if emergency {
-            assert!((60.0..=80.5).contains(&kmh), "top speed {kmh:.1} km/h");
+            assert!((70.0..=80.5).contains(&kmh), "top speed {kmh:.1} km/h");
         } else {
             assert!(kmh < 58.0, "top speed {kmh:.1} km/h");
         }
