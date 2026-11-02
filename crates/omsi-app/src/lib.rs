@@ -58,6 +58,7 @@ mod settings;
 mod showroom;
 mod tiles;
 mod traffic;
+mod traffic_density;
 
 mod app_events;
 mod bus_service;

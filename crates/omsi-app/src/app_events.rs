@@ -1863,11 +1863,11 @@ impl ApplicationHandler for App {
                         let own = Some(crate::humans::BusId::Player);
                         f.seat.map(|s| s.0) != own && f.inside.map(|i| i.0) != own
                     });
-                    h.density = w
+                    h.people_curve = w
                         .global
-                        .passenger_density((self.clock.time / 3600.0) as f32)
-                        // (OMSI's `AIPassFactor`, the passengers setting in per cent)
-                        * self.settings.pax_density;
+                        .passenger_density((self.clock.time / 3600.0) as f32);
+                    // (OMSI's `AIPassFactor`, the passengers setting in per cent)
+                    h.density = h.people_curve * self.settings.pax_density;
                     h.time_of_day = self.clock.time;
                     h.daylight =
                         omsi_sim::Daylight::compute(&self.clock, self.envir.as_ref()).light_a;
