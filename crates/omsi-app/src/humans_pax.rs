@@ -2432,10 +2432,13 @@ impl Humans {
         if self.empty_bus.contains(&bn.id) {
             if self.desk_busy == Some(self.people[i].id) {
                 if let Some(m) = self.money.as_mut() {
+                    // (both the payment and the change on the desk)
+                    m.clear(false);
                     m.clear(true);
                 }
                 self.change_due = None;
                 self.request = None;
+                self.paid = None;
                 self.desk_busy = None;
             }
             let pp = self.pax_mut(i).unwrap();
