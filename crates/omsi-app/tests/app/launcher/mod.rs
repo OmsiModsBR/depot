@@ -5,7 +5,6 @@ mod mapview;
 mod pages;
 mod prerender;
 mod settings;
-mod start;
 mod thumbs;
 mod tray;
 mod ui;

@@ -14,5 +14,6 @@ pub(crate) mod root;
 pub(crate) mod settings;
 pub(crate) mod setup;
 pub(crate) mod showroom;
+pub(crate) mod start;
 pub(crate) mod timetable;
 pub(crate) mod timetable_plan;

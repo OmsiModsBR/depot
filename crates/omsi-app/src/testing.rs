@@ -244,9 +244,6 @@ pub mod launcher {
     pub mod prerender {
         pub use crate::launcher::prerender::*;
     }
-    pub mod start {
-        pub use crate::launcher::start::*;
-    }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }
