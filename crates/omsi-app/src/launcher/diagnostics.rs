@@ -1,7 +1,8 @@
 //! The Diagnostics page: what to look at, or send along, when something goes wrong - this
 //! build, the OMSI 2 folder and whether its essential files are there, the game's log
 //! (`omsi_launcher_ui::window::diagnostics_overview`), a check of a map or a vehicle
-//! (`window::integrity_check`) and a map's AI traffic (`ai_traffic`). Its tabs are drawn here.
+//! (`window::integrity_check`) and a map's AI traffic (`window::ai_traffic_tab`). Its tabs are
+//! drawn here, and the preview of a vehicle the AI traffic tab shows.
 
 use super::{Launcher, Page};
 use omsi_launcher_ui::window;
@@ -15,7 +16,7 @@ pub struct DiagView {
     /// The Integrity tab (`omsi_launcher_ui::window::integrity_check`).
     pub check: omsi_launcher_ui::window::CheckView,
     /// The AI traffic tab.
-    pub(super) ai: super::ai_traffic::AiView,
+    pub(super) ai: window::AiView,
 }
 
 impl DiagView {
@@ -56,7 +57,10 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let below = Rect::new(area.x, body.y + 52.0, area.w, area.bottom() - body.y - 52.0);
     match l.pages.diag.tab {
         1 => window::integrity_check(frame!(l), &mut l.pages.diag.check, below),
-        2 => super::ai_traffic::draw(l, below),
+        2 => {
+            window::ai_traffic_tab(frame!(l), &mut l.pages.diag.ai, below);
+            picture(l);
+        }
         _ => {
             // (the status at the right of the tabs, where the bar has room)
             let at = tabs_r.right() + 16.0;
@@ -77,8 +81,29 @@ pub fn draw(l: &mut Launcher, area: Rect) {
 /// The window over the page: the AI traffic's editor, or the integrity report's export.
 pub fn dialog(l: &mut Launcher) {
     if l.pages.diag.tab == 2 {
-        super::ai_edit::dialog(l);
+        window::ai_traffic_dialog(frame!(l), &mut l.pages.diag.ai);
+        picture(l);
     } else {
         window::integrity_export(frame!(l), &mut l.pages.diag.check);
     }
+}
+
+/// The vehicle the AI traffic tab asked for, in the preview where the tab left room for it.
+fn picture(l: &mut Launcher) {
+    let Some(p) = l.pages.diag.ai.picture.take() else {
+        return;
+    };
+    let c = &l.state.choice;
+    let look = crate::showroom::Look {
+        root: std::path::PathBuf::from(l.state.config.root.trim()),
+        map: p.map,
+        bus: p.bus,
+        paint: p.paint,
+        weather: c.weather.clone(),
+        time: c.time,
+        date: p.date,
+    };
+    l.preview.want_picture(look);
+    l.preview.focus_x = 0.5;
+    l.preview(p.rect);
 }

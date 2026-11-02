@@ -2867,6 +2867,7 @@ dependencies = [
  "omsi-content",
  "omsi-integrity",
  "omsi-launcher-core",
+ "omsi-map",
  "omsi-ui",
  "pollster",
  "serde_json",

@@ -23,8 +23,6 @@ macro_rules! frame {
     };
 }
 
-pub(crate) mod ai_edit;
-pub(crate) mod ai_traffic;
 pub(crate) mod backdrop;
 pub(crate) mod chrome;
 pub(crate) mod diagnostics;
@@ -33,8 +31,8 @@ mod gfx;
 pub(crate) mod host;
 pub(crate) mod mapview;
 pub mod mobile;
-mod omsi2_plugins;
 mod omsi2_modules;
+mod omsi2_plugins;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;

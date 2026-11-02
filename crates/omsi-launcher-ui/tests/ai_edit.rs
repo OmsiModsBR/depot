@@ -1,9 +1,9 @@
+use omsi_launcher_ui::window::*;
 use omsi_map::ailists::DepotEntry;
 use omsi_map::ailists_edit::AiListsDoc;
 use omsi_map::ailists_edit::ParkListDoc;
 use omsi_map::backup;
 use omsi_map::ttl_edit::TtlDoc;
-use openomsi_game::testing::launcher::ai_edit::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
