@@ -4,66 +4,18 @@
 //! random traffic's density over the day. Edit lists changes the map's own car groups and
 //! parking lists (see `ai_edit`); everything else here only reads.
 
-use super::Launcher;
+use super::super::domain::ai::{AiView, Picture};
+use super::super::domain::frame::Frame;
+use crate::kit::{card, clipped, dot, right, Status};
+use crate::look::*;
 use omsi_integrity::traffic::{clock, day, Listed, TrafficGroup};
 use omsi_integrity::AiTraffic;
-use omsi_launcher_ui::kit::{card, clipped, dot, right, Status};
-use omsi_launcher_ui::look::*;
 use omsi_ui::paint::{Align, Color};
 use omsi_ui::widgets::ButtonKind;
 use omsi_ui::{Rect, Weight};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
-
-#[derive(Default)]
-pub struct AiView {
-    /// The map looked at (its place in the map list), once the launcher's own was taken.
-    item: Option<usize>,
-    /// The day, YYYY-MM-DD.
-    date: String,
-    /// The map's folder and day being read, and the answer.
-    loading: Option<(String, i32, Receiver<AiTraffic>)>,
-    /// The map's folder and day read, and what was read.
-    pub(super) data: Option<(String, i32, Arc<AiTraffic>)>,
-    /// The OMSI 2 folder and the content's generation (`omsi_cfg::content_generation`) of what
-    /// was read: another folder, or a change to the content (a timetable saved, a mod
-    /// installed), reads it again.
-    seen: Option<(String, u64)>,
-    /// 0 car groups, 1 bus fleet and lines, 2 parked cars, 3 people, 4 traffic density.
-    tab: usize,
-    group: usize,
-    vehicle: Option<usize>,
-    line: usize,
-    tour: usize,
-    /// (vehicle type, entry) of the fleet.
-    bus: Option<(usize, usize)>,
-    park: usize,
-    car: Option<usize>,
-    /// 0 `humans.txt`, 1 `drivers.txt`.
-    people: usize,
-    person: Option<usize>,
-    /// 0 weekdays, 1 Saturday, 2 Sunday or holiday.
-    day: usize,
-    /// The map's `global.cfg` (as the map list names it), for the preview's light.
-    map_file: String,
-    /// The last frame showed a vehicle's preview (the page's own bus is not asked for then).
-    showing: bool,
-    /// The map's lists being edited.
-    pub edit: Option<super::ai_edit::Editor>,
-}
-
-impl AiView {
-    /// The tab shows the preview of one of its vehicles.
-    pub fn shows_vehicle(&self) -> bool {
-        self.showing
-    }
-
-    /// A window of the editing lies over the tab.
-    pub fn dialog_open(&self) -> bool {
-        self.edit.as_ref().is_some_and(|e| e.dialog_open())
-    }
-}
 
 const ROW: f32 = 30.0;
 const LIST_ROW: f32 = 54.0;
@@ -97,17 +49,17 @@ fn read(root: PathBuf, folder: String, date: i32) -> Receiver<AiTraffic> {
 }
 
 /// The panel's chosen row in a list of `n`, kept inside it.
-pub(super) fn keep(i: usize, n: usize) -> usize {
+pub(crate) fn keep(i: usize, n: usize) -> usize {
     i.min(n.saturating_sub(1))
 }
 
-pub fn draw(l: &mut Launcher, area: Rect) {
-    l.pages.diag.ai.showing = false;
-    let list = omsi_launcher_ui::window::check_items(&l.state, 0);
-    let root = PathBuf::from(l.state.config.root.trim());
+pub fn ai_traffic_tab(f: &mut Frame, view: &mut AiView, area: Rect) {
+    view.showing = false;
+    let list = super::integrity::check_items(f.state, 0);
+    let root = PathBuf::from(f.state.config.root.trim());
     if list.is_empty() || root.as_os_str().is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "Nothing to verify here.",
             area.x + 4.0,
             area.y + 18.0,
@@ -119,91 +71,82 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         return;
     }
     // (first opened: the map and the day chosen for the drive)
-    if l.pages.diag.ai.item.is_none() {
-        let chosen = l
+    if view.item.is_none() {
+        let chosen = f
             .state
             .maps
             .iter()
-            .position(|m| m.file == l.state.choice.map)
+            .position(|m| m.file == f.state.choice.map)
             .and_then(|i| {
-                let folder = l.state.maps[i].file.split('/').nth(1)?;
+                let folder = f.state.maps[i].file.split('/').nth(1)?;
                 list.iter().position(|x| x.1 == folder)
             });
-        l.pages.diag.ai.item = Some(chosen.unwrap_or(0));
-        let date = l.state.choice.date.trim();
-        l.pages.diag.ai.date = if omsi_map::ailists::date_code(date).is_some() {
+        view.item = Some(chosen.unwrap_or(0));
+        let date = f.state.choice.date.trim();
+        view.date = if omsi_map::ailists::date_code(date).is_some() {
             date.to_string()
         } else {
             today()
         };
     }
-    let mut item = keep(l.pages.diag.ai.item.unwrap_or(0), list.len());
+    let mut item = keep(view.item.unwrap_or(0), list.len());
     // (while its lists are edited, the map stays)
-    if let Some(e) = l.pages.diag.ai.edit.as_ref() {
+    if let Some(e) = view.edit.as_ref() {
         match list.iter().position(|x| x.1 == e.folder) {
             Some(i) => item = i,
-            None => l.pages.diag.ai.edit = None,
+            None => view.edit = None,
         }
     }
-    let editing = l.pages.diag.ai.edit.is_some();
+    let editing = view.edit.is_some();
     let folder = list[item].1.clone();
-    l.pages.diag.ai.map_file = l
+    view.map_file = f
         .state
         .maps
         .iter()
         .find(|m| m.file.split('/').nth(1) == Some(folder.as_str()))
         .map(|m| m.file.clone())
         .unwrap_or_default();
-    let date = omsi_map::ailists::date_code(&l.pages.diag.ai.date);
+    let date = omsi_map::ailists::date_code(&view.date);
 
     // what was read is dropped when the OMSI 2 folder or its content changed
     let now = (
-        l.state.config.root.trim().to_string(),
+        f.state.config.root.trim().to_string(),
         omsi_cfg::content_generation(),
     );
-    if l.pages.diag.ai.seen.as_ref() != Some(&now) {
-        l.pages.diag.ai.data = None;
-        l.pages.diag.ai.loading = None;
-        l.pages.diag.ai.seen = Some(now);
+    if view.seen.as_ref() != Some(&now) {
+        view.data = None;
+        view.loading = None;
+        view.seen = Some(now);
     }
 
     // the answer of a read, and a new read when the map or the day changed
-    if let Some((f, d, rx)) = l.pages.diag.ai.loading.as_ref() {
+    if let Some((f, d, rx)) = view.loading.as_ref() {
         match rx.try_recv() {
             Ok(t) => {
                 let (f, d) = (f.clone(), *d);
-                l.pages.diag.ai.data = Some((f, d, Arc::new(t)));
-                l.pages.diag.ai.loading = None;
+                view.data = Some((f, d, Arc::new(t)));
+                view.loading = None;
             }
-            Err(TryRecvError::Disconnected) => l.pages.diag.ai.loading = None,
+            Err(TryRecvError::Disconnected) => view.loading = None,
             Err(TryRecvError::Empty) => {}
         }
     }
     if let Some(date) = date {
         let wanted = (folder.as_str(), date);
-        let have = l
-            .pages
-            .diag
-            .ai
+        let have = view
             .data
             .as_ref()
             .is_some_and(|(f, d, _)| (f.as_str(), *d) == wanted);
-        let asked = l
-            .pages
-            .diag
-            .ai
+        let asked = view
             .loading
             .as_ref()
             .is_some_and(|(f, d, _)| (f.as_str(), *d) == wanted);
         if !have && !asked {
             let rx = read(root, folder.clone(), date);
-            l.pages.diag.ai.loading = Some((folder.clone(), date, rx));
+            view.loading = Some((folder.clone(), date, rx));
         }
     }
-    let data = l
-        .pages
-        .diag
-        .ai
+    let data = view
         .data
         .as_ref()
         .filter(|(f, d, _)| *f == folder && date.is_none_or(|x| x == *d))
@@ -216,28 +159,28 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let sel_w = 300.0f32.min(area.w * 0.3);
     let map_r = Rect::new(area.x, area.y, sel_w, h);
     if editing {
-        l.ui.p()
+        f.ui.p()
             .rounded(map_r, omsi_ui::theme::CONTROL_RADIUS, PANEL_2);
-        l.ui.p()
+        f.ui.p()
             .rounded_border(map_r, omsi_ui::theme::CONTROL_RADIUS, 1.0, LINE);
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             &names[item],
             Rect::new(map_r.x + 12.0, map_r.y, map_r.w - 24.0, map_r.h),
             13.0,
             Weight::Regular,
             MUTED,
         );
-        l.ui.tooltip(map_r, "Stop editing to look at another map.");
-    } else if l.ui.select_as_is("ai-map", map_r, &mut it, &names) {
-        l.pages.diag.ai.item = Some(it);
-        reset(l);
+        f.ui.tooltip(map_r, "Stop editing to look at another map.");
+    } else if f.ui.select_as_is("ai-map", map_r, &mut it, &names) {
+        view.item = Some(it);
+        reset(view);
     }
     let date_r = Rect::new(map_r.right() + 10.0, area.y, 170.0, h);
-    let mut d = l.pages.diag.ai.date.clone();
-    if l.ui.date_field("ai-date", date_r, &mut d) {
-        l.pages.diag.ai.date = d;
+    let mut d = view.date.clone();
+    if f.ui.date_field("ai-date", date_r, &mut d) {
+        view.date = d;
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         date_r,
         "The day the lists are shown for: the Chrono scenarios in force then and the fleet in service.",
     );
@@ -247,21 +190,21 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         } else {
             omsi_ui::tr("Chrono: %{n} in force").replace("%{n}", &t.chrono.len().to_string())
         };
-        let cw = l.ui.width(&chrono, 12.0, Weight::Regular) + 26.0;
+        let cw = f.ui.width(&chrono, 12.0, Weight::Regular) + 26.0;
         let chip = Rect::new(date_r.right() + 10.0, area.y + 4.0, cw, h - 8.0);
-        l.ui.p().rounded(chip, 14.0, PANEL_2);
-        l.ui.p().rounded_border(chip, 14.0, 1.0, LINE);
-        l.ui.text_in_as_is(&chrono, chip.inset(2.0), 12.0, Weight::Regular, MUTED);
+        f.ui.p().rounded(chip, 14.0, PANEL_2);
+        f.ui.p().rounded_border(chip, 14.0, 1.0, LINE);
+        f.ui.text_in_as_is(&chrono, chip.inset(2.0), 12.0, Weight::Regular, MUTED);
         let tip = if t.chrono.is_empty() {
             omsi_ui::tr("No Chrono scenario of this map is in force on this day.").to_string()
         } else {
             t.chrono.join("\n")
         };
-        l.ui.tooltip(chip, &tip);
+        f.ui.tooltip(chip, &tip);
     }
     let export_r = Rect::new(area.right() - 170.0, area.y, 170.0, h);
     let can_export = data.is_some();
-    if l.ui.button(
+    if f.ui.button(
         "ai:export",
         export_r,
         "Export (TXT)",
@@ -270,21 +213,21 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     ) && can_export
     {
         if let Some(t) = data.as_ref() {
-            export(l, t, &list[item]);
+            export(f, t, &list[item]);
         }
     }
     if !can_export {
-        l.ui.p()
+        f.ui.p()
             .rounded(export_r, omsi_ui::theme::CONTROL_RADIUS, PANEL.alpha(0.6));
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         export_r,
         "Saves everything on this tab for the chosen map and day as a text file.",
     );
     if !editing {
         let edit_r = Rect::new(export_r.x - 10.0 - 150.0, area.y, 150.0, h);
-        let why = super::ai_edit::cannot_edit(l, &folder);
-        let clicked = l.ui.button(
+        let why = super::ai_edit::cannot_edit(f.state, &folder);
+        let clicked = f.ui.button(
             "ai:edit",
             edit_r,
             "Edit lists",
@@ -292,10 +235,10 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             ButtonKind::Normal,
         );
         if why.is_some() {
-            l.ui.p()
+            f.ui.p()
                 .rounded(edit_r, omsi_ui::theme::CONTROL_RADIUS, PANEL.alpha(0.6));
         }
-        l.ui.tooltip(
+        f.ui.tooltip(
             edit_r,
             why.unwrap_or(
                 "Change the map's car groups and parking lists. The files are copied before each save.",
@@ -303,14 +246,14 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         );
         if clicked && why.is_none() {
             let name = names[item].clone();
-            super::ai_edit::start(l, &folder, &name);
+            super::ai_edit::start(f, view, &folder, &name);
         }
     }
 
     // the editing banner
     let mut ty = area.y + h + 12.0;
     if editing {
-        super::ai_edit::banner(l, Rect::new(area.x, ty, area.w, 46.0));
+        super::ai_edit::banner(f, view, Rect::new(area.x, ty, area.w, 46.0));
         ty += 58.0;
     }
 
@@ -327,8 +270,8 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             ]
         })
         .unwrap_or_default();
-    if let Some(e) = l.pages.diag.ai.edit.as_ref() {
-        (counts[0], counts[2]) = super::ai_edit::counts(e);
+    if let Some(e) = view.edit.as_ref() {
+        (counts[0], counts[2]) = super::super::domain::ai_lists::counts(e);
     }
     let labels = [
         (
@@ -353,8 +296,8 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         ),
     ];
     let bar = Rect::new(area.x, ty, area.w, 36.0);
-    if let Some(i) = count_tabs(l, bar, &labels, &counts, l.pages.diag.ai.tab) {
-        l.pages.diag.ai.tab = i;
+    if let Some(i) = count_tabs(f, bar, &labels, &counts, view.tab) {
+        view.tab = i;
     }
 
     let body = Rect::new(
@@ -364,27 +307,27 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         (area.bottom() - ty - 56.0).max(160.0),
     );
     // the buses of the lines: the lines are those read, the fleet is the map's own file
-    if l.pages.diag.ai.edit.is_some() && l.pages.diag.ai.tab == 1 {
+    if view.edit.is_some() && view.tab == 1 {
         if let Some(t) = data.as_ref() {
-            super::ai_edit::bus_lines(l, body, t);
+            super::ai_edit::bus_lines(f, view, body, t);
             return;
         }
     }
     // the lists being edited are the map's own, read from its files
-    if l.pages.diag.ai.edit.is_some() && matches!(l.pages.diag.ai.tab, 0 | 2) {
-        if l.pages.diag.ai.tab == 0 {
-            super::ai_edit::car_groups(l, body);
+    if view.edit.is_some() && matches!(view.tab, 0 | 2) {
+        if view.tab == 0 {
+            super::ai_edit::car_groups(f, view, body);
         } else {
-            super::ai_edit::parked(l, body);
+            super::ai_edit::parked(f, view, body);
         }
         return;
     }
     let Some(t) = data else {
         let r = body;
-        l.ui.solid(r);
-        l.ui.p()
+        f.ui.solid(r);
+        f.ui.p()
             .rounded(r, omsi_ui::theme::RADIUS, omsi_ui::theme::surface(PANEL));
-        l.ui.p()
+        f.ui.p()
             .rounded_border(r, omsi_ui::theme::RADIUS, 1.0, LINE);
         let msg = if date.is_none() {
             "Type a day as YYYY-MM-DD, or pick one in the calendar."
@@ -392,7 +335,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             "Reading the map's AI lists…"
         };
         clipped(
-            &mut l.ui,
+            f.ui,
             msg,
             r.x + 19.0,
             r.y + 28.0,
@@ -402,7 +345,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             MUTED,
         );
         if date.is_some() {
-            l.ui.progress(
+            f.ui.progress(
                 Rect::new(r.x + 19.0, r.y + 46.0, r.w - 38.0, 4.0),
                 0.35,
                 true,
@@ -410,18 +353,18 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         }
         return;
     };
-    match l.pages.diag.ai.tab {
-        0 => car_groups(l, body, &t),
-        1 => bus_lines(l, body, &t),
-        2 => parked(l, body, &t),
-        3 => people(l, body, &t),
-        _ => density(l, body, &t),
+    match view.tab {
+        0 => car_groups(f, view, body, &t),
+        1 => bus_lines(f, view, body, &t),
+        2 => parked(f, view, body, &t),
+        3 => people(f, view, body, &t),
+        _ => density(f, view, body, &t),
     }
 }
 
 /// Another map: the choices in its lists start over.
-fn reset(l: &mut Launcher) {
-    let a = &mut l.pages.diag.ai;
+fn reset(view: &mut AiView) {
+    let a = &mut *view;
     a.group = 0;
     a.vehicle = None;
     a.line = 0;
@@ -432,7 +375,7 @@ fn reset(l: &mut Launcher) {
     a.person = None;
 }
 
-fn export(l: &mut Launcher, t: &AiTraffic, map: &(String, String)) {
+fn export(f: &mut Frame, t: &AiTraffic, map: &(String, String)) {
     let clean: String = map
         .0
         .chars()
@@ -460,17 +403,17 @@ fn export(l: &mut Launcher, t: &AiTraffic, map: &(String, String)) {
         "Build".into(),
         format!(
             "Project Depot {} ({})",
-            crate::core::startup::VERSION,
-            crate::core::startup::BUILD
+            f.host.version().0,
+            f.host.version().1
         ),
     ));
     match std::fs::write(&path, t.to_text(&header)) {
-        Ok(()) => l
+        Ok(()) => f
             .state
             .set_status("The AI traffic was saved as a text file.", false),
         Err(e) => {
             log::warn!("AI traffic export to {}: {e}", path.display());
-            l.state
+            f.state
                 .set_status("The text file could not be saved.", true);
         }
     }
@@ -478,13 +421,13 @@ fn export(l: &mut Launcher, t: &AiTraffic, map: &(String, String)) {
 
 /// A tab bar with a count badge on each tab; the tab clicked, if any.
 fn count_tabs(
-    l: &mut Launcher,
+    f: &mut Frame,
     bar: Rect,
     labels: &[(&str, &str)],
     counts: &[usize],
     on: usize,
 ) -> Option<usize> {
-    l.ui.p()
+    f.ui.p()
         .rect(Rect::new(bar.x, bar.bottom() - 1.0, bar.w, 1.0), LINE);
     let px = 12.5;
     let texts: Vec<String> = labels
@@ -495,8 +438,8 @@ fn count_tabs(
         .iter()
         .zip(counts)
         .map(|(t, n)| {
-            l.ui.width(t, px, Weight::Medium)
-                + l.ui.width(&n.to_string(), 11.0, Weight::Medium)
+            f.ui.width(t, px, Weight::Medium)
+                + f.ui.width(&n.to_string(), 11.0, Weight::Medium)
                 + 46.0
         })
         .sum();
@@ -505,22 +448,22 @@ fn count_tabs(
     let mut picked = None;
     for (i, label) in texts.iter().enumerate() {
         let n = counts.get(i).copied().unwrap_or(0);
-        let lw = l.ui.width(label, px, Weight::Medium);
-        let nw = l.ui.width(&n.to_string(), 11.0, Weight::Medium) + 12.0;
+        let lw = f.ui.width(label, px, Weight::Medium);
+        let nw = f.ui.width(&n.to_string(), 11.0, Weight::Medium) + 12.0;
         let w = (lw + nw + 46.0) * squeeze;
         let cell = Rect::new(x, bar.y, w, bar.h);
         let id = omsi_ui::widgets::id_of(&format!("ai-tab-{i}"));
-        let (hover, _, clicked) = l.ui.interact_key(id, cell);
+        let (hover, _, clicked) = f.ui.interact_key(id, cell);
         if clicked {
             picked = Some(i);
         }
         let sel = on == i;
         if hover && !sel {
-            l.ui.p().rounded(cell.inset(1.0), 4.0, HOVER_LAYER);
+            f.ui.p().rounded(cell.inset(1.0), 4.0, HOVER_LAYER);
         }
         let tx = x + 14.0 * squeeze;
         let room = (w - (tx - x) - nw - 6.0).max(10.0);
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             label,
             Rect::new(tx, bar.y, room, bar.h),
             px,
@@ -533,8 +476,8 @@ fn count_tabs(
             nw,
             18.0,
         );
-        l.ui.p().rounded(badge, 9.0, PANEL_2);
-        l.ui.text_in(
+        f.ui.p().rounded(badge, 9.0, PANEL_2);
+        f.ui.text_in(
             &n.to_string(),
             badge,
             11.0,
@@ -543,13 +486,13 @@ fn count_tabs(
             Align::Center,
         );
         if sel {
-            l.ui.p().rounded(
+            f.ui.p().rounded(
                 Rect::new(cell.x + 8.0, bar.bottom() - 3.0, cell.w - 16.0, 3.0),
                 1.5,
                 omsi_ui::theme::accent(),
             );
         }
-        l.ui.tooltip(cell, labels[i].1);
+        f.ui.tooltip(cell, labels[i].1);
         x += w;
     }
     picked
@@ -557,7 +500,7 @@ fn count_tabs(
 
 /// The three panels of a tab: the lists at the left, what the chosen one holds in the middle,
 /// and the details of the chosen entry at the right.
-pub(super) fn columns(body: Rect) -> (Rect, Rect, Rect) {
+pub(crate) fn columns(body: Rect) -> (Rect, Rect, Rect) {
     let gap = 12.0;
     let lw = (body.w * 0.2).clamp(200.0, 260.0);
     let rw = (body.w * 0.24).clamp(240.0, 330.0);
@@ -573,12 +516,12 @@ pub(super) fn columns(body: Rect) -> (Rect, Rect, Rect) {
 }
 
 /// A line of quiet text at the foot of a panel.
-pub(super) fn foot(l: &mut Launcher, r: Rect, s: &str) {
-    l.ui.p().rect(
+pub(crate) fn foot(f: &mut Frame, r: Rect, s: &str) {
+    f.ui.p().rect(
         Rect::new(r.x + 1.0, r.bottom() - 50.0, r.w - 2.0, 1.0),
         LINE,
     );
-    l.ui.paragraph(
+    f.ui.paragraph(
         s,
         glam::Vec2::new(r.x + 17.0, r.bottom() - 42.0),
         r.w - 34.0,
@@ -589,15 +532,15 @@ pub(super) fn foot(l: &mut Launcher, r: Rect, s: &str) {
 }
 
 /// A list of entries (title, line under it, status) in a panel; the entry clicked, if any.
-pub(super) fn entries(
-    l: &mut Launcher,
+pub(crate) fn entries(
+    f: &mut Frame,
     id: &str,
     r: Rect,
     rows: &[(String, String, Status)],
     sel: usize,
 ) -> Option<usize> {
     let mut picked = None;
-    l.ui.scroll_area(id, r, &mut |ui, v| {
+    f.ui.scroll_area(id, r, &mut |ui, v| {
         let mut y = v.y;
         for (i, (title, sub, st)) in rows.iter().enumerate() {
             let cell = Rect::new(v.x + 8.0, y + 2.0, v.w - 16.0, LIST_ROW - 4.0);
@@ -636,12 +579,12 @@ pub(super) fn entries(
 }
 
 /// A column of a table: its heading, its share of the width, and how it is aligned.
-pub(super) struct Col(pub(super) &'static str, pub(super) f32, pub(super) Align);
+pub(crate) struct Col(pub(crate) &'static str, pub(crate) f32, pub(crate) Align);
 
 /// A table (heading row, then rows of cells) in `r`; the row clicked, if any. A row whose
 /// status is not `Found` gets a dot of its colour; `dim` rows are drawn quieter.
-pub(super) fn table(
-    l: &mut Launcher,
+pub(crate) fn table(
+    f: &mut Frame,
     id: &str,
     r: Rect,
     cols: &[Col],
@@ -664,11 +607,11 @@ pub(super) fn table(
     for (c, (x, w)) in cols.iter().zip(xs(r.w)) {
         let cell = Rect::new(head.x + x, head.y, w - 8.0, ROW);
         let s = omsi_ui::tr(c.0).to_string();
-        l.ui.text_in(&s, cell, 12.0, Weight::Regular, MUTED, c.2);
+        f.ui.text_in(&s, cell, 12.0, Weight::Regular, MUTED, c.2);
     }
     let body = Rect::new(r.x, r.y + ROW, r.w, (r.h - ROW).max(0.0));
     let mut picked = None;
-    l.ui.scroll_area(id, body, &mut |ui, v| {
+    f.ui.scroll_area(id, body, &mut |ui, v| {
         let mut y = v.y;
         let at = xs(v.w);
         for (i, (cells, st, dim)) in rows.iter().enumerate() {
@@ -709,12 +652,12 @@ pub(super) fn table(
 }
 
 /// The details of the chosen entry: (label, value) rows under the card's title.
-pub(super) fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
-    card(&mut l.ui, r, "Details", None);
+pub(crate) fn details(f: &mut Frame, r: Rect, rows: &[(&str, String)]) {
+    card(f.ui, r, "Details", None);
     let lw = (r.w * 0.36).max(90.0);
     // (the rows scroll when the card is short: under a vehicle's picture)
     let list = Rect::new(r.x, r.y + 46.0, r.w, (r.h - 50.0).max(0.0));
-    l.ui.scroll_area("ai-details", list, &mut |ui, v| {
+    f.ui.scroll_area("ai-details", list, &mut |ui, v| {
         let mut y = v.y + 4.0;
         for (k, val) in rows {
             ui.p()
@@ -746,8 +689,9 @@ pub(super) fn details(l: &mut Launcher, r: Rect, rows: &[(&str, String)]) {
 /// The vehicle `file` in `paint` (empty: its own) at the top of `r`, as the preview helper
 /// draws it: the picture kept from an earlier time at once, the live view when it is turned.
 /// Returns the rest of `r`, under it.
-pub(super) fn vehicle_view(
-    l: &mut Launcher,
+pub(crate) fn vehicle_view(
+    f: &mut Frame,
+    view: &mut AiView,
     r: Rect,
     file: &str,
     paint: &str,
@@ -755,33 +699,27 @@ pub(super) fn vehicle_view(
 ) -> Rect {
     let h = (r.w * 0.68).min(r.h * 0.5).max(120.0);
     let top = Rect::new(r.x, r.y, r.w, h);
-    if !exists || l.state.in_game() || l.pages.diag.ai.map_file.is_empty() {
-        l.ui.solid(top);
-        l.ui.p()
+    if !exists || f.state.in_game() || view.map_file.is_empty() {
+        f.ui.solid(top);
+        f.ui.p()
             .rounded(top, omsi_ui::theme::RADIUS, omsi_ui::theme::FIELD);
         let why = if !exists {
             "The file is missing: there is nothing to show."
-        } else if l.state.in_game() {
+        } else if f.state.in_game() {
             "No preview while the game runs."
         } else {
             "No preview for this map."
         };
-        l.ui.text_in(why, top, 12.5, Weight::Regular, MUTED, Align::Center);
+        f.ui.text_in(why, top, 12.5, Weight::Regular, MUTED, Align::Center);
     } else {
-        let c = &l.state.choice;
-        let look = crate::showroom::Look {
-            root: PathBuf::from(l.state.config.root.trim()),
-            map: l.pages.diag.ai.map_file.clone(),
+        view.picture = Some(Picture {
+            rect: top,
+            map: view.map_file.clone(),
             bus: file.to_string(),
             paint: paint.to_string(),
-            weather: c.weather.clone(),
-            time: c.time,
-            date: l.pages.diag.ai.date.clone(),
-        };
-        l.preview.want_picture(look);
-        l.preview.focus_x = 0.5;
-        l.preview(top);
-        l.pages.diag.ai.showing = true;
+            date: view.date.clone(),
+        });
+        view.showing = true;
     }
     Rect::new(
         r.x,
@@ -791,7 +729,7 @@ pub(super) fn vehicle_view(
     )
 }
 
-pub(super) fn status_of(exists: bool) -> Status {
+pub(crate) fn status_of(exists: bool) -> Status {
     if exists {
         Status::Found
     } else {
@@ -816,7 +754,7 @@ pub fn weight_text(w: f32) -> String {
 }
 
 /// `one` for one, else `more` with the count in place of `%{n}`, translated.
-pub(super) fn many(n: usize, one: &str, more: &str) -> String {
+pub(crate) fn many(n: usize, one: &str, more: &str) -> String {
     if n == 1 {
         omsi_ui::tr(one).to_string()
     } else {
@@ -824,7 +762,7 @@ pub(super) fn many(n: usize, one: &str, more: &str) -> String {
     }
 }
 
-pub(super) fn percent(x: f32) -> String {
+pub(crate) fn percent(x: f32) -> String {
     format!("{:.1} %", x * 100.0)
 }
 
@@ -837,7 +775,7 @@ pub fn shown_name(name: &str, file: &str) -> String {
     }
 }
 
-fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
+fn car_groups(f: &mut Frame, view: &mut AiView, body: Rect, t: &AiTraffic) {
     let (left, mid, right_r) = columns(body);
     let groups: Vec<(usize, &TrafficGroup)> = t
         .groups
@@ -845,10 +783,10 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         .enumerate()
         .filter(|(_, g)| !g.is_depot)
         .collect();
-    card(&mut l.ui, left, "Groups", Some(&groups.len().to_string()));
+    card(f.ui, left, "Groups", Some(&groups.len().to_string()));
     if groups.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no car groups.",
             left.x + 17.0,
             left.y + 60.0,
@@ -858,13 +796,13 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             MUTED,
         );
         foot(
-            l,
+            f,
             left,
             "From ailists.cfg, with the Chrono scenarios in force on the chosen day.",
         );
         return;
     }
-    let sel = keep(l.pages.diag.ai.group, groups.len());
+    let sel = keep(view.group, groups.len());
     let rows: Vec<(String, String, Status)> = groups
         .iter()
         .map(|(i, g)| {
@@ -880,12 +818,12 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         })
         .collect();
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-groups", list_r, &rows, sel) {
-        l.pages.diag.ai.group = i;
-        l.pages.diag.ai.vehicle = None;
+    if let Some(i) = entries(f, "ai-groups", list_r, &rows, sel) {
+        view.group = i;
+        view.vehicle = None;
     }
     foot(
-        l,
+        f,
         left,
         "From ailists.cfg, with the Chrono scenarios in force on the chosen day.",
     );
@@ -896,7 +834,7 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         many(g.vehicles.len(), "1 vehicle", "%{n} vehicles"),
         omsi_ui::tr("weights add up to %{w}").replace("%{w}", &weight_text(g.total_weight()))
     );
-    card(&mut l.ui, mid, g.name.trim(), Some(&note));
+    card(f.ui, mid, g.name.trim(), Some(&note));
     let rows: Vec<(Vec<String>, Status, bool)> = g
         .vehicles
         .iter()
@@ -921,9 +859,9 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         Col("Weight", 0.8, Align::Right),
         Col("Chance", 1.0, Align::Right),
     ];
-    let vsel = l.pages.diag.ai.vehicle.filter(|&v| v < g.vehicles.len());
-    if let Some(i) = table(l, "ai-vehicles", table_r, &cols, &rows, vsel) {
-        l.pages.diag.ai.vehicle = Some(i);
+    let vsel = view.vehicle.filter(|&v| v < g.vehicles.len());
+    if let Some(i) = table(f, "ai-vehicles", table_r, &cols, &rows, vsel) {
+        view.vehicle = Some(i);
     }
     let random = match g.random {
         Some(c) => omsi_ui::tr("The random traffic uses this group (density class %{c}).")
@@ -934,7 +872,7 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         None => omsi_ui::tr("The random traffic does not use this group; tours or paths may.").to_string(),
     };
     foot(
-        l,
+        f,
         mid,
         &format!(
             "{random} {}",
@@ -948,9 +886,9 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
                 .replace("%{w}", &weight_text(v.weight))
                 .replace("%{total}", &weight_text(g.total_weight()))
                 .replace("%{p}", &percent(g.chance(k)));
-            let rest = vehicle_view(l, right_r, &v.file, "", v.exists);
+            let rest = vehicle_view(f, view, right_r, &v.file, "", v.exists);
             details(
-                l,
+                f,
                 rest,
                 &[
                     ("Vehicle", shown_name(&v.name, &v.file)),
@@ -967,7 +905,7 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         None => {
             let missing = g.vehicles.iter().filter(|v| !v.exists).count();
             details(
-                l,
+                f,
                 right_r,
                 &[
                     ("Group", g.name.trim().to_string()),
@@ -989,12 +927,12 @@ fn car_groups(l: &mut Launcher, body: Rect, t: &AiTraffic) {
     }
 }
 
-fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
+fn bus_lines(f: &mut Frame, view: &mut AiView, body: Rect, t: &AiTraffic) {
     let (left, mid, right_r) = columns(body);
-    card(&mut l.ui, left, "Lines", Some(&t.lines.len().to_string()));
+    card(f.ui, left, "Lines", Some(&t.lines.len().to_string()));
     if t.lines.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no timetable lines.",
             left.x + 17.0,
             left.y + 60.0,
@@ -1004,13 +942,13 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             MUTED,
         );
         foot(
-            l,
+            f,
             left,
             "From TTData, with the Chrono scenarios in force on the chosen day.",
         );
         return;
     }
-    let sel = keep(l.pages.diag.ai.line, t.lines.len());
+    let sel = keep(view.line, t.lines.len());
     let rows: Vec<(String, String, Status)> = t
         .lines
         .iter()
@@ -1032,13 +970,13 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         })
         .collect();
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-lines", list_r, &rows, sel) {
-        l.pages.diag.ai.line = i;
-        l.pages.diag.ai.tour = 0;
-        l.pages.diag.ai.bus = None;
+    if let Some(i) = entries(f, "ai-lines", list_r, &rows, sel) {
+        view.line = i;
+        view.tour = 0;
+        view.bus = None;
     }
     foot(
-        l,
+        f,
         left,
         "From TTData, with the Chrono scenarios in force on the chosen day.",
     );
@@ -1057,8 +995,8 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             .replace("%{p}", &percent(*f)),
         None => omsi_ui::tr("car_use: any bus of the group").to_string(),
     };
-    card(&mut l.ui, tours_r, &title, Some(&types));
-    let tsel = keep(l.pages.diag.ai.tour, line.tours.len());
+    card(f.ui, tours_r, &title, Some(&types));
+    let tsel = keep(view.tour, line.tours.len());
     let rows: Vec<(Vec<String>, Status, bool)> = line
         .tours
         .iter()
@@ -1088,9 +1026,9 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         Col("Last", 0.8, Align::Right),
     ];
     let table_r = Rect::new(tours_r.x, tours_r.y + 40.0, tours_r.w, tours_r.h - 46.0);
-    if let Some(i) = table(l, "ai-tours", table_r, &cols, &rows, Some(tsel)) {
-        l.pages.diag.ai.tour = i;
-        l.pages.diag.ai.bus = None;
+    if let Some(i) = table(f, "ai-tours", table_r, &cols, &rows, Some(tsel)) {
+        view.tour = i;
+        view.bus = None;
     }
 
     // the depot behind the chosen tour
@@ -1101,13 +1039,13 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         mid.bottom() - tours_r.bottom() - 12.0,
     );
     let Some(tour) = line.tours.get(tsel) else {
-        card(&mut l.ui, fleet_r, "Depot fleet", None);
-        details(l, right_r, &[]);
+        card(f.ui, fleet_r, "Depot fleet", None);
+        details(f, right_r, &[]);
         return;
     };
     let Some(group) = t.group(&tour.ai_group) else {
-        card(&mut l.ui, fleet_r, "Depot fleet", None);
-        l.ui.paragraph(
+        card(f.ui, fleet_r, "Depot fleet", None);
+        f.ui.paragraph(
             &omsi_ui::tr("No AI list has the group \"%{g}\": the game has no bus to take for this tour. The Integrity check names it too.")
                 .replace("%{g}", &tour.ai_group),
             glam::Vec2::new(fleet_r.x + 17.0, fleet_r.y + 46.0),
@@ -1117,7 +1055,7 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             WARN,
         );
         details(
-            l,
+            f,
             right_r,
             &[
                 ("Tour", format!("{}/{}", line.name, tour.number)),
@@ -1131,7 +1069,7 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         // a plain group: its vehicles by weight
         let title = omsi_ui::tr("Group %{g}").replace("%{g}", group.name.trim());
         card(
-            &mut l.ui,
+            f.ui,
             fleet_r,
             &title,
             Some(&many(group.vehicles.len(), "1 vehicle", "%{n} vehicles")),
@@ -1158,9 +1096,9 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             Col("Chance", 1.0, Align::Right),
         ];
         let r = Rect::new(fleet_r.x, fleet_r.y + 40.0, fleet_r.w, fleet_r.h - 46.0);
-        table(l, "ai-tour-group", r, &cols, &rows, None);
+        table(f, "ai-tour-group", r, &cols, &rows, None);
         details(
-            l,
+            f,
             right_r,
             &[
                 ("Tour", format!("{}/{}", line.name, tour.number)),
@@ -1176,7 +1114,7 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         .replace("%{n}", &group.in_service().to_string())
         .replace("%{all}", &all.to_string());
     let title = omsi_ui::tr("Depot fleet · %{g}").replace("%{g}", group.name.trim());
-    card(&mut l.ui, fleet_r, &title, Some(&note));
+    card(f.ui, fleet_r, &title, Some(&note));
     let mut index: Vec<(usize, usize)> = Vec::new();
     let mut rows: Vec<(Vec<String>, Status, bool)> = Vec::new();
     for (ti, ft) in group.fleet.iter().enumerate() {
@@ -1205,14 +1143,9 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         Col("Until", 1.0, Align::Left),
     ];
     let r = Rect::new(fleet_r.x, fleet_r.y + 40.0, fleet_r.w, fleet_r.h - 46.0);
-    let bsel = l
-        .pages
-        .diag
-        .ai
-        .bus
-        .and_then(|b| index.iter().position(|x| *x == b));
-    if let Some(i) = table(l, "ai-fleet", r, &cols, &rows, bsel) {
-        l.pages.diag.ai.bus = index.get(i).copied();
+    let bsel = view.bus.and_then(|b| index.iter().position(|x| *x == b));
+    if let Some(i) = table(f, "ai-fleet", r, &cols, &rows, bsel) {
+        view.bus = index.get(i).copied();
     }
     let tours = t.tours_of(&group.name);
     let tours_text = if tours.len() > 4 {
@@ -1220,10 +1153,7 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
     } else {
         tours.join(", ")
     };
-    match l
-        .pages
-        .diag
-        .ai
+    match view
         .bus
         .and_then(|(ti, ei)| Some((group.fleet.get(ti)?, group.fleet.get(ti)?.entries.get(ei)?)))
     {
@@ -1236,9 +1166,9 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
                     .replace("%{a}", &day(f))
                     .replace("%{b}", &day(u)),
             };
-            let rest = vehicle_view(l, right_r, &ft.file, &e.paint, ft.exists);
+            let rest = vehicle_view(f, view, right_r, &ft.file, &e.paint, ft.exists);
             details(
-                l,
+                f,
                 rest,
                 &[
                     ("Bus", shown_name(&ft.name, &ft.file)),
@@ -1256,7 +1186,7 @@ fn bus_lines(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             );
         }
         None => details(
-            l,
+            f,
             right_r,
             &[
                 ("Tour", format!("{}/{}", line.name, tour.number)),
@@ -1281,7 +1211,7 @@ fn short_list(list: &[String]) -> String {
 
 /// A list of files (parked cars, people) in the middle panel and the chosen one's details.
 fn files_panel(
-    l: &mut Launcher,
+    f: &mut Frame,
     mid: Rect,
     right_r: Rect,
     title: &str,
@@ -1300,7 +1230,7 @@ fn files_panel(
     } else {
         many(total, "1 entry", "%{n} entries")
     };
-    card(&mut l.ui, mid, title, Some(&note));
+    card(f.ui, mid, title, Some(&note));
     let rows: Vec<(Vec<String>, Status, bool)> = list
         .iter()
         .map(|c| {
@@ -1324,10 +1254,10 @@ fn files_panel(
     ];
     let r = Rect::new(mid.x, mid.y + 40.0, mid.w, mid.h - 46.0);
     let sel = sel.filter(|&s| s < list.len());
-    let picked = table(l, id, r, &cols, &rows, sel);
+    let picked = table(f, id, r, &cols, &rows, sel);
     match sel.and_then(|s| list.get(s)) {
         Some(c) => details(
-            l,
+            f,
             right_r,
             &[
                 ("Name", shown_name("", &c.file)),
@@ -1349,7 +1279,7 @@ fn files_panel(
             ],
         ),
         None => details(
-            l,
+            f,
             right_r,
             &[
                 ("Entries", total.to_string()),
@@ -1361,17 +1291,17 @@ fn files_panel(
     picked
 }
 
-fn parked(l: &mut Launcher, body: Rect, t: &AiTraffic) {
+fn parked(f: &mut Frame, view: &mut AiView, body: Rect, t: &AiTraffic) {
     let (left, mid, right_r) = columns(body);
     card(
-        &mut l.ui,
+        f.ui,
         left,
         "Parking lists",
         Some(&t.parklists.len().to_string()),
     );
     if t.parklists.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no parking lists.",
             left.x + 17.0,
             left.y + 60.0,
@@ -1382,7 +1312,7 @@ fn parked(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         );
         return;
     }
-    let sel = keep(l.pages.diag.ai.park, t.parklists.len());
+    let sel = keep(view.park, t.parklists.len());
     let rows: Vec<(String, String, Status)> = t
         .parklists
         .iter()
@@ -1406,27 +1336,27 @@ fn parked(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         })
         .collect();
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-parks", list_r, &rows, sel) {
-        l.pages.diag.ai.park = i;
-        l.pages.diag.ai.car = None;
+    if let Some(i) = entries(f, "ai-parks", list_r, &rows, sel) {
+        view.park = i;
+        view.car = None;
     }
     foot(
-        l,
+        f,
         left,
         "Each parking space of the map takes a car at random from its list.",
     );
     let p = &t.parklists[sel];
     let title = p.file.rsplit('/').next().unwrap_or(&p.file).to_string();
-    let car = l.pages.diag.ai.car;
-    if let Some(i) = files_panel(l, mid, right_r, &title, "ai-cars", &p.cars, car) {
-        l.pages.diag.ai.car = Some(i);
+    let car = view.car;
+    if let Some(i) = files_panel(f, mid, right_r, &title, "ai-cars", &p.cars, car) {
+        view.car = Some(i);
     }
 }
 
-fn people(l: &mut Launcher, body: Rect, t: &AiTraffic) {
+fn people(f: &mut Frame, view: &mut AiView, body: Rect, t: &AiTraffic) {
     let (left, mid, right_r) = columns(body);
-    card(&mut l.ui, left, "Lists", Some("2"));
-    let sel = l.pages.diag.ai.people.min(1);
+    card(f.ui, left, "Lists", Some("2"));
+    let sel = view.people.min(1);
     let count = |x: &[Listed]| x.iter().map(|c| c.count).sum::<usize>();
     let rows = vec![
         (
@@ -1457,12 +1387,12 @@ fn people(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         ),
     ];
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-people", list_r, &rows, sel) {
-        l.pages.diag.ai.people = i;
-        l.pages.diag.ai.person = None;
+    if let Some(i) = entries(f, "ai-people", list_r, &rows, sel) {
+        view.people = i;
+        view.person = None;
     }
     foot(
-        l,
+        f,
         left,
         "The people on foot and the passengers, and the drivers of the AI buses.",
     );
@@ -1471,37 +1401,32 @@ fn people(l: &mut Launcher, body: Rect, t: &AiTraffic) {
     } else {
         ("drivers.txt", &t.drivers)
     };
-    let person = l.pages.diag.ai.person;
-    if let Some(i) = files_panel(l, mid, right_r, title, "ai-persons", list, person) {
-        l.pages.diag.ai.person = Some(i);
+    let person = view.person;
+    if let Some(i) = files_panel(f, mid, right_r, title, "ai-persons", list, person) {
+        view.person = Some(i);
     }
 }
 
-fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
+fn density(f: &mut Frame, view: &mut AiView, body: Rect, t: &AiTraffic) {
     let gap = 12.0;
     let rw = (body.w * 0.24).clamp(240.0, 330.0);
     let chart_r = Rect::new(body.x, body.y, body.w - rw - gap, body.h);
     let legend_r = Rect::new(chart_r.right() + gap, body.y, rw, body.h);
-    card(&mut l.ui, chart_r, "Random traffic over the day", None);
+    card(f.ui, chart_r, "Random traffic over the day", None);
     let seg = Rect::new(chart_r.right() - 346.0, chart_r.y + 8.0, 330.0, 30.0);
-    let mut d = l.pages.diag.ai.day;
-    if l.ui.segmented(
+    let mut d = view.day;
+    if f.ui.segmented(
         "ai-day",
         seg,
         &mut d,
         &["Weekdays", "Saturday", "Sunday, holiday"],
     ) {
-        l.pages.diag.ai.day = d;
+        view.day = d;
     }
-    card(
-        &mut l.ui,
-        legend_r,
-        "Groups",
-        Some("unsched_trafficdens.txt"),
-    );
+    card(f.ui, legend_r, "Groups", Some("unsched_trafficdens.txt"));
     if t.density.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no unsched_trafficdens.txt: its random traffic follows global.cfg.",
             chart_r.x + 17.0,
             chart_r.y + 60.0,
@@ -1512,7 +1437,7 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         );
         return;
     }
-    let day = l.pages.diag.ai.day;
+    let day = view.day;
     // the curves, sampled every quarter of an hour
     let samples: Vec<Vec<f32>> = t
         .density
@@ -1538,10 +1463,10 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
     let mut v = 0.0;
     while v <= top + step * 0.01 {
         let y = ys(v);
-        l.ui.p()
+        f.ui.p()
             .rect(Rect::new(plot.x, y, plot.w, 1.0), LINE.alpha(0.7));
         right(
-            &mut l.ui,
+            f.ui,
             &trim_num(v),
             plot.x - 10.0,
             y,
@@ -1553,7 +1478,7 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
     }
     for h in (0..=24).step_by(3) {
         let x = xs(h as f32);
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             &format!("{h:02}:00"),
             Rect::new(x - 22.0, plot.bottom() + 6.0, 44.0, 20.0),
             11.0,
@@ -1566,15 +1491,15 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         for w in 0..s.len() - 1 {
             let a = glam::Vec2::new(xs(w as f32 * 0.25), ys(s[w]));
             let b = glam::Vec2::new(xs((w + 1) as f32 * 0.25), ys(s[w + 1]));
-            l.ui.p().line(a, b, 2.0, c);
+            f.ui.p().line(a, b, 2.0, c);
         }
     }
     // the values at the hour the pointer is on
-    let m = l.ui.input.mouse;
+    let m = f.ui.input.mouse;
     if plot.contains(m) {
         let hour = ((m.x - plot.x) / plot.w * 24.0).clamp(0.0, 24.0);
         let x = xs(hour);
-        l.ui.p().rect(
+        f.ui.p().rect(
             Rect::new(x, plot.y, 1.0, plot.h),
             omsi_ui::theme::accent().alpha(0.8),
         );
@@ -1586,9 +1511,9 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
                 trim_num(g.at(day, hour))
             ));
         }
-        l.ui.tooltip(plot, &tip);
+        f.ui.tooltip(plot, &tip);
     }
-    l.ui.paragraph(
+    f.ui.paragraph(
         "Each line is the group's curve for the day times its factor. The traffic options in Settings scale it again.",
         glam::Vec2::new(chart_r.x + 17.0, chart_r.bottom() - 34.0),
         chart_r.w - 34.0,
@@ -1603,26 +1528,26 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
         if y > legend_r.bottom() - 30.0 {
             break;
         }
-        l.ui.p().rect(
+        f.ui.p().rect(
             Rect::new(legend_r.x + 1.0, y - 4.0, legend_r.w - 2.0, 1.0),
             LINE,
         );
-        l.ui.p().circle(
+        f.ui.p().circle(
             glam::Vec2::new(legend_r.x + 22.0, y + 13.0),
             4.5,
             SERIES[k % SERIES.len()],
         );
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             g.name.trim(),
             Rect::new(legend_r.x + 34.0, y, legend_r.w - 150.0, 26.0),
             12.5,
             Weight::Regular,
             FG,
         );
-        let f = omsi_ui::tr("factor %{f}").replace("%{f}", &trim_num(g.factor));
+        let factor = omsi_ui::tr("factor %{f}").replace("%{f}", &trim_num(g.factor));
         right(
-            &mut l.ui,
-            &f,
+            f.ui,
+            &factor,
             legend_r.right() - 17.0,
             y + 13.0,
             12.0,
@@ -1630,7 +1555,7 @@ fn density(l: &mut Launcher, body: Rect, t: &AiTraffic) {
             if g.curve(day).is_some() { FG } else { MUTED },
         );
         if g.curve(day).is_none() {
-            l.ui.tooltip(
+            f.ui.tooltip(
                 Rect::new(legend_r.x, y - 4.0, legend_r.w, 30.0),
                 "This group has no curve for this day: it makes no random traffic then.",
             );

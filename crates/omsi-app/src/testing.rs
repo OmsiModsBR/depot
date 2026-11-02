@@ -223,12 +223,6 @@ pub mod keys {
 pub mod launcher {
     pub use crate::launcher::*;
 
-    pub mod ai_edit {
-        pub use crate::launcher::ai_edit::*;
-    }
-    pub mod ai_traffic {
-        pub use crate::launcher::ai_traffic::*;
-    }
     pub mod backdrop {
         pub use crate::launcher::backdrop::*;
     }

@@ -1,5 +1,7 @@
 //! The pages' shared heading and the pages moved out of the game's window.
 
+pub(crate) mod ai_edit;
+pub(crate) mod ai_traffic;
 pub(crate) mod dialog;
 pub(crate) mod engine;
 pub(crate) mod heading;

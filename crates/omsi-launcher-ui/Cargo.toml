@@ -15,6 +15,7 @@ omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-integrity = { path = "../omsi-integrity" }
 omsi-content = { path = "../omsi-content" }
+omsi-map = { path = "../omsi-map" }
 serde_json.workspace = true
 wgpu.workspace = true
 glam.workspace = true
