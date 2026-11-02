@@ -45,6 +45,9 @@ use {
     sky::*,
 };
 
+#[cfg(feature = "test-support")]
+pub mod testing;
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

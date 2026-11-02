@@ -41,6 +41,14 @@ const CLOUD_MS_GAIN: f32 = 2.4;
 // Where in its first step this pixel's ray starts (0..1; 0.5 for the reflection probe).
 var<private> cloud_jitter: f32 = 0.5;
 
+// A trip count the shader compiler cannot see through: `n`, plus the zero that
+// `min(clouds.x, 0.0)` is wherever the clouds are drawn (cloud_layer leaves early below
+// 0.001). With constant bounds, DirectX 12's compiler unrolled the 56 x 6 march into
+// every entry point of this module and overflowed its stack (#324).
+fn trips(n: i32) -> i32 {
+    return n + i32(min(camera.clouds.x, 0.0));
+}
+
 fn linearstep(a: f32, b: f32, v: f32) -> f32 {
     return clamp((v - a) / (b - a), 0.0, 1.0);
 }
@@ -151,7 +159,8 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
     var hit = 0.0;
     var hit_w = 0.0;
     var t = t0 + ds * cloud_jitter;
-    for (var i = 0; i < CLOUD_STEPS; i = i + 1) {
+    let steps = trips(CLOUD_STEPS);
+    for (var i = 0; i < steps; i = i + 1) {
         let p = vec3<f32>(cloud_ground(d, t), cloud_height(d, t));
         let h = (p.z - CLOUD_BOTTOM) / (CLOUD_TOP - CLOUD_BOTTOM);
         let sigma = cloud_sigma(p, h, coverage, lod, true);
@@ -160,7 +169,8 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
             var od = 0.0;
             var ls = 40.0;
             var lt = ls * 0.5;
-            for (var k = 0; k < 6; k = k + 1) {
+            let light_steps = trips(6);
+            for (var k = 0; k < light_steps; k = k + 1) {
                 let q = p + sd * lt;
                 let hq = (q.z - CLOUD_BOTTOM) / (CLOUD_TOP - CLOUD_BOTTOM);
                 if (hq >= 1.0) {
@@ -177,7 +187,8 @@ fn cloud_layer(d: vec3<f32>, below: vec3<f32>, pix: f32) -> vec4<f32> {
             var a = 1.0;
             var b = 1.0;
             var c = 1.0;
-            for (var o = 0; o < 3; o = o + 1) {
+            let octaves = trips(3);
+            for (var o = 0; o < octaves; o = o + 1) {
                 let phase = mix(hg_phase(cos_sun, 0.8 * c), hg_phase(cos_sun, -0.2 * c), 0.5);
                 direct = direct + sun * a * phase * exp(-od * b);
                 a = a * 0.5;
