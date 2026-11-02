@@ -18,6 +18,7 @@ pub mod screenshots;
 pub mod settings;
 pub mod start;
 pub mod timetable;
+pub mod weather;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};

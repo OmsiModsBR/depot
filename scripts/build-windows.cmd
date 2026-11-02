@@ -23,6 +23,7 @@ copy /y "target\%TARGET%\release\depot-launcher.exe" "dist\windows\depot-launche
 rem (Steam's library, x64 only: an ARM64 build has no Steam, see crates\omsi-app\build.rs)
 if /i "%TARGET%"=="x86_64-pc-windows-msvc" copy /y "assets\steam_redist\steam_api64.dll" "dist\windows\steam_api64.dll" >nul || goto :failed
 echo.
+copy /y "THIRD_PARTY.md" "dist\windows\THIRD_PARTY.txt" >nul || goto :failed
 echo Done. Run: "%CD%\dist\windows\depot.exe"
 exit /b 0
 :failed
