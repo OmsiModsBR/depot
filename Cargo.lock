@@ -2785,6 +2785,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-devtools-link"
+version = "0.1.0"
+dependencies = [
+ "omsi-devtools-proto",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "omsi-devtools-proto"
 version = "0.1.0"
 dependencies = [
