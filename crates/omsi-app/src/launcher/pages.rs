@@ -28,7 +28,7 @@ pub struct PagesView {
     /// The Settings page's section and search (`settings`).
     pub set: super::settings::SettingsView,
     pub pads: PadsView,
-    pub tt: super::timetable::TimetableView,
+    pub tt: omsi_launcher_ui::window::TimetableView,
     /// The Diagnostics page's tab and its integrity check (`integrity`).
     pub diag: super::diagnostics::DiagView,
     /// The keyboard tab on a computer (`keyboard`).

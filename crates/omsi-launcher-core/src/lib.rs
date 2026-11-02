@@ -17,6 +17,7 @@ pub mod screenshots;
 pub mod settings;
 pub mod start;
 pub mod timetable;
+pub mod weather;
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -3132,6 +3133,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["launcher_rest"] = json!(true);
     // the game's log with everything it loads and every failure (off: the usual log)
     v["detailed_log"] = json!(false);
+    // the developer tools of the launcher (off: nothing of them exists in a run, #500)
+    v["developer_mode"] = json!(false);
     // the window's size in pixels, "auto" to fit the screen (#904)
     v["resolution"] = json!("auto");
     // the game's information bar along the top, as the last session left it (#1164)
@@ -3154,6 +3157,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["sun_glow"] = json!(true);
     // DirectX9 (D3D9Ex) only: falling snow, off unless chosen
     v["dx9_snow"] = json!(false);
+    // DirectX9 (D3D9Ex) only: fewer map lamps a spot, off unless chosen
+    v["fewer_night_lights"] = json!(false);
     // DirectX9 (D3D9Ex) only: how a render scale below 100 % is brought up
     v["dx9_upscale"] = json!("bilinear");
     // DirectX9 (D3D9Ex) only, our ways to ease its work: everything drawn, no texture ceiling
@@ -3724,7 +3729,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "head_tracking_invert_z"
             | "voice_chat"
             | "launcher_rest"
-            | "detailed_log" => v[&k] = json!(b(val)),
+            | "detailed_log"
+            | "developer_mode" => v[&k] = json!(b(val)),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => {
@@ -3987,6 +3993,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
             "dx9_snow" => v[&k] = json!(b(val)),
+            "fewer_night_lights" => v[&k] = json!(b(val)),
             // (bilinear or fsr1, as the game reads it)
             "dx9_upscale" => {
                 v[&k] = json!(match val.to_ascii_lowercase().as_str() {
@@ -4500,7 +4507,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .filter(|x| x.is_finite())
         .unwrap_or(16.0)
         .clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\ndetailed_log={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), b("detailed_log", false));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\ndetailed_log={}\ndeveloper_mode={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), b("detailed_log", false), b("developer_mode", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -4644,6 +4651,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
     text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", false)));
+    text.push_str(&format!(
+        "fewer_night_lights={}\n",
+        b("fewer_night_lights", false)
+    ));
     text.push_str(&format!(
         "dx9_upscale={}\n",
         if v.get("dx9_upscale").and_then(|x| x.as_str()) == Some("fsr1") {
@@ -5155,6 +5166,16 @@ pub fn detailed_log_on() -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the "developer mode" setting is on. Only the launcher reads it: the game never
+/// does, and without it nothing of the developer tools (window, socket, extra work in the
+/// game) exists. It is off unless the player switched it on in Settings.
+pub fn developer_mode_on() -> bool {
+    get_settings()
+        .ok()
+        .and_then(|v| v.get("developer_mode").and_then(|x| x.as_bool()))
+        .unwrap_or(false)
+}
+
 /// Start a game for the duty. The core does not limit how many run (the CLI and tests use
 /// that); the launcher allows one at a time and enforces it itself.
 pub fn launch(d: &Duty) -> Result<Launched> {
@@ -5535,6 +5556,7 @@ mod tests {
             ("voice_chat", json!(false)),
             ("launcher_rest", json!(false)),
             ("detailed_log", json!(true)),
+            ("developer_mode", json!(true)),
             ("camera_collision", json!(false)),
             ("brake_hold", json!(false)),
             ("auto_clutch", json!(false)),
@@ -5578,6 +5600,7 @@ mod tests {
             "voice_chat",
             "launcher_rest",
             "detailed_log",
+            "developer_mode",
             "camera_collision",
             "brake_hold",
             "auto_clutch",

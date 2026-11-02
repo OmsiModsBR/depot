@@ -104,7 +104,10 @@ impl Situation {
                 v.tile.0, v.tile.1, v.odometer_km, v.paint
             ));
             if let Some(c) = v.coupled_with {
-                t.push_str(&format!("\r\n[coupledWith]\r\n{c}\r\n"));
+                // (all in lower case, as OMSI spells it in its own situations: the reader
+                // takes a keyword only spelled so, and `[coupledWith]` was never read back -
+                // the rear sections came back as vehicles of their own)
+                t.push_str(&format!("\r\n[coupledwith]\r\n{c}\r\n"));
             }
             if v.is_my_vehicle {
                 t.push_str("\r\n[ismyVehicle]\r\n");
@@ -245,6 +248,35 @@ mod tests {
                     .to_vec(),
                 ..Default::default()
             }],
+            ..Default::default()
+        };
+        sit.save(&path).unwrap();
+        let loaded = Situation::load(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(loaded.vehicles, sit.vehicles);
+    }
+
+    /// The rear sections of an articulated bus are read back as coupled to the vehicle
+    /// before them, not as vehicles of their own.
+    #[test]
+    fn coupled_parts_round_trip() {
+        let path =
+            std::env::temp_dir().join(format!("omsi_situation_coupled_{}.osn", std::process::id()));
+        let part = |file: &str| SituationVehicle {
+            file: file.into(),
+            coupled_with: Some(-1),
+            ..Default::default()
+        };
+        let sit = Situation {
+            vehicles: vec![
+                SituationVehicle {
+                    file: "Vehicles/Bus/front.bus".into(),
+                    is_my_vehicle: true,
+                    ..Default::default()
+                },
+                part("Vehicles/Bus/middle.bus"),
+                part("Vehicles/Bus/rear.bus"),
+            ],
             ..Default::default()
         };
         sit.save(&path).unwrap();

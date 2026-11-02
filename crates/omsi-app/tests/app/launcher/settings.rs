@@ -33,6 +33,7 @@ const BEFORE: &[&str] = &[
     "smoke_max",
     "smoke_in_mirrors",
     "dx9_snow",
+    "fewer_night_lights",
     "dx9_upscale",
     "dx9_glass_rain",
     "dx9_coronas",
@@ -152,6 +153,7 @@ const BEFORE: &[&str] = &[
     "time_speed",
     "language",
     "launcher_rest",
+    "developer_mode",
     "ui_scale",
     "ui_scale_window",
     "ui_opacity",
@@ -566,6 +568,27 @@ fn the_interface_options_are_searched_counted_and_reset() {
         .any(|o| o.key == "ui_dimming"));
 }
 
+/// Developer mode is off until the player switches it on, the switch is kept in the file, and
+/// the game's own settings parser neither needs nor changes anything for it (#500).
+#[test]
+fn developer_mode_is_off_by_default_and_the_switch_is_saved() {
+    let (mut s, mut start) = (all_rows(), start());
+    assert_eq!(s["developer_mode"], json!(false));
+    assert_eq!(default_of("developer_mode"), Some(json!(false)));
+    let off = core::settings_to_text(&s, None);
+    assert!(off.contains("developer_mode=0\n"), "{off}");
+    click(DEVELOPER, "opt-developer_mode", &mut s, &mut start);
+    assert_eq!(s["developer_mode"], json!(true));
+    let on = core::settings_to_text(&s, None);
+    assert!(on.contains("developer_mode=1\n"), "{on}");
+    let back = core::settings_from_text(Some(&on));
+    assert_eq!(back["developer_mode"], json!(true));
+    // (the game reads the same file and ends up with the same settings either way)
+    let game_off = openomsi_game::testing::settings::Settings::from_text(&off);
+    let game_on = openomsi_game::testing::settings::Settings::from_text(&on);
+    assert_eq!(format!("{game_off:?}"), format!("{game_on:?}"));
+}
+
 /// The mouse steering's smoothing is on unless switched off, and the switch is kept (#1092).
 #[test]
 fn smooth_mouse_steering_switches_off_and_is_saved() {
@@ -645,4 +668,46 @@ fn the_depot_graphics_api_does_not_limit_the_original_omsi2() {
     assert_eq!(values, ["eco", "full"]);
     let at = chosen(o, &st, &mut options);
     assert_eq!(options[at].0, "eco");
+}
+
+/// The Performance section gathers existing options (each key is one option of another
+/// section) and is offered under DirectX9 only.
+#[test]
+fn the_performance_section_is_directx9s_and_owns_no_option() {
+    let mut seen = std::collections::HashSet::new();
+    for (key, _) in PERFORMANCE_OPTS {
+        assert!(seen.insert(*key), "{key} is listed twice");
+        assert!(OPTS.iter().any(|o| o.key == *key), "{key} is not an option");
+    }
+    assert!(OPTS.iter().all(|o| o.sec != PERFORMANCE));
+    let drawn = |api: &str, id: &str| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            PERFORMANCE,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of(id))
+    };
+    // (the page offers the section only under the Depot's DirectX9)
+    let offered = |api: &str, omsi2: bool| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        performance_offered(&s, omsi2)
+    };
+    assert!(!offered("vulkan", false));
+    assert_eq!(offered("d3d9", false), cfg!(windows));
+    assert!(!offered("d3d9", true));
+    // (the section's body lists its rows even where the page does not offer it; here only the
+    // page's gate, above, decides, and the rows draw on Windows)
+    if cfg!(windows) {
+        for key in ["mirror_size", "max_obj_dist", "ai_max_random", "max_fps", "vsync"] {
+            assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
+        }
+    }
 }

@@ -13,6 +13,9 @@ pub(crate) fn data_dir() -> Option<PathBuf> {
 /// Version of the settings file (`version=`); files without it are version 1.
 pub const SETTINGS_VERSION: u32 = 3;
 
+/// Map lamps a spot of the ground keeps with "Fewer night lights" (the grid holds up to 32).
+pub const NIGHT_LIGHT_CAP: u32 = 8;
+
 /// The items of the information bar the `custom` layout can switch one by one (settings
 /// keys `info_item_<name>`).
 pub const INFO_ITEM_KEYS: [&str; 9] = [
@@ -246,6 +249,9 @@ pub struct Settings {
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
     /// snow without it.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: each spot of the ground takes at most [`NIGHT_LIGHT_CAP`] map
+    /// lamps into its light (a deliberate saving for weak graphics cards; off = all, as before).
+    pub fewer_night_lights: bool,
     /// "DirectX9 (D3D9Ex)" only: how the picture is brought up when the render scale draws it
     /// smaller than the window: `bilinear` (the card's filter) or `fsr1` (AMD's FidelityFX
     /// Super Resolution 1, adapted). A performance option that moves the picture away from
@@ -561,6 +567,7 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: false,
+            fewer_night_lights: false,
             dx9_upscale: "bilinear".into(),
             dx9_glass_rain: true,
             dx9_coronas: true,
@@ -939,6 +946,7 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "fewer_night_lights" => s.fewer_night_lights = b(v),
                 "dx9_upscale" => {
                     s.dx9_upscale = match v.to_ascii_lowercase().as_str() {
                         "fsr1" | "fsr" | "sharp" => "fsr1".into(),
@@ -1513,6 +1521,16 @@ impl Settings {
         crate::output::Backend::of(self)
     }
 
+    /// How many map lamps one spot of the ground may take into its light under "DirectX9
+    /// (D3D9Ex)" with the Fewer night lights option on; 0 = all of them.
+    pub fn night_light_cap(&self) -> u32 {
+        if self.fewer_night_lights && self.backend() == crate::output::Backend::D3d9 {
+            NIGHT_LIGHT_CAP
+        } else {
+            0
+        }
+    }
+
     /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
     /// under that API (the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
@@ -1572,6 +1590,16 @@ impl Settings {
         // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
         // the render scale it does, see `dx9_render_scale`: kept as saved)
         self.post_aa = "off".into();
+        // (a scale saved under Vulkan or DirectX12 carries over, fitted to the steps this API
+        // offers: 0.6 becomes 0.67; Auto stays Auto)
+        if self.render_scale > 0.0 {
+            if let Some(l) = crate::api_limits::d3d9("render_scale") {
+                let fitted = l.fit(&self.render_scale_text());
+                if let Ok(x) = fitted.parse::<f32>() {
+                    self.render_scale = x;
+                }
+            }
+        }
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
         if let Some(l) = crate::api_limits::d3d9("mirror_size") {

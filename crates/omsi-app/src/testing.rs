@@ -256,12 +256,6 @@ pub mod launcher {
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }
-    pub mod timetable {
-        pub use crate::launcher::timetable::*;
-    }
-    pub mod timetable_plan {
-        pub use crate::launcher::timetable_plan::*;
-    }
     pub mod tray {
         pub use crate::launcher::tray::*;
     }
@@ -411,6 +405,10 @@ pub mod settings {
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
             text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
             text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
+            text.push_str(&format!(
+                "fewer_night_lights={}\n",
+                self.fewer_night_lights as u8
+            ));
             text.push_str(&format!("dx9_upscale={}\n", self.dx9_upscale));
             text.push_str(&format!("dx9_glass_rain={}\n", self.dx9_glass_rain as u8));
             text.push_str(&format!("dx9_coronas={}\n", self.dx9_coronas as u8));

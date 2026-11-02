@@ -238,6 +238,7 @@ impl Inner {
                 grid: scene.frame_light_grid(),
                 place: plan.light_grid,
                 tile_map: plan.light_map,
+                cell_cap: plan.lamp_cap as usize,
             },
             // (no rain on the glass: the drops never gather, and what had gathered dries)
             rain: if self.effects.glass_rain {

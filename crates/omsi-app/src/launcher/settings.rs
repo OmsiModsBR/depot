@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 12] = [
+pub const SECTIONS: [&str; 14] = [
     "General",
     "Simulation",
     "Graphics",
@@ -30,6 +30,8 @@ pub const SECTIONS: [&str; 12] = [
     "Presets and files",
     "Interface",
     "Modules",
+    "Developer",
+    "Performance",
 ];
 pub const GENERAL: usize = 0;
 const SIMULATION: usize = 1;
@@ -44,10 +46,55 @@ pub const PRESETS: usize = 9;
 pub const INTERFACE: usize = 10;
 /// OmsiLaunch's optional modules: OMSI 2 mode only (the Depot has none).
 pub const MODULES: usize = 11;
+/// The Depot's developer tools (#500): the Depot engine only.
+pub const DEVELOPER: usize = 12;
 
-/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine.
-fn section_shown(sec: usize, omsi2: bool) -> bool {
-    sec != MODULES || omsi2
+/// Under "DirectX9 (D3D9Ex)" only: the options that lower the load on an older or integrated-graphics
+/// PC, gathered from the other sections (it owns none; see `PERFORMANCE_OPTS`).
+pub const PERFORMANCE: usize = 13;
+
+/// The options of the Performance section: key, and the card it sits in. They are the page's own
+/// rows from the other sections (one row is one setting), in this order. Each lowers the load on
+/// the processor, the graphics chip or the memory; the ones OMSI 2 lacks are off by default.
+pub const PERFORMANCE_OPTS: &[(&str, &str)] = &[
+    ("msaa", "Picture"),
+    ("anisotropy", "Picture"),
+    ("mirror_size", "Mirrors"),
+    ("mirror_refresh", "Mirrors"),
+    ("view_distance", "Distance and detail"),
+    ("max_obj_dist", "Distance and detail"),
+    ("min_obj_size", "Distance and detail"),
+    ("ai_max_random", "Traffic and people"),
+    ("ai_max_scheduled", "Traffic and people"),
+    ("ai_unsched_factor", "Traffic and people"),
+    ("ai_priority_scheduled", "Traffic and people"),
+    ("ai_max_parked", "Traffic and people"),
+    ("ai_max_humans", "Traffic and people"),
+    ("pax_density", "Traffic and people"),
+    ("smoke", "Effects"),
+    ("smoke_user_only", "Effects"),
+    ("smoke_max", "Effects"),
+    ("sun_glow", "Effects"),
+    ("reflections", "Effects"),
+    ("texture_memory", "Textures and memory"),
+    ("max_fps", "Frame rate"),
+    ("vsync", "Frame rate"),
+];
+
+/// Whether the Performance section is offered with the settings `s` (the Depot's DirectX9 only).
+pub fn performance_offered(s: &Value, omsi2: bool) -> bool {
+    !omsi2 && d3d9_fixes_vanilla(s)
+}
+
+/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
+/// while the Depot is, Performance only where it is offered.
+fn section_shown(sec: usize, s: &Value, omsi2: bool) -> bool {
+    match sec {
+        MODULES => omsi2,
+        DEVELOPER => !omsi2,
+        PERFORMANCE => performance_offered(s, omsi2),
+        _ => true,
+    }
 }
 
 /// What the page remembers: the section shown, the search, "changed only".
@@ -720,6 +767,14 @@ pub static OPTS: &[Opt] = &[
         "The launcher rests while a game runs",
         "Gives the graphics card to the game",
     )),
+    // Developer
+    toggle(
+        DEVELOPER,
+        "Developer mode",
+        "developer_mode",
+        "Enable developer mode",
+        "Tools for people who make or test vehicles and maps. Off by default: while it is off, nothing of them runs. The tools themselves are not in this version yet",
+    ),
     // Simulation
     toggle(
         SIMULATION,
@@ -1077,6 +1132,14 @@ pub static OPTS: &[Opt] = &[
         "dx9_snow",
         "Snow",
         "Snowflakes fall in snow weather",
+    ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "fewer_night_lights",
+        "Fewer night lights",
+        "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
     ),
     // (DirectX9 only, our own ways to ease its work, see `shown`)
     toggle(
@@ -2156,6 +2219,7 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        "fewer_night_lights" => fixed,
         // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
         "dx9_upscale" => {
             let scale = st.get("render_scale");
@@ -2386,6 +2450,13 @@ fn after(key: &str, st: &mut Store) {
 /// The options a search or "changed only" lists, or a section's.
 pub fn listed<'a>(sec: usize, query: &str, changed_only: bool, st: &Store) -> Vec<&'a Opt> {
     let q = query.trim().to_lowercase();
+    if sec == PERFORMANCE && q.is_empty() && !changed_only {
+        return PERFORMANCE_OPTS
+            .iter()
+            .filter_map(|(k, _)| OPTS.iter().find(|o| o.key == *k))
+            .filter(|o| shown(o, st) != Shown::Hidden)
+            .collect();
+    }
     OPTS.iter()
         .filter(|o| {
             if q.is_empty() {
@@ -2420,7 +2491,10 @@ enum Card<'a> {
 
 impl Card<'_> {
     fn wide(&self) -> bool {
-        matches!(self, Card::Api(_) | Card::Own("plugins" | "omsi2-plugins"))
+        matches!(
+            self,
+            Card::Api(_) | Card::Own("plugins" | "performance" | "omsi2-plugins")
+        )
     }
 
     fn height(&self) -> f32 {
@@ -2450,7 +2524,13 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
             out.push(Card::Accent(o));
             continue;
         }
-        let title = if mixed {
+        let title = if sec == PERFORMANCE && !mixed {
+            PERFORMANCE_OPTS
+                .iter()
+                .find(|(k, _)| *k == o.key)
+                .map_or(o.group, |(_, g)| g)
+                .to_string()
+        } else if mixed {
             format!("{} · {}", SECTIONS[o.sec], o.group)
         } else {
             o.group.to_string()
@@ -2462,6 +2542,9 @@ fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card
             Some(Card::Group(_, rows)) => rows.push(o),
             _ => out.push(Card::Group(title, vec![o])),
         }
+    }
+    if sec == PERFORMANCE && !mixed {
+        out.insert(0, Card::Own("performance"));
     }
     if !mixed {
         let own: &[&str] = match sec {
@@ -2498,7 +2581,7 @@ pub struct Outside {
 
 pub fn settings(l: &mut Launcher, area: Rect) {
     // (Modules goes with OMSI 2 mode: back to the first section without it)
-    if !section_shown(l.pages.set.sec, l.state.omsi2_engine()) {
+    if !section_shown(l.pages.set.sec, &l.state.settings, l.state.omsi2_engine()) {
         l.pages.set.sec = GENERAL;
     }
     let sec = l.pages.set.sec.min(SECTIONS.len() - 1);
@@ -2547,6 +2630,14 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     // (each section's rows and whether one is changed, once a frame: the list and the chip use them)
     let mut per_sec = [(0usize, false); SECTIONS.len()];
     let mut n_changed = 0;
+    if performance_offered(st.s, omsi2) {
+        for k in PERFORMANCE_OPTS.iter().filter_map(|(k, _)| OPTS.iter().find(|o| o.key == *k)) {
+            if shown(k, &st) != Shown::Hidden {
+                per_sec[PERFORMANCE].0 += 1;
+                per_sec[PERFORMANCE].1 |= shown(k, &st) == Shown::Row && changed(k, &st);
+            }
+        }
+    }
     for o in OPTS {
         if shown(o, &st) == Shown::Row {
             let c = changed(o, &st);
@@ -2613,7 +2704,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     // the sections: a list on the left, a dropdown on a narrow window
     let content = if narrow {
         let shown: Vec<usize> = (0..SECTIONS.len())
-            .filter(|&i| section_shown(i, omsi2))
+            .filter(|&i| section_shown(i, st.s, omsi2))
             .collect();
         let mut s = shown.iter().position(|&i| i == sec).unwrap_or(0);
         let names: Vec<String> = shown.iter().map(|&i| SECTIONS[i].to_string()).collect();
@@ -2636,7 +2727,7 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     } else {
         let lw = omsi_launcher_ui::kit::fit(230.0, body.w);
         let nav = Rect::new(body.x, y, lw, (body.bottom() - y).max(0.0));
-        if let Some(s) = sections_card(ui, nav, sec, mixed, &per_sec, omsi2) {
+        if let Some(s) = sections_card(ui, nav, sec, mixed, &per_sec, st.s, omsi2) {
             view.sec = s;
             view.query.clear();
             view.changed_only = false;
@@ -2778,6 +2869,7 @@ fn sections_card(
     sec: usize,
     mixed: bool,
     per_sec: &[(usize, bool)],
+    s: &Value,
     omsi2: bool,
 ) -> Option<usize> {
     ui.panel(r);
@@ -2786,7 +2878,7 @@ fn sections_card(
     let w = r.w - 24.0;
     let mut k = 0;
     for (i, name) in SECTIONS.iter().enumerate() {
-        if !section_shown(i, omsi2) {
+        if !section_shown(i, s, omsi2) {
             continue;
         }
         let rr = Rect::new(x, r.y + 12.0 + k as f32 * 37.0, w, 33.0);
@@ -3166,6 +3258,18 @@ fn own_card(
                 out.controls = Some(1);
             }
             y + 34.0 + 16.0 - r.y
+        }
+        "performance" => {
+            let mut y = card_frame(ui, r, "About these options", None);
+            y += ui.paragraph(
+                "These options lower the load on the processor, the graphics chip and the memory. Some of them move the picture or the simulation away from OMSI 2, and are off until you choose them. They do not widen the hardware Depot supports; they may help in some cases, with no guarantee.",
+                Vec2::new(r.x + 16.0, y),
+                r.w - 32.0,
+                12.5,
+                Weight::Regular,
+                TEXT_DIM,
+            );
+            y + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
         "omsi2-plugins" => super::omsi2_plugins::card(ui, r, root, out.game_runs),
