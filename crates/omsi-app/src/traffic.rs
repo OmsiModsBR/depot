@@ -4894,7 +4894,9 @@ impl Traffic {
         let st = &car.state;
         let v = st.speed.max(0.0);
         // as far as the car needs to stop without a jolt, and never less than a car length
-        let reach = (v * v / 5.0 + v + 6.0).clamp(8.0, 45.0);
+        // (an emergency vehicle drives faster: it looks further ahead, so it can still stop
+        // for somebody who steps onto a crossing it passes on red)
+        let reach = (v * v / 5.0 + v + 6.0).clamp(8.0, if st.emergency { 75.0 } else { 45.0 });
         let origin = car.vehicle.position.truncate();
         let near: Vec<&(DVec3, DVec2, bool)> = self
             .people
@@ -5078,7 +5080,10 @@ impl Traffic {
                     go
                 }
             };
-            if !go {
+            // an emergency vehicle goes through a red light; the right of way at the junction
+            // (`junction_stop`) still makes it wait for what is physically in its way, and
+            // the cross traffic gives way to it
+            if !go && !car.state.emergency {
                 stop = Some(d);
                 break;
             }
@@ -6615,6 +6620,14 @@ impl Traffic {
             }
             let merge_wait = self.plan_route_change(i, &by_lane);
             let way = self.way_lanes(&self.cars[i].state, 200.0);
+            // an emergency vehicle: faster than the limit, and no stop at a red light
+            // (`light_stop`); the one lookup per car and frame is all it costs
+            let emergency = !self.cars[i].is_bus()
+                && self.cars[i]
+                    .vehicle
+                    .var("TrafficPriority")
+                    .is_some_and(|v| v > 0.5);
+            self.cars[i].state.emergency = emergency;
             // traffic lights
             let light = if self.net.lanes[self.cars[i].state.lane].kind == LaneKind::Air {
                 None

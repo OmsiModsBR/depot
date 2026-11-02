@@ -87,6 +87,10 @@ pub struct AiState {
     /// long they take to move off when the way clears (s). `accel` is how hard they pull
     /// away and `decel` how hard they like to brake.
     pub desire: f32,
+    /// An emergency vehicle with right of way (its script sets `TrafficPriority`): it drives
+    /// faster than the limit (`EMERGENCY_SPEED_FACTOR`, at most `EMERGENCY_MAX_KMH`) and
+    /// does not stop at a red light. Set by the traffic system every frame.
+    pub emergency: bool,
     pub headway: f32,
     pub min_gap: f32,
     pub accept_gap: f32,
@@ -158,6 +162,7 @@ impl AiState {
             signal_time: 0.0,
             lat_accel: 2.8,
             desire: 1.0,
+            emergency: false,
             headway: 1.4,
             min_gap: 2.0,
             accept_gap: 4.0,
