@@ -349,3 +349,16 @@ fn scenery_freetex_name_resolution() {
         Some("zero.bmp")
     );
 }
+
+/// A vehicle's text layer (a fleet number on `[matl_alpha] 2` without `[matl_noZwrite]`)
+/// must not write depth: its transparent texels hid what lay behind and showed as a solid
+/// rectangle (AI buses' roof and front numbers).
+#[test]
+fn vehicle_text_layer_never_writes_depth() {
+    let extra = vehicle_text_layer_extra(MaterialExtra {
+        writes_depth: true,
+        ..Default::default()
+    });
+    assert!(extra.no_z_write);
+    assert!(!extra.writes_depth);
+}

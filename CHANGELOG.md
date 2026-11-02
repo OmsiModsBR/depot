@@ -29,6 +29,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Graphics (Vanilla+ and Enhanced)
 
 - **Fixed.** Text drawn by the bus itself (`[useTextTexture]`: destination signs, route boards behind the windscreen, fleet numbers, number plates) and other blended layers printed on a surface (stickers) now take the ambient occlusion of the surface they lie on. Before, the letters stayed bright where the sign around them lay in the shade, for example under the dashboard's edge. Only a layer within about a centimetre of the opaque surface behind it (more at a distance) takes it; panes, translucent doors and named glass still take none, so the shade of what stands behind them does not show on them. Vanilla, the D3D9 renderer and the sun's shadow are unchanged. Checked by an automated GPU test (lavapipe) only; **not yet looked at in the game**. (#630)
+- **Fixed.** A bus's own text layer (`[useTextTexture]`) no longer writes depth where it is transparent. A fleet number whose material is blended without `[matl_noZwrite]` (the AI buses of the Apache VIP4 pack, on the roof and the front) showed as a solid white rectangle behind the digits instead of the digits alone over the paint. Applies to every renderer. Checked by an automated test of the material only; **not yet looked at in the game and not yet compared with OMSI 2** (the pack was reported to look right in OMSI 2). (#PR)
 
 ### DirectX 9 renderer (D3D9Ex)
 
