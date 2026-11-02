@@ -1,5 +1,5 @@
 use omsi_launcher_lib as core;
-use openomsi_game::testing::launcher::timetable_plan::*;
+use omsi_launcher_ui::window::*;
 
 /// A trip of `stops` leaving at `dep` (seconds), two minutes from stop to stop; a stop
 /// named with a leading `~` is passed.
