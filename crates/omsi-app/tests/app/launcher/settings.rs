@@ -669,3 +669,45 @@ fn the_depot_graphics_api_does_not_limit_the_original_omsi2() {
     let at = chosen(o, &st, &mut options);
     assert_eq!(options[at].0, "eco");
 }
+
+/// The Performance section gathers existing options (each key is one option of another
+/// section) and is offered under DirectX9 only.
+#[test]
+fn the_performance_section_is_directx9s_and_owns_no_option() {
+    let mut seen = std::collections::HashSet::new();
+    for (key, _) in PERFORMANCE_OPTS {
+        assert!(seen.insert(*key), "{key} is listed twice");
+        assert!(OPTS.iter().any(|o| o.key == *key), "{key} is not an option");
+    }
+    assert!(OPTS.iter().all(|o| o.sec != PERFORMANCE));
+    let drawn = |api: &str, id: &str| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            PERFORMANCE,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of(id))
+    };
+    // (the page offers the section only under the Depot's DirectX9)
+    let offered = |api: &str, omsi2: bool| {
+        let mut s = all_rows();
+        s["graphics_api"] = json!(api);
+        performance_offered(&s, omsi2)
+    };
+    assert!(!offered("vulkan", false));
+    assert_eq!(offered("d3d9", false), cfg!(windows));
+    assert!(!offered("d3d9", true));
+    // (the section's body lists its rows even where the page does not offer it; here only the
+    // page's gate, above, decides, and the rows draw on Windows)
+    if cfg!(windows) {
+        for key in ["mirror_size", "max_obj_dist", "ai_max_random", "max_fps", "vsync"] {
+            assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
+        }
+    }
+}
