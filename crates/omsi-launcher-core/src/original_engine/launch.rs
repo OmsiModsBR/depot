@@ -139,8 +139,13 @@ pub fn module_args(modules: &Map<String, Value>, root: &Path) -> Result<Vec<Stri
         if !modules::present(root, id) {
             continue;
         }
-        if !m.get("enabled").and_then(Value::as_bool).unwrap_or(true) {
+        let on = m.get("enabled").and_then(Value::as_bool);
+        if on == Some(false) {
             out.push(format!("/no-module:{id}"));
+            continue;
+        }
+        // (never switched: as the module itself would have it, no request either way)
+        if on.is_none() && !modules::on_by_default(id) {
             continue;
         }
         out.push(format!("/module:{id}"));
@@ -367,6 +372,41 @@ mod tests {
     }
 
     #[test]
+    fn openhud_choices_become_its_arguments() {
+        let root = tmp("hud");
+        place(&root, "openhud");
+        // never switched: openHUD joins only when asked for, so nothing is sent
+        let mut m = Map::new();
+        m.insert("openhud".into(), json!({"settings": {"radar": "false"}}));
+        assert!(module_args(&m, &root).unwrap().is_empty());
+        m.insert(
+            "openhud".into(),
+            json!({"enabled": true, "settings": {
+                "radar_corner": "top-right", "radar_zoom": "far", "radar_size_percent": "150",
+                "radar_opacity_percent": 80, "pause_menu": "false", "units": "imperial",
+                "ui_scale_percent": "125", "language": "pt-BR", "radar": true}}),
+        );
+        assert_eq!(
+            module_args(&m, &root).unwrap(),
+            [
+                "/module:openhud",
+                "/module-setting:openhud.language=pt-BR",
+                "/module-setting:openhud.pause_menu=false",
+                "/module-setting:openhud.radar=true",
+                "/module-setting:openhud.radar_corner=top-right",
+                "/module-setting:openhud.radar_opacity_percent=80",
+                "/module-setting:openhud.radar_size_percent=150",
+                "/module-setting:openhud.radar_zoom=far",
+                "/module-setting:openhud.ui_scale_percent=125",
+                "/module-setting:openhud.units=imperial",
+            ]
+        );
+        m.insert("openhud".into(), json!({"enabled": false}));
+        assert_eq!(module_args(&m, &root).unwrap(), ["/no-module:openhud"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn only_the_values_a_card_offers_are_sent() {
         let root = tmp("strict");
         place(&root, "omsi-prefetch");
@@ -385,10 +425,11 @@ mod tests {
             );
             assert!(module_args(&m, &root).is_err(), "{m:?}");
         }
-        // a module without a card yet takes no settings from Depot
+        // a module without a card takes no settings from Depot
+        place(&root, "other");
         let mut m = Map::new();
         m.insert(
-            "openhud".into(),
+            "other".into(),
             json!({"enabled": true, "settings": {"radar": true}}),
         );
         assert!(module_args(&m, &root).is_err());
