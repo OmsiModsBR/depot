@@ -1,4 +1,5 @@
 mod bicycle_cap;
+mod emergency_way;
 mod group_density;
 mod junction;
 mod junction_arrival;

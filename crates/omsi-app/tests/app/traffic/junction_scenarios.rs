@@ -274,6 +274,7 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         sound_cfgs: HashMap::new(),
         root: std::path::PathBuf::new(),
         held_at_red: 0,
+        way_makers: Default::default(),
         stop_wishes: None,
         player_still: 0.0,
         day_time: 0.0,
