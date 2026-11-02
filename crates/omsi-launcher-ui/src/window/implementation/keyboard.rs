@@ -224,7 +224,7 @@ fn capture(f: &mut Frame, view: &mut KeyboardView) {
         return;
     };
     view.added = None;
-    let section = SECTIONS[sec];
+    let section = KEY_SECTIONS[sec];
     let vr = f
         .state
         .keybindings
@@ -721,7 +721,7 @@ fn wait_for_key(f: &mut Frame, view: &mut KeyboardView, row: &KeyRow, k: usize) 
     if let Some(a) = f
         .state
         .keybindings
-        .get_mut(SECTIONS[row.sec])
+        .get_mut(KEY_SECTIONS[row.sec])
         .and_then(|a| a.as_array_mut())
     {
         if let Some(b) = a.get(last).cloned() {
@@ -746,7 +746,7 @@ fn drop_added(f: &mut Frame, view: &mut KeyboardView) {
     if let Some(a) = f
         .state
         .keybindings
-        .get_mut(SECTIONS[sec])
+        .get_mut(KEY_SECTIONS[sec])
         .and_then(|a| a.as_array_mut())
     {
         if a.get(idx)
@@ -765,7 +765,7 @@ fn back_to_original(f: &mut Frame, view: &mut KeyboardView, row: &KeyRow) {
     if f.state.omsi2_engine() {
         return;
     }
-    let key = SECTIONS[row.sec];
+    let key = KEY_SECTIONS[row.sec];
     let from = factory_entries(view.factory.as_ref(), key, &row.action);
     if from.is_empty() {
         return;
@@ -966,8 +966,8 @@ fn detail_card(
         *y += 34.0;
     };
     let in_omsi = original
-        .filter(|o| has_action(o, SECTIONS[row.sec], &row.action))
-        .map(|o| keys_of(o, SECTIONS[row.sec], &row.action));
+        .filter(|o| has_action(o, KEY_SECTIONS[row.sec], &row.action))
+        .map(|o| keys_of(o, KEY_SECTIONS[row.sec], &row.action));
     match &in_omsi {
         Some(k) => line(
             f,
@@ -1053,7 +1053,7 @@ fn detail_card(
         )
         && !row.unassigned()
     {
-        let key = SECTIONS[row.sec];
+        let key = KEY_SECTIONS[row.sec];
         if let Some(a) = f
             .state
             .keybindings
@@ -1560,7 +1560,7 @@ fn add_dialog(
             if let Some(list) = f
                 .state
                 .keybindings
-                .get_mut(SECTIONS[sec])
+                .get_mut(KEY_SECTIONS[sec])
                 .and_then(|x| x.as_array_mut())
             {
                 // (a listed action without a key gets its key in its own entry)

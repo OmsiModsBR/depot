@@ -488,6 +488,16 @@ pub fn depot_like(dir: &Path, hints: &[&str]) -> Option<Hof> {
 /// map's .hof into such a folder; this finds the copy that is already installed with
 /// another bus.
 pub fn depot_anywhere(name: &str) -> Option<Hof> {
+    depot_anywhere_path(name).and_then(|p| Hof::load(&p).ok())
+}
+
+/// Whether [`depot_anywhere`] finds `name`, without reading the file again once the search
+/// has been done (cheap enough for a call on every repaint).
+pub fn depot_anywhere_exists(name: &str) -> bool {
+    depot_anywhere_path(name).is_some()
+}
+
+fn depot_anywhere_path(name: &str) -> Option<PathBuf> {
     // (asked for every type of AI bus without the map's depot: the file found is kept for
     // the session, and a big installation's thousands of folders are gone through once)
     type Found = std::collections::HashMap<String, Option<PathBuf>>;
@@ -503,7 +513,7 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
         f.1.get(&key).cloned()
     };
     if let Some(path) = known {
-        return path.and_then(|p| Hof::load(&p).ok());
+        return path;
     }
     // every vehicle folder once over all roots (depot_in looks at each root's copy)
     let mut dirs: Vec<PathBuf> = omsi_cfg::read_dir_merged("Vehicles")
@@ -516,13 +526,13 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
             .to_string_lossy()
             .to_ascii_lowercase()
     });
-    let h = dirs.iter().find_map(|d| depot_in(d, name));
+    let path = dirs.iter().find_map(|d| depot_in(d, name)).map(|h| h.path);
     found
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .1
-        .insert(key, h.as_ref().map(|h| h.path.clone()));
-    h
+        .insert(key, path.clone());
+    path
 }
 
 #[cfg(test)]

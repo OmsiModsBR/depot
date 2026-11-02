@@ -245,7 +245,6 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
     let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
     Traffic {
         net,
-        street_weight: 0.0,
         parked: HashMap::new(),
         parked_waiting: Vec::new(),
         lane_tiles: Default::default(),
@@ -258,6 +257,9 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         cars: Vec::new(),
         dormant: Vec::new(),
         dormant_time: 0.0,
+        spawn_time: 0.0,
+        lane_clocks: Vec::new(),
+        spawn_cursor: 0,
         rng: 0x9E37_79B9_7F4A_7C15,
         target: 0,
         lights_only: false,
@@ -325,7 +327,6 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         twinned: Default::default(),
         keep_clear: Vec::new(),
         mirror: false,
-        count_near: None,
         lan_centers: Vec::new(),
     }
 }

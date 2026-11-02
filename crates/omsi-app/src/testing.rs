@@ -244,12 +244,6 @@ pub mod launcher {
     pub mod prerender {
         pub use crate::launcher::prerender::*;
     }
-    pub mod settings {
-        pub use crate::launcher::settings::*;
-    }
-    pub mod start {
-        pub use crate::launcher::start::*;
-    }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }
@@ -471,6 +465,9 @@ pub mod tr_fill {
 }
 pub mod traffic {
     pub use crate::traffic::*;
+}
+pub mod traffic_density {
+    pub use crate::traffic_density::*;
 }
 pub mod tutorial {
     pub use crate::tutorial::*;

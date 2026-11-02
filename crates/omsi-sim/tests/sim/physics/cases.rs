@@ -121,6 +121,56 @@ fn the_axle_steers_as_far_left_as_right() {
     );
 }
 
+/// Where along the body (m forward of the model origin) the body has no speed across:
+/// the line it turns about.
+fn turning_line(rb: &RigidBody) -> f32 {
+    let back = rb.orientation().inverse();
+    let (v, w) = (back.mul_vec3(rb.velocity()), rb.omega());
+    rb.cog().y + v.x / w.z
+}
+
+/// A bus at full lock at walking pace, its tyres holding: the line it turns about.
+fn line_at_full_lock(def: &Vehicle) -> f32 {
+    let mut rb = RigidBody::from_definition(def, &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    for _ in 0..240 {
+        rb.step(1.0 / 60.0, 2000.0, &[0.0; 4], 1.0, &g);
+    }
+    assert!(rb.holding(), "the tyres slid");
+    turning_line(&rb)
+}
+
+/// The bus turns about `[rot_pnt_long]` counted from its `[cog]`: with the `[cog]` 1 m
+/// ahead of the model origin, the stock bus (`[rot_pnt_long]` its rear axle, -2.7) turns
+/// about a line 1.7 m behind the origin, ahead of its rear axle, which swings out. Without a `[cog]`
+/// the line is counted from the middle of the `[boundingbox]` (0.001 m here).
+#[test]
+fn the_turning_line_is_counted_from_the_cog() {
+    let stock = line_at_full_lock(&bus());
+    assert!((stock - (-2.699)).abs() < 0.05, "{stock}");
+    let ahead = line_at_full_lock(&Vehicle {
+        cog: Some([0.0, 1.0, 1.2]),
+        ..bus()
+    });
+    assert!((ahead - (-1.7)).abs() < 0.05, "{ahead}");
+    // the axles point at the centre of the turn on that line, the rear one as well
+    let mut rb = RigidBody::from_definition(
+        &Vehicle {
+            cog: Some([0.0, 1.0, 1.2]),
+            ..bus()
+        },
+        &[],
+    );
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    for _ in 0..5 {
+        rb.step(1.0 / 60.0, 0.0, &[0.0; 4], 1.0, &g);
+    }
+    assert!((rb.axle_steer(0) - (4.938f32 * 0.13).atan()).abs() < 1e-3);
+    assert!((rb.axle_steer(2) - (-0.937f32 * 0.13).atan()).abs() < 1e-3);
+}
+
 /// The axle turns as far as `[inv_min_turnradius]` takes it, with no angle limit of the
 /// game's own: a lock of 0.4 1/m puts the front axle, 5.94 m ahead of the turning line, at
 /// atan(5.94 x 0.4), about 67°.
@@ -931,7 +981,7 @@ fn the_moments_of_inertia_are_in_tonne_square_metres() {
     };
     assert_eq!(
         i([6000.0, 90.0, 400.0]),
-        Vec3::new(6_000_000.0, 400_000.0, 90_000.0)
+        Vec3::new(6_000_000.0, 90_000.0, 400_000.0)
     );
     assert_eq!(i([0.05, 0.05, 0.05]), Vec3::splat(50.0));
     assert_eq!(i([0.0; 3]), Vec3::splat(100_000.0));

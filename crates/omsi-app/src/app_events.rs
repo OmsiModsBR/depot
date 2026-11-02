@@ -1863,11 +1863,11 @@ impl ApplicationHandler for App {
                         let own = Some(crate::humans::BusId::Player);
                         f.seat.map(|s| s.0) != own && f.inside.map(|i| i.0) != own
                     });
-                    h.density = w
+                    h.people_curve = w
                         .global
-                        .passenger_density((self.clock.time / 3600.0) as f32)
-                        // (OMSI's `AIPassFactor`, the passengers setting in per cent)
-                        * self.settings.pax_density;
+                        .passenger_density((self.clock.time / 3600.0) as f32);
+                    // (OMSI's `AIPassFactor`, the passengers setting in per cent)
+                    h.density = h.people_curve * self.settings.pax_density;
                     h.time_of_day = self.clock.time;
                     h.daylight =
                         omsi_sim::Daylight::compute(&self.clock, self.envir.as_ref()).light_a;
@@ -3359,8 +3359,21 @@ impl ApplicationHandler for App {
                                 &lighting,
                             )
                         };
+                        // ("DirectX9 (D3D9Ex)": the renderer's own picture is blank - it runs
+                        // on a device that draws nothing - so the picture is the one the
+                        // Direct3D 9Ex device just drew for it, read back before it could be
+                        // shown)
+                        let drawn = match self.output.capture_window() {
+                            Some(Ok(picture)) => Ok(picture),
+                            // (the renderer's own error says more than a missing frame)
+                            Some(Err(e)) => match drawn {
+                                Err(own) => Err(own),
+                                Ok(_) => Err(e),
+                            },
+                            None => drawn.map(|px| (s.config.width, s.config.height, px)),
+                        };
                         match drawn {
-                            Ok(mut px) => match {
+                            Ok((pic_w, pic_h, mut px)) => match {
                                 // (with the on-screen controls, when there are)
                                 if include_touch {
                                     if let Some(over) =
@@ -3372,8 +3385,8 @@ impl ApplicationHandler for App {
                                 image::save_buffer(
                                     &path,
                                     &px,
-                                    s.config.width,
-                                    s.config.height,
+                                    pic_w,
+                                    pic_h,
                                     image::ColorType::Rgba8,
                                 )
                             } {

@@ -56,7 +56,8 @@ pub struct RigidBody {
     /// The curvature the steering asks for this step (1/m, positive to the right).
     pub(crate) kappa: f32,
     pub(crate) max_steer_deg: f32,
-    /// `[rot_pnt_long]` and `[inv_min_turnradius]`: the line the bus turns about and the
+    /// The line the bus turns about (m forward of the model origin: `PhysicsSpec::turn_line`,
+    /// a section behind a joint its own `[rot_pnt_long]`) and `[inv_min_turnradius]`, the
     /// curvature of the full lock.
     pub(crate) rot_pnt_long: f32,
     pub(crate) inv_min_turn_radius: f32,
