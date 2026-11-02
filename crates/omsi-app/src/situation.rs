@@ -22,22 +22,13 @@ pub(crate) fn find_hof(
     names.extend(world.ailists.groups.iter().filter_map(|g| g.hof.clone()));
     // every wanted name in order: the bus's own depot files first (by file name, then by
     // the [name] inside), then the map's depot as another vehicle folder has it (a mod bus
-    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`)
+    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`), and
+    // only then a bus file of a similar name: an exact file installed anywhere wins (#46)
     for n in &names {
         if let Some(h) = omsi_vehicle::hof::depot_in(dir, n) {
             log::info!("using depot file {} (name {n})", h.path.display());
             return Some(std::sync::Arc::new(h));
         }
-    }
-    // the bus's own depot of the same place under another name (its Spandau 2019 where the
-    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896)
-    let wanted: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
-    if let Some(h) = omsi_vehicle::hof::depot_like(dir, &wanted) {
-        log::info!(
-            "using depot file {} (the bus's own of {wanted:?})",
-            h.path.display()
-        );
-        return Some(std::sync::Arc::new(h));
     }
     for n in &names {
         if let Some(h) = omsi_vehicle::hof::depot_anywhere(n) {
@@ -48,6 +39,17 @@ pub(crate) fn find_hof(
             );
             return Some(std::sync::Arc::new(h));
         }
+    }
+    // the bus's own depot of the same place under another name (its Spandau 2019 where the
+    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896), only
+    // when the map's exact depot is installed nowhere
+    let wanted: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+    if let Some(h) = omsi_vehicle::hof::depot_like(dir, &wanted) {
+        log::info!(
+            "using depot file {} (the bus's own of {wanted:?})",
+            h.path.display()
+        );
+        return Some(std::sync::Arc::new(h));
     }
     // a map without a depot of its own: the bus's depot named like the map (#896)
     let folder = world

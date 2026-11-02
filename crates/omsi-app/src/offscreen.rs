@@ -219,10 +219,10 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             }
         }
         // (with the passengers setting, as in the window)
-        h.density = world
+        h.people_curve = world
             .global
-            .passenger_density((parse_time(&args.time) / 3600.0) as f32)
-            * settings.pax_density;
+            .passenger_density((parse_time(&args.time) / 3600.0) as f32);
+        h.density = h.people_curve * settings.pax_density;
         h.time_of_day = parse_time(&args.time);
         h.stop_targets = schedule.as_ref().map(|s| s.stop_targets());
         h.stop_names = schedule.as_ref().map(|s| s.stop_names());
@@ -954,10 +954,10 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             // (stop_target = enter_mean * density; without this it stays at the startup
             // value and the new formula returns 0 for the whole session when the map has
             // a low hourly density at the start time)
-            h.density = world
+            h.people_curve = world
                 .global
-                .passenger_density((run_clock.time / 3600.0) as f32)
-                * settings.pax_density;
+                .passenger_density((run_clock.time / 3600.0) as f32);
+            h.density = h.people_curve * settings.pax_density;
             h.time_of_day = run_clock.time;
             h.daylight = omsi_sim::Daylight::compute(&run_clock, envir.as_ref()).light_a;
             // populate stops near every LAN player every 2 seconds, as app_events.rs
