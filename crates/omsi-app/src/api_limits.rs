@@ -133,8 +133,9 @@ pub const D3D9: &[ApiLimit] = &[
     },
     ApiLimit {
         key: "render_scale",
-        limit: Limit::Locked("Auto"),
-        reason: "DirectX9 draws at the window size",
+        // (Auto is the window's own size: the scale is the player's choice, never automatic)
+        limit: Limit::Choices(&["auto", "1", "0.85", "0.75", "0.67", "0.5"]),
+        reason: "DirectX9 draws at the window size unless a smaller scale is chosen",
     },
     // Mirrors are drawn (flat ones, as OMSI 2 has them): its picture sizes, and the real-time
     // reflections on or off. Economical and the biggest picture are ours.

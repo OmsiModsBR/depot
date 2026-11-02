@@ -2,6 +2,7 @@
 
 pub use super::super::domain::check::*;
 pub use super::super::domain::frame::*;
+pub use super::super::domain::keyboard::*;
 pub use super::super::domain::overview::*;
 pub use super::super::domain::profile::*;
 pub use super::super::domain::root::*;
@@ -10,6 +11,7 @@ pub use super::super::implementation::dialog::*;
 pub use super::super::implementation::engine::*;
 pub use super::super::implementation::heading::*;
 pub use super::super::implementation::integrity::*;
+pub use super::super::implementation::keyboard::*;
 pub use super::super::implementation::mods::*;
 pub use super::super::implementation::overview::*;
 pub use super::super::implementation::profile::*;

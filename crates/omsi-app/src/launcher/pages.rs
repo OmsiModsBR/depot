@@ -20,8 +20,6 @@ pub struct PagesView {
     pub kb_filter: [String; 2],
     /// The OMSI-style "Add event..." browser is open for a keyboard section.
     pub kb_events: [bool; 2],
-    /// (section, index) of the binding waiting for a key.
-    pub capturing: Option<(usize, usize)>,
     pub drop_hover: bool,
     /// The Setup page's folders as edited, and its Content card (`setup`).
     pub setup: omsi_launcher_ui::window::SetupView,
@@ -34,7 +32,7 @@ pub struct PagesView {
     /// The Diagnostics page's tab and its integrity check (`integrity`).
     pub diag: super::diagnostics::DiagView,
     /// The keyboard tab on a computer (`keyboard`).
-    pub kb: super::keyboard::KeyboardView,
+    pub kb: omsi_launcher_ui::window::KeyboardView,
 }
 
 /// The game controllers tab: the devices `gamectrler.cfg` sets up, the ones connected now,
@@ -223,7 +221,8 @@ pub fn known_action(a: &str) -> Option<String> {
 /// axis and button does, only shown (changed inside OMSI 2; nothing is written from here).
 fn game_controllers_read_only(l: &mut Launcher, body: Rect) {
     use crate::controllers::Func;
-    let bar = super::keyboard::read_only_bar(l, Rect::new(body.x, body.y, body.w, 44.0));
+    let bar =
+        omsi_launcher_ui::window::read_only_bar(&mut l.ui, Rect::new(body.x, body.y, body.w, 44.0));
     let body = Rect::new(
         body.x,
         body.y + bar + 12.0,
@@ -347,7 +346,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
             }
         } else {
             l.pages.pads.cancel_feedback_test();
-            super::keyboard::draw(l, body);
+            omsi_launcher_ui::window::keyboard_tab(frame!(l), &mut l.pages.kb, body);
         }
         return;
     }
@@ -367,10 +366,10 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     }
     l.pages.pads.cancel_feedback_test();
     // a key pressed while one binding waits for it
-    if let (Some((sec, idx)), Some(code)) = (l.pages.capturing, l.ui.input.raw_key) {
+    if let (Some((sec, idx)), Some(code)) = (l.pages.kb.capturing, l.ui.input.raw_key) {
         use winit::keyboard::KeyCode as K;
         if code == K::Escape {
-            l.pages.capturing = None;
+            l.pages.kb.capturing = None;
         } else if !matches!(
             code,
             K::ShiftLeft
@@ -419,7 +418,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                     true,
                 ),
             }
-            l.pages.capturing = None;
+            l.pages.kb.capturing = None;
         }
         l.ui.input.raw_key = None;
     }
@@ -589,7 +588,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                     .and_then(|a| a.as_array_mut())
                 {
                     a.push(json!({ "action": action.clone(), "scan_code": 0, "modifier": 0 }));
-                    l.pages.capturing = Some((0, a.len() - 1));
+                    l.pages.kb.capturing = Some((0, a.len() - 1));
                     l.pages.kb_events[0] = false;
                     l.pages.kb_filter[0] = action;
                     l.state.set_status(
@@ -647,7 +646,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
         if sec == 1 {
             shown.sort_by_key(|(_, label, _, _)| !label.starts_with("VR:"));
         }
-        let capturing = l.pages.capturing;
+        let capturing = l.pages.kb.capturing;
         // what the row's buttons asked: (entry, cleared) a key cleared or to be pressed,
         // `more` another key for an entry's action (#854)
         let mut clicked: Option<(usize, bool)> = None;
@@ -679,7 +678,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                     .and_then(|a| a.as_array_mut())
                 {
                     a.push(json!({ "action": new_action, "scan_code": 0, "modifier": 0 }));
-                    l.pages.capturing = Some((sec, a.len() - 1));
+                    l.pages.kb.capturing = Some((sec, a.len() - 1));
                 }
                 // (the filter stays: the new row is the one it shows, waiting for its key)
             }
@@ -798,7 +797,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                 }
                 save_keys(l, vr_binding);
             }
-            Some((i, false)) => l.pages.capturing = Some((sec, i)),
+            Some((i, false)) => l.pages.kb.capturing = Some((sec, i)),
             None => {}
         }
         if let Some(i) = more {
@@ -813,7 +812,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
                     let hold = b.get("modifier").and_then(|x| x.as_i64()).unwrap_or(0)
                         & omsi_content::input::KEY_HOLD as i64;
                     a.insert(i + 1, json!({ "action": b.get("action").cloned().unwrap_or(json!("")), "scan_code": 0, "modifier": hold }));
-                    l.pages.capturing = Some((sec, i + 1));
+                    l.pages.kb.capturing = Some((sec, i + 1));
                 }
             }
         }
@@ -1914,40 +1913,9 @@ fn save_gamectrler(
 
 /// Settings → Driving keys: "Custom controls", the keys of the Controls page.
 pub(super) fn use_custom_keys(l: &mut Launcher) -> bool {
-    if l.state.settings.get("drive_keys").and_then(|v| v.as_str()) == Some("omsi") {
-        return false;
-    }
-    l.state.settings["drive_keys"] = json!("omsi");
-    l.state.settings_dirty = 0.3;
-    l.state.set_status(
-        "Driving keys: Custom controls - the game uses the keys of this page.",
-        false,
-    );
-    true
+    omsi_launcher_ui::window::use_custom_keys(&mut l.state)
 }
 
 pub(super) fn save_keys(l: &mut Launcher, vr_binding: bool) {
-    // (with OMSI 2 chosen the keys are only shown: the file may be the OMSI 2 folder's own)
-    if l.state.omsi2_engine() {
-        return;
-    }
-    match core::save_keybindings(&l.state.keybindings) {
-        Ok(()) => {
-            l.state.keybindings_error.clear();
-            if let Ok(k) = core::get_keybindings() {
-                l.state.keybindings = k;
-            }
-            // a key changed is a key the player wants to use: with a ready-made layout it
-            // would be ignored wherever that layout has a key of its own
-            if !vr_binding && use_custom_keys(l) {
-                l.state.set_status("Key bindings saved; Driving keys switched to Custom controls so the game uses them.", false);
-            } else {
-                l.state.set_status("Key bindings saved.", false);
-            }
-        }
-        Err(e) => {
-            l.state.keybindings_error = format!("{e:#}");
-            l.state.set_status(format!("{e:#}"), true);
-        }
-    }
+    omsi_launcher_ui::window::save_keys(&mut l.state, vr_binding);
 }

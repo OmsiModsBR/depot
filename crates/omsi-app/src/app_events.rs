@@ -443,6 +443,10 @@ impl ApplicationHandler for App {
                     u32::from(self.settings.anisotropy),
                     self.settings.dx9_effects(),
                 );
+                self.output.set_render_scale(
+                    self.settings.dx9_render_scale(),
+                    self.settings.dx9_sharp_upscale(),
+                );
                 // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")

@@ -246,6 +246,11 @@ pub struct Settings {
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
     /// snow without it.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: how the picture is brought up when the render scale draws it
+    /// smaller than the window: `bilinear` (the card's filter) or `fsr1` (AMD's FidelityFX
+    /// Super Resolution 1, adapted). A performance option that moves the picture away from
+    /// OMSI 2's; nothing happens at a render scale of Auto or 100 %.
+    pub dx9_upscale: String,
     /// "DirectX9 (D3D9Ex)" only, and ours (OMSI 2 has no such options): leave out what takes
     /// effort to draw. All on (and no texture ceiling) draws what the renderer draws without
     /// them. Raindrops on glass:
@@ -556,6 +561,7 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: false,
+            dx9_upscale: "bilinear".into(),
             dx9_glass_rain: true,
             dx9_coronas: true,
             dx9_stars: true,
@@ -933,6 +939,12 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "dx9_upscale" => {
+                    s.dx9_upscale = match v.to_ascii_lowercase().as_str() {
+                        "fsr1" | "fsr" | "sharp" => "fsr1".into(),
+                        _ => "bilinear".into(),
+                    }
+                }
                 "dx9_glass_rain" => s.dx9_glass_rain = b(v),
                 "dx9_coronas" => s.dx9_coronas = b(v),
                 "dx9_stars" => s.dx9_stars = b(v),
@@ -1507,6 +1519,22 @@ impl Settings {
         self.dx9_snow && self.backend() == crate::output::Backend::D3d9
     }
 
+    /// The fraction of the window the "DirectX9 (D3D9Ex)" renderer draws the scene at (0 =
+    /// the window's own size: Auto, or another graphics API, whose scale the default renderer
+    /// takes). Chosen by the player, never automatic: no governor works on this one.
+    pub fn dx9_render_scale(&self) -> f32 {
+        if self.backend() == crate::output::Backend::D3d9 && self.render_scale < 0.995 {
+            self.render_scale.max(0.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// Whether the scaled picture is brought up with the sharper pass (`dx9_upscale`).
+    pub fn dx9_sharp_upscale(&self) -> bool {
+        self.dx9_upscale == "fsr1"
+    }
+
     /// The effort-saving options of "DirectX9 (D3D9Ex)", for the device.
     pub(crate) fn dx9_effects(&self) -> crate::output::Dx9Effects {
         crate::output::Dx9Effects {
@@ -1541,8 +1569,8 @@ impl Settings {
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
-        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet)
-        self.render_scale = 0.0;
+        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
+        // the render scale it does, see `dx9_render_scale`: kept as saved)
         self.post_aa = "off".into();
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
@@ -1602,11 +1630,15 @@ impl Settings {
         if n >= 2 {
             self.shadows = false;
             self.shadow_size = 1024;
-            self.render_scale = if self.render_scale > 0.0 {
-                self.render_scale.min(0.75)
-            } else {
-                0.75
-            };
+            // ("DirectX9 (D3D9Ex)" has no automatic scale: its picture is only ever scaled by
+            // the player's choice)
+            if self.backend() != crate::output::Backend::D3d9 {
+                self.render_scale = if self.render_scale > 0.0 {
+                    self.render_scale.min(0.75)
+                } else {
+                    0.75
+                };
+            }
             self.texture_memory = self.texture_memory.min(700);
             self.mirror_size = self.mirror_size.min(128);
         }
@@ -1619,7 +1651,13 @@ impl Settings {
             anisotropy: self.anisotropy,
             shadow_size: self.shadow_size,
             ssao: self.ssao,
-            render_scale: self.render_scale,
+            // ("DirectX9 (D3D9Ex)" scales its own picture, see `dx9_render_scale`; the renderer
+            // behind it draws on a device that shows nothing)
+            render_scale: if self.backend() == crate::output::Backend::D3d9 {
+                0.0
+            } else {
+                self.render_scale
+            },
             compress_textures: self.texture_compression,
             fxaa: self.post_aa != "off",
             min_obj_size: self.min_obj_size,

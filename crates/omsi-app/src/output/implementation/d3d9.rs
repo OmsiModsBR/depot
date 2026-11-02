@@ -531,6 +531,19 @@ impl D3d9Output {
         }
     }
 
+    /// The render scale option: the fraction of the window the scene is drawn at (0 = the
+    /// window's size) and whether it is brought up with the sharper pass.
+    pub(crate) fn set_render_scale(&self, scale: f32, sharp: bool) {
+        self.lock().device.set_render_scale(
+            scale,
+            if sharp {
+                omsi_render_d3d9::Upscale::Fsr1
+            } else {
+                omsi_render_d3d9::Upscale::Bilinear
+            },
+        );
+    }
+
     /// The options that take effort off the picture: what they leave out is left out from the
     /// next picture on. The texture size limit is not among them: it is read once, when the
     /// device is opened (a limit changed in the game's options takes effect at the next start,

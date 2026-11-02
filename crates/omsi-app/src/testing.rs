@@ -244,9 +244,6 @@ pub mod launcher {
     pub mod drive {
         pub use crate::launcher::drive::*;
     }
-    pub mod keyboard {
-        pub use crate::launcher::keyboard::*;
-    }
     pub mod mapview {
         pub use crate::launcher::mapview::*;
     }
@@ -420,6 +417,7 @@ pub mod settings {
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
             text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
             text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
+            text.push_str(&format!("dx9_upscale={}\n", self.dx9_upscale));
             text.push_str(&format!("dx9_glass_rain={}\n", self.dx9_glass_rain as u8));
             text.push_str(&format!("dx9_coronas={}\n", self.dx9_coronas as u8));
             text.push_str(&format!("dx9_stars={}\n", self.dx9_stars as u8));
