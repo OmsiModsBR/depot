@@ -1,7 +1,6 @@
 mod backdrop;
 mod chrome;
 mod dialogs;
-mod drive;
 mod mapview;
 mod pages;
 mod prerender;

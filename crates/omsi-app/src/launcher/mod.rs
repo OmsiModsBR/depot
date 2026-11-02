@@ -26,7 +26,6 @@ macro_rules! frame {
 pub(crate) mod backdrop;
 pub(crate) mod chrome;
 pub(crate) mod diagnostics;
-pub(crate) mod drive;
 mod gfx;
 pub(crate) mod host;
 pub(crate) mod map;
@@ -38,6 +37,7 @@ pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
 pub(crate) mod settings;
+mod stage;
 pub(crate) mod start;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -164,7 +164,7 @@ pub struct Launcher {
     preview: showroom::Preview,
     page: Page,
     page_anim: f32,
-    pub drive: drive::DriveView,
+    pub drive: window::DriveView,
     /// The launcher made for a phone (see `phone`).
     pub phone: phone::PhoneView,
     pub pages: pages::PagesView,
@@ -278,7 +278,7 @@ impl Launcher {
             preview: showroom::Preview::new(),
             page: Page::Drive,
             page_anim: 1.0,
-            drive: drive::DriveView::default(),
+            drive: window::DriveView::default(),
             phone: phone::PhoneView::default(),
             pages: pages::PagesView::default(),
             vehicles: Default::default(),
@@ -900,16 +900,6 @@ fn run_time(t: u64) -> String {
         omsi_ui::tr("%{h} h %{m} min")
             .replace("%{h}", &(m / 60).to_string())
             .replace("%{m}", &(m % 60).to_string())
-    }
-}
-
-/// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
-/// player's language.
-pub(crate) fn precip_text(p: &str) -> String {
-    match (p.strip_prefix("rain "), p.strip_prefix("snow ")) {
-        (Some(n), _) => omsi_ui::tr("rain %{n}%").replace("%{n}", n.trim_end_matches('%')),
-        (_, Some(n)) => omsi_ui::tr("snow %{n}%").replace("%{n}", n.trim_end_matches('%')),
-        _ => omsi_ui::tr(p).into_owned(),
     }
 }
 
@@ -1768,7 +1758,7 @@ impl Launcher {
             let glass = self.draw_backdrop();
             omsi_ui::theme::set_glass(glass);
             match self.page {
-                Page::Drive => drive::draw(self, content),
+                Page::Drive => self.drive_page(content),
                 Page::Vehicles => self.vehicles_page(content),
                 Page::Maps => self.maps_page(content),
                 Page::Diagnostics => diagnostics::draw(self, content),
@@ -1947,27 +1937,17 @@ impl Launcher {
         window::timetable(frame!(self), &mut self.pages.tt, &mut map, area);
     }
 
-    /// The mouse over the map: what it drags, where it zooms, and the entry point a click
-    /// takes. Called once the page's panels are drawn - they have the first claim on it.
-    pub fn map_interact(&mut self, r: Rect, window: Rect) {
-        self.map_interact_with(r, window, true);
-    }
-
-    /// `map_interact` for a map inside a window of its own: the window's darkened frame claims
-    /// the whole screen (`over_ui`), so only the map's own rectangle decides what the mouse
-    /// does to it.
+    /// The mouse over a map inside a window of its own (what it drags, where it zooms, and
+    /// the entry point a click takes): the window's darkened frame claims the whole screen
+    /// (`over_ui`), so only the map's own rectangle decides what the mouse does to it.
     pub fn map_interact_in_window(&mut self, r: Rect, window: Rect) {
-        self.map_interact_with(r, window, false);
-    }
-
-    fn map_interact_with(&mut self, r: Rect, window: Rect, panels_first: bool) {
         let p = mapview::Pointer {
             at: self.ui.input.mouse,
             pressed: self.ui.input.pressed,
             released: self.ui.input.released,
             down: self.ui.input.down,
             wheel: self.ui.input.wheel.y,
-            blocked: (panels_first && self.ui.over_ui) || !r.contains(self.ui.input.mouse),
+            blocked: !r.contains(self.ui.input.mouse),
         };
         self.mapview.think(r, window, self.ui.scale, p);
         if let Some(i) = self.mapview.take_clicked() {
@@ -1982,68 +1962,24 @@ impl Launcher {
         }
     }
 
-    /// The bus across `r`, the whole page behind the panels. `focus` is where the panels end,
-    /// as a share of the window: the showroom frames the bus in what is left of it.
-    pub fn preview_full(&mut self, r: Rect, focus: f32) {
-        self.preview_rect = Some(r);
-        self.preview.focus_x = focus.clamp(0.2, 0.95);
-        match (self.preview_tex, self.preview.has_picture()) {
-            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
-            _ => {
-                self.ui.solid(r);
-                self.ui.p().rounded(r, RADIUS, FIELD);
-                let t = if self.preview.error.is_some() {
-                    "No preview"
-                } else {
-                    "Loading…"
-                };
-                self.ui.text_in(
-                    t,
-                    Rect::new(r.x, r.y + r.h * 0.5 - 12.0, r.w, 24.0),
-                    13.0,
-                    Weight::Regular,
-                    TEXT_FAINT,
-                    Align::Center,
-                );
-            }
-        }
-        // (left of the panels, which lie over the right part of the page)
-        let w = (r.w * self.preview.focus_x * 2.0 - r.w).clamp(r.w * 0.3, r.w);
-        self.preview_badge(Rect::new(r.x, r.y, w, r.h));
-    }
-
-    /// Where the preview's picture comes from, in the lower left of `r`: kept from an earlier
-    /// time (the helper draws the live one only while the page shows it) or drawn live.
+    /// Where the preview's picture comes from, in the lower left of `r` (see `stage::badge`).
     fn preview_badge(&mut self, r: Rect) {
-        let t = if self.preview.live {
-            "Preview helper: running"
-        } else if self.preview.has_picture() && self.preview.picture_only() {
-            // (a page that shows the kept picture: the live view when the player turns it)
-            "Image from cache · drag it to see it live"
-        } else if self.preview.has_picture() && self.preview.from_cache {
-            "Image from cache · live view only on this page"
-        } else {
-            return;
-        };
-        let w = self.ui.width(t, 11.5, Weight::Regular) + 20.0;
-        let b = Rect::new(r.x + 14.0, r.y + r.h - 38.0, w, 24.0);
-        self.ui
-            .p()
-            .rounded(b, 12.0, omsi_ui::Color::rgba(10, 10, 12, 0.72));
-        self.ui
-            .text_in(t, b, 11.5, Weight::Regular, TEXT_DIM, Align::Center);
+        stage::badge(&mut self.ui, &self.preview, r);
     }
 
-    /// The wheel and the cursor over the showroom, once the panels have had the mouse.
-    pub fn showroom_pointer(&mut self, r: Rect) {
-        if self.ui.over_ui || !r.contains(self.ui.input.mouse) {
-            return;
-        }
-        if self.ui.input.wheel.y.abs() > 0.0 {
-            self.preview
-                .zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
-        }
-        self.ui.cursor = winit::window::CursorIcon::Grab;
+    /// The Drive page in `area`, over the launcher's map or the bus.
+    pub(super) fn drive_page(&mut self, area: Rect) {
+        let mut map = map::GameMap {
+            view: &mut self.mapview,
+            tex: self.map_tex,
+            rect: &mut self.map_rect,
+        };
+        let mut room = stage::GameShowroom {
+            preview: &mut self.preview,
+            tex: self.preview_tex,
+            rect: &mut self.preview_rect,
+        };
+        window::drive(frame!(self), &mut self.drive, &mut map, &mut room, area);
     }
 
     pub fn go(&mut self, p: Page) {

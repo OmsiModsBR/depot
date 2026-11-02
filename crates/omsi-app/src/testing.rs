@@ -235,9 +235,6 @@ pub mod launcher {
     pub mod dialogs {
         pub use crate::launcher::dialogs::*;
     }
-    pub mod drive {
-        pub use crate::launcher::drive::*;
-    }
     pub mod mapview {
         pub use crate::launcher::mapview::*;
     }
