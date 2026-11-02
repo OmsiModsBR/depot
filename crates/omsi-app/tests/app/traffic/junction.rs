@@ -273,8 +273,8 @@ fn two_emergency_vehicles_do_not_wait_for_each_other() {
 }
 
 /// Deliberate improvement: an emergency vehicle (its script sets `TrafficPriority`) drives
-/// through a red light, while an ordinary car stops at it; the cross traffic with green gives
-/// way to it. Nobody else is on the road, so nothing is in its way.
+/// through a red light, while an ordinary car (also one behind it) stops at it. Nobody else is
+/// on the road, so nothing is in its way; cross traffic giving way is not covered here.
 #[test]
 fn an_emergency_vehicle_does_not_stop_at_a_red_light() {
     for emergency in [false, true] {
