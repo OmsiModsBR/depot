@@ -357,8 +357,10 @@ fn scenery_freetex_name_resolution() {
 fn vehicle_text_layer_never_writes_depth() {
     let extra = vehicle_text_layer_extra(MaterialExtra {
         writes_depth: true,
+        transmap_declared: true,
         ..Default::default()
     });
+    assert!(!extra.transmap_declared);
     assert!(extra.no_z_write);
     assert!(!extra.writes_depth);
 }

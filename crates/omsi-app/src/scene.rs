@@ -11922,6 +11922,9 @@ fn text_is_display(lightmap: bool, night: bool) -> bool {
 pub fn vehicle_text_layer_extra(mut extra: MaterialExtra) -> MaterialExtra {
     extra.no_z_write = true;
     extra.writes_depth = false;
+    // (the layer has no transparency map of its own, so none is declared either: a stale
+    // declaration would count it as glass in the shading)
+    extra.transmap_declared = false;
     extra
 }
 
