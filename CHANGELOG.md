@@ -36,7 +36,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Vehicle physics and simulation
 
-- **Fixed.** A saved situation brings an articulated bus back bent as it was left: each rear section is saved after its bus, where it stands and turned as it is (`[coupledWith]` -1), and on loading it is hung back on its joint at that angle, for the driven bus and the placed ones. The driver's brake pedal and steering come back too (from the saved `Brake` and `Axle_Steering_*`): before, the controls wrote over them on the first frame, so the brake came off and the wheels went straight. Parts coupled by hand beyond the bus's own rear sections are still not coupled again on loading. Checked by automated tests only, not yet in the game. (#634)
+- **Fixed.** A saved situation brings an articulated bus back bent as it was left: each rear section is saved after its bus, where it stands and turned as it is (`[coupledWith]` -1), and on loading it is hung back on its joint at that angle, for the driven bus and the placed ones. The driver's brake pedal and steering come back too (from the saved `Brake` and `Axle_Steering_*`): before, the controls wrote over them on the first frame, so the brake came off and the wheels went straight. Parts coupled by hand beyond the bus's own rear sections are still not coupled again on loading. The loading screen of a saved situation names the livery the bus was saved in (it showed the default one). Checked by automated tests only, not yet in the game. (#634)
 
 ### Launcher
 
