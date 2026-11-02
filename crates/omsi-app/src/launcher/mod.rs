@@ -31,8 +31,6 @@ pub(crate) mod host;
 pub(crate) mod map;
 pub(crate) mod mapview;
 pub mod mobile;
-mod omsi2_modules;
-mod omsi2_plugins;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;

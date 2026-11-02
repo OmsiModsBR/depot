@@ -9,6 +9,8 @@ pub(crate) mod heading;
 pub(crate) mod integrity;
 pub(crate) mod keyboard;
 pub(crate) mod mods;
+pub(crate) mod omsi2_modules;
+pub(crate) mod omsi2_plugins;
 pub(crate) mod overview;
 pub(crate) mod profile;
 pub(crate) mod setup;

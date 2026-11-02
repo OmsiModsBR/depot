@@ -911,8 +911,11 @@ impl Humans {
             return;
         }
         let people = &self.people;
-        self.empty_bus
-            .retain(|b| people.iter().any(|p| p.inside(*b) && matches!(p.state, State::Pax(_))));
+        self.empty_bus.retain(|b| {
+            people
+                .iter()
+                .any(|p| p.inside(*b) && matches!(p.state, State::Pax(_)))
+        });
     }
 
     /// The passenger of person `i`, if it is one.

@@ -7,6 +7,7 @@ pub(crate) mod drive;
 pub(crate) mod frame;
 pub(crate) mod keyboard;
 pub(crate) mod map;
+pub(crate) mod modules;
 pub(crate) mod overview;
 pub(crate) mod profile;
 pub(crate) mod root;

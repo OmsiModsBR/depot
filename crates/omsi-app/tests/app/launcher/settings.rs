@@ -706,7 +706,13 @@ fn the_performance_section_is_directx9s_and_owns_no_option() {
     // (the section's body lists its rows even where the page does not offer it; here only the
     // page's gate, above, decides, and the rows draw on Windows)
     if cfg!(windows) {
-        for key in ["mirror_size", "max_obj_dist", "ai_max_random", "max_fps", "vsync"] {
+        for key in [
+            "mirror_size",
+            "max_obj_dist",
+            "ai_max_random",
+            "max_fps",
+            "vsync",
+        ] {
             assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
         }
     }

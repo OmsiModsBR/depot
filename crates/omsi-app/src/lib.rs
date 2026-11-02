@@ -12,7 +12,7 @@
 mod about;
 mod actions;
 mod ambience;
-mod api_limits;
+use omsi_launcher_ui::api_limits;
 mod career;
 mod describe;
 mod driver;
