@@ -16,6 +16,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::output::Dx9Effects;
 use anyhow::{anyhow, Result};
 use omsi_render::{
     FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene, TexAddressing,
@@ -43,6 +44,8 @@ struct Inner {
     open: bool,
     /// When the last window picture was drawn (raindrops on glass move on by the time between).
     last_window_picture: Option<std::time::Instant>,
+    /// The options that leave effects out (see [`Dx9Effects`]).
+    effects: Dx9Effects,
     /// Problems already logged (each kind once, not every frame or every asset).
     warned: hashbrown::HashSet<&'static str>,
     /// The device draws into this window: it lives as long as the device.
@@ -213,7 +216,7 @@ impl Inner {
             main: &self.main,
             cab: &self.cab,
             surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
-            coronas: if omsi_cfg::flags::NO_CORONAS.is_set() {
+            coronas: if omsi_cfg::flags::NO_CORONAS.is_set() || !self.effects.coronas {
                 SceneCoronas::default()
             } else {
                 SceneCoronas {
@@ -236,19 +239,32 @@ impl Inner {
                 place: plan.light_grid,
                 tile_map: plan.light_map,
             },
-            rain: SceneRain {
-                intensity: plan.rain,
-                wiper: scene.glass_wiper,
-                seconds,
+            // (no rain on the glass: the drops never gather, and what had gathered dries)
+            rain: if self.effects.glass_rain {
+                SceneRain {
+                    intensity: plan.rain,
+                    wiper: scene.glass_wiper,
+                    seconds,
+                }
+            } else {
+                SceneRain {
+                    intensity: 0.0,
+                    wiper: None,
+                    seconds,
+                }
             },
             sky: SceneSky {
                 textures: scene.sky_textures(),
                 params: plan.sky,
+                // (no cloud picture: the sky is drawn without the layer; the clouds' cover
+                // still dims the light and thins the sun's glow, as the plan has it)
                 clouds: SceneClouds {
                     texture: scene.sky_cloud_picture(),
                     params: plan.clouds,
                 },
+                no_cloud_layer: !self.effects.cloud_picture,
                 sun_glow: plan.sun_glow,
+                no_stars: !self.effects.stars,
             },
         };
         let material = |id: usize| {
@@ -424,6 +440,7 @@ impl D3d9Output {
         window: &Arc<Window>,
         vsync: bool,
         (msaa, anisotropy): (u32, u32),
+        effects: Dx9Effects,
     ) -> Result<Self> {
         let hwnd = match window.window_handle().map(|h| h.as_raw()) {
             Ok(RawWindowHandle::Win32(h)) => {
@@ -442,6 +459,8 @@ impl D3d9Output {
         device
             .set_quality(msaa, anisotropy)
             .map_err(|e| anyhow!("Direct3D 9Ex: {e}"))?;
+        // (before the first texture goes up: the ceiling is applied as each one does)
+        device.set_texture_limit(effects.texture_limit);
         log::info!("graphics: DirectX9 (D3D9Ex) on {:?}", device.caps());
         let inner = Arc::new(Mutex::new(Inner {
             device,
@@ -453,6 +472,7 @@ impl D3d9Output {
             draws: Vec::new(),
             open: false,
             last_window_picture: None,
+            effects,
             warned: Default::default(),
             _window: window.clone(),
         }));
@@ -522,6 +542,19 @@ impl D3d9Output {
                 omsi_render_d3d9::Upscale::Bilinear
             },
         );
+    }
+
+    /// The options that take effort off the picture: what they leave out is left out from the
+    /// next picture on. The texture size limit is not among them: it is read once, when the
+    /// device is opened (a limit changed in the game's options takes effect at the next start,
+    /// so one session never mixes sharp and soft textures).
+    pub(crate) fn set_effects(&self, effects: Dx9Effects) {
+        let mut inner = self.lock();
+        let texture_limit = inner.effects.texture_limit;
+        inner.effects = Dx9Effects {
+            texture_limit,
+            ..effects
+        };
     }
 
     /// Ends and shows the frame the renderer's picture began (none: nothing happens).

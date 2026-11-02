@@ -2,7 +2,7 @@
 //! Direct3D 9Ex device that shows its pictures. Off Windows there is only wgpu, and the
 //! device's calls do nothing.
 
-use super::super::domain::backend::Backend;
+use super::super::domain::backend::{Backend, Dx9Effects};
 #[cfg(windows)]
 use super::d3d9::D3d9Output;
 use anyhow::Result;
@@ -35,9 +35,10 @@ impl Output {
         window: &Arc<Window>,
         vsync: bool,
         quality: (u32, u32),
+        effects: Dx9Effects,
     ) -> Result<()> {
         use anyhow::Context;
-        let out = D3d9Output::attach(renderer, window, vsync, quality)
+        let out = D3d9Output::attach(renderer, window, vsync, quality, effects)
             .context("The game cannot draw with DirectX9 (D3D9Ex) on this computer")?;
         self.d3d9 = Some(out);
         self.backend = Backend::D3d9;
@@ -52,6 +53,7 @@ impl Output {
         _window: &Arc<Window>,
         _vsync: bool,
         _quality: (u32, u32),
+        _effects: Dx9Effects,
     ) -> Result<()> {
         Err(anyhow::anyhow!("DirectX9 (D3D9Ex) draws on Windows only"))
     }
@@ -76,11 +78,18 @@ impl Output {
     /// Presents wait for the display's refresh, or not, with the anti-aliasing and
     /// anisotropic filtering options.
     #[cfg_attr(not(windows), allow(unused_variables))]
-    pub(crate) fn set_vsync_and_quality(&self, vsync: bool, msaa: u32, anisotropy: u32) {
+    pub(crate) fn set_vsync_and_quality(
+        &self,
+        vsync: bool,
+        msaa: u32,
+        anisotropy: u32,
+        effects: Dx9Effects,
+    ) {
         #[cfg(windows)]
         if let Some(d) = self.d3d9.as_ref() {
             d.set_vsync(vsync);
             d.set_quality(msaa, anisotropy);
+            d.set_effects(effects);
         }
     }
 

@@ -107,6 +107,9 @@ pub struct D3d9Device {
     scene: scene::SceneStore,
     /// What the scene layer may use beyond the floor.
     scene_caps: scene::SceneCaps,
+    /// The player's ceiling on a scene texture's size (texels a side, 0 = none): see
+    /// [`D3d9Device::set_texture_limit`].
+    texture_limit: u32,
     /// The game's interface ([`crate::ui`]), under each owner's ids.
     ui: ui::UiStore,
     /// Presents wait for the display's refresh.
@@ -394,6 +397,7 @@ impl D3d9Device {
                 frame: None,
                 scene: scene::SceneStore::default(),
                 scene_caps,
+                texture_limit: 0,
                 ui: ui::UiStore::default(),
                 vsync: true,
                 msaa: (1, 1),
@@ -891,6 +895,7 @@ impl RenderBackend for D3d9Device {
         let vsync = self.vsync;
         let (msaa, anisotropy) = (self.msaa.0, self.anisotropy);
         let render_scale = (self.render_scale(), self.scale.upscale());
+        let texture_limit = self.texture_limit;
         let fresh = Self::open_with(self.target, w, h)?;
         // (the scene's meshes and textures go up again from their copies: the game does not
         // send them twice)
@@ -898,6 +903,7 @@ impl RenderBackend for D3d9Device {
         let owners = std::mem::take(&mut self.ui.owners);
         *self = fresh;
         self.generation = generation;
+        self.texture_limit = texture_limit;
         let restored = self.restore_scene(copies).and(self.restore_ui(owners));
         self.set_render_scale(render_scale.0.unwrap_or(0.0), render_scale.1);
         let quality = self.set_quality(msaa, anisotropy);

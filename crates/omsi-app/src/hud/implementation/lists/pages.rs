@@ -93,6 +93,11 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
         // (DirectX9 only: the other APIs draw their own snowfall)
         (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
+        // (DirectX9 only, our own ways to ease its work)
+        switch_row(app, "dx9_glass_rain", "Raindrops on glass", "Drops gather on the panes in the rain").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_coronas", "Light coronas", "The glow round lamps and headlights").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_stars", "Stars", "The points of light in the night sky").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_cloud_picture", "Cloud picture", "The clouds drawn over the sky; their light on the scene stays").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
     ]
         .into_iter()
         .flatten()
@@ -190,6 +195,9 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
                 pick("mirror_size", "Mirrors", later)
             }),
             pick("texture_memory", "Texture memory", later),
+            (app.output.backend() == crate::output::Backend::D3d9)
+                .then(|| pick("dx9_texture_limit", "Texture size limit", later))
+                .flatten(),
             switch_row(
                 app,
                 "texture_compression",

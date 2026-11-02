@@ -3156,6 +3156,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["dx9_snow"] = json!(false);
     // DirectX9 (D3D9Ex) only: how a render scale below 100 % is brought up
     v["dx9_upscale"] = json!("bilinear");
+    // DirectX9 (D3D9Ex) only, our ways to ease its work: everything drawn, no texture ceiling
+    v["dx9_glass_rain"] = json!(true);
+    v["dx9_coronas"] = json!(true);
+    v["dx9_stars"] = json!(true);
+    v["dx9_cloud_picture"] = json!(true);
+    v["dx9_texture_limit"] = json!(0);
     // outside sounds heard from a cab go through a low-pass
     v["muffle_outside"] = json!(false);
     // OMSI's own options
@@ -3988,6 +3994,17 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     _ => "bilinear",
                 })
             }
+            "dx9_glass_rain" => v[&k] = json!(b(val)),
+            "dx9_coronas" => v[&k] = json!(b(val)),
+            "dx9_stars" => v[&k] = json!(b(val)),
+            "dx9_cloud_picture" => v[&k] = json!(b(val)),
+            // the sizes the page offers; anything else is no ceiling
+            "dx9_texture_limit" => {
+                v[&k] = json!(match val.parse::<i64>() {
+                    Ok(n @ (512 | 1024 | 2048)) => n,
+                    _ => 0,
+                })
+            }
             "muffle_outside" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
             "time_speed" => {
@@ -4186,7 +4203,7 @@ pub fn save_settings(v: &Value) -> Result<()> {
 
 /// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
 /// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 24] = [
+pub const GRAPHICS_PROFILE_KEYS: [&str; 29] = [
     "graphics",
     "msaa",
     "render_scale",
@@ -4203,6 +4220,11 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 24] = [
     "clouds",
     "windy_trees",
     "sun_glow",
+    "dx9_glass_rain",
+    "dx9_coronas",
+    "dx9_stars",
+    "dx9_cloud_picture",
+    "dx9_texture_limit",
     "vsync",
     "max_fps",
     "view_distance",
@@ -4628,6 +4650,20 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             "fsr1"
         } else {
             "bilinear"
+        }
+    ));
+    text.push_str(&format!("dx9_glass_rain={}\n", b("dx9_glass_rain", true)));
+    text.push_str(&format!("dx9_coronas={}\n", b("dx9_coronas", true)));
+    text.push_str(&format!("dx9_stars={}\n", b("dx9_stars", true)));
+    text.push_str(&format!(
+        "dx9_cloud_picture={}\n",
+        b("dx9_cloud_picture", true)
+    ));
+    text.push_str(&format!(
+        "dx9_texture_limit={}\n",
+        match n("dx9_texture_limit", 0) {
+            x @ (512 | 1024 | 2048) => x,
+            _ => 0,
         }
     ));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));

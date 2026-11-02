@@ -112,6 +112,12 @@ pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static s
             ("512", "High (512)"),
             ("1024", "Very high (1024)"),
         ],
+        "dx9_texture_limit" => vec![
+            ("0", "No limit"),
+            ("2048", "2048 px"),
+            ("1024", "1024 px"),
+            ("512", "512 px"),
+        ],
         "texture_memory" => vec![
             ("0", "Automatic"),
             ("500", "500 MB"),
