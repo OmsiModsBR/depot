@@ -4,108 +4,21 @@
 //! folder first (the game reads that copy before the original's, which stays untouched).
 //! Trips (`.ttp`) and their tracks (`.ttr`) are the map maker's and are only chosen here.
 
-use super::theme::*;
-use super::timetable_plan::Plan;
-use super::ui::{ButtonKind, Ui};
-use super::Launcher;
-use glam::DVec2;
-use omsi_launcher_lib as core;
+use super::super::domain::frame::Frame;
+use super::super::domain::map::{Map, MapLook, Pointer};
+use super::super::domain::timetable::*;
+use super::super::domain::timetable_plan::Plan;
+use super::super::interface::output::{core, Page};
+use super::heading::{card_title, page_title, part_title};
 use omsi_timetable::{Line, TimetableData, Tour, TourTrip};
 use omsi_ui::paint::Align;
+use omsi_ui::theme::{
+    accent, DANGER, EDGE, FIELD, GAP, PANEL, ROW, TEXT, TEXT_DIM, TEXT_FAINT, TEXT_SOFT,
+};
+use omsi_ui::widgets::{ButtonKind, Ui};
 use omsi_ui::{Color, Rect, Weight};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-#[derive(Default)]
-pub struct TimetableView {
-    pub map: usize,
-    /// The map the data was read for (its `global.cfg`).
-    loaded: Option<String>,
-    data: Option<TimetableData>,
-    map_dir: PathBuf,
-    /// The AI groups the map's own `ailists.cfg` has (name, a depot's group), read with the
-    /// map: the groups a tour can take its buses from.
-    ai_groups: Vec<(String, bool)>,
-    line: usize,
-    tour: usize,
-    /// The departures being typed, one per trip of the shown tour.
-    times: Vec<String>,
-    times_for: Option<(usize, usize)>,
-    /// Minutes a copied tour runs after the one it copies (and the repeat's interval).
-    offset: String,
-    /// The repeat's last departure ("h:mm").
-    until: String,
-    /// The name typed for a new line.
-    new_line: String,
-    /// The lines changed and not saved yet (by name): kept while the player moves between
-    /// lines - the page used to drop a line's changes when another was clicked, and a day's
-    /// timetable took a save after every line.
-    dirty: std::collections::BTreeSet<String>,
-    /// The reset button was pressed once: the next press puts the map's own timetable back.
-    reset_armed: bool,
-    /// The tab: 0 the map, 1 the schematic, 2 the trips.
-    pub tab: usize,
-    /// The map's `global.cfg` (the map tab reads it).
-    global: PathBuf,
-    /// What the lines run (their stops and times) for the map and the start's date, read in
-    /// the background; what it was read for, and why it could not be.
-    plan: Arc<Plan>,
-    plan_for: Option<(String, String)>,
-    plan_rx: Option<std::sync::mpsc::Receiver<Result<Plan, String>>>,
-    plan_error: Option<String>,
-    /// Every line's name the page knows (the map's and those the date runs), lower case and
-    /// sorted: a line's colour is its place here, the same in every list and on the map.
-    palette: Vec<String>,
-    /// The line the Map and Schematic tabs have chosen (by name): one the date runs may not
-    /// be one of the map's own files (a chrono line).
-    chosen: String,
-    /// The lines hidden on the map (by name).
-    hidden: std::collections::BTreeSet<String>,
-    /// The stop chosen on the map (by name), what the search holds, and whether its list of
-    /// what it found is open.
-    stop: Option<String>,
-    find: String,
-    find_open: bool,
-    /// The direction the schematic draws: which of the line's termini it goes to.
-    dir: usize,
-    /// The lines' roads on the map, worked out once per plan and reading of the map.
-    roads: Option<LineRoads>,
-}
-
-/// Every line's roads in world metres (the lanes its drawn trips drive, by road piece, a piece
-/// two ways share once), for the plan and the map reading they were worked out for; and how
-/// many stretches of the routes the map or its timetable has no road for (they are not
-/// drawn).
-struct LineRoads {
-    plan: usize,
-    map: usize,
-    lines: Vec<(String, Vec<PieceLanes>)>,
-    missing: usize,
-}
-
-/// A row of the lines card: name, title, what is under it, colour, hidden.
-type LineRow = (String, String, String, Color, bool);
-
-/// A road piece and the lanes drawn for it.
-type PieceLanes = (core::RoadPiece, Vec<Vec<DVec2>>);
-
-impl TimetableView {
-    /// The stop `name` chosen on the map.
-    pub fn set_stop(&mut self, name: &str) {
-        self.stop = Some(name.to_string());
-    }
-
-    /// The line `name` chosen on the Map and Schematic tabs.
-    pub fn set_line(&mut self, name: &str) {
-        self.chosen = name.to_string();
-    }
-
-    /// `q` typed in the map's search, its list open.
-    pub fn set_find(&mut self, q: &str) {
-        self.find = q.to_string();
-        self.find_open = !q.trim().is_empty();
-    }
-}
 
 pub use core::timetable::{fmt_time, next_number, parse_time, repeat_tour};
 
@@ -228,9 +141,9 @@ fn plan_note(tv: &TimetableView) -> Option<String> {
     (tv.plan_rx.is_some() && tv.plan.lines.is_empty()).then(|| "Reading the lines…".to_string())
 }
 
-pub fn draw(l: &mut Launcher, area: Rect) {
-    let body = l.page_title(area, omsi_launcher_ui::Page::Timetable);
-    let maps: Vec<(String, String)> = l
+pub fn timetable(f: &mut Frame, tv: &mut TimetableView, mv: &mut dyn Map, area: Rect) {
+    let body = page_title(f.ui, area, Page::Timetable);
+    let maps: Vec<(String, String)> = f
         .state
         .maps
         .iter()
@@ -239,14 +152,14 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     if maps.is_empty() {
         // (a card, as Sessions says it has none)
         let r = Rect::new(body.x, body.y, body.w.min(720.0), 120.0);
-        l.ui.panel(r);
-        l.ui.icon(
+        f.ui.panel(r);
+        f.ui.icon(
             "schedule",
             glam::Vec2::new(r.x + 40.0, r.center().y),
             36.0,
             TEXT_FAINT,
         );
-        l.ui.paragraph(
+        f.ui.paragraph(
             "No maps found.",
             glam::Vec2::new(r.x + 76.0, r.y + 52.0),
             r.w - 100.0,
@@ -256,11 +169,11 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         );
         return;
     }
-    let tv = &mut l.pages.tt;
+    let tv = &mut *tv;
     // (always the map chosen on the Maps page: this page has no map of its own)
     let want_map = maps
         .iter()
-        .position(|m| m.1 == l.state.choice.map)
+        .position(|m| m.1 == f.state.choice.map)
         .unwrap_or(tv.map)
         .min(maps.len() - 1);
     if want_map != tv.map {
@@ -268,11 +181,11 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         if !tv.dirty.is_empty() {
             let (saved, err) = save_all(tv);
             match err {
-                Some(e) => l.state.set_status(
+                Some(e) => f.state.set_status(
                     omsi_ui::tr("Not saved: %{error}").replace("%{error}", &e.to_string()),
                     true,
                 ),
-                None => l.state.set_status(
+                None => f.state.set_status(
                     omsi_ui::tr("%{n} line(s) saved").replace("%{n}", &saved.to_string()),
                     false,
                 ),
@@ -286,7 +199,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     // read the chosen map's timetable
     if tv.loaded.as_deref() != Some(maps[tv.map].1.as_str()) {
         let file = &maps[tv.map].1;
-        let root = PathBuf::from(&l.state.config.root);
+        let root = PathBuf::from(&f.state.config.root);
         let global = core::content_dir()
             .map(|c| c.join(file))
             .filter(|p| p.is_file())
@@ -320,7 +233,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         tv.palette = palette_of(tv.data.as_ref(), &tv.plan);
     }
     // what the lines run (stops, times), read in the background for the map and the start's date
-    let want = (maps[tv.map].1.clone(), l.state.choice.date.clone());
+    let want = (maps[tv.map].1.clone(), f.state.choice.date.clone());
     if tv.plan_for.as_ref() != Some(&want) {
         tv.plan_for = Some(want.clone());
         let (tx, rx) = std::sync::mpsc::channel();
@@ -371,7 +284,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     // the tabs, the map and what can be changed
     let bar = Rect::new(body.x, body.y, body.w, 36.0);
     let mut tab = tv.tab;
-    if l.ui.segmented(
+    if f.ui.segmented(
         "tt-tab",
         Rect::new(bar.x, bar.y, 360.0f32.min(bar.w * 0.4), bar.h),
         &mut tab,
@@ -388,12 +301,12 @@ pub fn draw(l: &mut Launcher, area: Rect) {
     let mw = 240.0f32.min(bar.w * 0.25).max(dir_w);
     let map_r = Rect::new(bar.right() - mw, bar.y, mw, bar.h);
     let note = "Stops, streets and routes are read from the map; only departures can be edited";
-    let nw = l.ui.width(note, 12.0, Weight::Regular) + 24.0;
+    let nw = f.ui.width(note, 12.0, Weight::Regular) + 24.0;
     if map_r.x - nw - 12.0 > bar.x + 380.0 {
         let cr = Rect::new(map_r.x - nw - 12.0, bar.y + 5.0, nw, 26.0);
-        l.ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
-        l.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
-        l.ui.text_in(note, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
+        f.ui.p().rounded(cr, 13.0, Color::WHITE.alpha(0.04));
+        f.ui.p().rounded_border(cr, 13.0, 1.0, EDGE);
+        f.ui.text_in(note, cr, 12.0, Weight::Regular, TEXT_DIM, Align::Center);
     }
     if tv.tab == 1 {
         let dirs = tv
@@ -408,7 +321,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
                 .collect();
             let mut d = tv.dir % dirs.len();
             let sw = 110.0;
-            if l.ui.select(
+            if f.ui.select(
                 "tt-dir",
                 Rect::new(map_r.x, map_r.y, map_r.w - sw - 8.0, map_r.h),
                 &mut d,
@@ -416,7 +329,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
             ) {
                 tv.dir = d;
             }
-            if l.ui.button(
+            if f.ui.button(
                 "tt-swap",
                 Rect::new(map_r.right() - sw, map_r.y, sw, map_r.h),
                 "Swap direction",
@@ -428,7 +341,7 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         }
     } else {
         // (the map is the one chosen on the Maps page: only its name is shown here)
-        l.ui.text_in(
+        f.ui.text_in(
             &maps[tv.map].0,
             map_r,
             13.0,
@@ -451,27 +364,27 @@ pub fn draw(l: &mut Launcher, area: Rect) {
         main.right() - left.right() - GAP,
         main.h,
     );
-    if !lines_card(l, left) {
+    if !lines_card(f, tv, left) {
         return;
     }
-    match l.pages.tt.tab {
-        0 => map_tab(l, right),
-        1 => schematic_tab(l, right),
-        _ => trips_card(l, right),
+    match tv.tab {
+        0 => map_tab(f, tv, mv, right),
+        1 => schematic_tab(f, tv, right),
+        _ => trips_card(f, tv, right),
     }
 }
 
 /// The map's lines: chosen with a click, shown or hidden on the map with their switch; under
 /// them what the tab offers (new line and the map's own timetable back, the direction drawn,
 /// or all shown or hidden). False when the page should stop for this frame.
-fn lines_card(l: &mut Launcher, left: Rect) -> bool {
-    let tab = l.pages.tt.tab;
-    let ui: &mut Ui = &mut l.ui;
-    let tv = &mut l.pages.tt;
+fn lines_card(f: &mut Frame, tv: &mut TimetableView, left: Rect) -> bool {
+    let tab = tv.tab;
+    let ui: &mut Ui = f.ui;
+    let tv = &mut *tv;
     let mut status: Option<(String, bool)> = None;
     let note = plan_note(tv);
     ui.panel(left);
-    let inner = Launcher::card_title(
+    let inner = card_title(
         ui,
         Rect::new(left.x + 18.0, left.y + 14.0, left.w - 36.0, left.h - 28.0),
         "Lines",
@@ -481,7 +394,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
         1 => "pick one to draw",
         _ => "",
     };
-    omsi_launcher_ui::kit::right(
+    crate::kit::right(
         ui,
         hint,
         left.right() - 18.0,
@@ -577,7 +490,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
                             omsi_cfg::content_changed();
                             // read again from where the game reads it
                             tv.loaded = None;
-                            l.state.set_status(m, false);
+                            f.state.set_status(m, false);
                             return false;
                         }
                         Err(e) => status = Some((e, true)),
@@ -701,7 +614,7 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
             TEXT_DIM,
         );
         if let Some((s, e)) = status {
-            l.state.set_status(s, e);
+            f.state.set_status(s, e);
         }
         // (the Map tab still shows the map, and its search)
         return tab < 2 && !data.lines.is_empty();
@@ -775,13 +688,13 @@ fn lines_card(l: &mut Launcher, left: Rect) -> bool {
     }
     tv.line = tv.line.min(data.lines.len().saturating_sub(1));
     if let Some((s, e)) = status {
-        l.state.set_status(s, e);
+        f.state.set_status(s, e);
     }
     !data.lines.is_empty() || tab < 2
 }
 
 /// Every line's roads (see `LineRoads`), worked out for the plan and map reading `key`.
-fn line_roads(plan: &Plan, view: &super::mapview::MapView, key: (usize, usize)) -> LineRoads {
+fn line_roads(plan: &Plan, view: &dyn Map, key: (usize, usize)) -> LineRoads {
     let mut out = LineRoads {
         plan: key.0,
         map: key.1,
@@ -832,46 +745,40 @@ enum Found {
 
 /// The Map tab: the map with the shown lines drawn from stop to stop, a search for a stop or
 /// a street, and the stop chosen with the lines that serve it and what leaves from it next.
-fn map_tab(l: &mut Launcher, r: Rect) {
+fn map_tab(f: &mut Frame, tv: &mut TimetableView, mv: &mut dyn Map, r: Rect) {
     let side_w = (r.w * 0.36).clamp(260.0, 330.0);
     let card = Rect::new(r.x, r.y, r.w - side_w - GAP, r.h);
     let side = Rect::new(card.right() + GAP, r.y, side_w, r.h);
-    l.ui.panel(card);
+    f.ui.panel(card);
     let map = Rect::new(
         card.x + 1.0,
         card.y + 58.0,
         card.w - 2.0,
         card.h - 58.0 - 46.0,
     );
-    let file = l.pages.tt.loaded.clone().unwrap_or_default();
-    l.mapview.want(super::mapview::Look {
+    let file = tv.loaded.clone().unwrap_or_default();
+    mv.want(MapLook {
         map: file,
-        global: l.pages.tt.global.clone(),
-        date: l.state.choice.date.clone(),
+        global: tv.global.clone(),
+        date: f.state.choice.date.clone(),
         trip: String::new(),
         entry: -1,
     });
-    l.map_background(map);
+    mv.background(f.ui, map);
     // the shown lines on the streets they drive, every way they run: never straight from stop
     // to stop (a stretch whose road is not known is left out, its stops still shown)
-    let plan = l.pages.tt.plan.clone();
-    let hidden = l.pages.tt.hidden.clone();
-    let palette = l.pages.tt.palette.clone();
-    let key = (Arc::as_ptr(&plan) as usize, l.mapview.roads_key());
-    if l.mapview.ready()
-        && l.pages
-            .tt
-            .roads
-            .as_ref()
-            .is_none_or(|x| (x.plan, x.map) != key)
-    {
-        let roads = line_roads(&plan, &l.mapview, key);
+    let plan = tv.plan.clone();
+    let hidden = tv.hidden.clone();
+    let palette = tv.palette.clone();
+    let key = (Arc::as_ptr(&plan) as usize, mv.roads_key());
+    if mv.ready() && tv.roads.as_ref().is_none_or(|x| (x.plan, x.map) != key) {
+        let roads = line_roads(&plan, mv, key);
         if roads.missing > 0 {
             log::info!("timetable page: {} stretch(es) of the lines have no road on the map and are not drawn", roads.missing);
         }
-        l.pages.tt.roads = Some(roads);
+        tv.roads = Some(roads);
     }
-    let roads = l.pages.tt.roads.take();
+    let roads = tv.roads.take();
     let shown: Vec<&(String, Vec<PieceLanes>)> = roads
         .iter()
         .flat_map(|x| x.lines.iter())
@@ -885,7 +792,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         }
     }
     let mut slot: std::collections::BTreeMap<core::RoadPiece, usize> = Default::default();
-    l.ui.push_clip(map, 0.0);
+    f.ui.push_clip(map, 0.0);
     for (name, pieces) in shown {
         let c = color_of(&palette, name);
         for (piece, lanes) in pieces {
@@ -896,7 +803,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             for lane in lanes {
                 let mut last: Option<glam::Vec2> = None;
                 for q in lane {
-                    let at = l.mapview.project(*q);
+                    let at = mv.project(*q);
                     match last {
                         // (points closer than a pixel and a half are one)
                         Some(a) if a.distance(at) < 1.5 => continue,
@@ -907,7 +814,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
                         {
                             let d = (at - a).normalize_or_zero();
                             let side = glam::Vec2::new(-d.y, d.x) * off;
-                            l.ui.p().line(a + side, at + side, 4.0, c);
+                            f.ui.p().line(a + side, at + side, 4.0, c);
                         }
                         _ => {}
                     }
@@ -916,9 +823,9 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             }
         }
     }
-    l.ui.pop_clip();
+    f.ui.pop_clip();
     let missing = roads.as_ref().map_or(0, |x| x.missing);
-    l.pages.tt.roads = roads;
+    tv.roads = roads;
     let mut placed: Vec<Placed> = Vec::new();
     for (k, line) in plan.lines.iter().enumerate() {
         if hidden.contains(&line.name.to_lowercase()) {
@@ -929,7 +836,7 @@ fn map_tab(l: &mut Launcher, r: Rect) {
                 continue;
             };
             for s in &trip.stops {
-                let Some(at) = l.mapview.place_of(s.id).map(|q| l.mapview.project(q)) else {
+                let Some(at) = mv.place_of(s.id).map(|q| mv.project(q)) else {
                     continue;
                 };
                 if !placed.iter().any(|p| p.name.eq_ignore_ascii_case(&s.name)) {
@@ -948,27 +855,26 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         (card.w - 24.0 - 3.0 * 40.0).min(320.0),
         34.0,
     );
-    let before = l.pages.tt.find.clone();
-    l.ui.text_input(
+    let before = tv.find.clone();
+    f.ui.text_input(
         "tt-find",
         find,
-        &mut l.pages.tt.find,
+        &mut tv.find,
         "Find a stop or street...",
         Some("search"),
     );
-    if l.pages.tt.find != before {
-        l.pages.tt.find_open = !l.pages.tt.find.trim().is_empty();
+    if tv.find != before {
+        tv.find_open = !tv.find.trim().is_empty();
     }
-    let q = l.pages.tt.find.trim().to_lowercase();
+    let q = tv.find.trim().to_lowercase();
     let mut found: Vec<Found> = Vec::new();
-    if l.pages.tt.find_open && !q.is_empty() {
+    if tv.find_open && !q.is_empty() {
         found.extend(
             plan.find(&q, 6)
                 .into_iter()
                 .map(|n| Found::Stop(n.to_string())),
         );
-        let streets = l
-            .mapview
+        let streets = mv
             .streets()
             .iter()
             .filter(|s| s.0.to_lowercase().contains(&q))
@@ -991,23 +897,23 @@ fn map_tab(l: &mut Launcher, r: Rect) {
     .enumerate()
     {
         let c = glam::Vec2::new(card.right() - 28.0 - (2 - i) as f32 * 40.0, card.y + 29.0);
-        if l.ui
+        if f.ui
             .icon_button(&format!("tt-zoom-{i}"), c, 15.0, icon, tip)
         {
             match i {
-                0 => l.mapview.zoom(1.5),
-                1 => l.mapview.zoom(1.0 / 1.5),
-                _ => l.mapview.refit(),
+                0 => mv.zoom(1.5),
+                1 => mv.zoom(1.0 / 1.5),
+                _ => mv.refit(),
             }
         }
     }
-    let mouse = l.ui.input.mouse;
+    let mouse = f.ui.input.mouse;
     let in_list = !found.is_empty() && list.contains(mouse);
     let over = placed
         .iter()
         .position(|p| map.contains(p.at) && p.at.distance(mouse) < 9.0)
         .filter(|_| !in_list);
-    let chosen = l.pages.tt.stop.clone();
+    let chosen = tv.stop.clone();
     let few = placed.len() <= 30;
     // (the chosen and the hovered stop's names first, then the rest where they fit)
     let mut order: Vec<usize> = (0..placed.len()).collect();
@@ -1027,12 +933,12 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             .as_deref()
             .is_some_and(|c| c.eq_ignore_ascii_case(&p.name));
         if on {
-            l.ui.p().circle(p.at, 9.0, accent());
+            f.ui.p().circle(p.at, 9.0, accent());
         }
-        l.ui.p().circle(p.at, 5.5, Color::rgba(20, 20, 20, 1.0));
-        l.ui.p().circle(p.at, 3.5, Color::rgba(240, 240, 240, 1.0));
+        f.ui.p().circle(p.at, 5.5, Color::rgba(20, 20, 20, 1.0));
+        f.ui.p().circle(p.at, 3.5, Color::rgba(240, 240, 240, 1.0));
         if few || on || over == Some(i) {
-            let w = l.ui.width(&p.name, 11.5, Weight::Medium) + 14.0;
+            let w = f.ui.width(&p.name, 11.5, Weight::Medium) + 14.0;
             // right of the stop, else left of it; a name that would cover another is left out
             let fits = |r: &Rect| {
                 map.contains(glam::Vec2::new(r.x, r.y))
@@ -1045,8 +951,8 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             let left = Rect::new(p.at.x - 9.0 - w, p.at.y - 20.0, w, 18.0);
             if let Some(lr) = [right, left].into_iter().find(fits) {
                 labels.push(lr);
-                l.ui.p().rounded(lr, 3.0, Color::rgba(0, 0, 0, 0.6));
-                l.ui.text_in(
+                f.ui.p().rounded(lr, 3.0, Color::rgba(0, 0, 0, 0.6));
+                f.ui.text_in(
                     &p.name,
                     lr.pad(5.0, 0.0),
                     11.5,
@@ -1057,13 +963,13 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             }
         }
     }
-    if let (Some(i), true) = (over, l.ui.input.pressed) {
-        l.pages.tt.stop = Some(placed[i].name.clone());
+    if let (Some(i), true) = (over, f.ui.input.pressed) {
+        tv.stop = Some(placed[i].name.clone());
     }
     // the plan has stops, but the map cannot say where they stand, or which roads join them
-    let note = plan_note(&l.pages.tt)
+    let note = plan_note(&tv)
         .or_else(|| {
-            (!plan.stops().is_empty() && placed.is_empty() && l.mapview.ready()).then(|| {
+            (!plan.stops().is_empty() && placed.is_empty() && mv.ready()).then(|| {
                 "Where the stops stand is not known for this map: search a stop by name".to_string()
             })
         })
@@ -1073,10 +979,10 @@ fn map_tab(l: &mut Launcher, r: Rect) {
             })
         });
     if let Some(t) = note {
-        let w = (l.ui.width(&t, 12.5, Weight::Regular) + 32.0).min(map.w - 24.0);
+        let w = (f.ui.width(&t, 12.5, Weight::Regular) + 32.0).min(map.w - 24.0);
         let nr = Rect::new(map.center().x - w * 0.5, map.bottom() - 46.0, w, 30.0);
-        l.ui.p().rounded(nr, 6.0, Color::rgba(0, 0, 0, 0.7));
-        l.ui.text_in(
+        f.ui.p().rounded(nr, 6.0, Color::rgba(0, 0, 0, 0.7));
+        f.ui.text_in(
             &t,
             nr.pad(12.0, 0.0),
             12.5,
@@ -1093,59 +999,59 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         omsi_ui::tr("%{n} stops shown").replace("%{n}", &shown.to_string()),
     ];
     // (the map and the stop card show the timetable as saved)
-    if !l.pages.tt.dirty.is_empty() {
+    if !tv.dirty.is_empty() {
         chips.push("Showing the saved times: save to see the changes".into());
     }
     for t in chips {
-        let w = l.ui.width(&t, 12.0, Weight::Regular) + 22.0;
+        let w = f.ui.width(&t, 12.0, Weight::Regular) + 22.0;
         if x + w > card.right() - 12.0 {
             break;
         }
-        chip(&mut l.ui, Rect::new(x, hint_y, w, 24.0), &t);
+        chip(f.ui, Rect::new(x, hint_y, w, 24.0), &t);
         x += w + 8.0;
     }
-    stop_card(l, side);
+    stop_card(f, tv, side);
     // (looking only: the map's entry points are the Maps page's, a click here takes none)
-    let p = super::mapview::Pointer {
+    let p = Pointer {
         at: mouse,
-        pressed: l.ui.input.pressed,
-        released: l.ui.input.released,
-        down: l.ui.input.down,
-        wheel: l.ui.input.wheel.y,
+        pressed: f.ui.input.pressed,
+        released: f.ui.input.released,
+        down: f.ui.input.down,
+        wheel: f.ui.input.wheel.y,
         // (the card around the map is a panel, which claims the mouse over it: the map's own
         // rectangle and the search results over it are what count here)
         blocked: in_list || !map.contains(mouse),
     };
-    l.mapview.think(map, map, l.ui.scale, p);
-    let _ = l.mapview.take_clicked();
+    mv.think(map, map, f.ui.scale, p);
+    let _ = mv.take_clicked();
     // what the search found, over the map
     if !found.is_empty() {
-        l.ui.solid(list);
-        l.ui.p().shadow(list, 6.0, 16.0, Color::rgba(0, 0, 0, 0.5));
-        l.ui.p().rounded(list, 6.0, FIELD);
-        l.ui.p().rounded_border(list, 6.0, 1.0, EDGE);
+        f.ui.solid(list);
+        f.ui.p().shadow(list, 6.0, 16.0, Color::rgba(0, 0, 0, 0.5));
+        f.ui.p().rounded(list, 6.0, FIELD);
+        f.ui.p().rounded_border(list, 6.0, 1.0, EDGE);
         let mut pick = None;
-        for (i, f) in found.iter().enumerate() {
+        for (i, hit) in found.iter().enumerate() {
             let rr = Rect::new(
                 list.x + 4.0,
                 list.y + 4.0 + i as f32 * 32.0,
                 list.w - 8.0,
                 30.0,
             );
-            if l.ui.row(&format!("tt-found-{i}"), rr, false) {
+            if f.ui.row(&format!("tt-found-{i}"), rr, false) {
                 pick = Some(i);
             }
-            let (icon, name, kind) = match f {
+            let (icon, name, kind) = match hit {
                 Found::Stop(n) => ("o-pin", n.as_str(), "stop"),
                 Found::Street(n, _) => ("route", n.as_str(), "street"),
             };
-            l.ui.icon(
+            f.ui.icon(
                 icon,
                 glam::Vec2::new(rr.x + 16.0, rr.center().y),
                 15.0,
                 TEXT_SOFT,
             );
-            l.ui.text_in(
+            f.ui.text_in(
                 name,
                 Rect::new(rr.x + 32.0, rr.y, rr.w - 90.0, rr.h),
                 13.0,
@@ -1153,8 +1059,8 @@ fn map_tab(l: &mut Launcher, r: Rect) {
                 TEXT,
                 Align::Left,
             );
-            omsi_launcher_ui::kit::right(
-                &mut l.ui,
+            crate::kit::right(
+                f.ui,
                 kind,
                 rr.right() - 10.0,
                 rr.center().y,
@@ -1166,32 +1072,32 @@ fn map_tab(l: &mut Launcher, r: Rect) {
         if let Some(i) = pick {
             match &found[i] {
                 Found::Stop(n) => {
-                    l.pages.tt.stop = Some(n.clone());
+                    tv.stop = Some(n.clone());
                     // (to where it stands, when the map knows)
                     if let Some(at) = plan
                         .stop(n)
-                        .and_then(|e| e.ids.iter().find_map(|id| l.mapview.place_of(*id)))
+                        .and_then(|e| e.ids.iter().find_map(|id| mv.place_of(*id)))
                     {
-                        l.mapview.look_at(at);
+                        mv.look_at(at);
                     }
                 }
-                Found::Street(_, at) => l.mapview.look_at(*at),
+                Found::Street(_, at) => mv.look_at(*at),
             }
-            l.pages.tt.find_open = false;
+            tv.find_open = false;
         }
     }
 }
 
 /// The stop chosen on the map: the lines that serve it and the next departures from it.
-fn stop_card(l: &mut Launcher, r: Rect) {
-    l.ui.panel(r);
-    let inner = Launcher::card_title(
-        &mut l.ui,
+fn stop_card(f: &mut Frame, tv: &mut TimetableView, r: Rect) {
+    f.ui.panel(r);
+    let inner = card_title(
+        f.ui,
         Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
         "Stop",
     );
-    omsi_launcher_ui::kit::right(
-        &mut l.ui,
+    crate::kit::right(
+        f.ui,
         "on the map",
         r.right() - 18.0,
         r.y + 22.0,
@@ -1199,16 +1105,16 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         Weight::Regular,
         TEXT_DIM,
     );
-    let Some(stop) = l.pages.tt.stop.clone() else {
-        l.ui.paragraph("Click a stop on the map, or find it by name, to see which lines serve it and what leaves from it next.", glam::Vec2::new(inner.x, inner.y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
+    let Some(stop) = tv.stop.clone() else {
+        f.ui.paragraph("Click a stop on the map, or find it by name, to see which lines serve it and what leaves from it next.", glam::Vec2::new(inner.x, inner.y), inner.w, 12.5, Weight::Regular, TEXT_DIM);
         return;
     };
-    let plan = l.pages.tt.plan.clone();
-    let palette = l.pages.tt.palette.clone();
+    let plan = tv.plan.clone();
+    let palette = tv.palette.clone();
     let lines = plan.serving(&stop);
-    let from = l.state.choice.time as f64 * 60.0;
+    let from = f.state.choice.time as f64 * 60.0;
     let mut y = inner.y;
-    l.ui.icon(
+    f.ui.icon(
         "o-pin",
         glam::Vec2::new(inner.x + 8.0, y + 16.0),
         18.0,
@@ -1218,7 +1124,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         .stop(&stop)
         .map(|e| e.name.clone())
         .unwrap_or_else(|| stop.clone());
-    l.ui.text_in(
+    f.ui.text_in(
         &name,
         Rect::new(inner.x + 28.0, y, inner.w - 28.0, 22.0),
         15.0,
@@ -1231,7 +1137,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         1 => "1 line".to_string(),
         n => omsi_ui::tr("Interchange · %{n} lines").replace("%{n}", &n.to_string()),
     };
-    l.ui.text_in(
+    f.ui.text_in(
         &kind,
         Rect::new(inner.x + 28.0, y + 22.0, inner.w - 28.0, 18.0),
         12.0,
@@ -1240,21 +1146,21 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         Align::Left,
     );
     y += 52.0;
-    Launcher::part_title(
-        &mut l.ui,
+    part_title(
+        f.ui,
         Rect::new(inner.x, y, inner.w, 28.0),
         "Lines that serve this stop",
     );
     y += 32.0;
-    let hidden = l.pages.tt.hidden.clone();
+    let hidden = tv.hidden.clone();
     for (k, to) in lines {
         let line = &plan.lines[*k];
         let off = hidden.contains(&line.name.to_lowercase());
         let row = Rect::new(inner.x, y, inner.w, 46.0);
-        l.ui.p()
+        f.ui.p()
             .rounded(row, 6.0, if off { FIELD.alpha(0.5) } else { FIELD });
         badge(
-            &mut l.ui,
+            f.ui,
             Rect::new(row.x + 10.0, row.y + 12.0, 36.0, 22.0),
             &line.name,
             color_of(&palette, &line.name),
@@ -1273,7 +1179,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             omsi_ui::tr("next %{times}").replace("%{times}", &next.join(", "))
         };
         let title = omsi_ui::tr("to %{stops}").replace("%{stops}", &to.join(" / "));
-        l.ui.text_in_tip(
+        f.ui.text_in_tip(
             &title,
             Rect::new(row.x + 56.0, row.y + 5.0, row.w - 70.0, 20.0),
             13.5,
@@ -1281,7 +1187,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             if off { TEXT_DIM } else { TEXT },
             Align::Left,
         );
-        l.ui.text_in(
+        f.ui.text_in(
             &sub,
             Rect::new(row.x + 56.0, row.y + 24.0, row.w - 66.0, 16.0),
             11.5,
@@ -1295,18 +1201,18 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         }
     }
     y += 8.0;
-    Launcher::part_title(
-        &mut l.ui,
+    part_title(
+        f.ui,
         Rect::new(inner.x, y, inner.w, 28.0),
         "Next departures here",
     );
     y += 32.0;
     let buttons_y = inner.bottom() - 2.0 * ROW - 8.0;
     let cols = [(0.0, "Time"), (0.24, "Line"), (0.46, "To")];
-    for (f, t) in cols {
-        l.ui.text_in(
+    for (at, t) in cols {
+        f.ui.text_in(
             t,
-            Rect::new(inner.x + inner.w * f, y, inner.w * 0.5, 18.0),
+            Rect::new(inner.x + inner.w * at, y, inner.w * 0.5, 18.0),
             11.5,
             Weight::Regular,
             TEXT_DIM,
@@ -1317,8 +1223,8 @@ fn stop_card(l: &mut Launcher, r: Rect) {
     let fit = ((buttons_y - y - 8.0) / 30.0).max(0.0) as usize;
     for (t, k, to) in plan.departures(&stop, from, fit, None) {
         let line = &plan.lines[*k].name;
-        l.ui.p().rect(Rect::new(inner.x, y, inner.w, 1.0), EDGE);
-        l.ui.text_in(
+        f.ui.p().rect(Rect::new(inner.x, y, inner.w, 1.0), EDGE);
+        f.ui.text_in(
             &hm(*t),
             Rect::new(inner.x, y + 4.0, inner.w * 0.24, 22.0),
             13.0,
@@ -1326,7 +1232,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             TEXT,
             Align::Left,
         );
-        l.ui.text_in(
+        f.ui.text_in(
             line,
             Rect::new(inner.x + inner.w * 0.24, y + 4.0, inner.w * 0.22, 22.0),
             13.0,
@@ -1334,7 +1240,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             color_of(&palette, line),
             Align::Left,
         );
-        l.ui.text_in_tip(
+        f.ui.text_in_tip(
             to,
             Rect::new(inner.x + inner.w * 0.46, y + 4.0, inner.w * 0.54, 22.0),
             13.0,
@@ -1344,7 +1250,7 @@ fn stop_card(l: &mut Launcher, r: Rect) {
         );
         y += 30.0;
     }
-    if l.ui.button(
+    if f.ui.button(
         "tt-only-these",
         Rect::new(inner.x, buttons_y, inner.w, ROW),
         "Show only these lines",
@@ -1356,22 +1262,20 @@ fn stop_card(l: &mut Launcher, r: Rect) {
             .map(|(k, _)| plan.lines[*k].name.to_lowercase())
             .collect();
         let all = plan.lines.iter().map(|x| x.name.to_lowercase()).chain(
-            l.pages
-                .tt
-                .data
+            tv.data
                 .iter()
                 .flat_map(|d| d.lines.iter().map(|x| x.name.to_lowercase())),
         );
-        l.pages.tt.hidden = all.filter(|n| !keep.contains(n)).collect();
+        tv.hidden = all.filter(|n| !keep.contains(n)).collect();
     }
-    if l.ui.button(
+    if f.ui.button(
         "tt-edit-line",
         Rect::new(inner.x, buttons_y + ROW + 8.0, inner.w, ROW),
         "Edit this line's trips",
         Some("chevron_right"),
         ButtonKind::Normal,
     ) {
-        let tv = &mut l.pages.tt;
+        let tv = &mut *tv;
         if let Some(d) = tv.data.as_ref() {
             let current = d.lines.get(tv.line).map(|x| x.name.to_lowercase());
             let serves = |n: &str| {
@@ -1393,19 +1297,19 @@ fn stop_card(l: &mut Launcher, r: Rect) {
 
 /// The Schematic tab: the chosen line's stops in order, the minutes between them, the other
 /// lines at each stop, and where one can change to them.
-fn schematic_tab(l: &mut Launcher, r: Rect) {
-    l.ui.panel(r);
-    let tv = &l.pages.tt;
+fn schematic_tab(f: &mut Frame, tv: &mut TimetableView, r: Rect) {
+    f.ui.panel(r);
+    let tv = &tv;
     let plan = tv.plan.clone();
     let palette = tv.palette.clone();
     let name = tv.chosen.clone();
-    let inner = Launcher::card_title(
-        &mut l.ui,
+    let inner = card_title(
+        f.ui,
         Rect::new(r.x + 18.0, r.y + 14.0, r.w - 36.0, r.h - 28.0),
         &omsi_ui::tr("Line %{line} · diagram").replace("%{line}", &name),
     );
-    omsi_launcher_ui::kit::right(
-        &mut l.ui,
+    crate::kit::right(
+        f.ui,
         "schematic, stops in order",
         r.right() - 18.0,
         r.y + 22.0,
@@ -1416,7 +1320,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
     let Some(k) = plan.line(&name) else {
         let t = plan_note(tv)
             .unwrap_or_else(|| "This line runs no trips the map's timetable knows of.".to_string());
-        l.ui.paragraph(
+        f.ui.paragraph(
             &t,
             glam::Vec2::new(inner.x, inner.y),
             inner.w,
@@ -1427,7 +1331,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
         return;
     };
     let Some(trip) = plan.route(k, tv.dir) else {
-        l.ui.text_in(
+        f.ui.text_in(
             "This line has no trips yet.",
             Rect::new(inner.x, inner.y, inner.w, 22.0),
             13.0,
@@ -1440,7 +1344,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
     // (the stations a depot run passes are no stops of the diagram)
     let stops: Vec<&core::StopInfo> = trip.stops.iter().filter(|s| s.stops).collect();
     let c = color_of(&palette, &name);
-    let from = l.state.choice.time as f64 * 60.0;
+    let from = f.state.choice.time as f64 * 60.0;
     let dirty = !tv.dirty.is_empty();
     // the other lines at each stop, worked out once for the drawing and the table
     let others: Vec<Vec<usize>> = stops
@@ -1468,7 +1372,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
         inner.w,
         (rows as f32 * row_h).min(room),
     );
-    let ui: &mut Ui = &mut l.ui;
+    let ui: &mut Ui = f.ui;
     let badge_of = |o: usize| {
         (
             plan.lines[o].name.clone(),
@@ -1495,8 +1399,7 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
             }
             for (i, st) in part.iter().enumerate() {
                 let x = x_of(i);
-                let label =
-                    omsi_launcher_ui::kit::fit_text(ui, &st.name, 12.0, step.max(80.0) - 8.0);
+                let label = crate::kit::fit_text(ui, &st.name, 12.0, step.max(80.0) - 8.0);
                 ui.text_in(
                     &label,
                     Rect::new(x - step * 0.5, y0, step, 18.0),
@@ -1571,16 +1474,16 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
     }
     y += 44.0;
     // where one can change
-    Launcher::part_title(ui, Rect::new(inner.x, y, inner.w, 28.0), "Interchanges");
+    part_title(ui, Rect::new(inner.x, y, inner.w, 28.0), "Interchanges");
     y += 34.0;
-    for (f, t) in [
+    for (at, t) in [
         (0.0, "Stop"),
         (0.4, "Change to"),
         (0.62, "Next departures of those lines"),
     ] {
         ui.text_in(
             t,
-            Rect::new(inner.x + 12.0 + inner.w * f, y, inner.w * 0.4, 18.0),
+            Rect::new(inner.x + 12.0 + inner.w * at, y, inner.w * 0.4, 18.0),
             11.5,
             Weight::Regular,
             TEXT_DIM,
@@ -1667,9 +1570,9 @@ fn schematic_tab(l: &mut Launcher, r: Rect) {
 
 /// The Trips tab: the chosen line's tours (one at a time), the trips of the tour with when
 /// each leaves, and the tools to change them; Save writes every changed line.
-fn trips_card(l: &mut Launcher, right: Rect) {
-    let ui: &mut Ui = &mut l.ui;
-    let tv = &mut l.pages.tt;
+fn trips_card(f: &mut Frame, tv: &mut TimetableView, right: Rect) {
+    let ui: &mut Ui = f.ui;
+    let tv = &mut *tv;
     let mut status: Option<(String, bool)> = None;
     let Some(data) = tv.data.as_mut() else { return };
     if data.lines.is_empty() {
@@ -1723,7 +1626,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
         .collect();
     let line = &mut data.lines[tv.line];
     ui.panel(right);
-    let inner = Launcher::card_title(
+    let inner = card_title(
         ui,
         Rect::new(
             right.x + 18.0,
@@ -1913,7 +1816,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
             });
         }
         if let Some((s, e)) = status {
-            l.state.set_status(s, e);
+            f.state.set_status(s, e);
         }
         return;
     };
@@ -2004,7 +1907,7 @@ fn trips_card(l: &mut Launcher, right: Rect) {
                 })
                 .unwrap_or_default();
             let cell = |ui: &mut Ui, c: usize, s: &str| {
-                let s = omsi_launcher_ui::kit::fit_text(ui, s, 13.0, width(c));
+                let s = crate::kit::fit_text(ui, s, 13.0, width(c));
                 ui.text_in(
                     &s,
                     Rect::new(col(c) + dx, y, width(c), ROW - 4.0),
@@ -2208,6 +2111,6 @@ fn trips_card(l: &mut Launcher, right: Rect) {
         }
     }
     if let Some((s, err)) = status {
-        l.state.set_status(s, err);
+        f.state.set_status(s, err);
     }
 }

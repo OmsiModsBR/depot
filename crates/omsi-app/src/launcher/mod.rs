@@ -29,6 +29,7 @@ pub(crate) mod diagnostics;
 pub(crate) mod drive;
 mod gfx;
 pub(crate) mod host;
+pub(crate) mod map;
 pub(crate) mod mapview;
 pub mod mobile;
 mod omsi2_modules;
@@ -45,8 +46,6 @@ pub(crate) use omsi_launcher_ui::state::days_text;
 pub(crate) mod dialogs;
 mod theme;
 pub(crate) mod thumbs;
-pub(crate) mod timetable;
-pub(crate) mod timetable_plan;
 pub(crate) mod tray;
 pub(crate) mod ui;
 
@@ -1779,7 +1778,7 @@ impl Launcher {
                 Page::Controls => pages::controls(self, content),
                 Page::Mods => window::mods(frame!(self), content),
                 Page::Tutorials => window::tutorials(frame!(self), content),
-                Page::Timetable => timetable::draw(self, content),
+                Page::Timetable => self.timetable_page(content),
                 Page::Setup => self.setup_page(content),
             }
             // the rail over the page (a scrolled page passes under it)
@@ -1929,49 +1928,23 @@ impl Launcher {
     /// its entry points and the chosen trip's route, read from the tile files (see
     /// `mapview`), or a word while it is read. `map_interact` gives it the mouse afterwards.
     pub fn map_background(&mut self, r: Rect) {
-        self.map_rect = Some(r);
-        let status = self.mapview.status();
-        match (self.map_tex, status.is_empty()) {
-            (Some(tex), true) => {
-                self.ui.image(r, tex, RADIUS);
-                // (the data's licence asks for it where its surface is shown)
-                if let Some(credit) = self.mapview.credit().map(str::to_string) {
-                    self.ui.text_in(
-                        &credit,
-                        Rect::new(r.x + 12.0, r.bottom() - 24.0, (r.w - 24.0).max(0.0), 18.0),
-                        10.5,
-                        Weight::Medium,
-                        TEXT_FAINT,
-                        Align::Left,
-                    );
-                }
-            }
-            _ => {
-                self.ui.solid(r);
-                self.ui
-                    .p()
-                    .rounded(r, RADIUS, omsi_ui::Color::rgba(13, 13, 13, 1.0));
-                let t = if status.is_empty() {
-                    "Loading…"
-                } else {
-                    status
-                };
-                self.ui.text_in(
-                    t,
-                    Rect::new(r.x, r.y + r.h * 0.5 - 12.0, r.w, 24.0),
-                    13.5,
-                    Weight::Regular,
-                    TEXT_FAINT,
-                    Align::Center,
-                );
-            }
-        }
-        if self.mapview.busy() {
-            // (out of the way of the panels: the map is being read, the page is not)
-            let c = Vec2::new(r.right() - 26.0, r.y + r.h - 26.0);
-            let a = self.ui.time * 5.0;
-            self.ui.p().arc(c, 6.0, 8.0, a, a + 4.2, TEXT_SOFT);
-        }
+        map::background(
+            &mut self.ui,
+            &self.mapview,
+            self.map_tex,
+            &mut self.map_rect,
+            r,
+        );
+    }
+
+    /// The Timetable page in `area`, over the launcher's map.
+    pub(super) fn timetable_page(&mut self, area: Rect) {
+        let mut map = map::GameMap {
+            view: &mut self.mapview,
+            tex: self.map_tex,
+            rect: &mut self.map_rect,
+        };
+        window::timetable(frame!(self), &mut self.pages.tt, &mut map, area);
     }
 
     /// The mouse over the map: what it drags, where it zooms, and the entry point a click
@@ -2655,11 +2628,6 @@ impl Launcher {
     /// A card's title (`window::card_title`); returns the rest of `r` under it.
     pub fn card_title(ui: &mut Ui, r: Rect, title: &str) -> Rect {
         window::card_title(ui, r, title)
-    }
-
-    /// The title of a part further down a card (`window::part_title`).
-    pub fn part_title(ui: &mut Ui, r: Rect, title: &str) {
-        window::part_title(ui, r, title);
     }
 }
 

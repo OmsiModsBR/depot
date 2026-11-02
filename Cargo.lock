@@ -2868,6 +2868,7 @@ dependencies = [
  "omsi-integrity",
  "omsi-launcher-core",
  "omsi-map",
+ "omsi-timetable",
  "omsi-ui",
  "pollster",
  "serde_json",

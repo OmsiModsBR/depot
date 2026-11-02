@@ -16,6 +16,7 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-integrity = { path = "../omsi-integrity" }
 omsi-content = { path = "../omsi-content" }
 omsi-map = { path = "../omsi-map" }
+omsi-timetable = { path = "../omsi-timetable" }
 serde_json.workspace = true
 wgpu.workspace = true
 glam.workspace = true

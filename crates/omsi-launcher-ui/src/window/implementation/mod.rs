@@ -11,4 +11,5 @@ pub(crate) mod mods;
 pub(crate) mod overview;
 pub(crate) mod profile;
 pub(crate) mod setup;
+pub(crate) mod timetable;
 pub(crate) mod tutorials;

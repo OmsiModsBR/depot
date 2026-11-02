@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 13] = [
+pub const SECTIONS: [&str; 14] = [
     "General",
     "Simulation",
     "Graphics",
@@ -30,6 +30,7 @@ pub const SECTIONS: [&str; 13] = [
     "Presets and files",
     "Interface",
     "Modules",
+    "Developer",
     "Performance",
 ];
 pub const GENERAL: usize = 0;
@@ -45,10 +46,12 @@ pub const PRESETS: usize = 9;
 pub const INTERFACE: usize = 10;
 /// OmsiLaunch's optional modules: OMSI 2 mode only (the Depot has none).
 pub const MODULES: usize = 11;
+/// The Depot's developer tools (#500): the Depot engine only.
+pub const DEVELOPER: usize = 12;
 
 /// Under "DirectX9 (D3D9Ex)" only: the options that lower the load on an older or integrated-graphics
 /// PC, gathered from the other sections (it owns none; see `PERFORMANCE_OPTS`).
-pub const PERFORMANCE: usize = 12;
+pub const PERFORMANCE: usize = 13;
 
 /// The options of the Performance section: key, and the card it sits in. They are the page's own
 /// rows from the other sections (one row is one setting), in this order. Each lowers the load on
@@ -83,10 +86,15 @@ pub fn performance_offered(s: &Value, omsi2: bool) -> bool {
     !omsi2 && d3d9_fixes_vanilla(s)
 }
 
-/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Performance only
-/// where it is offered.
+/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
+/// while the Depot is, Performance only where it is offered.
 fn section_shown(sec: usize, s: &Value, omsi2: bool) -> bool {
-    (sec != MODULES || omsi2) && (sec != PERFORMANCE || performance_offered(s, omsi2))
+    match sec {
+        MODULES => omsi2,
+        DEVELOPER => !omsi2,
+        PERFORMANCE => performance_offered(s, omsi2),
+        _ => true,
+    }
 }
 
 /// What the page remembers: the section shown, the search, "changed only".
@@ -759,6 +767,14 @@ pub static OPTS: &[Opt] = &[
         "The launcher rests while a game runs",
         "Gives the graphics card to the game",
     )),
+    // Developer
+    toggle(
+        DEVELOPER,
+        "Developer mode",
+        "developer_mode",
+        "Enable developer mode",
+        "Tools for people who make or test vehicles and maps. Off by default: while it is off, nothing of them runs. The tools themselves are not in this version yet",
+    ),
     // Simulation
     toggle(
         SIMULATION,
