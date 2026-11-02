@@ -127,7 +127,7 @@ struct Reply {
 /// downlevel 256 MB, and a buffer is made at the next power of two above what it holds: a
 /// big map's plan (Mapa Transcol: 7.9 million vertices, 478 MB) asked for 512 MB, was refused
 /// and drew no roads (#536). Half of the promise leaves room for that rounding.
-const MAX_PLAN_BUFFER_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_PLAN_BUFFER_BYTES: usize = 128 * 1024 * 1024;
 
 /// The markers' buffer; the plan's pieces follow it, from [`PLAN_FIRST_BUFFER`].
 const MARKS_BUFFER: usize = 0;
@@ -1207,41 +1207,5 @@ fn read_map(look: &Look) -> Roads {
         streets,
         // (after `configure_grid`: the package is put onto this game's grid)
         surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
-    }
-}
-
-#[cfg(test)]
-mod plan_piece_tests {
-    use super::*;
-
-    /// #536: a plan of 7,960,824 vertices (Mapa Transcol) is 478 MB: one buffer of it was
-    /// rounded to 512 MB and refused by a device that promises 256 MB.
-    #[test]
-    fn a_big_plan_is_cut_below_the_buffer_limit() {
-        let total = 7_960_824;
-        let pieces = plan_pieces(total, MAX_PLAN_BUFFER_BYTES);
-        assert!(pieces.len() > 1);
-        let mut at = 0;
-        for r in &pieces {
-            assert_eq!(r.start, at, "no gap, no overlap");
-            at = r.end;
-            let bytes = (r.end - r.start) * std::mem::size_of::<Vertex>();
-            // (the GPU buffer is made at the next power of two)
-            assert!(bytes <= MAX_PLAN_BUFFER_BYTES);
-            assert!(bytes.next_power_of_two() <= 256 * 1024 * 1024);
-            if r.end != total {
-                assert_eq!((r.end - r.start) % 3, 0, "cuts fall between triangles");
-            }
-        }
-        assert_eq!(at, total);
-    }
-
-    #[test]
-    fn a_small_plan_stays_whole_and_an_empty_one_has_no_pieces() {
-        assert_eq!(plan_pieces(300, MAX_PLAN_BUFFER_BYTES), vec![0..300]);
-        assert!(plan_pieces(0, MAX_PLAN_BUFFER_BYTES).is_empty());
-        let per = MAX_PLAN_BUFFER_BYTES / std::mem::size_of::<Vertex>() / 3 * 3;
-        assert_eq!(plan_pieces(per, MAX_PLAN_BUFFER_BYTES).len(), 1);
-        assert_eq!(plan_pieces(per + 3, MAX_PLAN_BUFFER_BYTES).len(), 2);
     }
 }

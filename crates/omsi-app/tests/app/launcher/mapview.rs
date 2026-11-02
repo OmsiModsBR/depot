@@ -97,7 +97,6 @@ fn a_zoom_in_progress_keeps_the_plan_it_has() {
         Some(Plan {
             key: built.clone(),
             verts: Vec::new(),
-            count: 0,
             uploaded: true,
         })
     };
@@ -114,4 +113,36 @@ fn a_zoom_in_progress_keeps_the_plan_it_has() {
     m.wheeled = Some(Instant::now() - std::time::Duration::from_secs(1));
     assert!(m.plan_is_stale(&finer));
     assert!(!m.plan_is_stale(&built));
+}
+
+/// #536: a plan of 7,960,824 vertices (Mapa Transcol) is 478 MB: one buffer of it was
+/// rounded to 512 MB and refused by a device that promises 256 MB.
+#[test]
+fn a_big_plan_is_cut_below_the_buffer_limit() {
+    let total = 7_960_824;
+    let vertex = 60; // omsi_ui::Vertex
+    let pieces = plan_pieces(total, MAX_PLAN_BUFFER_BYTES);
+    assert!(pieces.len() > 1);
+    let mut at = 0;
+    for r in &pieces {
+        assert_eq!(r.start, at, "no gap, no overlap");
+        at = r.end;
+        let bytes = (r.end - r.start) * vertex;
+        assert!(bytes <= MAX_PLAN_BUFFER_BYTES);
+        // (the GPU buffer is made at the next power of two)
+        assert!(bytes.next_power_of_two() <= 256 * 1024 * 1024);
+        if r.end != total {
+            assert_eq!((r.end - r.start) % 3, 0, "cuts fall between triangles");
+        }
+    }
+    assert_eq!(at, total);
+}
+
+#[test]
+fn a_small_plan_stays_whole_and_an_empty_one_has_no_pieces() {
+    assert_eq!(plan_pieces(300, MAX_PLAN_BUFFER_BYTES), vec![0..300]);
+    assert!(plan_pieces(0, MAX_PLAN_BUFFER_BYTES).is_empty());
+    let per = MAX_PLAN_BUFFER_BYTES / 60 / 3 * 3;
+    assert_eq!(plan_pieces(per, MAX_PLAN_BUFFER_BYTES).len(), 1);
+    assert_eq!(plan_pieces(per + 3, MAX_PLAN_BUFFER_BYTES).len(), 2);
 }
