@@ -7,6 +7,9 @@
 //! weather's layer of clouds from the cloud type's own picture (when the frame has one and it
 //! is put up); both are in the sky's pixel shader, a pass of its own.
 //!
+//! The sun's glow is a second pass of its own (`shaders/sunglow.hlsl`), drawn after the scene
+//! so that what stands in front of the sun hides it by the depth test.
+//!
 //! It is a pass of its own, with its own small shaders, so the scene's pixel shader keeps its
 //! instruction slots. A device that cannot make it (the pass is tried once) draws the scene
 //! over the clear colour and says so in the log.
@@ -36,11 +39,42 @@ pub(super) struct SkyPipeline {
     triangles: u32,
 }
 
+/// The sun glow's shaders and its square.
+pub(super) struct GlowPipeline {
+    decl: IDirect3DVertexDeclaration9,
+    vs: IDirect3DVertexShader9,
+    ps: IDirect3DPixelShader9,
+    quad: IDirect3DVertexBuffer9,
+}
+
 #[derive(Default)]
 pub(super) struct SkyStore {
     pipeline: Option<SkyPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
+    glow: Option<GlowPipeline>,
+    glow_unsupported: bool,
+}
+
+/// Where the glow's square is put, in metres from the camera (inside the dome's reach, as far
+/// as the sky is).
+const GLOW_DISTANCE: f32 = 4000.0;
+/// The glow's half angle: its square reaches this far from the sun's place.
+/// **Provisional**: the original's size is not observed yet.
+const GLOW_HALF_ANGLE_DEG: f32 = 7.0;
+
+/// How strongly the sun's glow shows (0 none .. 1): the sun's own strength (it is 0 under an
+/// overcast cover), faded out as the sun goes below the horizon, thinned by the cloud cover
+/// and gone in a thick fog, in the way the fog covers the sky.
+pub(crate) fn glow_strength(light: &crate::scene::SceneLight, cloud_cover: f32) -> f32 {
+    let sun = light.sun_dir[3].clamp(0.0, 1.0);
+    let horizon = ((light.sun_dir[2] + 0.03) / 0.08).clamp(0.0, 1.0);
+    // (a closed deck, the Overcast types, hides the sun whatever strength the light carries)
+    let cover = cloud_cover.clamp(0.0, 1.0);
+    let closed = ((cover - 0.8) / 0.2).clamp(0.0, 1.0);
+    let clouds = (1.0 - 0.6 * cover) * (1.0 - closed * closed * (3.0 - 2.0 * closed));
+    let fog = 1.0 - (light.fog[3] * 150.0 - 0.15).clamp(0.0, 1.0);
+    sun * horizon * clouds * fog
 }
 
 /// The dome: latitude rings from a little below the horizon to the zenith, and the triangles
@@ -146,10 +180,84 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<SkyPipeline> {
     }
 }
 
+fn build_glow(device: &IDirect3DDevice9Ex) -> Result<GlowPipeline> {
+    let vs_code = shader::compile(
+        shader::SUN_GLOW,
+        "sunglow.hlsl",
+        "vs_main",
+        shader::Stage::Vertex,
+    )?;
+    let ps_code = shader::compile(
+        shader::SUN_GLOW,
+        "sunglow.hlsl",
+        "ps_main",
+        shader::Stage::Pixel,
+    )?;
+    let elements = [
+        D3DVERTEXELEMENT9 {
+            Stream: 0,
+            Offset: 0,
+            Type: D3DDECLTYPE_FLOAT2.0 as u8,
+            Method: D3DDECLMETHOD_DEFAULT.0 as u8,
+            Usage: D3DDECLUSAGE_POSITION.0 as u8,
+            UsageIndex: 0,
+        },
+        // D3DDECL_END()
+        D3DVERTEXELEMENT9 {
+            Stream: 0xFF,
+            Offset: 0,
+            Type: D3DDECLTYPE_UNUSED.0 as u8,
+            Method: 0,
+            Usage: 0,
+            UsageIndex: 0,
+        },
+    ];
+    // a strip of four corners
+    let corners: [f32; 8] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
+    // SAFETY: out-parameters are live locals; the bytecode and element arrays outlive the calls.
+    unsafe {
+        let mut vb = None;
+        device
+            .CreateVertexBuffer(
+                std::mem::size_of_val(&corners) as u32,
+                D3DUSAGE_WRITEONLY as u32,
+                0,
+                D3DPOOL_DEFAULT,
+                &mut vb,
+                std::ptr::null_mut(),
+            )
+            .map_err(map_err)?;
+        let quad = some(vb, "sun glow corners")?;
+        super::write_buffer(&quad, &corners)?;
+        Ok(GlowPipeline {
+            quad,
+            decl: device
+                .CreateVertexDeclaration(elements.as_ptr())
+                .map_err(map_err)?,
+            vs: device
+                .CreateVertexShader(vs_code.as_ptr())
+                .map_err(map_err)?,
+            ps: device
+                .CreatePixelShader(ps_code.as_ptr())
+                .map_err(map_err)?,
+        })
+    }
+}
+
 impl D3d9Device {
     /// Builds the sky pass if it is not there. A pass that cannot be made is remembered and
     /// the scene is drawn over the clear colour.
     pub(super) fn ensure_sky(&mut self) {
+        if self.scene.sky.glow.is_none() && !self.scene.sky.glow_unsupported {
+            match build_glow(&self.device) {
+                Ok(g) => self.scene.sky.glow = Some(g),
+                Err(BackendError::DeviceLost | BackendError::DeviceNotReset) => {}
+                Err(e) => {
+                    log::warn!("d3d9: the sun's glow cannot be drawn on this device: {e}");
+                    self.scene.sky.glow_unsupported = true;
+                }
+            }
+        }
         if self.scene.sky.pipeline.is_some() || self.scene.sky.unsupported {
             return;
         }
@@ -271,6 +379,106 @@ impl D3d9Device {
             d.SetStreamSource(0, &p.vertices, 0, 12).map_err(map_err)?;
             d.SetIndices(&p.indices).map_err(map_err)?;
             d.DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, p.vertex_count, 0, p.triangles)
+                .map_err(map_err)?;
+        }
+        Ok(())
+    }
+}
+
+impl D3d9Device {
+    /// Draws the sun's glow over the scene drawn so far: a bright glow added around the sun's
+    /// place, depth-tested at the far plane so that whatever stands in front of the sun
+    /// covers it (glass, which writes no depth, lets it through). Nothing when the frame has
+    /// the glow off, the sun gives no light (night, overcast, below the horizon, thick fog) or
+    /// the shaders could not be made.
+    pub(super) fn draw_sun_glow(
+        &self,
+        frame: &SceneFrame,
+        pixel_offset: [f32; 4],
+        coverage: A2c,
+    ) -> Result<()> {
+        let (true, Some(g)) = (frame.sky.sun_glow, &self.scene.sky.glow) else {
+            return Ok(());
+        };
+        let light = &frame.light;
+        // (cloud cover counts only when the clouds are really drawn)
+        let clouds = frame.sky.clouds;
+        let cover = match clouds.texture {
+            Some(id) if self.scene_texture(id).is_some() => clouds.params[0],
+            _ => 0.0,
+        };
+        let strength = glow_strength(light, cover);
+        let [sx, sy, sz] = [light.sun_dir[0], light.sun_dir[1], light.sun_dir[2]];
+        let len = (sx * sx + sy * sy + sz * sz).sqrt();
+        let max = light.sun_color[..3].iter().cloned().fold(0.0, f32::max);
+        if !(strength > 0.002 && len > 0.5 && max > 0.001) {
+            return Ok(());
+        }
+        // the sun's own colour (warm at its rise and set), at the strength worked out
+        let colour = [
+            light.sun_color[0] / max * strength,
+            light.sun_color[1] / max * strength,
+            light.sun_color[2] / max * strength,
+            0.0,
+        ];
+        let sun = [sx / len, sy / len, sz / len, GLOW_DISTANCE];
+        let half_side = [
+            GLOW_DISTANCE * GLOW_HALF_ANGLE_DEG.to_radians().tan(),
+            0.0,
+            0.0,
+            0.0,
+        ];
+        let d = &self.device;
+        let vs = [
+            light.cam_pos,
+            pixel_offset,
+            light.cam_right,
+            light.cam_up,
+            sun,
+            half_side,
+        ];
+        // SAFETY: plain calls on a live device; the constant arrays outlive the calls; the
+        // buffer belongs to this device.
+        unsafe {
+            coverage.set(d, false)?;
+            for (state, value) in [
+                (D3DRS_ZENABLE, D3DZB_TRUE.0 as u32),
+                (D3DRS_ZFUNC, D3DCMP_GREATEREQUAL.0 as u32),
+                (D3DRS_ZWRITEENABLE, 0),
+                (D3DRS_CULLMODE, D3DCULL_NONE.0 as u32),
+                (D3DRS_ALPHATESTENABLE, 0),
+                (D3DRS_DEPTHBIAS, 0),
+                (D3DRS_SLOPESCALEDEPTHBIAS, 0),
+                (D3DRS_ALPHABLENDENABLE, 1),
+                (D3DRS_SEPARATEALPHABLENDENABLE, 0),
+                // added to the picture
+                (D3DRS_SRCBLEND, D3DBLEND_ONE.0 as u32),
+                (D3DRS_DESTBLEND, D3DBLEND_ONE.0 as u32),
+                (D3DRS_COLORWRITEENABLE, 0x7),
+                (D3DRS_SRGBWRITEENABLE, 0),
+            ] {
+                d.SetRenderState(state, value).map_err(map_err)?;
+            }
+            d.SetStreamSourceFreq(0, 1).map_err(map_err)?;
+            d.SetStreamSourceFreq(1, 1).map_err(map_err)?;
+            d.SetVertexDeclaration(&g.decl).map_err(map_err)?;
+            d.SetVertexShader(&g.vs).map_err(map_err)?;
+            d.SetPixelShader(&g.ps).map_err(map_err)?;
+            d.SetVertexShaderConstantF(0, frame.view_proj.as_ptr().cast(), 4)
+                .map_err(map_err)?;
+            d.SetVertexShaderConstantF(4, vs.as_ptr().cast(), vs.len() as u32)
+                .map_err(map_err)?;
+            d.SetPixelShaderConstantF(SKY_REGISTER, colour.as_ptr(), 1)
+                .map_err(map_err)?;
+            d.SetStreamSource(0, &g.quad, 0, 8).map_err(map_err)?;
+            d.DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2)
+                .map_err(map_err)?;
+            // (the scene's blending, as the pass that follows expects it)
+            d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
                 .map_err(map_err)?;
         }
         Ok(())

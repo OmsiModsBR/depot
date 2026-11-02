@@ -1536,6 +1536,8 @@ impl D3d9Device {
                 current = (None, None, None, None);
             }
         }
+        // the sun's glow over the picture, hidden where something stands in front of it
+        self.draw_sun_glow(frame, pixel, coverage)?;
         if skipped > 0 {
             log::debug!("d3d9 scene: {skipped} batches without their mesh or material");
         }
