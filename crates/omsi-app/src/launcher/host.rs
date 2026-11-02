@@ -40,6 +40,10 @@ impl omsi_launcher_ui::Host for GameHost {
         crate::about::REPO_URL
     }
 
+    fn releases_url(&self) -> &'static str {
+        crate::about::RELEASES_URL
+    }
+
     fn helper_log(&self) -> std::path::PathBuf {
         crate::showroom::helper_log()
     }
@@ -67,5 +71,17 @@ impl omsi_launcher_ui::Host for GameHost {
 
     fn save_controllers(&self, devices: &[crate::controllers::DeviceCfg]) -> Result<(), String> {
         crate::controllers::save_cfg(devices)
+    }
+
+    fn adapter_texture_mb(&self) -> i64 {
+        omsi_render::ADAPTER_TEXTURE_MB.load(std::sync::atomic::Ordering::Relaxed) as i64
+    }
+
+    fn own_stations(&self) -> Vec<(String, String)> {
+        crate::radio::own_stations()
+    }
+
+    fn save_stations(&self, list: &[(String, String)]) -> std::io::Result<()> {
+        crate::radio::save_stations(list)
     }
 }
