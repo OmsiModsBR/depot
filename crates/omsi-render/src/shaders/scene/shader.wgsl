@@ -246,6 +246,38 @@ fn ao_at(frag: vec2<f32>, world: vec3<f32>) -> f32 {
     }
     return select(best, sum / wsum, wsum > 0.02);
 }
+
+// The ambient occlusion under a blended layer that lies on an opaque surface: a decal - a
+// `[useTextTexture]` destination or fleet number, a sticker - takes the shade of the surface
+// it is printed on, or its letters stood out bright where the sign around them lay in the
+// dashboard's shade. Only where the opaque depth is within a centimetre or so (more far
+// off) of the layer: a pane or a translucent door further in front of what the AO saw keeps
+// none, as before (the shade of what stands behind it must not show on it).
+fn ao_on_decal(frag: vec2<f32>, world: vec3<f32>) -> f32 {
+    let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
+    let tol = 0.01 + 0.004 * z;
+    if (camera.clouds.w > 1.5) {
+        let t = rt_at(frag, world);
+        return select(1.0, t.x, t.w > 0.5 && abs(t.y - z) < tol);
+    }
+    let size = vec2<i32>(textureDimensions(t_ao));
+    let f = frag * 0.5 - vec2<f32>(0.5);
+    let base = vec2<i32>(floor(f));
+    var best = 1.0;
+    var best_d = tol;
+    for (var j = 0; j < 2; j = j + 1) {
+        for (var i = 0; i < 2; i = i + 1) {
+            let c = clamp(base + vec2<i32>(i, j), vec2<i32>(0), size - vec2<i32>(1));
+            let s = textureLoad(t_ao, c, 0);
+            let d = abs(s.g - z);
+            if (d < best_d) {
+                best_d = d;
+                best = s.r;
+            }
+        }
+    }
+    return best;
+}
 // the tile light maps (`.map.LM.bmp`) of the 5x5 tiles around the camera, north up, and where
 // they lie: x, y the south-west corner (render-origin relative), z the side, w 1 when set
 @group(0) @binding(18) var t_lmap: texture_2d<f32>;
@@ -1688,6 +1720,9 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     // showed the shade of what stood behind it)
     if (camera.clouds.w > 0.5 && mode < 1.5) {
         ao = ao_at(in.clip.xy, in.world);
+    } else if (camera.clouds.w > 0.5 && !(material.emissive.w > 0.5 && material.emissive.w < 1.5)) {
+        // (a blended layer printed on an opaque surface takes that surface's - not glass)
+        ao = ao_on_decal(in.clip.xy, in.world);
     }
     var diffuse = camera.sun_color.rgb * camera.sun_dir.w * ndl * shadow + (camera.sky_color.rgb * from_above * (0.6 + 0.4 * shadow) + camera.ambient.xyz) * ao;
     var albedo = tex.rgb;
