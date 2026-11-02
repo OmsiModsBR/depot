@@ -1784,6 +1784,8 @@ pub struct Humans {
     pub ticket_blocks: Option<crate::money::TicketBlocks>,
     /// A rider pressed the stop button for the next stop (the app fires the vehicle trigger `int_haltewunsch`).
     pub stop_request: bool,
+    /// Buses the player asked to empty (`force_disembark`).
+    pub empty_bus: hashbrown::HashSet<BusId>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
     pub ticket_cash: f32,
@@ -2086,6 +2088,7 @@ impl Humans {
             under_bus: hashbrown::HashSet::new(),
             ticket_blocks: None,
             stop_request: false,
+            empty_bus: hashbrown::HashSet::new(),
             tickets_sold: 0,
             ticket_cash: 0.0,
             boarded: 0,
@@ -4596,6 +4599,7 @@ impl Humans {
         let bus_ix: HashMap<BusId, usize> =
             buses.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
         // the stops: which buses stand at them, who waits there
+        self.end_emptied_buses();
         let at_stops = self.register_buses(&buses, dt);
         self.claim_waiting();
         self.ride_comfort(dt, bus, &buses, &bus_ix, world);

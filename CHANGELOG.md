@@ -23,6 +23,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### In-game interface (Esc menu, Alt bar, windows, loading, trip report)
 
+- **Added** *(deliberate improvement)*. The Alt bar's line and destination window (the itinerary list, not the timetable) has a **Make everyone get off** button under the list, for maps where passengers stay on at the end of the run. Everyone on board then walks to an exit and leaves by the open doors, at a stop or not, and the order ends when the bus is empty. Nothing changes unless it is pressed; the list, OK and Cancel work as before. It does not pause anything, has a tooltip and is translated into all 26 languages. Checked by automated tests only, not yet in the game. (#PR)
 - **Fixed.** A screenshot (Ctrl+Shift+P, F12 or Esc menu > Screenshot) holds the scene alone: the information bar, the minimap/navigator, the Alt bar, its windows and the other HUD are no longer drawn into the saved picture (Vulkan/DX12). The `Screenshot: <path>` notice stays out of it as before. DirectX9 (D3D9Ex) does not save screenshots yet. (#612)
 
 ### Graphics (Vanilla+ and Enhanced)
