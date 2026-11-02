@@ -1,4 +1,7 @@
-use openomsi_game::testing::launcher::drive::*;
+//! The Drive page's bus list and tour search without a window: how buses group by
+//! manufacturer, how they sort and what a search finds.
+
+use omsi_launcher_ui::window::*;
 
 fn vehicle(folder: &str, maker: &str, name: &str, file: &str) -> omsi_launcher_lib::VehicleInfo {
     omsi_launcher_lib::VehicleInfo {
