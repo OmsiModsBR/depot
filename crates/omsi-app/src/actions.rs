@@ -422,6 +422,7 @@ impl App {
             situation_strvars: Vec::new(),
             situation_odometer_km: None,
             situation_script_textures: None,
+            situation_riders: Vec::new(),
             situation_others: Vec::new(),
             situation_trailers: Vec::new(),
             line: None,
@@ -568,6 +569,7 @@ impl App {
             situation_strvars: Vec::new(),
             situation_odometer_km: None,
             situation_script_textures: None,
+            situation_riders: Vec::new(),
             situation_others: Vec::new(),
             situation_trailers: Vec::new(),
             line: None,
@@ -1581,7 +1583,7 @@ impl App {
         );
         match sit.save(&out) {
             Ok(()) => {
-                crate::situation::save_script_textures(&out, &self.situation_vehicles());
+                self.save_situation_extras(&out);
                 log::info!("saved the last situation {}", out.display());
                 Some(out)
             }
@@ -1589,6 +1591,22 @@ impl App {
                 log::warn!("saving {}: {e}", out.display());
                 None
             }
+        }
+    }
+
+    /// What goes beside a saved situation in files of their own: the script textures of its
+    /// vehicles and the passengers of the player's bus (#34, #613).
+    fn save_situation_extras(&self, osn: &std::path::Path) {
+        crate::situation::save_script_textures(osn, &self.situation_vehicles());
+        let riders = self
+            .humans
+            .as_ref()
+            .filter(|_| self.player.is_some())
+            .map(|h| h.riders_aboard())
+            .unwrap_or_default();
+        let n = crate::situation::save_riders(osn, &riders);
+        if n > 0 {
+            log::info!("situation: {n} passenger(s) saved");
         }
     }
 
@@ -1686,7 +1704,7 @@ impl App {
             Path::new("Situations").join("quicksave.osn").as_path(),
         ) {
             Ok(out) => {
-                crate::situation::save_script_textures(&out, &self.situation_vehicles());
+                self.save_situation_extras(&out);
                 log::info!(
                     "saved situation {} ({} vehicles)",
                     out.display(),
@@ -1767,7 +1785,7 @@ impl App {
         );
         match save_or_fallback(&sit, &out, rel_dir.join(format!("Slot {n}.osn")).as_path()) {
             Ok(out) => {
-                crate::situation::save_script_textures(&out, &self.situation_vehicles());
+                self.save_situation_extras(&out);
                 log::info!(
                     "saved situation {} ({} vehicles)",
                     out.display(),

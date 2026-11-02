@@ -604,6 +604,16 @@ rim the reflection running on away from the camera.
   `[vehicle]` block per vehicle (file, x height y, 7 orientation numbers, tile x y, id,
   depot name, optional `[coupledWith]`, `[ismyVehicle]`, `[vars] n` name/value pairs,
   `[stringvars] n`, optional `[settimetable]`), finally `[myvehicle]` and `[view]`.
+* Project Depot keeps the passengers of the player's bus in a file beside the situation, `<name>.osn.riders`
+  (UTF-8, LF; not part of OMSI 2's format, which neither writes nor reads it). First line `depot-riders 1 <hash>` (a 64-bit FNV-1a of the `.osn` it was written beside, so a situation saved over by another game never gets the passengers of an older save), then one
+  line per rider of tab-separated `key=value` pairs: `seat` (index of the bus's passenger places, in the order
+  of its `[passpos]` list; `none` for somebody already on the way to the door, who is seated at any free place), `left_km` (kilometres of the ride still to go), `random` (0..1, where between
+  departure and approach they ask to get off), and when set `dest`, `alt`, `alt_seen`, `alt_m` (`%`, tab and
+  line breaks in names written as `%25`, `%09`, `%0A`, `%0D`). Unknown keys and lines without a `seat` are
+  skipped; any other first line, a hash that is not the `.osn`'s, or a file above 1 MB, makes the whole file ignored. Deleted or absent: an empty
+  bus on load. Saving over a name rewrites it, or removes it when nobody rides. The file only
+  works beside its `.osn`, under the same name: copy, move or rename the two together (a situation
+  copied alone loads with an empty bus).
 * Weather `.owt`: `[wind] direction_deg speed_m/s`; `[clouds] type value` with type
   `-1` (clear), `Cumulus 1..3`, `Overcast 1`; the cover is drawn from `Texture\clouds.tga`
   (a grey density map) as a layer ~1500 m up drifting with the wind.

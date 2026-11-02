@@ -40,6 +40,7 @@
 
 use crate::ambience;
 use crate::scene::World;
+use crate::situation::SavedRider;
 use crate::traffic::Traffic;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
@@ -4176,8 +4177,6 @@ impl Humans {
         let Some(cabin) = self.cabin_for(bus) else {
             return;
         };
-        let trailers = part_frames(bus, &cabin);
-        let rot = bus.body_rotation();
         let off = places_off(bus, &cabin);
         for _ in 0..n {
             let Some(k) = self.reserve_place(BusId::Player, &cabin.seats, &off) else {
@@ -4186,39 +4185,134 @@ impl Humans {
             let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
             let r = self.rand_f() as f32;
             let mut pax = Pax::new(walk, self.rand_f());
-            pax.bus = Some(BusId::Player);
-            pax.inside = Some(BusId::Player);
-            pax.seat = Some(k);
             pax.ride_km = r * 19.0 + 1.0;
-            pax.task = Task::InBusToPlace;
-            let at = train_point(bus.position, &rot, &trailers, cabin.seats[k].pos);
-            let Some(i) = self.spawn(
-                world,
-                renderer,
-                scene,
-                at,
-                bus.heading,
-                State::Pax(Box::new(pax)),
-            ) else {
-                self.free_seat(BusId::Player, k);
+            if !self.seat_rider(pax, k, bus, &cabin, world, renderer, scene) {
                 break;
-            };
-            let s = cabin.seats[k].clone();
-            let seatheight = self.people[i].ty.def.seat_height;
-            if let Some(p) = self.pax_mut(i) {
-                p.task = Task::SittingInBus;
-                p.st = 0;
-                if s.seated {
-                    p.seat_h = s.height;
-                    p.pos = (s.pos - Vec3::Z * seatheight).as_dvec3();
-                    p.pax_state = 2.0;
-                } else {
-                    p.pos = s.pos.as_dvec3();
-                }
-                p.yaw = (s.rot as f64).to_radians();
             }
-            self.people[i].place = Place::Bus(BusId::Player, s.pos);
         }
+    }
+
+    /// The passengers aboard the player's bus, for a situation to keep (#613): each with the
+    /// place they hold. Somebody still walking in or out of a door keeps their place too.
+    pub fn riders_aboard(&self) -> Vec<SavedRider> {
+        let km = self.odometer.get(&BusId::Player).copied().unwrap_or(0.0);
+        self.people
+            .iter()
+            .filter_map(|p| match &p.state {
+                State::Pax(x) if x.inside == Some(BusId::Player) => SavedRider::from_pax(x, km),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Put the riders a situation kept back in the player's bus, each at the place it held
+    /// (the same `[passpos]`; a place the bus no longer has, one its scripts have switched
+    /// off, or one a rider before already holds, leaves that rider out, with a line in the
+    /// log). The number seated.
+    pub fn restore_riders(
+        &mut self,
+        riders: &[SavedRider],
+        bus: &VehicleInstance,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) -> usize {
+        let Some(cabin) = self.cabin_for(bus) else {
+            return 0;
+        };
+        let off = places_off(bus, &cabin);
+        let km = self.odometer.get(&BusId::Player).copied().unwrap_or(0.0);
+        let mut seated = 0;
+        for r in riders {
+            let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
+            let k = match r.seat {
+                Some(k) => {
+                    let free = cabin.seats.get(k).is_some()
+                        && !off.get(k).copied().unwrap_or(false)
+                        && !self
+                            .seats
+                            .get(&BusId::Player)
+                            .and_then(|s| s.get(k))
+                            .copied()
+                            .unwrap_or(false);
+                    if !free {
+                        log::warn!(
+                            "situation: a rider's place {k} is not free in this bus; left out"
+                        );
+                        continue;
+                    }
+                    let seats = self.seats.entry(BusId::Player).or_default();
+                    if seats.len() < cabin.seats.len() {
+                        seats.resize(cabin.seats.len(), false);
+                    }
+                    seats[k] = true;
+                    k
+                }
+                // on the way to the door when saved: any free place, the stop asked for again
+                None => match self.reserve_place(BusId::Player, &cabin.seats, &off) {
+                    Some(k) => k,
+                    None => {
+                        log::warn!("situation: no free place for a rider on the way out; left out");
+                        continue;
+                    }
+                },
+            };
+            if !self.seat_rider(r.to_pax(walk, km), k, bus, &cabin, world, renderer, scene) {
+                break;
+            }
+            seated += 1;
+        }
+        seated
+    }
+
+    /// One passenger, with place `k` of `cabin` (reserved), sitting or standing there in
+    /// the player's bus. False when nobody can be added (the pool is full): the place is
+    /// given back.
+    #[allow(clippy::too_many_arguments)]
+    fn seat_rider(
+        &mut self,
+        mut pax: Pax,
+        k: usize,
+        bus: &VehicleInstance,
+        cabin: &Cabin,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+    ) -> bool {
+        let trailers = part_frames(bus, cabin);
+        let rot = bus.body_rotation();
+        pax.bus = Some(BusId::Player);
+        pax.inside = Some(BusId::Player);
+        pax.seat = Some(k);
+        pax.task = Task::InBusToPlace;
+        let at = train_point(bus.position, &rot, &trailers, cabin.seats[k].pos);
+        let Some(i) = self.spawn(
+            world,
+            renderer,
+            scene,
+            at,
+            bus.heading,
+            State::Pax(Box::new(pax)),
+        ) else {
+            self.free_seat(BusId::Player, k);
+            return false;
+        };
+        let s = cabin.seats[k].clone();
+        let seatheight = self.people[i].ty.def.seat_height;
+        if let Some(p) = self.pax_mut(i) {
+            p.task = Task::SittingInBus;
+            p.st = 0;
+            if s.seated {
+                p.seat_h = s.height;
+                p.pos = (s.pos - Vec3::Z * seatheight).as_dvec3();
+                p.pax_state = 2.0;
+            } else {
+                p.pos = s.pos.as_dvec3();
+            }
+            p.yaw = (s.rot as f64).to_radians();
+        }
+        self.people[i].place = Place::Bus(BusId::Player, s.pos);
+        true
     }
 
     /// Give back what a person holds (a waiting place, a seat) before they change plans.
