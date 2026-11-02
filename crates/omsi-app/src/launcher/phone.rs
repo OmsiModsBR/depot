@@ -1894,7 +1894,7 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
         Page::Profile => {
             omsi_launcher_ui::window::profile(frame!(l), &mut l.pages.profile, content)
         }
-        Page::Settings => super::settings::settings(l, content),
+        Page::Settings => l.settings_page(content),
         Page::Controls => super::pages::controls(l, content),
         Page::Mods => omsi_launcher_ui::window::mods(frame!(l), content),
         Page::Tutorials => omsi_launcher_ui::window::tutorials(frame!(l), content),

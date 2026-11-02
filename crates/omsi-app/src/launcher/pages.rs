@@ -26,7 +26,7 @@ pub struct PagesView {
     /// The Controls page's tab: 0 the keyboard, 1 the game controllers.
     pub controls_tab: usize,
     /// The Settings page's section and search (`settings`).
-    pub set: super::settings::SettingsView,
+    pub set: omsi_launcher_ui::window::SettingsView,
     pub pads: PadsView,
     pub tt: omsi_launcher_ui::window::TimetableView,
     /// The Diagnostics page's tab and its integrity check (`integrity`).
