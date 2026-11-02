@@ -205,6 +205,10 @@ pub struct Args {
     /// drawn back into the bus after spawning (`situation::restore_script_textures`).
     #[arg(skip)]
     pub situation_script_textures: Option<std::path::PathBuf>,
+    /// The passengers the bus carried when the situation was saved (`situation::load_riders`),
+    /// seated again once the people exist.
+    #[arg(skip)]
+    pub situation_riders: Vec<crate::situation::SavedRider>,
     /// Saved ordinal in the current timetable trip; absent in older situations.
     #[arg(skip)]
     pub situation_next_stop: Option<usize>,

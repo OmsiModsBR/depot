@@ -111,6 +111,7 @@ pub(crate) fn apply_situation(args: &mut Args) -> Result<()> {
 pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &mut Args) {
     args.situation_odometer_km = None;
     args.situation_script_textures = None;
+    args.situation_riders = Vec::new();
     args.map = sit.map.replace('\\', "/");
     // A map from an archive was saved as its whole path (`\Users\…\Archives\x.zip\Maps\
     // Novi Sad\global.cfg`), which then went after the root and the game closed at once:
@@ -197,6 +198,10 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
         }
         args.situation_strvars = v.string_vars.clone();
         args.situation_script_textures = script_texture_prefix(&sit.path, i);
+        // (the passengers it carried: a situation read from a file only)
+        if !sit.path.as_os_str().is_empty() {
+            args.situation_riders = load_riders(&sit.path);
+        }
         log::info!(
             "situation: player {} at {:?} line {:?} tour {:?} hof {:?}, {} vars",
             v.file,
@@ -345,6 +350,238 @@ pub fn restore_script_textures(vehicle: &mut omsi_sim::VehicleInstance, prefix: 
         }
     }
     restored
+}
+
+/// A passenger riding in the player's bus, as a situation keeps them (#613).
+///
+/// A deliberate improvement over the reference game, whose situations bring the timetable
+/// and the trip back but an empty bus. Kept: the place each rider holds (the index of the
+/// bus's `[passpos]` list: the same seat or standing place again), where they are going and
+/// how much of their ride is left. Not kept: who they look like, their ticket, their mood.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SavedRider {
+    pub seat: usize,
+    pub dest: Option<String>,
+    pub alt: Option<String>,
+    pub alt_seen: bool,
+    pub alt_m: f32,
+    /// Kilometres still to ride (counts only for a rider without a destination, or past the
+    /// stop their line leaves the known route at).
+    pub left_km: f32,
+    /// Where between departure and the approach they ask to get off (0..1).
+    pub request_random: f64,
+}
+
+impl SavedRider {
+    /// The rider a passenger sitting or standing in a bus is. `odometer_km`: the kilometres
+    /// the riders' clock of that bus reads now. None for somebody not aboard with a place.
+    pub fn from_pax(x: &crate::humans::pax::Pax, odometer_km: f64) -> Option<SavedRider> {
+        x.inside?;
+        let seat = x.seat?;
+        Some(SavedRider {
+            seat,
+            dest: x.dest.clone(),
+            alt: x.alt.clone(),
+            alt_seen: x.alt_seen,
+            alt_m: x.alt_m,
+            left_km: (x.km_start + x.ride_km as f64 - odometer_km).max(0.0) as f32,
+            request_random: x.stop_request_random,
+        })
+    }
+
+    /// The passenger again, settled at their place: `odometer_km` is the riders' clock now,
+    /// so what is left of the ride counts from it.
+    pub fn to_pax(&self, walk_speed: f32, odometer_km: f64) -> crate::humans::pax::Pax {
+        use crate::humans::pax::{Pax, Task};
+        let mut p = Pax::new(walk_speed, self.request_random.clamp(0.0, 1.0));
+        p.task = Task::SittingInBus;
+        p.seat = Some(self.seat);
+        p.dest = self.dest.clone();
+        p.alt = self.alt.clone();
+        p.alt_seen = self.alt_seen;
+        p.alt_m = self.alt_m;
+        p.km_start = odometer_km;
+        p.ride_km = self.left_km;
+        p
+    }
+}
+
+/// The file the riders of a situation are kept in, next to it: `Slot 1.osn.riders`. A file
+/// of its own so the `.osn` stays exactly what the reference game writes and reads; a
+/// situation without the file (every older one, every one the reference saved) simply
+/// loads an empty bus, as before.
+pub fn riders_file(osn: &Path) -> Option<PathBuf> {
+    let name = osn.file_name()?.to_string_lossy().into_owned();
+    Some(osn.with_file_name(format!("{name}.riders")))
+}
+
+const RIDERS_HEADER: &str = "depot-riders 1";
+/// More riders than any bus holds; a larger file is damaged or hostile and is not read.
+const MAX_RIDERS: usize = 1024;
+const MAX_RIDERS_FILE: u64 = 1 << 20;
+
+fn escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '%' => out.push_str("%25"),
+            '\t' => out.push_str("%09"),
+            '\n' => out.push_str("%0A"),
+            '\r' => out.push_str("%0D"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn unescape(s: &str) -> String {
+    let mut out = Vec::with_capacity(s.len());
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            let hex = std::str::from_utf8(&b[i + 1..i + 3]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Write the riders next to `osn`, or remove an older file of that name when nobody rides
+/// (a later save under the same name must not bring back the passengers of an earlier one).
+/// The number written.
+pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
+    let Some(file) = riders_file(osn) else {
+        return 0;
+    };
+    if riders.is_empty() {
+        let _ = std::fs::remove_file(&file);
+        return 0;
+    }
+    let mut t = format!("{RIDERS_HEADER}\n");
+    for r in riders.iter().take(MAX_RIDERS) {
+        t.push_str(&format!(
+            "seat={}\tleft_km={}\trandom={}",
+            r.seat, r.left_km, r.request_random
+        ));
+        if let Some(d) = &r.dest {
+            t.push_str(&format!("\tdest={}", escape(d)));
+        }
+        if let Some(a) = &r.alt {
+            t.push_str(&format!("\talt={}", escape(a)));
+        }
+        if r.alt_seen {
+            t.push_str("\talt_seen=1");
+        }
+        if r.alt_m != 0.0 {
+            t.push_str(&format!("\talt_m={}", r.alt_m));
+        }
+        t.push('\n');
+    }
+    match std::fs::write(&file, t) {
+        Ok(()) => riders.len().min(MAX_RIDERS),
+        Err(e) => {
+            log::warn!("situation: riders {}: {e}", file.display());
+            0
+        }
+    }
+}
+
+/// The riders saved next to `osn`: none without a file; a file that cannot be read, from a
+/// newer format or damaged in places keeps what it can and says so in the log.
+pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
+    let Some(file) = riders_file(osn) else {
+        return Vec::new();
+    };
+    let Ok(meta) = std::fs::metadata(&file) else {
+        return Vec::new();
+    };
+    if meta.len() > MAX_RIDERS_FILE {
+        log::warn!("situation: riders {} is too large; ignored", file.display());
+        return Vec::new();
+    }
+    let Ok(text) = std::fs::read_to_string(&file) else {
+        log::warn!(
+            "situation: riders {} could not be read; ignored",
+            file.display()
+        );
+        return Vec::new();
+    };
+    let mut lines = text.lines();
+    if lines.next().map(str::trim) != Some(RIDERS_HEADER) {
+        log::warn!(
+            "situation: riders {} is of another format; ignored",
+            file.display()
+        );
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (n, line) in lines.enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if out.len() >= MAX_RIDERS {
+            break;
+        }
+        let mut r = SavedRider::default();
+        let mut seat = false;
+        for kv in line.split('\t') {
+            let Some((k, v)) = kv.split_once('=') else {
+                continue;
+            };
+            match k {
+                "seat" => match v.parse() {
+                    Ok(x) => {
+                        r.seat = x;
+                        seat = true;
+                    }
+                    Err(_) => {}
+                },
+                "left_km" => {
+                    r.left_km = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f32| x.is_finite())
+                        .unwrap_or(0.0)
+                        .max(0.0)
+                }
+                "random" => {
+                    r.request_random = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f64| x.is_finite())
+                        .unwrap_or(0.5)
+                }
+                "dest" => r.dest = Some(unescape(v)),
+                "alt" => r.alt = Some(unescape(v)),
+                "alt_seen" => r.alt_seen = v == "1",
+                "alt_m" => {
+                    r.alt_m = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f32| x.is_finite())
+                        .unwrap_or(0.0)
+                }
+                _ => {}
+            }
+        }
+        if seat {
+            out.push(r);
+        } else {
+            log::warn!(
+                "situation: riders {} line {}: no place; skipped",
+                file.display(),
+                n + 2
+            );
+        }
+    }
+    out
 }
 
 /// The lowest height (m) a saved vehicle can plausibly stand at. A vehicle that fell through

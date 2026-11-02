@@ -278,3 +278,120 @@ fn a_locked_texture_saves_what_it_shows() {
     st.put(1, 0, [2, 2, 2, 2]);
     assert_eq!(st.shown(), &[1, 1, 1, 1, 0, 0, 0, 0]);
 }
+
+fn rider(seat: usize, dest: Option<&str>) -> SavedRider {
+    SavedRider {
+        seat,
+        dest: dest.map(String::from),
+        alt: None,
+        alt_seen: false,
+        alt_m: 0.0,
+        left_km: 3.5,
+        request_random: 0.25,
+    }
+}
+
+/// #613: the passengers of a saved bus come back in the places they held, going where they
+/// were going, in a file next to the situation; names with odd characters survive it.
+#[test]
+fn riders_round_trip_through_their_file() {
+    let dir = std::env::temp_dir().join(format!("depot_sit_riders_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let osn = dir.join("Slot 1.osn");
+    let mut a = rider(0, Some("Praça\t100% \"Central\""));
+    a.alt = Some("Alt\nStop".into());
+    a.alt_seen = true;
+    a.alt_m = 800.0;
+    let riders = vec![a, rider(7, None), rider(31, Some("Terminal"))];
+    assert_eq!(save_riders(&osn, &riders), 3);
+    assert_eq!(
+        riders_file(&osn).unwrap().file_name().unwrap(),
+        "Slot 1.osn.riders"
+    );
+    assert_eq!(load_riders(&osn), riders);
+
+    // the situation as read back hands them to the game
+    let mut args = Args::parse_from(["depot"]);
+    let sit = omsi_content::situation::Situation {
+        path: osn.clone(),
+        vehicles: vec![omsi_content::situation::SituationVehicle {
+            is_my_vehicle: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_riders, riders);
+
+    // an empty bus saved under the same name leaves nobody behind in the older file
+    assert_eq!(save_riders(&osn, &[]), 0);
+    assert!(!riders_file(&osn).unwrap().exists());
+    apply_situation_parsed(&sit, &mut args);
+    assert!(args.situation_riders.is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// #613: situations without the file (every older one, every one the reference game wrote)
+/// load an empty bus as before; a damaged or foreign file never stops the load.
+#[test]
+fn missing_or_damaged_rider_files_load_an_empty_bus() {
+    let dir = std::env::temp_dir().join(format!("depot_sit_riders_bad_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let osn = dir.join("Old.osn");
+    assert!(load_riders(&osn).is_empty());
+    let file = riders_file(&osn).unwrap();
+    for bad in [
+        &b"\xff\xfe not text"[..],
+        b"depot-riders 99\nseat=1\n",
+        b"",
+        b"depot-riders 1\nseat=x\tleft_km=NaN\nnothing here\n",
+    ] {
+        std::fs::write(&file, bad).unwrap();
+        assert!(load_riders(&osn).is_empty(), "{bad:?}");
+    }
+    // one good line among bad ones: what can be kept is kept, and a nonsense distance is 0
+    std::fs::write(
+        &file,
+        "depot-riders 1\nseat=2\tleft_km=-5\trandom=NaN\tmystery=1\nseat=\n",
+    )
+    .unwrap();
+    let got = load_riders(&osn);
+    assert_eq!(got.len(), 1);
+    assert_eq!((got[0].seat, got[0].left_km), (2, 0.0));
+    assert!((0.0..=1.0).contains(&got[0].request_random));
+    // the situation file itself is untouched by any of this
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// #613: a passenger seated again rides what was left of the ride, counted from the clock
+/// of the bus they are in now, and holds the same place.
+#[test]
+fn a_rider_keeps_the_ride_that_is_left() {
+    use testing::humans::pax::{Pax, Task};
+    let mut x = Pax::new(1.1, 0.4);
+    x.inside = Some(testing::humans::BusId::Player);
+    x.seat = Some(12);
+    x.task = Task::SittingInBus;
+    x.km_start = 100.0;
+    x.ride_km = 6.0;
+    x.dest = Some("Central".into());
+    // 2 km into the ride at the odometer reading 102
+    let r = SavedRider::from_pax(&x, 102.0).unwrap();
+    assert_eq!((r.seat, r.dest.as_deref()), (12, Some("Central")));
+    assert!((r.left_km - 4.0).abs() < 1e-4);
+    // the same ride at 0 km on the new clock
+    let back = r.to_pax(1.1, 0.0);
+    assert_eq!((back.seat, back.task), (Some(12), Task::SittingInBus));
+    assert!((back.km_start + back.ride_km as f64 - 4.0).abs() < 1e-4);
+    assert_eq!(back.dest.as_deref(), Some("Central"));
+    // a ride that was over saves as over, never negative
+    assert_eq!(SavedRider::from_pax(&x, 200.0).unwrap().left_km, 0.0);
+    // nobody outside a bus, or without a place, is a rider
+    x.inside = None;
+    assert!(SavedRider::from_pax(&x, 0.0).is_none());
+    x.inside = Some(testing::humans::BusId::Player);
+    x.seat = None;
+    assert!(SavedRider::from_pax(&x, 0.0).is_none());
+}
