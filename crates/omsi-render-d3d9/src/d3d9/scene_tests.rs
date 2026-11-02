@@ -833,6 +833,62 @@ fn white_lit(u: &[[f32; 4]; MATERIAL_VECTORS]) -> SceneMaterial<'_> {
 }
 
 #[test]
+fn the_cell_cap_keeps_the_first_map_lamps_and_every_vehicle_light() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 0, [255, 255, 255, 255]);
+    let u = uniform(0.0);
+    // [nomaplighting]: only a vehicle's light reaches it, so that a map lamp is seen by a
+    // surface that takes them (the plain material below)
+    let far = lamp([500.0, 500.0, 1.5, 1.0], POINT, [0.0; 4]);
+    let near = lamp([0.0, 0.0, 1.5, 100.0], POINT, [0.0; 4]);
+    // a headlight: a spot pointing down at the quad (direction, outer cone cosine; inner cone
+    // cosine, core radius, radius of full light squared)
+    let headlight = lamp(
+        [0.0, 0.0, 1.5, 100.0],
+        [0.0, 0.0, -1.0, 0.5],
+        [0.9, 1.0, 100.0, 0.0],
+    );
+    let two: Vec<[f32; 4]> = [far, near].concat();
+    let three: Vec<[f32; 4]> = [far, near, headlight].concat();
+    let draw =
+        |dev: &mut D3d9Device, lights: &[[f32; 4]], grid: &[u32], cap: usize, m: SceneMaterial| {
+            let lamps = SceneLamps {
+                lights,
+                grid,
+                place: ONE_CELL,
+                cell_cap: cap,
+                ..Default::default()
+            };
+            draw_lamps(dev, m, SECOND, dark(), lamps)
+        };
+    let mut no_map = uniform(0.0);
+    no_map[1][1] = 0.25;
+    // no cap (the default) and a cap above the lamps: every place is looked up
+    for cap in [0, 8] {
+        let px = draw(&mut dev, &two, &[0, 1], cap, white_lit(&u));
+        assert!(
+            all(&px, [255, 255, 255, 255], 1),
+            "cap {cap}: {:?}",
+            &px[..4]
+        );
+    }
+    // a cap of one map lamp: the second is left out
+    let px = draw(&mut dev, &two, &[0, 1], 1, white_lit(&u));
+    assert!(all(&px, [0, 0, 0, 255], 1), "cap 1: {:?}", &px[..4]);
+    // the vehicle's light after the two map lamps still lights, past the cap
+    let px = draw(&mut dev, &three, &[0, 1, 2], 1, white_lit(&no_map));
+    // (a spot's light is less than a point lamp's: lit, not saturated)
+    assert!(
+        px[..3].iter().all(|&c| c > 150),
+        "headlight: {:?}",
+        &px[..4]
+    );
+    // and the same headlight is cut by nothing: without it, past the cap, the quad is dark
+    let px = draw(&mut dev, &three, &[0, 1, u32::MAX], 1, white_lit(&no_map));
+    assert!(all(&px, [0, 0, 0, 255], 1), "no headlight: {:?}", &px[..4]);
+}
+
+#[test]
 fn the_maps_lamps_light_what_takes_them() {
     let Some(mut dev) = device() else { return };
     rgba(&mut dev, 0, [255, 255, 255, 255]);
@@ -1700,6 +1756,8 @@ fn dark_sky(
         params,
         clouds,
         sun_glow: false,
+        no_stars: false,
+        no_cloud_layer: false,
     }
 }
 
@@ -1742,6 +1800,45 @@ fn no_cloud_without_a_cover_a_picture_or_a_shape() {
         let px = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
         assert!(all(&px, [0, 0, 0, 255], 2), "{clouds:?}: {:?}", &px[..4]);
     }
+}
+
+#[test]
+fn the_cloud_layer_is_left_out_when_the_option_says_so_but_still_thins_the_glow() {
+    let Some(mut dev) = device() else { return };
+    rgba(&mut dev, 4, [255, 255, 255, 255]);
+    let clouds = crate::scene::SceneClouds {
+        texture: Some(4),
+        params: [0.5, 0.0, 0.0, 1500.0],
+    };
+    let sky = dark_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], clouds);
+    let with = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
+    assert!(!all(&with, [0, 0, 0, 255], 2), "the layer should show");
+    let hidden = crate::scene::SceneSky {
+        no_cloud_layer: true,
+        ..sky
+    };
+    let px = draw_sky_with(&mut dev, hidden, LOOK_NORTH, light([0.0; 4]), (W, H));
+    assert!(all(&px, [0, 0, 0, 255], 2), "{:?}", &px[..4]);
+    // the glow keeps the cover's thinning with the layer hidden
+    let sun = [0.0, 1.0, 0.05, 1.0];
+    let glow = |dev: &mut D3d9Device, sky: crate::scene::SceneSky| {
+        let sky = crate::scene::SceneSky {
+            sun_glow: true,
+            ..sky
+        };
+        peak(
+            &draw_sky_with(dev, sky, LOOK_NORTH, sunny(sun), (W, H)),
+            W / 2,
+            H / 2,
+        )
+    };
+    let shown = glow(&mut dev, sky);
+    let without_layer = glow(&mut dev, hidden);
+    assert!(shown > 0);
+    assert!(
+        without_layer.abs_diff(shown) <= 2,
+        "glow {without_layer} with the layer hidden, {shown} with it"
+    );
 }
 
 #[test]
@@ -1792,6 +1889,73 @@ fn the_stars_show_at_night_and_not_by_day() {
     );
     // and they stay put from one frame to the next
     assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
+}
+
+#[test]
+fn the_stars_are_left_out_when_the_option_says_so() {
+    let Some(mut dev) = device() else { return };
+    let size = (128, 128);
+    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
+    let night = [0.0, 0.0, 0.0, 1.0];
+    let on = dark_sky(&mut dev, night, Default::default());
+    let with = draw_sky_with(&mut dev, on, LOOK_UP, light([0.0; 4]), size);
+    assert!(lit(&with) > 0);
+    let off = crate::scene::SceneSky {
+        no_stars: true,
+        ..dark_sky(&mut dev, night, Default::default())
+    };
+    let without = draw_sky_with(&mut dev, off, LOOK_UP, light([0.0; 4]), size);
+    assert_eq!(lit(&without), 0);
+}
+
+/// The size of the first level of scene texture `id`.
+fn put_up_size(dev: &D3d9Device, id: usize) -> (u32, u32) {
+    let mut desc = D3DSURFACE_DESC::default();
+    // SAFETY: plain query on a live texture with an out-parameter that is a live local.
+    unsafe {
+        dev.scene.textures[id]
+            .as_ref()
+            .unwrap()
+            .GetLevelDesc(0, &mut desc)
+    }
+    .unwrap();
+    (desc.Width, desc.Height)
+}
+
+#[test]
+fn a_texture_ceiling_puts_larger_pictures_up_smaller() {
+    let Some(mut dev) = device() else { return };
+    let put = |dev: &mut D3d9Device, id: usize, side: u32, mips: bool| {
+        let levels = vec![[10u8, 20, 30, 255].repeat((side * side) as usize)];
+        dev.set_scene_texture(
+            id,
+            &SceneTexture {
+                width: side,
+                height: side,
+                format: TexFormat::Rgba8,
+                levels: &levels,
+                make_mips: mips,
+            },
+        )
+        .unwrap();
+    };
+    // no ceiling: the picture goes up as it is
+    put(&mut dev, 0, 64, true);
+    assert_eq!(put_up_size(&dev, 0), (64, 64));
+    // a ceiling of 16: a larger one goes up at 16, a smaller one is left alone
+    dev.set_texture_limit(16);
+    put(&mut dev, 1, 64, true);
+    put(&mut dev, 2, 8, true);
+    assert_eq!(put_up_size(&dev, 1), (16, 16));
+    assert_eq!(put_up_size(&dev, 2), (8, 8));
+    // a picture that cannot make its own smaller levels is halved all the same
+    put(&mut dev, 3, 64, false);
+    assert_eq!(put_up_size(&dev, 3), (16, 16));
+    // what is already up keeps its size, and 0 lifts the ceiling again
+    assert_eq!(put_up_size(&dev, 0), (64, 64));
+    dev.set_texture_limit(0);
+    put(&mut dev, 4, 64, true);
+    assert_eq!(put_up_size(&dev, 4), (64, 64));
 }
 
 /// The light of a camera looking north: the sun towards `sun` (w its strength), white.

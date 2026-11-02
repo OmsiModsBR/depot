@@ -219,6 +219,7 @@ impl App {
                 &window,
                 self.settings.vsync,
                 (self.settings.msaa, u32::from(self.settings.anisotropy)),
+                self.settings.dx9_effects(),
             ) {
                 fatal_message(&format!(
                     "{e:#}. Choose another graphics API in the options."

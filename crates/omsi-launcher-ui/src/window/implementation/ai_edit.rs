@@ -9,532 +9,41 @@
 //! `~/.depot/backups/<map>/<stamp>/` (see `omsi_map::backup`), from where Backups puts it
 //! back. Not while the game runs.
 
+use super::super::domain::ai::AiView;
+use super::super::domain::ai_lists::*;
+use super::super::domain::frame::Frame;
+use super::super::interface::output::State;
 use super::ai_traffic::{
     columns, details, entries, foot, keep, many, percent, shown_name, vehicle_view, weight_text,
 };
-use super::ui::Key;
-use super::Launcher;
+use super::dialog::{dialog, dialog_foot};
+use crate::kit::{card, clipped, Status};
+use crate::look::*;
 use omsi_integrity::traffic::VehicleFile;
-use omsi_launcher_ui::kit::{card, clipped, Status};
-use omsi_launcher_ui::look::*;
-use omsi_map::ailists::DepotEntry;
-use omsi_map::ailists_edit::{AiListsDoc, EditError, GroupKind, ParkListDoc};
+use omsi_map::ailists_edit::{EditError, GroupKind};
 use omsi_map::backup::{self, Backup};
-use omsi_map::ttl_edit::{TtlDoc, TtlEditError};
 use omsi_ui::paint::{Align, Color};
-use omsi_ui::widgets::ButtonKind;
-use omsi_ui::widgets::Ui;
+use omsi_ui::widgets::{ButtonKind, Key, Ui};
 use omsi_ui::{Rect, Weight};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 
 mod fleet;
 pub use fleet::bus_lines;
 
-/// A parking list of the map and its lines.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Park {
-    /// Its name in the map folder.
-    pub file: String,
-    /// 0 for `parklist_p.txt`, n for `parklist_p_<n>.txt`.
-    pub index: usize,
-    pub doc: ParkListDoc,
-}
-
-/// A timetable line of the map (`TTData/<name>.ttl`) and its tours' AI groups.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Ttl {
-    /// Its path in the map folder, with `/`.
-    pub file: String,
-    pub doc: TtlDoc,
-}
-
-/// The map's own lists, as edited.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Lists {
-    /// The name `ailists.cfg` has in the map folder (`ailists.cfg` when there is none yet).
-    pub ailists_file: String,
-    pub ailists: AiListsDoc,
-    pub parks: Vec<Park>,
-    /// The map's timetable lines.
-    pub ttls: Vec<Ttl>,
-}
-
-impl Lists {
-    /// The lists in the map folder `map_dir` on the disk.
-    pub fn load(map_dir: &Path) -> Lists {
-        let mut l = Lists {
-            ailists_file: "ailists.cfg".into(),
-            ..Default::default()
-        };
-        let mut names: Vec<String> = std::fs::read_dir(map_dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| e.path().is_file())
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .collect();
-        names.sort_by_key(|n| n.to_ascii_lowercase());
-        for n in names {
-            let lower = n.to_ascii_lowercase();
-            let read = || std::fs::read(map_dir.join(&n)).unwrap_or_default();
-            if lower == "ailists.cfg" {
-                l.ailists = AiListsDoc::from_bytes(&read());
-                l.ailists_file = n.clone();
-                continue;
-            }
-            let index = if lower == "parklist_p.txt" {
-                Some(0)
-            } else {
-                lower
-                    .strip_prefix("parklist_p_")
-                    .and_then(|x| x.strip_suffix(".txt"))
-                    .and_then(|x| x.parse().ok())
-            };
-            if let Some(index) = index {
-                l.parks.push(Park {
-                    file: n.clone(),
-                    index,
-                    doc: ParkListDoc::from_bytes(&read()),
-                });
-            }
-        }
-        l.parks.sort_by_key(|p| p.index);
-        // the lines: TTData's `.ttl` files, whatever case the folder has
-        let tt = std::fs::read_dir(map_dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .find(|e| {
-                e.path().is_dir()
-                    && e.file_name()
-                        .to_string_lossy()
-                        .eq_ignore_ascii_case("ttdata")
-            });
-        if let Some(tt) = tt {
-            let folder = tt.file_name().to_string_lossy().into_owned();
-            let mut files: Vec<String> = std::fs::read_dir(tt.path())
-                .into_iter()
-                .flatten()
-                .flatten()
-                .filter(|e| e.path().is_file())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| n.to_ascii_lowercase().ends_with(".ttl"))
-                .collect();
-            files.sort_by_key(|n| n.to_ascii_lowercase());
-            for n in files {
-                let bytes = std::fs::read(tt.path().join(&n)).unwrap_or_default();
-                l.ttls.push(Ttl {
-                    file: format!("{folder}/{n}"),
-                    doc: TtlDoc::from_bytes(&bytes),
-                });
-            }
-        }
-        l
-    }
-
-    /// The files that differ from `saved`, with what to write.
-    /// (A file that does not read back byte for byte is never written: see `cannot_edit`.)
-    pub fn to_write(&self, saved: &Lists) -> Vec<(String, Vec<u8>)> {
-        let mut out = Vec::new();
-        if self.ailists != saved.ailists && self.ailists.exact() {
-            out.push((self.ailists_file.clone(), self.ailists.to_bytes()));
-        }
-        for p in &self.parks {
-            let before = saved.parks.iter().find(|s| s.file == p.file);
-            if before.is_none_or(|b| b.doc != p.doc) && p.doc.exact() {
-                out.push((p.file.clone(), p.doc.to_bytes()));
-            }
-        }
-        for t in &self.ttls {
-            let before = saved.ttls.iter().find(|s| s.file == t.file);
-            if before.is_none_or(|b| b.doc != t.doc) && t.doc.exact() {
-                out.push((t.file.clone(), t.doc.to_bytes()));
-            }
-        }
-        out
-    }
-}
-
-/// A change from the lists as saved to the lists now.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Change {
-    Weight {
-        group: String,
-        file: String,
-        from: f32,
-        to: f32,
-    },
-    Added {
-        group: String,
-        file: String,
-        weight: Option<f32>,
-    },
-    Removed {
-        group: String,
-        file: String,
-    },
-    GroupAdded(String),
-    GroupRemoved(String),
-    Parked {
-        list: String,
-        file: String,
-        from: usize,
-        to: usize,
-    },
-    /// A bus of a depot's fleet: `what` is its number and plate.
-    BusAdded {
-        group: String,
-        what: String,
-    },
-    BusRemoved {
-        group: String,
-        what: String,
-    },
-    BusChanged {
-        group: String,
-        what: String,
-    },
-    /// A tour of a timetable line now takes its buses from another group.
-    TourGroup {
-        line: String,
-        tour: String,
-        from: String,
-        to: String,
-    },
-}
-
-/// The vehicles of a group by file (any case), each with its weights in order.
-fn by_file(doc: &AiListsDoc, g: usize) -> Vec<(String, Vec<f32>)> {
-    let mut out: Vec<(String, Vec<f32>)> = Vec::new();
-    for v in &doc.groups()[g].vehicles {
-        match out
-            .iter_mut()
-            .find(|(f, _)| f.eq_ignore_ascii_case(&v.file))
-        {
-            Some(e) => e.1.push(v.weight),
-            None => out.push((v.file.clone(), vec![v.weight])),
-        }
-    }
-    out
-}
-
-/// What changed from `saved` to `now`, group by group and list by list.
-pub fn changes(saved: &Lists, now: &Lists) -> Vec<Change> {
-    let mut out = Vec::new();
-    let (a, b) = (&saved.ailists, &now.ailists);
-    for (gi, g) in b.groups().iter().enumerate() {
-        let name = g.name.trim().to_string();
-        let weights = g.kind.has_weights();
-        let new = by_file(b, gi);
-        let old = a.find(&name).map(|i| by_file(a, i));
-        if old.is_none() {
-            out.push(Change::GroupAdded(name.clone()));
-        }
-        let old = old.unwrap_or_default();
-        for (file, ws) in &new {
-            let was = old
-                .iter()
-                .find(|(f, _)| f.eq_ignore_ascii_case(file))
-                .map(|(_, w)| w.as_slice())
-                .unwrap_or(&[]);
-            for (i, w) in ws.iter().enumerate() {
-                match was.get(i) {
-                    Some(o) if o != w => out.push(Change::Weight {
-                        group: name.clone(),
-                        file: file.clone(),
-                        from: *o,
-                        to: *w,
-                    }),
-                    Some(_) => {}
-                    None => out.push(Change::Added {
-                        group: name.clone(),
-                        file: file.clone(),
-                        weight: weights.then_some(*w),
-                    }),
-                }
-            }
-            for _ in ws.len()..was.len() {
-                out.push(Change::Removed {
-                    group: name.clone(),
-                    file: file.clone(),
-                });
-            }
-        }
-        for (file, was) in &old {
-            if !new.iter().any(|(f, _)| f.eq_ignore_ascii_case(file)) {
-                for _ in was {
-                    out.push(Change::Removed {
-                        group: name.clone(),
-                        file: file.clone(),
-                    });
-                }
-            }
-        }
-    }
-    for g in a.groups() {
-        if b.find(&g.name).is_none() {
-            out.push(Change::GroupRemoved(g.name.trim().to_string()));
-        }
-    }
-    bus_changes(saved, now, &mut out);
-    for p in &now.parks {
-        let before = saved
-            .parks
-            .iter()
-            .find(|s| s.file == p.file)
-            .map(|s| s.doc.cars())
-            .unwrap_or_default();
-        let after = p.doc.cars();
-        let count = |list: &[(String, usize)], f: &str| {
-            list.iter()
-                .find(|(x, _)| x.eq_ignore_ascii_case(f))
-                .map(|(_, n)| *n)
-                .unwrap_or(0)
-        };
-        let mut files: Vec<&String> = after.iter().map(|(f, _)| f).collect();
-        for (f, _) in &before {
-            if !files.iter().any(|x| x.eq_ignore_ascii_case(f)) {
-                files.push(f);
-            }
-        }
-        for f in files {
-            let (from, to) = (count(&before, f), count(&after, f));
-            if from != to {
-                out.push(Change::Parked {
-                    list: p.file.clone(),
-                    file: f.clone(),
-                    from,
-                    to,
-                });
-            }
-        }
-    }
-    out
-}
-
-/// The buses of every depot group, each with the vehicle file of its list.
-fn fleet_of(doc: &AiListsDoc, g: usize) -> Vec<(String, DepotEntry)> {
-    doc.groups()[g]
-        .fleets
-        .iter()
-        .flat_map(|f| f.buses.iter().map(|b| (f.file.clone(), b.entry.clone())))
-        .collect()
-}
-
-/// A bus as the lists name it: its number and plate.
-fn bus_name(e: &DepotEntry) -> String {
-    if e.registration.trim().is_empty() {
-        e.number.clone()
-    } else {
-        format!("{} · {}", e.number, e.registration)
-    }
-}
-
-/// The buses added, taken out or changed in the depots' fleet lists, and the tours that
-/// changed their group.
-fn bus_changes(saved: &Lists, now: &Lists, out: &mut Vec<Change>) {
-    let (a, b) = (&saved.ailists, &now.ailists);
-    for (gi, g) in b.groups().iter().enumerate() {
-        let Some(oi) = a.find(&g.name) else { continue };
-        let name = g.name.trim().to_string();
-        let mut old = fleet_of(a, oi);
-        let mut added = Vec::new();
-        for (file, e) in fleet_of(b, gi) {
-            match old
-                .iter()
-                .position(|(f, o)| f.eq_ignore_ascii_case(&file) && *o == e)
-            {
-                Some(i) => {
-                    old.remove(i);
-                }
-                None => added.push((file, e)),
-            }
-        }
-        for (file, e) in added {
-            // (the same number in the same list: one bus changed, not two)
-            let same = old.iter().position(|(f, o)| {
-                f.eq_ignore_ascii_case(&file) && o.number.trim() == e.number.trim()
-            });
-            match same {
-                Some(i) => {
-                    old.remove(i);
-                    out.push(Change::BusChanged {
-                        group: name.clone(),
-                        what: bus_name(&e),
-                    });
-                }
-                None => out.push(Change::BusAdded {
-                    group: name.clone(),
-                    what: bus_name(&e),
-                }),
-            }
-        }
-        for (_, e) in old {
-            out.push(Change::BusRemoved {
-                group: name.clone(),
-                what: bus_name(&e),
-            });
-        }
-    }
-    for t in &now.ttls {
-        let Some(before) = saved.ttls.iter().find(|s| s.file == t.file) else {
-            continue;
-        };
-        let line = std::path::Path::new(&t.file)
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        for (n, o) in t.doc.tours().iter().zip(before.doc.tours()) {
-            if n.ai_group != o.ai_group {
-                out.push(Change::TourGroup {
-                    line: line.clone(),
-                    tour: n.number.trim().to_string(),
-                    from: o.ai_group.trim().to_string(),
-                    to: n.ai_group.trim().to_string(),
-                });
-            }
-        }
-    }
-}
-
-/// A window over the tab.
-pub enum Dialog {
-    /// Pick a vehicle to add to group `group`.
-    AddVehicle {
-        group: usize,
-        search: String,
-        /// 0 cars and trucks, 1 buses, 2 all.
-        kind: usize,
-        sel: Option<usize>,
-        weight: f32,
-    },
-    /// The group to move the chosen vehicle to.
-    MoveTo {
-        sel: Option<usize>,
-    },
-    NewGroup {
-        name: String,
-        error: bool,
-    },
-    /// A bus of a depot's fleet, new (`bus` none) or changed: group, fleet list, the fields.
-    Bus(fleet::BusForm),
-    /// The group a tour takes its buses from: the line's file, the tour's place in it.
-    TourGroup {
-        file: String,
-        tour: usize,
-        sel: Option<usize>,
-    },
-    Save,
-    Backups {
-        list: Vec<Backup>,
-        sel: usize,
-    },
-    /// Leave the editing with changes not saved.
-    Leave,
-}
-
-/// The editing of one map's lists.
-pub struct Editor {
-    /// The map's folder (as the AI traffic tab names it) and its name.
-    pub folder: String,
-    pub name: String,
-    pub map_dir: PathBuf,
-    pub now: Lists,
-    pub saved: Lists,
-    pub undo: Vec<Lists>,
-    pub redo: Vec<Lists>,
-    pub group: usize,
-    pub vehicle: Option<usize>,
-    pub park: usize,
-    pub car: Option<usize>,
-    /// The line and tour looked at on the bus tab, and the bus (fleet list, bus) of the group.
-    pub line: usize,
-    pub tour: usize,
-    pub bus: Option<(usize, usize)>,
-    pub dialog: Option<Dialog>,
-    /// The vehicles there are to add, once read.
-    pub vehicles: Option<Vec<VehicleFile>>,
-    pub reading: Option<Receiver<Vec<VehicleFile>>>,
-    /// Whether a file named by the lists is there (by its name in lower case).
-    pub exists: HashMap<String, bool>,
-    /// The vehicles' own names, by file in lower case: from the lists as read, and from the vehicles there
-    /// are to add once read.
-    pub names: HashMap<String, String>,
-}
-
-impl Editor {
-    pub fn dialog_open(&self) -> bool {
-        self.dialog.is_some()
-    }
-
-    pub fn dirty(&self) -> bool {
-        self.now != self.saved
-    }
-
-    /// Change the lists with `f`, kept for Undo when something changed.
-    pub fn act(
-        &mut self,
-        f: impl FnOnce(&mut Lists) -> Result<(), EditError>,
-    ) -> Result<(), EditError> {
-        let before = self.now.clone();
-        f(&mut self.now)?;
-        if self.now != before {
-            self.undo.push(before);
-            self.redo.clear();
-        }
-        Ok(())
-    }
-
-    /// Like [`act`](Self::act) for a timetable line.
-    pub fn act_ttl(
-        &mut self,
-        f: impl FnOnce(&mut Lists) -> Result<(), TtlEditError>,
-    ) -> Result<(), TtlEditError> {
-        let before = self.now.clone();
-        f(&mut self.now)?;
-        if self.now != before {
-            self.undo.push(before);
-            self.redo.clear();
-        }
-        Ok(())
-    }
-
-    pub fn undo(&mut self) {
-        if let Some(prev) = self.undo.pop() {
-            self.redo.push(std::mem::replace(&mut self.now, prev));
-        }
-    }
-
-    pub fn redo(&mut self) {
-        if let Some(next) = self.redo.pop() {
-            self.undo.push(std::mem::replace(&mut self.now, next));
-        }
-    }
-
-    fn exists(&mut self, root: &Path, file: &str) -> bool {
-        *self
-            .exists
-            .entry(file.to_ascii_lowercase())
-            .or_insert_with(|| {
-                omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, &file.replace('\\', "/")))
-            })
-    }
-}
-
 /// The real folder of the map `folder`.
-fn map_dir(l: &Launcher, folder: &str) -> PathBuf {
-    let root = PathBuf::from(l.state.config.root.trim());
+fn map_dir(state: &State, folder: &str) -> PathBuf {
+    let root = PathBuf::from(state.config.root.trim());
     omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&root, "Maps"), folder)
 }
 
 /// Why the lists of the map `folder` cannot be edited now, if they cannot.
-pub fn cannot_edit(l: &Launcher, folder: &str) -> Option<&'static str> {
-    if l.state.in_game() {
+pub fn cannot_edit(state: &State, folder: &str) -> Option<&'static str> {
+    if state.in_game() {
         return Some("The lists cannot be changed while the game runs.");
     }
-    let dir = map_dir(l, folder);
+    let dir = map_dir(state, folder);
     if !dir.is_dir() {
         return Some("This map is inside an archive: its lists cannot be changed here.");
     }
@@ -552,10 +61,10 @@ pub fn cannot_edit(l: &Launcher, folder: &str) -> Option<&'static str> {
 }
 
 /// Start editing the lists of the map `folder` (`name` as it is shown).
-pub fn start(l: &mut Launcher, folder: &str, name: &str) {
-    let dir = map_dir(l, folder);
+pub fn start(f: &mut Frame, view: &mut AiView, folder: &str, name: &str) {
+    let dir = map_dir(f.state, folder);
     let lists = Lists::load(&dir);
-    let a = &mut l.pages.diag.ai;
+    let a = &mut *view;
     let mut names = HashMap::new();
     if let Some((_, _, t)) = a.data.as_ref() {
         for v in t.groups.iter().flat_map(|g| &g.vehicles) {
@@ -587,23 +96,10 @@ pub fn start(l: &mut Launcher, folder: &str, name: &str) {
     });
 }
 
-/// The editor's counts for the car groups and parking lists tabs.
-pub fn counts(e: &Editor) -> (usize, usize) {
-    (
-        e.now
-            .ailists
-            .groups()
-            .iter()
-            .filter(|g| g.kind != GroupKind::Depot)
-            .count(),
-        e.now.parks.len(),
-    )
-}
-
 /// A button that does nothing, drawn quieter, when it is not `enabled`.
 #[allow(clippy::too_many_arguments)]
 fn button(
-    l: &mut Launcher,
+    f: &mut Frame,
     id: &str,
     r: Rect,
     label: &str,
@@ -613,12 +109,12 @@ fn button(
     tip: &str,
 ) -> bool {
     let kind = if enabled { kind } else { ButtonKind::Normal };
-    let clicked = l.ui.button(id, r, label, icon, kind);
+    let clicked = f.ui.button(id, r, label, icon, kind);
     if !enabled {
-        l.ui.p()
+        f.ui.p()
             .rounded(r, omsi_ui::theme::CONTROL_RADIUS, PANEL.alpha(0.6));
     }
-    l.ui.tooltip(r, tip);
+    f.ui.tooltip(r, tip);
     clicked && enabled
 }
 
@@ -648,12 +144,12 @@ fn stepper(ui: &mut Ui, id: &str, r: Rect, value: &str, less: &str, more: &str) 
 }
 
 /// The editing banner over the tabs: what is edited, Undo, Redo, Backups and Done.
-pub fn banner(l: &mut Launcher, r: Rect) {
-    let Some(mut e) = l.pages.diag.ai.edit.take() else {
+pub fn banner(f: &mut Frame, view: &mut AiView, r: Rect) {
+    let Some(mut e) = view.edit.take() else {
         return;
     };
-    l.ui.p().rounded(r, 6.0, WARN.alpha(0.12));
-    l.ui.p().rounded_border(r, 6.0, 1.0, WARN.alpha(0.5));
+    f.ui.p().rounded(r, 6.0, WARN.alpha(0.12));
+    f.ui.p().rounded_border(r, 6.0, 1.0, WARN.alpha(0.5));
     let bw = [96.0, 96.0, 120.0, 140.0];
     let total: f32 = bw.iter().sum::<f32>() + 8.0 * 4.0;
     let text = omsi_ui::tr(
@@ -661,7 +157,7 @@ pub fn banner(l: &mut Launcher, r: Rect) {
     )
     .replace("%{map}", &e.name);
     clipped(
-        &mut l.ui,
+        f.ui,
         &text,
         r.x + 16.0,
         r.y + r.h * 0.5,
@@ -678,11 +174,11 @@ pub fn banner(l: &mut Launcher, r: Rect) {
         b
     };
     let (u, rd, bk, done) = (at(bw[0]), at(bw[1]), at(bw[2]), at(bw[3]));
-    let ctrl = l.ui.input.ctrl;
-    let keys_undo = ctrl && l.ui.input.raw_key == Some(winit::keyboard::KeyCode::KeyZ);
-    let keys_redo = ctrl && l.ui.input.raw_key == Some(winit::keyboard::KeyCode::KeyY);
+    let ctrl = f.ui.input.ctrl;
+    let keys_undo = ctrl && f.ui.input.raw_key == Some(winit::keyboard::KeyCode::KeyZ);
+    let keys_redo = ctrl && f.ui.input.raw_key == Some(winit::keyboard::KeyCode::KeyY);
     if button(
-        l,
+        f,
         "ai-edit:undo",
         u,
         "Undo",
@@ -695,7 +191,7 @@ pub fn banner(l: &mut Launcher, r: Rect) {
         e.undo();
     }
     if button(
-        l,
+        f,
         "ai-edit:redo",
         rd,
         "Redo",
@@ -708,7 +204,7 @@ pub fn banner(l: &mut Launcher, r: Rect) {
         e.redo();
     }
     if button(
-        l,
+        f,
         "ai-edit:backups",
         bk,
         "Backups",
@@ -720,10 +216,10 @@ pub fn banner(l: &mut Launcher, r: Rect) {
         let list = backup::store_of(&e.map_dir)
             .map(|s| backup::list(&s))
             .unwrap_or_default();
-        e.dialog = Some(Dialog::Backups { list, sel: 0 });
+        e.dialog = Some(ListsDialog::Backups { list, sel: 0 });
     }
     if button(
-        l,
+        f,
         "ai-edit:done",
         done,
         "Stop editing",
@@ -733,19 +229,19 @@ pub fn banner(l: &mut Launcher, r: Rect) {
         "Back to looking at the lists. Changes not saved are asked about first.",
     ) {
         if e.dirty() {
-            e.dialog = Some(Dialog::Leave);
+            e.dialog = Some(ListsDialog::Leave);
         } else {
             return;
         }
     }
-    l.pages.diag.ai.edit = Some(e);
+    view.edit = Some(e);
 }
 
 /// The foot of the middle panel: what is not saved yet, the size of `ailists.cfg`, Discard
 /// and Save.
-fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
+fn save_bar(f: &mut Frame, e: &mut Editor, r: Rect) {
     let y = r.bottom() - 50.0;
-    l.ui.p().rect(Rect::new(r.x + 1.0, y, r.w - 2.0, 1.0), LINE);
+    f.ui.p().rect(Rect::new(r.x + 1.0, y, r.w - 2.0, 1.0), LINE);
     let n = changes(&e.saved, &e.now).len();
     let (text, c) = if n == 0 {
         (omsi_ui::tr("No changes").to_string(), MUTED)
@@ -762,7 +258,7 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
     let bw = 110.0;
     let room = r.w - 2.0 * bw - 52.0;
     clipped(
-        &mut l.ui,
+        f.ui,
         &text,
         r.x + 17.0,
         y + 17.0,
@@ -772,7 +268,7 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
         c,
     );
     clipped(
-        &mut l.ui,
+        f.ui,
         &size_text,
         r.x + 17.0,
         y + 35.0,
@@ -781,7 +277,7 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
         Weight::Regular,
         if over { WARN } else { MUTED },
     );
-    l.ui.tooltip(
+    f.ui.tooltip(
         Rect::new(r.x, y, room, 50.0),
         if over {
             "Larger than 16 KB: not recommended except on high-performance computers. Big AI lists slow the game down when it loads and fills the streets."
@@ -791,9 +287,9 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
     );
     let save = Rect::new(r.right() - 16.0 - bw, y + 9.0, bw, 32.0);
     let discard = Rect::new(save.x - 8.0 - bw, y + 9.0, bw, 32.0);
-    let in_game = l.state.in_game();
+    let in_game = f.state.in_game();
     if button(
-        l,
+        f,
         "ai-edit:discard",
         discard,
         "Discard",
@@ -808,7 +304,7 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
         e.redo.clear();
     }
     if button(
-        l,
+        f,
         "ai-edit:save",
         save,
         "Save",
@@ -821,7 +317,7 @@ fn save_bar(l: &mut Launcher, e: &mut Editor, r: Rect) {
             "Shows the changes and the files they go into, then saves them."
         },
     ) {
-        e.dialog = Some(Dialog::Save);
+        e.dialog = Some(ListsDialog::Save);
     }
 }
 
@@ -830,14 +326,14 @@ fn kb(bytes: u64) -> String {
 }
 
 /// The car groups, editable.
-pub fn car_groups(l: &mut Launcher, body: Rect) {
-    let Some(mut e) = l.pages.diag.ai.edit.take() else {
+pub fn car_groups(f: &mut Frame, view: &mut AiView, body: Rect) {
+    let Some(mut e) = view.edit.take() else {
         return;
     };
-    let root = PathBuf::from(l.state.config.root.trim());
+    let root = PathBuf::from(f.state.config.root.trim());
     let (left, mid, right_r) = columns(body);
     let n = e.now.ailists.groups().len();
-    card(&mut l.ui, left, "Groups", Some(&n.to_string()));
+    card(f.ui, left, "Groups", Some(&n.to_string()));
     e.group = keep(e.group, n);
     let all = e.now.ailists.groups().to_vec();
     let mut rows: Vec<(String, String, Status)> = Vec::new();
@@ -851,7 +347,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         rows.push((g.name.trim().to_string(), sub, st));
     }
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-edit-groups", list_r, &rows, e.group) {
+    if let Some(i) = entries(f, "ai-edit-groups", list_r, &rows, e.group) {
         e.group = i;
         e.vehicle = None;
     }
@@ -859,12 +355,12 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     let half = (left.w - 42.0) * 0.5;
     let ng = Rect::new(left.x + 17.0, left.bottom() - 42.0, half, 32.0);
     let rg = Rect::new(ng.right() + 8.0, ng.y, half, 32.0);
-    l.ui.p().rect(
+    f.ui.p().rect(
         Rect::new(left.x + 1.0, left.bottom() - 52.0, left.w - 2.0, 1.0),
         LINE,
     );
     if button(
-        l,
+        f,
         "ai-edit:new-group",
         ng,
         "New group",
@@ -873,7 +369,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         true,
         "Adds an empty group of cars at the end of ailists.cfg.",
     ) {
-        e.dialog = Some(Dialog::NewGroup {
+        e.dialog = Some(ListsDialog::NewGroup {
             name: String::new(),
             error: false,
         });
@@ -885,7 +381,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         .get(e.group)
         .is_some_and(|g| g.kind != GroupKind::Depot && g.vehicles.is_empty());
     if button(
-        l,
+        f,
         "ai-edit:remove-group",
         rg,
         "Remove",
@@ -896,16 +392,16 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     ) {
         let g = e.group;
         if let Err(err) = e.act(|x| x.ailists.remove_group(g)) {
-            l.state.set_status(error_text(&err), true);
+            f.state.set_status(error_text(&err), true);
         } else {
             e.group = e.group.saturating_sub(1);
         }
     }
 
     let Some(g) = e.now.ailists.groups().get(e.group).cloned() else {
-        card(&mut l.ui, mid, "Vehicles", None);
+        card(f.ui, mid, "Vehicles", None);
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no car groups yet. Add one with New group.",
             mid.x + 17.0,
             mid.y + 60.0,
@@ -914,9 +410,9 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
             Weight::Regular,
             MUTED,
         );
-        save_bar(l, &mut e, mid);
-        details(l, right_r, &[]);
-        l.pages.diag.ai.edit = Some(e);
+        save_bar(f, &mut e, mid);
+        details(f, right_r, &[]);
+        view.edit = Some(e);
         return;
     };
     let total: f32 = g.vehicles.iter().map(|v| v.weight.max(0.0)).sum();
@@ -930,9 +426,9 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         many(g.vehicles.len(), "1 vehicle", "%{n} vehicles")
     };
     // the note goes under the title: the buttons take the header's right side
-    card(&mut l.ui, mid, g.name.trim(), None);
+    card(f.ui, mid, g.name.trim(), None);
     clipped(
-        &mut l.ui,
+        f.ui,
         &note,
         mid.x + 17.0,
         mid.y + 46.0,
@@ -943,7 +439,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     );
     if g.kind == GroupKind::Depot {
         clipped(
-            &mut l.ui,
+            f.ui,
             "A depot's buses are in its depot file and fleet lists: they are read only here.",
             mid.x + 17.0,
             mid.y + 60.0,
@@ -952,16 +448,16 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
             Weight::Regular,
             MUTED,
         );
-        save_bar(l, &mut e, mid);
+        save_bar(f, &mut e, mid);
         details(
-            l,
+            f,
             right_r,
             &[
                 ("Group", g.name.trim().to_string()),
                 ("Kind", omsi_ui::tr("Depot").to_string()),
             ],
         );
-        l.pages.diag.ai.edit = Some(e);
+        view.edit = Some(e);
         return;
     }
     // add, move
@@ -969,7 +465,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     let add_r = Rect::new(mid.right() - 16.0 - 2.0 * aw - 8.0, mid.y + 8.0, aw, 30.0);
     let move_r = Rect::new(add_r.right() + 8.0, add_r.y, aw, 30.0);
     if button(
-        l,
+        f,
         "ai-edit:add",
         add_r,
         "Add vehicle",
@@ -978,7 +474,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         true,
         "Picks a car, truck or bus of the installation or of a mod and adds it to this group.",
     ) {
-        e.dialog = Some(Dialog::AddVehicle {
+        e.dialog = Some(ListsDialog::AddVehicle {
             group: e.group,
             search: String::new(),
             kind: 0,
@@ -996,7 +492,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     }
     let vsel = e.vehicle.filter(|&v| v < g.vehicles.len());
     if button(
-        l,
+        f,
         "ai-edit:move",
         move_r,
         "Move to group",
@@ -1005,14 +501,14 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         vsel.is_some(),
         "Moves the chosen vehicle, with its weight, to another group.",
     ) {
-        e.dialog = Some(Dialog::MoveTo { sel: None });
+        e.dialog = Some(ListsDialog::MoveTo { sel: None });
     }
 
     // the vehicles: name and file, weight, chance, take out
     let table_r = Rect::new(mid.x, mid.y + 66.0, mid.w, mid.h - 66.0 - 56.0);
     let heads = [("Vehicle", 0.0), ("Weight", 0.52), ("Chance", 0.7)];
     for (h, at) in heads {
-        l.ui.text_in(
+        f.ui.text_in(
             h,
             Rect::new(
                 table_r.x + 28.0 + (table_r.w - 36.0) * at,
@@ -1037,7 +533,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
     let mut drop: Option<usize> = None;
     let weights = g.kind.has_weights();
     let names = &e.names;
-    l.ui.scroll_area("ai-edit-vehicles", list, &mut |ui, v| {
+    f.ui.scroll_area("ai-edit-vehicles", list, &mut |ui, v| {
         let mut y = v.y;
         let w = v.w - 8.0;
         for (i, veh) in g.vehicles.iter().enumerate() {
@@ -1054,7 +550,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
                 ui.p().rounded(row, 4.0, HOVER_LAYER);
             }
             if !exists[i] {
-                omsi_launcher_ui::kit::dot(ui, v.x + 16.0, y + 22.0, Status::Error);
+                crate::kit::dot(ui, v.x + 16.0, y + 22.0, Status::Error);
             }
             let x0 = v.x + 28.0;
             let cols = w - 36.0;
@@ -1145,14 +641,14 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         let _ = e.act(|x| x.ailists.remove_vehicle(gi, i));
         e.vehicle = None;
     }
-    save_bar(l, &mut e, mid);
+    save_bar(f, &mut e, mid);
 
     // the chosen vehicle (Discard may have taken the group away: a new one, not saved)
     let Some(g) = e.now.ailists.groups().get(gi).cloned() else {
         e.group = 0;
         e.vehicle = None;
-        details(l, right_r, &[]);
-        l.pages.diag.ai.edit = Some(e);
+        details(f, right_r, &[]);
+        view.edit = Some(e);
         return;
     };
     let total: f32 = g.vehicles.iter().map(|v| v.weight.max(0.0)).sum();
@@ -1190,10 +686,10 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
                 .get(&file.to_ascii_lowercase())
                 .cloned()
                 .unwrap_or_default();
-            l.pages.diag.ai.edit = Some(e);
-            let rest = vehicle_view(l, right_r, &file, "", ex);
+            view.edit = Some(e);
+            let rest = vehicle_view(f, view, right_r, &file, "", ex);
             details(
-                l,
+                f,
                 rest,
                 &[
                     ("Vehicle", shown_name(&name, &file)),
@@ -1209,7 +705,7 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
         }
         None => {
             details(
-                l,
+                f,
                 right_r,
                 &[
                     ("Group", g.name.trim().to_string()),
@@ -1219,25 +715,25 @@ pub fn car_groups(l: &mut Launcher, body: Rect) {
             );
         }
     }
-    l.pages.diag.ai.edit = Some(e);
+    view.edit = Some(e);
 }
 
 /// The parking lists, editable.
-pub fn parked(l: &mut Launcher, body: Rect) {
-    let Some(mut e) = l.pages.diag.ai.edit.take() else {
+pub fn parked(f: &mut Frame, view: &mut AiView, body: Rect) {
+    let Some(mut e) = view.edit.take() else {
         return;
     };
-    let root = PathBuf::from(l.state.config.root.trim());
+    let root = PathBuf::from(f.state.config.root.trim());
     let (left, mid, right_r) = columns(body);
     card(
-        &mut l.ui,
+        f.ui,
         left,
         "Parking lists",
         Some(&e.now.parks.len().to_string()),
     );
     if e.now.parks.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "This map has no parking lists.",
             left.x + 17.0,
             left.y + 60.0,
@@ -1246,8 +742,8 @@ pub fn parked(l: &mut Launcher, body: Rect) {
             Weight::Regular,
             MUTED,
         );
-        save_bar(l, &mut e, mid);
-        l.pages.diag.ai.edit = Some(e);
+        save_bar(f, &mut e, mid);
+        view.edit = Some(e);
         return;
     }
     e.park = keep(e.park, e.now.parks.len());
@@ -1261,12 +757,12 @@ pub fn parked(l: &mut Launcher, body: Rect) {
         })
         .collect();
     let list_r = Rect::new(left.x, left.y + 40.0, left.w, left.h - 96.0);
-    if let Some(i) = entries(l, "ai-edit-parks", list_r, &rows, e.park) {
+    if let Some(i) = entries(f, "ai-edit-parks", list_r, &rows, e.park) {
         e.park = i;
         e.car = None;
     }
     foot(
-        l,
+        f,
         left,
         "Each parking space of the map takes a car at random from its list.",
     );
@@ -1275,9 +771,9 @@ pub fn parked(l: &mut Launcher, body: Rect) {
     let cars = e.now.parks[pi].doc.cars();
     let total: usize = cars.iter().map(|c| c.1).sum();
     let title = e.now.parks[pi].file.clone();
-    card(&mut l.ui, mid, &title, None);
+    card(f.ui, mid, &title, None);
     clipped(
-        &mut l.ui,
+        f.ui,
         &many(total, "1 entry", "%{n} entries"),
         mid.x + 17.0,
         mid.y + 46.0,
@@ -1288,7 +784,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
     );
     let add_r = Rect::new(mid.right() - 16.0 - 140.0, mid.y + 8.0, 140.0, 30.0);
     if button(
-        l,
+        f,
         "ai-edit:add-car",
         add_r,
         "Add car",
@@ -1300,15 +796,15 @@ pub fn parked(l: &mut Launcher, body: Rect) {
         let title = omsi_ui::tr("Pick a parked car (.sco)").to_string();
         if let Some(p) = omsi_launcher_lib::pick_file(&title) {
             match content_name(&root, &p) {
-                Some(f) if f.to_ascii_lowercase().ends_with(".sco") => {
-                    if let Err(err) = e.act(|x| x.parks[pi].doc.add(&f)) {
-                        l.state.set_status(error_text(&err), true);
+                Some(name) if name.to_ascii_lowercase().ends_with(".sco") => {
+                    if let Err(err) = e.act(|x| x.parks[pi].doc.add(&name)) {
+                        f.state.set_status(error_text(&err), true);
                     }
                 }
-                Some(_) => l
+                Some(_) => f
                     .state
                     .set_status("A parked car is a scenery object (.sco).", true),
-                None => l.state.set_status(
+                None => f.state.set_status(
                     "The file must be inside the OMSI 2 folder or a mod's folder.",
                     true,
                 ),
@@ -1317,7 +813,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
     }
     let table_r = Rect::new(mid.x, mid.y + 66.0, mid.w, mid.h - 66.0 - 56.0);
     for (h, at) in [("Name", 0.0), ("Listed", 0.52), ("Chance", 0.7)] {
-        l.ui.text_in(
+        f.ui.text_in(
             h,
             Rect::new(
                 table_r.x + 28.0 + (table_r.w - 36.0) * at,
@@ -1337,7 +833,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
     let mut picked = None;
     let mut step: Option<(usize, i32)> = None;
     let mut drop: Option<usize> = None;
-    l.ui.scroll_area("ai-edit-cars", list, &mut |ui, v| {
+    f.ui.scroll_area("ai-edit-cars", list, &mut |ui, v| {
         let mut y = v.y;
         let w = v.w - 8.0;
         for (i, (file, n)) in cars.iter().enumerate() {
@@ -1354,7 +850,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
                 ui.p().rounded(row, 4.0, HOVER_LAYER);
             }
             if !exists[i] {
-                omsi_launcher_ui::kit::dot(ui, v.x + 16.0, y + 22.0, Status::Error);
+                crate::kit::dot(ui, v.x + 16.0, y + 22.0, Status::Error);
             }
             let x0 = v.x + 28.0;
             let cols = w - 36.0;
@@ -1428,14 +924,14 @@ pub fn parked(l: &mut Launcher, body: Rect) {
         let _ = e.act(|x| x.parks[pi].doc.set_count(&f, 0));
         e.car = None;
     }
-    save_bar(l, &mut e, mid);
+    save_bar(f, &mut e, mid);
     let cars = e.now.parks[pi].doc.cars();
     let total: usize = cars.iter().map(|c| c.1).sum();
     match e.car.and_then(|c| cars.get(c).map(|x| (c, x.clone()))) {
         Some((k, (file, n))) => {
             let ex = exists.get(k).copied().unwrap_or(false);
             details(
-                l,
+                f,
                 right_r,
                 &[
                     ("Name", shown_name("", &file)),
@@ -1456,7 +952,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
             );
         }
         None => details(
-            l,
+            f,
             right_r,
             &[
                 ("Entries", total.to_string()),
@@ -1464,7 +960,7 @@ pub fn parked(l: &mut Launcher, body: Rect) {
             ],
         ),
     }
-    l.pages.diag.ai.edit = Some(e);
+    view.edit = Some(e);
 }
 
 /// `p` as a list names it: from the OMSI 2 folder or the content root it is in, with `\`.
@@ -1595,8 +1091,8 @@ fn stamp_now() -> String {
 }
 
 /// The window open over the tab, if any.
-pub fn dialog(l: &mut Launcher) {
-    let Some(mut e) = l.pages.diag.ai.edit.take() else {
+pub fn ai_traffic_dialog(f: &mut Frame, view: &mut AiView) {
+    let Some(mut e) = view.edit.take() else {
         return;
     };
     if let Some(rx) = e.reading.as_ref() {
@@ -1613,29 +1109,31 @@ pub fn dialog(l: &mut Launcher) {
         }
     }
     let Some(d) = e.dialog.take() else {
-        l.pages.diag.ai.edit = Some(e);
+        view.edit = Some(e);
         return;
     };
-    let escape = l.ui.input.keys.contains(&Key::Escape);
+    let escape = f.ui.input.keys.contains(&Key::Escape);
     let keep_open = if escape {
         None
     } else {
         match d {
-            Dialog::AddVehicle {
+            ListsDialog::AddVehicle {
                 group,
                 search,
                 kind,
                 sel,
                 weight,
-            } => add_vehicle(l, &mut e, group, search, kind, sel, weight),
-            Dialog::MoveTo { sel } => move_to(l, &mut e, sel),
-            Dialog::NewGroup { name, error } => new_group(l, &mut e, name, error),
-            Dialog::Bus(form) => fleet::bus_dialog(l, &mut e, form),
-            Dialog::TourGroup { file, tour, sel } => fleet::tour_group(l, &mut e, file, tour, sel),
-            Dialog::Save => save_dialog(l, &mut e),
-            Dialog::Backups { list, sel } => backups(l, &mut e, list, sel),
-            Dialog::Leave => {
-                if leave(l, &mut e) {
+            } => add_vehicle(f, &mut e, group, search, kind, sel, weight),
+            ListsDialog::MoveTo { sel } => move_to(f, &mut e, sel),
+            ListsDialog::NewGroup { name, error } => new_group(f, &mut e, name, error),
+            ListsDialog::Bus(form) => fleet::bus_dialog(f, &mut e, form),
+            ListsDialog::TourGroup { file, tour, sel } => {
+                fleet::tour_group(f, &mut e, file, tour, sel)
+            }
+            ListsDialog::Save => save_dialog(f, view, &mut e),
+            ListsDialog::Backups { list, sel } => backups(f, view, &mut e, list, sel),
+            ListsDialog::Leave => {
+                if leave(f, &mut e) {
                     // (the editing ends)
                     return;
                 }
@@ -1646,18 +1144,18 @@ pub fn dialog(l: &mut Launcher) {
     if e.dialog.is_none() {
         e.dialog = keep_open;
     }
-    l.pages.diag.ai.edit = Some(e);
+    view.edit = Some(e);
 }
 
 fn add_vehicle(
-    l: &mut Launcher,
+    f: &mut Frame,
     e: &mut Editor,
     group: usize,
     mut search: String,
     mut kind: usize,
     mut sel: Option<usize>,
     mut weight: f32,
-) -> Option<Dialog> {
+) -> Option<ListsDialog> {
     let gname = e
         .now
         .ailists
@@ -1666,16 +1164,16 @@ fn add_vehicle(
         .map(|g| g.name.trim().to_string())
         .unwrap_or_default();
     let title = omsi_ui::tr("Add a vehicle to %{g}").replace("%{g}", &gname);
-    let inside = super::start::dialog(
-        l,
+    let inside = dialog(
+        f.ui,
         860.0,
         620.0,
         &title,
         "AI vehicles of Vehicles and of your mods",
     );
-    let (buttons, body) = super::start::dialog_foot(l, inside);
+    let (buttons, body) = dialog_foot(f.ui, inside);
     let sw = body.w - 360.0;
-    l.ui.text_input(
+    f.ui.text_input(
         "ai-edit-search",
         Rect::new(body.x, body.y, sw, 34.0),
         &mut search,
@@ -1683,7 +1181,7 @@ fn add_vehicle(
         Some("search"),
     );
     let seg = Rect::new(body.x + sw + 12.0, body.y, body.w - sw - 12.0, 34.0);
-    if l.ui.segmented(
+    if f.ui.segmented(
         "ai-edit-kind",
         seg,
         &mut kind,
@@ -1691,7 +1189,7 @@ fn add_vehicle(
     ) {
         sel = None;
     }
-    l.ui.tooltip(
+    f.ui.tooltip(
         seg,
         "Cars and trucks are .ovh files, buses .bus files; a group may hold both.",
     );
@@ -1715,7 +1213,7 @@ fn add_vehicle(
         }
         None => {
             clipped(
-                &mut l.ui,
+                f.ui,
                 "Looking for the vehicles…",
                 list_r.x,
                 list_r.y + 16.0,
@@ -1729,7 +1227,7 @@ fn add_vehicle(
     };
     if e.vehicles.as_ref().is_some_and(|_| shown.is_empty()) {
         clipped(
-            &mut l.ui,
+            f.ui,
             "No vehicle matches.",
             list_r.x,
             list_r.y + 16.0,
@@ -1744,7 +1242,7 @@ fn add_vehicle(
         .map(|v| (shown_name(&v.name, &v.file), v.file.clone(), Status::Found))
         .collect();
     let s = sel.filter(|&i| i < rows.len()).unwrap_or(usize::MAX);
-    if let Some(i) = entries(l, "ai-edit-pick", list_r, &rows, s) {
+    if let Some(i) = entries(f, "ai-edit-pick", list_r, &rows, s) {
         sel = Some(i);
     }
 
@@ -1756,7 +1254,7 @@ fn add_vehicle(
         .get(group)
         .is_some_and(|g| g.kind.has_weights());
     if weights {
-        l.ui.text_in(
+        f.ui.text_in(
             "Weight",
             Rect::new(buttons.x, buttons.y, 70.0, buttons.h),
             13.0,
@@ -1765,7 +1263,7 @@ fn add_vehicle(
             Align::Left,
         );
         let d = stepper(
-            &mut l.ui,
+            f.ui,
             "ai-edit-new-w",
             Rect::new(buttons.x + 70.0, buttons.y + 3.0, 110.0, 28.0),
             &weight_text(weight),
@@ -1777,7 +1275,7 @@ fn add_vehicle(
     let add_r = Rect::new(buttons.right() - 180.0, buttons.y, 180.0, buttons.h);
     let cancel_r = Rect::new(add_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:pick-cancel",
         cancel_r,
         "Cancel",
@@ -1790,7 +1288,7 @@ fn add_vehicle(
     }
     let chosen = sel.and_then(|i| shown.get(i)).map(|v| v.file.clone());
     if button(
-        l,
+        f,
         "ai-edit:pick-add",
         add_r,
         "Add to the group",
@@ -1799,8 +1297,8 @@ fn add_vehicle(
         chosen.is_some(),
         "Adds the chosen vehicle at the end of the group.",
     ) {
-        if let Some(f) = chosen {
-            match e.act(|x| x.ailists.add_vehicle(group, &f, weight)) {
+        if let Some(file) = chosen {
+            match e.act(|x| x.ailists.add_vehicle(group, &file, weight)) {
                 Ok(()) => {
                     e.group = group;
                     e.vehicle = e
@@ -1811,11 +1309,11 @@ fn add_vehicle(
                         .map(|g| g.vehicles.len().saturating_sub(1));
                     return None;
                 }
-                Err(err) => l.state.set_status(error_text(&err), true),
+                Err(err) => f.state.set_status(error_text(&err), true),
             }
         }
     }
-    Some(Dialog::AddVehicle {
+    Some(ListsDialog::AddVehicle {
         group,
         search,
         kind,
@@ -1824,12 +1322,12 @@ fn add_vehicle(
     })
 }
 
-fn move_to(l: &mut Launcher, e: &mut Editor, mut sel: Option<usize>) -> Option<Dialog> {
+fn move_to(f: &mut Frame, e: &mut Editor, mut sel: Option<usize>) -> Option<ListsDialog> {
     let (g, v) = (e.group, e.vehicle?);
     let file = e.now.ailists.groups().get(g)?.vehicles.get(v)?.file.clone();
     let title = omsi_ui::tr("Move %{v} to").replace("%{v}", &shown_name("", &file));
-    let inside = super::start::dialog(l, 520.0, 520.0, &title, "");
-    let (buttons, body) = super::start::dialog_foot(l, inside);
+    let inside = dialog(f.ui, 520.0, 520.0, &title, "");
+    let (buttons, body) = dialog_foot(f.ui, inside);
     let targets: Vec<usize> = e
         .now
         .ailists
@@ -1852,7 +1350,7 @@ fn move_to(l: &mut Launcher, e: &mut Editor, mut sel: Option<usize>) -> Option<D
         .collect();
     if rows.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "There is no other car group. Add one with New group.",
             body.x,
             body.y + 16.0,
@@ -1863,13 +1361,13 @@ fn move_to(l: &mut Launcher, e: &mut Editor, mut sel: Option<usize>) -> Option<D
         );
     }
     let s = sel.filter(|&i| i < rows.len()).unwrap_or(usize::MAX);
-    if let Some(i) = entries(l, "ai-edit-move", body, &rows, s) {
+    if let Some(i) = entries(f, "ai-edit-move", body, &rows, s) {
         sel = Some(i);
     }
     let ok_r = Rect::new(buttons.right() - 140.0, buttons.y, 140.0, buttons.h);
     let cancel_r = Rect::new(ok_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:move-cancel",
         cancel_r,
         "Cancel",
@@ -1882,7 +1380,7 @@ fn move_to(l: &mut Launcher, e: &mut Editor, mut sel: Option<usize>) -> Option<D
     }
     let to = sel.and_then(|i| targets.get(i).copied());
     if button(
-        l,
+        f,
         "ai-edit:move-ok",
         ok_r,
         "Move",
@@ -1903,22 +1401,22 @@ fn move_to(l: &mut Launcher, e: &mut Editor, mut sel: Option<usize>) -> Option<D
                         .map(|x| x.vehicles.len().saturating_sub(1));
                     return None;
                 }
-                Err(err) => l.state.set_status(error_text(&err), true),
+                Err(err) => f.state.set_status(error_text(&err), true),
             }
         }
     }
-    Some(Dialog::MoveTo { sel })
+    Some(ListsDialog::MoveTo { sel })
 }
 
 fn new_group(
-    l: &mut Launcher,
+    f: &mut Frame,
     e: &mut Editor,
     mut name: String,
     mut error: bool,
-) -> Option<Dialog> {
-    let inside = super::start::dialog(l, 520.0, 250.0, "New group", "ailists.cfg");
-    let (buttons, body) = super::start::dialog_foot(l, inside);
-    if l.ui.text_input(
+) -> Option<ListsDialog> {
+    let inside = dialog(f.ui, 520.0, 250.0, "New group", "ailists.cfg");
+    let (buttons, body) = dialog_foot(f.ui, inside);
+    if f.ui.text_input(
         "ai-edit-group-name",
         Rect::new(body.x, body.y, body.w, 34.0),
         &mut name,
@@ -1932,7 +1430,7 @@ fn new_group(
     } else {
         "The new group is empty; add vehicles to it next. The random traffic uses it once unsched_vehgroups.txt names it."
     };
-    l.ui.paragraph(
+    f.ui.paragraph(
         note,
         glam::Vec2::new(body.x, body.y + 46.0),
         body.w,
@@ -1943,7 +1441,7 @@ fn new_group(
     let ok_r = Rect::new(buttons.right() - 140.0, buttons.y, 140.0, buttons.h);
     let cancel_r = Rect::new(ok_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:group-cancel",
         cancel_r,
         "Cancel",
@@ -1954,9 +1452,9 @@ fn new_group(
     ) {
         return None;
     }
-    let enter = l.ui.input.keys.contains(&Key::Enter);
+    let enter = f.ui.input.keys.contains(&Key::Enter);
     if button(
-        l,
+        f,
         "ai-edit:group-ok",
         ok_r,
         "Add group",
@@ -1974,22 +1472,22 @@ fn new_group(
                 return None;
             }
             Err(EditError::Exists) => error = true,
-            Err(err) => l.state.set_status(error_text(&err), true),
+            Err(err) => f.state.set_status(error_text(&err), true),
         }
     }
-    Some(Dialog::NewGroup { name, error })
+    Some(ListsDialog::NewGroup { name, error })
 }
 
-fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
+fn save_dialog(f: &mut Frame, view: &mut AiView, e: &mut Editor) -> Option<ListsDialog> {
     let list = changes(&e.saved, &e.now);
     let files = e.now.to_write(&e.saved);
     let store = backup::store_of(&e.map_dir);
-    let inside = super::start::dialog(l, 860.0, 600.0, "Save the changes?", &e.name);
-    let (buttons, body) = super::start::dialog_foot(l, inside);
+    let inside = dialog(f.ui, 860.0, 600.0, "Save the changes?", &e.name);
+    let (buttons, body) = dialog_foot(f.ui, inside);
     // the changes
     let head = Rect::new(body.x, body.y, body.w, 26.0);
-    l.ui.text_in("Where", head, 12.0, Weight::Regular, MUTED, Align::Left);
-    l.ui.text_in(
+    f.ui.text_in("Where", head, 12.0, Weight::Regular, MUTED, Align::Left);
+    f.ui.text_in(
         "Change",
         Rect::new(body.x + 180.0, body.y, body.w - 180.0, 26.0),
         12.0,
@@ -2007,7 +1505,7 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
         (body.h - 28.0 - tail).max(60.0),
     );
     let rows: Vec<(String, String, Color)> = list.iter().map(change_row).collect();
-    l.ui.scroll_area("ai-edit-changes", rows_r, &mut |ui, v| {
+    f.ui.scroll_area("ai-edit-changes", rows_r, &mut |ui, v| {
         let mut y = v.y;
         for (place, what, c) in &rows {
             ui.p().rect(Rect::new(v.x, y, v.w, 1.0), LINE);
@@ -2048,8 +1546,8 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
         })
         .unwrap_or_default();
     for (k, v) in [("Writes", written.join(", ")), ("Copy kept in", copy)] {
-        l.ui.p().rect(Rect::new(body.x, y, body.w, 1.0), LINE);
-        l.ui.text_in(
+        f.ui.p().rect(Rect::new(body.x, y, body.w, 1.0), LINE);
+        f.ui.text_in(
             k,
             Rect::new(body.x, y, 170.0, 34.0),
             12.5,
@@ -2057,20 +1555,20 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
             MUTED,
             Align::Left,
         );
-        l.ui.text_in_as_is(
+        f.ui.text_in_as_is(
             &v,
             Rect::new(body.x + 180.0, y, body.w - 180.0, 34.0),
             12.5,
             Weight::Regular,
             FG,
         );
-        l.ui.tooltip(Rect::new(body.x, y, body.w, 34.0), &v);
+        f.ui.tooltip(Rect::new(body.x, y, body.w, 34.0), &v);
         y += 36.0;
     }
     if over {
         let t = omsi_ui::tr("ailists.cfg will be %{s} KB: larger than 16 KB is not recommended except on high-performance computers.")
             .replace("%{s}", &kb(size));
-        l.ui.paragraph(
+        f.ui.paragraph(
             &t,
             glam::Vec2::new(body.x, y + 6.0),
             body.w,
@@ -2080,7 +1578,7 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
         );
         y += 40.0;
     }
-    l.ui.paragraph(
+    f.ui.paragraph(
         "Comments, order, blank lines and the file's text encoding stay as they are. Put a copy back at any time with Backups. The game must not be running.",
         glam::Vec2::new(body.x, y + 6.0),
         body.w,
@@ -2091,7 +1589,7 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
     let ok_r = Rect::new(buttons.right() - 120.0, buttons.y, 120.0, buttons.h);
     let back_r = Rect::new(ok_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:save-back",
         back_r,
         "Back",
@@ -2102,9 +1600,9 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
     ) {
         return None;
     }
-    let in_game = l.state.in_game();
+    let in_game = f.state.in_game();
     if button(
-        l,
+        f,
         "ai-edit:save-ok",
         ok_r,
         "Save",
@@ -2129,12 +1627,12 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
                 e.saved = e.now.clone();
                 e.exists.clear();
                 // the tab reads the map again
-                l.pages.diag.ai.data = None;
-                l.state.set_status("The AI lists were saved.", false);
+                view.data = None;
+                f.state.set_status("The AI lists were saved.", false);
             }
             Err(err) => {
                 log::warn!("saving the AI lists of {}: {err}", e.map_dir.display());
-                l.state.set_status(
+                f.state.set_status(
                     "The AI lists could not be saved: nothing was changed.",
                     true,
                 );
@@ -2142,15 +1640,21 @@ fn save_dialog(l: &mut Launcher, e: &mut Editor) -> Option<Dialog> {
         }
         return None;
     }
-    Some(Dialog::Save)
+    Some(ListsDialog::Save)
 }
 
-fn backups(l: &mut Launcher, e: &mut Editor, list: Vec<Backup>, mut sel: usize) -> Option<Dialog> {
-    let inside = super::start::dialog(l, 760.0, 560.0, "Backups", &e.name);
-    let (buttons, body) = super::start::dialog_foot(l, inside);
+fn backups(
+    f: &mut Frame,
+    view: &mut AiView,
+    e: &mut Editor,
+    list: Vec<Backup>,
+    mut sel: usize,
+) -> Option<ListsDialog> {
+    let inside = dialog(f.ui, 760.0, 560.0, "Backups", &e.name);
+    let (buttons, body) = dialog_foot(f.ui, inside);
     if list.is_empty() {
         clipped(
-            &mut l.ui,
+            f.ui,
             "No copy kept yet: one is made at each save.",
             body.x,
             body.y + 16.0,
@@ -2179,10 +1683,10 @@ fn backups(l: &mut Launcher, e: &mut Editor, list: Vec<Backup>, mut sel: usize) 
         .collect();
     sel = keep(sel, rows.len());
     let list_r = Rect::new(body.x, body.y, body.w, body.h - 40.0);
-    if let Some(i) = entries(l, "ai-edit-backups", list_r, &rows, sel) {
+    if let Some(i) = entries(f, "ai-edit-backups", list_r, &rows, sel) {
         sel = i;
     }
-    l.ui.paragraph(
+    f.ui.paragraph(
         "Putting a copy back writes its files over the map's and takes out the files that save made; what is there now is copied first.",
         glam::Vec2::new(body.x, body.bottom() - 32.0),
         body.w,
@@ -2193,7 +1697,7 @@ fn backups(l: &mut Launcher, e: &mut Editor, list: Vec<Backup>, mut sel: usize) 
     let ok_r = Rect::new(buttons.right() - 160.0, buttons.y, 160.0, buttons.h);
     let close_r = Rect::new(ok_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:backups-close",
         close_r,
         "Close",
@@ -2204,10 +1708,10 @@ fn backups(l: &mut Launcher, e: &mut Editor, list: Vec<Backup>, mut sel: usize) 
     ) {
         return None;
     }
-    let in_game = l.state.in_game();
+    let in_game = f.state.in_game();
     let dirty = e.dirty();
     if button(
-        l,
+        f,
         "ai-edit:restore",
         ok_r,
         "Put it back",
@@ -2231,26 +1735,26 @@ fn backups(l: &mut Launcher, e: &mut Editor, list: Vec<Backup>, mut sel: usize) 
                     e.undo.clear();
                     e.redo.clear();
                     e.exists.clear();
-                    l.pages.diag.ai.data = None;
-                    l.state.set_status("The copy was put back.", false);
+                    view.data = None;
+                    f.state.set_status("The copy was put back.", false);
                 }
                 Err(err) => {
                     log::warn!("restoring {}: {err}", b.dir.display());
-                    l.state.set_status("The copy could not be put back.", true);
+                    f.state.set_status("The copy could not be put back.", true);
                 }
             }
         }
         return None;
     }
-    Some(Dialog::Backups { list, sel })
+    Some(ListsDialog::Backups { list, sel })
 }
 
 /// Leave with changes not saved: true when the editing ends.
-fn leave(l: &mut Launcher, e: &mut Editor) -> bool {
-    let inside = super::start::dialog(l, 520.0, 220.0, "Leave without saving?", &e.name);
-    let (buttons, body) = super::start::dialog_foot(l, inside);
+fn leave(f: &mut Frame, e: &mut Editor) -> bool {
+    let inside = dialog(f.ui, 520.0, 220.0, "Leave without saving?", &e.name);
+    let (buttons, body) = dialog_foot(f.ui, inside);
     let n = changes(&e.saved, &e.now).len();
-    l.ui.paragraph(
+    f.ui.paragraph(
         &many(
             n,
             "1 change is not saved. It is lost when you stop editing now.",
@@ -2265,7 +1769,7 @@ fn leave(l: &mut Launcher, e: &mut Editor) -> bool {
     let ok_r = Rect::new(buttons.right() - 170.0, buttons.y, 170.0, buttons.h);
     let back_r = Rect::new(ok_r.x - 118.0, buttons.y, 110.0, buttons.h);
     if button(
-        l,
+        f,
         "ai-edit:leave-back",
         back_r,
         "Back",
@@ -2278,7 +1782,7 @@ fn leave(l: &mut Launcher, e: &mut Editor) -> bool {
         return false;
     }
     if button(
-        l,
+        f,
         "ai-edit:leave-ok",
         ok_r,
         "Discard changes",
@@ -2289,6 +1793,6 @@ fn leave(l: &mut Launcher, e: &mut Editor) -> bool {
     ) {
         return true;
     }
-    e.dialog = Some(Dialog::Leave);
+    e.dialog = Some(ListsDialog::Leave);
     false
 }

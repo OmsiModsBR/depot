@@ -938,8 +938,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // not inherit occlusion belonging to geometry on the far side of the window.
     // (nor any other blended surface: a van's translucent door showed the shade of what
     // stood behind it)
-    if (glass || mode > 1.5) {
+    // (a decal - a text texture, a sticker - lying on an opaque surface takes that
+    // surface's, see `ao_on_decal`)
+    if (glass) {
         ao = 1.0;
+    } else if (mode > 1.5) {
+        ao = select(1.0, ao_on_decal(in.clip.xy, in.world), camera.clouds.w > 0.5 && !capture);
     }
     ao = ao * pbr_ao;
     let fr = f_schlick(f0, nv);

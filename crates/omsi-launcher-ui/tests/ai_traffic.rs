@@ -1,4 +1,4 @@
-use openomsi_game::testing::launcher::ai_traffic::*;
+use omsi_launcher_ui::window::*;
 
 #[test]
 fn chart_steps_and_numbers_read_well() {

@@ -64,31 +64,8 @@ const CLICK_SLOP: f32 = 5.0;
 /// for the whole map to be thinned again on every notch.
 const ZOOM_SETTLE: std::time::Duration = std::time::Duration::from_millis(140);
 
-/// What the map should show. Changing `map` reads the tiles again; changing `trip` only walks
-/// the timetable; changing `entry` only moves the ring.
-#[derive(Clone, PartialEq, Debug, Default)]
-pub struct Look {
-    /// The map as the launcher names it (`maps/<name>/global.cfg`), and where that is.
-    pub map: String,
-    pub global: PathBuf,
-    /// The date the duty starts on (the chrono folders change the map and the timetable).
-    pub date: String,
-    /// The trip whose route is drawn (empty: the map alone).
-    pub trip: String,
-    /// The entry point the player picked, -1 = automatic (nothing is ringed).
-    pub entry: i32,
-}
-
-/// One frame of the mouse over the map. `blocked` is what a panel or a field over it takes.
-#[derive(Clone, Copy, Default)]
-pub struct Pointer {
-    pub at: Vec2,
-    pub pressed: bool,
-    pub released: bool,
-    pub down: bool,
-    pub wheel: f32,
-    pub blocked: bool,
-}
+/// What the map should show, and the mouse over it (see `omsi_launcher_ui::window::Map`).
+pub use omsi_launcher_ui::window::{MapLook as Look, Pointer};
 
 /// An entry point as the map draws it: where its marker stands, its name, and its own place
 /// in `global.cfg`'s list. That place - not its place among the drawn markers - is what the
