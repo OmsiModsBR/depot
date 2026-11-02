@@ -11,6 +11,7 @@ pub(crate) mod modules;
 pub(crate) mod overview;
 pub(crate) mod profile;
 pub(crate) mod root;
+pub(crate) mod settings;
 pub(crate) mod setup;
 pub(crate) mod showroom;
 pub(crate) mod timetable;
