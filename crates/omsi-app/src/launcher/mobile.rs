@@ -18,7 +18,7 @@ use winit::event::{Touch, TouchPhase};
 /// Width of the rail of icons on a phone.
 pub const RAIL_W_MOBILE: f32 = 64.0;
 /// The height the pages are laid out for on a phone (they scroll within the screen).
-pub const PAGE_H: f32 = 700.0;
+pub use omsi_launcher_ui::window::PAGE_H;
 /// How far a finger moves (interface points) before a touch is a drag, not a tap.
 const SLOP: f32 = 9.0;
 

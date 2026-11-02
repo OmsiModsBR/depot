@@ -10,6 +10,7 @@ pub(crate) mod map;
 pub(crate) mod modules;
 pub(crate) mod overview;
 pub(crate) mod pads;
+pub(crate) mod phone;
 pub(crate) mod profile;
 pub(crate) mod root;
 pub(crate) mod settings;

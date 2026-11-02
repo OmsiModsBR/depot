@@ -1,10 +1,12 @@
-//! The game's side of the Drive page's bus (`omsi_launcher_ui::window::Showroom`): the bus
-//! preview (`crate::showroom`), and its picture as the window last drew it.
+//! The game's side of the pages' bus (`omsi_launcher_ui::window::Showroom`), the Drive page's and
+//! the phone's Play screen's: the bus preview (`crate::showroom`), and its picture as the window
+//! last drew it.
 
 use crate::showroom::Preview;
+use glam::Vec2;
 use omsi_launcher_ui::window::Showroom;
 use omsi_ui::paint::Align;
-use omsi_ui::theme::{FIELD, RADIUS, TEXT_DIM, TEXT_FAINT};
+use omsi_ui::theme::{FIELD, RADIUS, TEXT_DIM, TEXT_FAINT, TEXT_SOFT};
 use omsi_ui::widgets::Ui;
 use omsi_ui::{Rect, Weight};
 
@@ -53,6 +55,36 @@ impl Showroom for GameShowroom<'_> {
                 .zoom_by((1.0 - ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
         }
         ui.cursor = winit::window::CursorIcon::Grab;
+    }
+
+    fn card(&mut self, ui: &mut Ui, r: Rect) {
+        *self.rect = Some(r);
+        ui.solid(r);
+        ui.p().rounded(r, RADIUS, FIELD);
+        match (self.tex, self.preview.has_picture()) {
+            (Some(tex), true) => ui.image_cover(r, tex, self.preview.aspect, 1.0),
+            _ => {
+                let t = if self.preview.error.is_some() {
+                    "No preview"
+                } else {
+                    "Loading…"
+                };
+                ui.text_in(t, r, 13.0, Weight::Regular, TEXT_FAINT, Align::Center);
+            }
+        }
+        if self.preview.busy && self.preview.has_picture() {
+            let c = Vec2::new(r.right() - 16.0, r.y + 16.0);
+            let a = ui.time * 5.0;
+            ui.p().arc(c, 6.0, 8.0, a, a + 4.2, TEXT_SOFT);
+        }
+        badge(ui, self.preview, r);
+        if ui.hover(r) && ui.input.wheel.y.abs() > 0.0 {
+            self.preview
+                .zoom_by((1.0 - ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
+        }
+        if ui.hover(r) {
+            ui.cursor = winit::window::CursorIcon::Grab;
+        }
     }
 }
 

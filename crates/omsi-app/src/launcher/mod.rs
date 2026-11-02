@@ -39,7 +39,6 @@ mod stage;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::state::crash_of;
-pub(crate) use omsi_launcher_ui::state::days_text;
 pub(crate) mod dialogs;
 mod theme;
 pub(crate) mod thumbs;
@@ -162,7 +161,7 @@ pub struct Launcher {
     page_anim: f32,
     pub drive: window::DriveView,
     /// The launcher made for a phone (see `phone`).
-    pub phone: phone::PhoneView,
+    pub phone: window::PhoneView,
     pub pages: pages::PagesView,
     /// The Vehicles and Maps pages (`omsi_launcher_ui`).
     pub vehicles: omsi_launcher_ui::vehicles::VehiclesView,
@@ -275,7 +274,7 @@ impl Launcher {
             page: Page::Drive,
             page_anim: 1.0,
             drive: window::DriveView::default(),
-            phone: phone::PhoneView::default(),
+            phone: window::PhoneView::default(),
             pages: pages::PagesView::default(),
             vehicles: Default::default(),
             maps: Default::default(),
@@ -360,12 +359,12 @@ impl Launcher {
             }
             // (`OMSI_LAUNCHER_PAGE=more`, `=sheet-bus` …: the phone's More, or one of its sheets)
             match p.as_str() {
-                "more" => app.phone.tab = phone::Tab::More,
-                "sheet-map" => app.phone.sheet = Some(phone::Sheet::Map),
-                "sheet-bus" => app.phone.sheet = Some(phone::Sheet::Bus),
-                "sheet-duty" => app.phone.sheet = Some(phone::Sheet::Duty),
-                "sheet-time" => app.phone.sheet = Some(phone::Sheet::Time),
-                "sheet-livery" => app.phone.sheet = Some(phone::Sheet::Livery),
+                "more" => app.phone.tab = window::Tab::More,
+                "sheet-map" => app.phone.sheet = Some(window::Sheet::Map),
+                "sheet-bus" => app.phone.sheet = Some(window::Sheet::Bus),
+                "sheet-duty" => app.phone.sheet = Some(window::Sheet::Duty),
+                "sheet-time" => app.phone.sheet = Some(window::Sheet::Time),
+                "sheet-livery" => app.phone.sheet = Some(window::Sheet::Livery),
                 _ => {}
             }
             // (the Maps page's windows: maps:start-point, maps:weather, maps:explore)
@@ -1699,8 +1698,8 @@ impl Launcher {
         // a phone: the launcher made for it, not the desktop's pages
         if mobile {
             if self.page == Page::Setup && !self.root_ok() && self.phone.page.is_none() {
-                self.phone.tab = phone::Tab::More;
-                self.phone.page = Some(Page::Setup);
+                self.phone.tab = window::Tab::More;
+                self.phone.page = Some(UiPage::Setup);
             }
             phone::draw(self);
         } else {
@@ -1885,34 +1884,12 @@ impl Launcher {
     /// The bus preview in `r`: the game's picture of it, or a word while it loads. The mouse
     /// dragged on it turns the bus, the wheel zooms.
     pub fn preview(&mut self, r: Rect) {
-        self.preview_rect = Some(r);
-        self.ui.solid(r);
-        self.ui.p().rounded(r, RADIUS, FIELD);
-        match (self.preview_tex, self.preview.has_picture()) {
-            (Some(tex), true) => self.ui.image_cover(r, tex, self.preview.aspect, 1.0),
-            _ => {
-                let t = if self.preview.error.is_some() {
-                    "No preview"
-                } else {
-                    "Loading…"
-                };
-                self.ui
-                    .text_in(t, r, 13.0, Weight::Regular, TEXT_FAINT, Align::Center);
-            }
-        }
-        if self.preview.busy && self.preview.has_picture() {
-            let c = Vec2::new(r.right() - 16.0, r.y + 16.0);
-            let a = self.ui.time * 5.0;
-            self.ui.p().arc(c, 6.0, 8.0, a, a + 4.2, TEXT_SOFT);
-        }
-        self.preview_badge(r);
-        if self.ui.hover(r) && self.ui.input.wheel.y.abs() > 0.0 {
-            self.preview
-                .zoom_by((1.0 - self.ui.input.wheel.y * 0.08).clamp(0.8, 1.25));
-        }
-        if self.ui.hover(r) {
-            self.ui.cursor = winit::window::CursorIcon::Grab;
-        }
+        let mut room = stage::GameShowroom {
+            preview: &mut self.preview,
+            tex: self.preview_tex,
+            rect: &mut self.preview_rect,
+        };
+        window::Showroom::card(&mut room, &mut self.ui, r);
     }
 
     /// The Timetable page in `area`, over the launcher's map.
@@ -1923,11 +1900,6 @@ impl Launcher {
             rect: &mut self.map_rect,
         };
         window::timetable(frame!(self), &mut self.pages.tt, &mut map, area);
-    }
-
-    /// Where the preview's picture comes from, in the lower left of `r` (see `stage::badge`).
-    fn preview_badge(&mut self, r: Rect) {
-        stage::badge(&mut self.ui, &self.preview, r);
     }
 
     /// The start panel's window open over the Maps page (start points, weather, the map to
@@ -1976,20 +1948,20 @@ impl Launcher {
             self.page_scroll = 0.0;
             self.phone.page = match p {
                 Page::Drive => {
-                    self.phone.tab = phone::Tab::Play;
+                    self.phone.tab = window::Tab::Play;
                     None
                 }
                 Page::Multiplayer => {
-                    self.phone.tab = phone::Tab::Online;
+                    self.phone.tab = window::Tab::Online;
                     None
                 }
                 Page::Mods => {
-                    self.phone.tab = phone::Tab::Mods;
+                    self.phone.tab = window::Tab::Mods;
                     None
                 }
                 other => {
-                    self.phone.tab = phone::Tab::More;
-                    Some(other)
+                    self.phone.tab = window::Tab::More;
+                    other.shown()
                 }
             };
             match p {

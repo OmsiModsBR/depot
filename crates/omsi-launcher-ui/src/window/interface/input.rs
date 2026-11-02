@@ -10,6 +10,7 @@ pub use super::super::domain::map::*;
 pub use super::super::domain::modules::Asks;
 pub use super::super::domain::overview::*;
 pub use super::super::domain::pads::*;
+pub use super::super::domain::phone::*;
 pub use super::super::domain::profile::*;
 pub use super::super::domain::root::*;
 pub use super::super::domain::settings::*;
@@ -37,6 +38,9 @@ pub use super::super::implementation::omsi2_plugins::plugins_card;
 pub use super::super::implementation::overview::*;
 pub use super::super::implementation::pads::{
     feedback_setup, read_only as pads_read_only, tab as pads_tab,
+};
+pub use super::super::implementation::phone::{
+    foot as phone_foot, phone, status as phone_toast, PAGE_H,
 };
 pub use super::super::implementation::profile::*;
 pub use super::super::implementation::settings::{reset_dialog, section_body, settings};

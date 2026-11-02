@@ -1,6 +1,6 @@
-//! The bus the Drive page shows behind its panels: the game draws it (a picture kept from an
-//! earlier time, or a helper's live one), so the page asks it through `Showroom`, which the game
-//! implements.
+//! The bus the Drive page shows behind its panels, and a page in a card (the phone's Play screen):
+//! the game draws it (a picture kept from an earlier time, or a helper's live one), so the page
+//! asks it through `Showroom`, which the game implements.
 
 use super::super::interface::output::Ui;
 use omsi_ui::Rect;
@@ -12,4 +12,7 @@ pub trait Showroom {
     fn full(&mut self, ui: &mut Ui, r: Rect, focus: f32);
     /// The wheel and the cursor over the bus, once the panels have had the mouse.
     fn pointer(&mut self, ui: &mut Ui, r: Rect);
+    /// The bus in a card `r` of a page (the phone's Play screen, the Diagnostics overview): the
+    /// mouse dragged on it turns the bus, the wheel zooms.
+    fn card(&mut self, ui: &mut Ui, r: Rect);
 }
