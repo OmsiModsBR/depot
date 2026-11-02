@@ -325,6 +325,19 @@ impl Renderer {
         self.render_image(scene, width, height, camera, lighting, None)
     }
 
+    /// Like `render_to_image`, but the picture holds the scene alone: no HUD overlays and
+    /// nothing from the overlay hook (a player's screenshot). Both are kept for the next frame.
+    pub fn render_scene_to_image(
+        &mut self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+        camera: &Camera,
+        lighting: &Lighting,
+    ) -> Result<Vec<u8>> {
+        self.render_image_with(scene, width, height, camera, lighting, None, false)
+    }
+
     /// Capture all three physical screen projections, including the shared HUD.
     pub fn render_triple_to_image(
         &mut self,

@@ -504,6 +504,10 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "sun_glow" => s.sun_glow,
         "dx9_snow" => s.dx9_snow,
         "fewer_night_lights" => s.fewer_night_lights,
+        "dx9_glass_rain" => s.dx9_glass_rain,
+        "dx9_coronas" => s.dx9_coronas,
+        "dx9_stars" => s.dx9_stars,
+        "dx9_cloud_picture" => s.dx9_cloud_picture,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
         "texture_compression" => s.texture_compression,
@@ -797,6 +801,22 @@ pub(in crate::hud) fn toggle_set(
         "fewer_night_lights" => {
             app.settings.fewer_night_lights = on;
             Some(("fewer_night_lights", bit))
+        }
+        "dx9_glass_rain" => {
+            app.settings.dx9_glass_rain = on;
+            Some(("dx9_glass_rain", bit))
+        }
+        "dx9_coronas" => {
+            app.settings.dx9_coronas = on;
+            Some(("dx9_coronas", bit))
+        }
+        "dx9_stars" => {
+            app.settings.dx9_stars = on;
+            Some(("dx9_stars", bit))
+        }
+        "dx9_cloud_picture" => {
+            app.settings.dx9_cloud_picture = on;
+            Some(("dx9_cloud_picture", bit))
         }
         "fullscreen" => {
             app.settings.fullscreen = on;

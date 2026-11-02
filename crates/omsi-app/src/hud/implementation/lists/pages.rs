@@ -70,6 +70,10 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "graphics", "Graphics", || pick("graphics", "Graphics", later)),
         limit_or(app, "msaa", "Anti-aliasing", || pick("msaa", "Anti-aliasing", later)),
         limit_or(app, "render_scale", "Render scale", || pick("render_scale", "Render scale", later)),
+        // (DirectX9 only, and only while a scale below 100 % is chosen)
+        (app.output.backend() == crate::output::Backend::D3d9 && s.dx9_render_scale() > 0.0)
+            .then(|| pick("dx9_upscale", "Upscaling", "How the smaller picture is scaled up to the window's size"))
+            .flatten(),
         limit_or(app, "anisotropy", "Anisotropic", || pick("anisotropy", "Anisotropic", later)),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
         // (under "DirectX9 (D3D9Ex)" the `api_limits` table hides or locks these: `limit_or`)
@@ -90,6 +94,11 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         // (DirectX9 only: the other APIs draw their own snowfall)
         (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
         (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "fewer_night_lights", "Fewer night lights", "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2")).flatten(),
+        // (DirectX9 only, our own ways to ease its work)
+        switch_row(app, "dx9_glass_rain", "Raindrops on glass", "Drops gather on the panes in the rain").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_coronas", "Light coronas", "The glow round lamps and headlights").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_stars", "Stars", "The points of light in the night sky").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        switch_row(app, "dx9_cloud_picture", "Cloud picture", "The clouds drawn over the sky; their light on the scene stays").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
     ]
         .into_iter()
         .flatten()
@@ -187,6 +196,9 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
                 pick("mirror_size", "Mirrors", later)
             }),
             pick("texture_memory", "Texture memory", later),
+            (app.output.backend() == crate::output::Backend::D3d9)
+                .then(|| pick("dx9_texture_limit", "Texture size limit", later))
+                .flatten(),
             switch_row(
                 app,
                 "texture_compression",
