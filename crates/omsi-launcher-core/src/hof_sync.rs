@@ -7,7 +7,8 @@
 //! The OMSI 2 folder is never written to. A vehicle that lives there gets a folder of the
 //! same path in the Depot's own content folder (the overlay) holding only the synced files;
 //! the game merges both folders of a vehicle when it loads (`omsi_cfg::mirrored_dirs`), and
-//! the overlay's file is the one that takes effect. Nothing is deleted, a file that is the
+//! the overlay's file is the one that takes effect. "Newer" is the files' modified time: a
+//! file restored from an archive with an old date, or a changed clock, flips the outcome. Nothing is deleted, a file that is the
 //! same already (in the overlay or in the vehicle's own folder) is left alone, and running
 //! the sync again changes nothing.
 
@@ -44,6 +45,10 @@ pub struct Summary {
     /// Files left alone because the bus's own file in another folder differs and is newer than
     /// the source (a bus's own, newer depot file is never overridden by the root's).
     pub own_newer: usize,
+    /// Of those, the bus has a newer own file but an older Depot copy from an earlier run is
+    /// still in the overlay and, read first, still takes effect: the sync deletes nothing, so
+    /// it only counts them (remove that copy by hand to let the bus's file win).
+    pub stale_overlay: usize,
     /// The overlay folders where a file was written (created or replaced).
     pub changed: Vec<PathBuf>,
     /// The vehicle folders (by name, as the vehicle list has them) of the vehicles whose
@@ -54,8 +59,8 @@ pub struct Summary {
 impl Summary {
     pub fn line(&self) -> String {
         format!(
-            "hof sync: {} depot file(s) for {} vehicle folder(s): {} created, {} updated, {} already there, {} kept, {} left to a newer bus file, {} failed",
-            self.sources, self.vehicles, self.created, self.updated, self.identical, self.kept, self.own_newer, self.failed
+            "hof sync: {} depot file(s) for {} vehicle folder(s): {} created, {} updated, {} already there, {} kept, {} left to a newer bus file ({} of them with an older Depot copy still in the overlay), {} failed",
+            self.sources, self.vehicles, self.created, self.updated, self.identical, self.kept, self.own_newer, self.stale_overlay, self.failed
         ) + &self.failures.iter().map(|f| format!("; failed: {f}")).collect::<String>()
     }
 }
@@ -180,7 +185,8 @@ fn holds_vehicle(dir: &Path) -> bool {
 /// Nothing is deleted or lost: a file the vehicle has already (byte for byte) is skipped; a
 /// differing file of the same name in the overlay is replaced only when the source is newer,
 /// never in a folder that holds a vehicle (a mod's own files), and the file it replaces is
-/// kept beside it as `<name>.hof.bak`. A bus's own differing file in its other folders is
+/// kept beside it as `<name>.hof.bak` (the first one replaced only; later replacements do
+/// not refresh it). A bus's own differing file in its other folders is
 /// not touched, and when it is newer than the source nothing is put beside it (the bus's
 /// newer file wins); when it is older, the overlay copy is put beside it and, the game
 /// reading the overlay first, takes effect.
@@ -213,6 +219,9 @@ pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
             // (the bus's own file, when it is newer than the root's, is the one that stays)
             if others.iter().any(|p| newer(p, src)) {
                 sum.own_newer += 1;
+                if in_overlay.is_some() {
+                    sum.stale_overlay += 1;
+                }
                 continue;
             }
             let replacing = in_overlay.is_some();
@@ -256,4 +265,15 @@ pub fn sync(sources: &[PathBuf], vehicles: &[VehicleDir]) -> Summary {
         }
     }
     sum
+}
+
+/// The vehicle folders (by name) whose overlay folder got a file: the only ones read again.
+pub fn affected_folders(changed: &[PathBuf], overlay_folder: &[(PathBuf, String)]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (overlay, folder) in overlay_folder {
+        if changed.contains(overlay) && !out.contains(folder) {
+            out.push(folder.clone());
+        }
+    }
+    out
 }

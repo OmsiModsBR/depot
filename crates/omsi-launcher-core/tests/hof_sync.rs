@@ -270,3 +270,40 @@ fn an_older_bus_file_is_overridden_and_only_that_folder_is_listed_as_changed() {
         "same"
     );
 }
+
+#[test]
+fn a_stale_overlay_copy_under_a_newer_bus_file_is_counted_not_deleted() {
+    let omsi = tmp("stale-omsi");
+    let depot = tmp("stale-depot");
+    let src = tmp("stale-src");
+    put(&src.join("hof/Map.hof"), "root");
+    put(&depot.join("Vehicles/Bus/Map.hof"), "earlier overlay copy");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    put(&omsi.join("Vehicles/Bus/Map.hof"), "the bus's newer own");
+    let s = sync(
+        &source_files(&[src]),
+        &[VehicleDir {
+            overlay: depot.join("Vehicles/Bus"),
+            existing: vec![omsi.join("Vehicles/Bus")],
+        }],
+    );
+    assert_eq!((s.own_newer, s.stale_overlay, s.updated), (1, 1, 0));
+    assert!(depot.join("Vehicles/Bus/Map.hof").exists());
+    assert!(s.line().contains("1 of them"));
+}
+
+#[test]
+fn only_the_folders_that_got_a_file_are_read_again() {
+    let (a, b, c) = (
+        PathBuf::from("/d/A"),
+        PathBuf::from("/d/B"),
+        PathBuf::from("/d/C"),
+    );
+    let map = vec![
+        (a.clone(), "A".to_string()),
+        (b.clone(), "B".to_string()),
+        (c.clone(), "B".to_string()),
+    ];
+    assert_eq!(affected_folders(&[c, a], &map), ["A", "B"]);
+    assert!(affected_folders(&[], &map).is_empty());
+}

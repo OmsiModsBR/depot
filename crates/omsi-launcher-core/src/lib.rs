@@ -1367,11 +1367,7 @@ pub fn auto_sync_hofs(vehicles: &[VehicleInfo]) -> Option<hof_sync::Summary> {
         .collect();
     let mut sum = hof_sync::sync(&sources, &dirs);
     // (only the vehicles whose folder got a file are read again)
-    for (overlay, folder) in &overlay_folder {
-        if sum.changed.contains(overlay) && !sum.folders.contains(folder) {
-            sum.folders.push(folder.clone());
-        }
-    }
+    sum.folders = hof_sync::affected_folders(&sum.changed, &overlay_folder);
     let note = if refused > 0 {
         format!(" ({refused} folder(s) refused: they lead into the OMSI 2 folder)")
     } else {
