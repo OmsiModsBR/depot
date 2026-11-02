@@ -150,7 +150,6 @@ pub fn plan_pieces(total: usize, max_bytes: usize) -> Vec<std::ops::Range<usize>
 pub struct Plan {
     pub key: Key,
     pub verts: Vec<Vertex>,
-    pub count: u32,
     pub uploaded: bool,
 }
 
@@ -195,8 +194,8 @@ pub struct MapView {
     hover: Option<usize>,
     pub clicked: Option<usize>,
 
-    /// The plan and the markers (the markers' buffer and the plan's pieces); the markers are built every frame, the
-    /// plan only when its key changes.
+    /// The plan and the markers (the markers' buffer and the plan's pieces); the
+    /// markers are built every frame, the plan only when its key changes.
     pub plan: Option<Plan>,
     gpu: Option<Gpu>,
     target: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
@@ -758,7 +757,6 @@ impl MapView {
             self.plan = Some(Plan {
                 key,
                 verts,
-                count,
                 uploaded: false,
             });
         }
@@ -1229,6 +1227,7 @@ mod plan_piece_tests {
             at = r.end;
             let bytes = (r.end - r.start) * std::mem::size_of::<Vertex>();
             // (the GPU buffer is made at the next power of two)
+            assert!(bytes <= MAX_PLAN_BUFFER_BYTES);
             assert!(bytes.next_power_of_two() <= 256 * 1024 * 1024);
             if r.end != total {
                 assert_eq!((r.end - r.start) % 3, 0, "cuts fall between triangles");
@@ -1241,5 +1240,8 @@ mod plan_piece_tests {
     fn a_small_plan_stays_whole_and_an_empty_one_has_no_pieces() {
         assert_eq!(plan_pieces(300, MAX_PLAN_BUFFER_BYTES), vec![0..300]);
         assert!(plan_pieces(0, MAX_PLAN_BUFFER_BYTES).is_empty());
+        let per = MAX_PLAN_BUFFER_BYTES / std::mem::size_of::<Vertex>() / 3 * 3;
+        assert_eq!(plan_pieces(per, MAX_PLAN_BUFFER_BYTES).len(), 1);
+        assert_eq!(plan_pieces(per + 3, MAX_PLAN_BUFFER_BYTES).len(), 2);
     }
 }
