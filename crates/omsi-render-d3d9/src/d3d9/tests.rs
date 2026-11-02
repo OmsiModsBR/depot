@@ -339,7 +339,7 @@ fn window_device() -> Option<D3d9Device> {
 }
 
 #[test]
-fn the_open_window_frame_is_captured_and_never_shown() {
+fn the_open_window_frame_is_captured_and_closed() {
     let Some(mut dev) = window_device() else {
         return;
     };
@@ -348,7 +348,8 @@ fn the_open_window_frame_is_captured_and_never_shown() {
         dev.begin_frame(&frame([1., 0., 0., 1.])).unwrap();
         let (w, h, px) = dev.capture_window_frame().unwrap();
         assert_eq!(px.len(), (w * h * 4) as usize);
-        assert!(w > 0 && h > 0);
+        assert_eq!((w, h), dev.window_size);
+        eprintln!("capture at {}x multisampling", dev.msaa.1);
         // (opaque red, whatever the back buffer's alpha says)
         assert!(
             all_near(&px, [255, 0, 0, 255], 1),

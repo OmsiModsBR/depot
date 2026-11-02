@@ -691,6 +691,13 @@ impl D3d9Device {
         format: D3DFORMAT,
         opaque: bool,
     ) -> Result<Vec<u8>> {
+        // (rows are read as four bytes a pixel: any other format would run past them)
+        if format != D3DFMT_X8R8G8B8 && format != D3DFMT_A8R8G8B8 {
+            return Err(BackendError::Backend(format!(
+                "back buffer format {} is not 32-bit",
+                format.0
+            )));
+        }
         // SAFETY: as in `upload_texture`, reading instead of writing.
         unsafe {
             let mut sysmem = None;

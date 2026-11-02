@@ -3365,7 +3365,11 @@ impl ApplicationHandler for App {
                         // shown)
                         let drawn = match self.output.capture_window() {
                             Some(Ok(picture)) => Ok(picture),
-                            Some(Err(e)) => Err(e),
+                            // (the renderer's own error says more than a missing frame)
+                            Some(Err(e)) => match drawn {
+                                Err(own) => Err(own),
+                                Ok(_) => Err(e),
+                            },
                             None => drawn.map(|px| (s.config.width, s.config.height, px)),
                         };
                         match drawn {
