@@ -2963,7 +2963,7 @@ fn group_card(ui: &mut Ui, r: Rect, title: &str, rows: &[&Opt], st: &mut Store) 
 
 /// What the texture memory row says in place of its hint when the chosen amount is more than
 /// the graphics adapter holds (the game then takes it down, see `memory::texture_budget`):
-/// DirectX9 sees little of the card's memory, so the default can be above it.
+/// DirectX9 sees little of the card's memory, so a chosen amount can be above it.
 fn texture_notice(o: &Opt, st: &Store) -> Option<String> {
     if !matches!(o.kind, Kind::TexMem) {
         return None;

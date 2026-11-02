@@ -7,8 +7,8 @@ use super::state::Renderer;
 use crate::assets::RT_BUFFERS;
 use crate::gpu::{
     basic_pipelines, dedicated_vram_mb, fallback_load, fallback_store, gpu_error_text,
-    vulkan_vram_mb, ArrayPath, ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, ARRAY_PATH, BASIC_PIPELINES,
-    DEPTH_FORMAT, GL_BACKEND, MASK_FORMAT, MSAA,
+    note_adapter, vulkan_vram_mb, ArrayPath, ARRAY_PATH, BASIC_PIPELINES, DEPTH_FORMAT, GL_BACKEND,
+    MASK_FORMAT, MSAA,
 };
 use anyhow::{anyhow, Context, Result};
 
@@ -36,42 +36,8 @@ impl Renderer {
             ),
             _ => {}
         }
-        // What the textures may take on this adapter (wgpu does not tell a card's memory):
-        // a discrete card is taken for one of 2-4 GB, whose rest the pictures (the render
-        // targets, the shadow maps) and the driver need; an integrated one shares the
-        // system's memory, Apple's generously
+        note_adapter(&adapter);
         let vram = dedicated_vram_mb(&info).or_else(|| vulkan_vram_mb(&adapter));
-        let guess_mb: u64 = match info.device_type {
-            // (a card of 2 or 3 GB, where Windows says: half of it - 1600 MB of a GTX 1050's
-            // 2 GB left too little for the rest, and its Vulkan device was lost at the start;
-            // a card of 2 GB a third of it - with half, 4x MSAA, SSAO and the shadows its
-            // DirectX 12 device still ran out of memory on Grundorf within seconds, #114)
-            wgpu::DeviceType::DiscreteGpu => vram.filter(|v| *v >= 512).map_or(1600, |v| {
-                if v <= 2560 {
-                    v * 35 / 100
-                } else if v <= 6144 {
-                    (v / 2).min(1600)
-                } else {
-                    v * 3 / 10
-                }
-            }),
-            wgpu::DeviceType::IntegratedGpu if info.backend == wgpu::Backend::Metal => 3000,
-            wgpu::DeviceType::IntegratedGpu | wgpu::DeviceType::VirtualGpu => 1000,
-            _ => 800,
-        };
-        ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
-        let discrete_vram = vram
-            .filter(|_| info.device_type == wgpu::DeviceType::DiscreteGpu)
-            .unwrap_or(0);
-        ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
-        log::info!(
-            "graphics adapter: {} ({:?}, {:?}{}), texture memory taken for it: {guess_mb} MB",
-            info.name,
-            info.device_type,
-            info.backend,
-            vram.map(|v| format!(", {v} MB of its own"))
-                .unwrap_or_default()
-        );
         // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
         // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
         // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
