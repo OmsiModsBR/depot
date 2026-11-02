@@ -27,7 +27,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Graphics (Vanilla+ and Enhanced)
 
-- **Fixed.** Text drawn by the bus itself (`[useTextTexture]`: destination signs, route boards behind the windscreen, fleet numbers, number plates) and other blended layers printed on a surface (stickers) now take the ambient occlusion of the surface they lie on. Before, the letters stayed bright where the sign around them lay in the shade, for example under the dashboard's edge. Only a layer within about a centimetre of the opaque surface behind it (more at a distance) takes it; panes, translucent doors and named glass still take none, so the shade of what stands behind them does not show on them. Vanilla, the D3D9 renderer and the sun's shadow are unchanged. Checked by an automated GPU test (lavapipe) only; **not yet looked at in the game**. (#PR)
+- **Fixed.** Text drawn by the bus itself (`[useTextTexture]`: destination signs, route boards behind the windscreen, fleet numbers, number plates) and other blended layers printed on a surface (stickers) now take the ambient occlusion of the surface they lie on. Before, the letters stayed bright where the sign around them lay in the shade, for example under the dashboard's edge. Only a layer within about a centimetre of the opaque surface behind it (more at a distance) takes it; panes, translucent doors and named glass still take none, so the shade of what stands behind them does not show on them. Vanilla, the D3D9 renderer and the sun's shadow are unchanged. Checked by an automated GPU test (lavapipe) only; **not yet looked at in the game**. (#630)
 
 ### DirectX 9 renderer (D3D9Ex)
 
