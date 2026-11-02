@@ -31,6 +31,7 @@ pub(crate) mod host;
 pub(crate) mod map;
 pub(crate) mod mapview;
 pub mod mobile;
+mod pads;
 pub(crate) mod pages;
 pub mod phone;
 pub(crate) mod prerender;
@@ -48,7 +49,6 @@ pub(crate) mod ui;
 use crate::showroom;
 use glam::Vec2;
 use omsi_launcher_lib as core;
-use omsi_launcher_ui::omsi2_map;
 use omsi_launcher_ui::picture::MapPicture;
 use omsi_launcher_ui::window;
 use omsi_launcher_ui::Page as UiPage;
@@ -488,7 +488,7 @@ impl Launcher {
     /// launcher's window).
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     pub fn release_window(&mut self) -> Option<Arc<Window>> {
-        self.pages.pads.release_io();
+        self.pages.release_io();
         self.surface = None;
         self.drop_gpu();
         if let Some(h) = self.gpu_rest_drop.take() {
@@ -558,7 +558,7 @@ impl ApplicationHandler for Launcher {
         event: DeviceEvent,
     ) {
         if matches!(event, DeviceEvent::Added | DeviceEvent::Removed) {
-            if let Some(io) = self.pages.pads.io.as_ref() {
+            if let Some(io) = self.pages.pad_io.as_ref() {
                 io.refresh();
             }
         }
@@ -657,7 +657,7 @@ impl ApplicationHandler for Launcher {
             WindowEvent::Occluded(o) => {
                 self.occluded = o;
                 if o {
-                    self.pages.pads.cancel_feedback_test();
+                    self.pages.cancel_feedback_test();
                 } else if self.gfx.is_none() {
                     // Back in view without a graphics device (a game just ended, or the
                     // window was covered while resting): draw again so the device is opened
@@ -913,7 +913,7 @@ impl Launcher {
     /// The launcher ends: the window's close button, or the tray's Quit (the games keep
     /// running).
     fn quit(&mut self, event_loop: &ActiveEventLoop) {
-        self.pages.pads.cancel_feedback_test();
+        self.pages.cancel_feedback_test();
         // (the icon leaves the tray before the process ends)
         self.tray = None;
         event_loop.exit();
@@ -1114,7 +1114,7 @@ impl Launcher {
             omsi_ui::theme::set_motion(windows_motion());
         }
         if !f {
-            self.pages.pads.cancel_feedback_test();
+            self.pages.cancel_feedback_test();
             self.modifiers.release_keys();
             self.modifiers.apply(&mut self.ui.input);
         }
@@ -1206,7 +1206,7 @@ impl Launcher {
             });
             // The Controls page may still own the same DirectInput wheel non-exclusively.
             // Drop it before the child asks for exclusive foreground access for force feedback.
-            self.pages.pads.release_io();
+            self.pages.release_io();
             self.state.spawn_launch(d);
         }
     }
@@ -1260,7 +1260,7 @@ impl Launcher {
         self.ui.begin(size, scale, dt);
         self.draw_ui();
         if own_frame && self.chrome_after(&window, size) {
-            self.pages.pads.cancel_feedback_test();
+            self.pages.cancel_feedback_test();
             event_loop.exit();
         }
         if mobile::mobile() {
@@ -1652,7 +1652,7 @@ impl Launcher {
                 == Some("square"),
         );
         if self.page != Page::Controls || self.pages.controls_tab != 1 {
-            self.pages.pads.cancel_feedback_test();
+            self.pages.cancel_feedback_test();
         }
         let size = self.ui.size;
         let mobile = mobile::mobile();
@@ -1675,7 +1675,7 @@ impl Launcher {
         // (and the integrity report's export over Diagnostics)
         let diag = !mobile && self.page == Page::Diagnostics && self.pages.diag.dialog_open();
         if self.browser.is_some() || crash || reset || disconnected {
-            self.pages.pads.cancel_feedback_test();
+            self.pages.cancel_feedback_test();
         }
         let saved = (self.browser.is_some()
             || crash
@@ -1821,6 +1821,7 @@ impl Launcher {
                 window::keyboard_dialog(frame!(self), &mut self.pages.kb);
                 if std::mem::take(&mut self.pages.kb.pads_read) {
                     self.pages.pads = Default::default();
+                    self.pages.pad_io = None;
                 }
             } else if self.browser.is_none() && diag {
                 diagnostics::dialog(self);

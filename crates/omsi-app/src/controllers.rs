@@ -22,6 +22,11 @@ use gilrs::{Axis, EventType, Gilrs};
 pub(crate) use omsi_content::input::gamectrler::{
     axis_shape, write as save_cfg_to, DeviceCfg, Func, AXIS_SHAPES,
 };
+// (the launcher's Controls page shows them too: the device connected now and how a name in
+// the file is matched to one live in the launcher's library)
+pub use omsi_launcher_lib::controllers::{
+    find_connected, names_match, normalized_device_name, Connected, HAT_BUTTONS,
+};
 use std::path::Path;
 
 /// The `gamectrler.cfg` in use: the content folder's (written by the launcher) before
@@ -177,26 +182,6 @@ pub fn wheel_steering(
     let steering = shaped.signum() * ((shaped.abs() - deadzone).max(0.0) / (1.0 - deadzone)) * gain;
     (steering.clamp(-1.0, 1.0), position.clamp(-1.0, 1.0))
 }
-
-/// A device connected now: its name, its axes (DirectInput slot, -1..1), whether the system
-/// knows it as a gamepad (a known layout of sticks and triggers), and whether it can push
-/// back (force feedback).
-#[derive(Debug, Clone)]
-pub struct Connected {
-    pub name: String,
-    pub hardware_id: Option<(u16, u16)>,
-    pub axes: Vec<(usize, f32)>,
-    pub gamepad: bool,
-    pub ff: bool,
-    /// The hardware advertises FFB, even when this window has not created an effect.
-    pub ff_capable: bool,
-    /// How many buttons it has (0: the system does not say).
-    pub buttons: usize,
-}
-
-/// The first button number of the hat switches' directions (4 hats x up, right, down, left).
-#[cfg_attr(not(windows), allow(dead_code))]
-pub const HAT_BUTTONS: usize = 128;
 
 /// The devices of every kind: gilrs (gamepads everywhere; on macOS and Linux every device),
 /// and on Windows DirectInput for everything a gamepad is not (`crate::dinput`) - many wheels
@@ -1952,31 +1937,6 @@ pub fn di_slots(axes: &[(u32, f32)]) -> Vec<(usize, f32)> {
         }
     }
     out
-}
-
-/// OMSI stores DirectInput's product name; the system's may differ in spacing and case.
-fn normalized_device_name(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect()
-}
-
-pub fn names_match(a: &str, b: &str) -> bool {
-    // (letters of any script: a name of Cyrillic or Chinese letters only was empty here and
-    // matched nothing)
-    let (a, b) = (normalized_device_name(a), normalized_device_name(b));
-    !a.is_empty() && (a == b || a.contains(&b) || b.contains(&a))
-}
-
-/// The connected device this name is set up as - its exact name first: an Xbox-type pad's
-/// gilrs lists too, as a plain "Controller" with no axis or button at all (see
-/// `mac_game_controller`), and that name is a substring of (so fuzzy-matches) this device's.
-pub(crate) fn find_connected<'a>(connected: &'a [Connected], name: &str) -> Option<&'a Connected> {
-    connected
-        .iter()
-        .find(|c| c.name == name)
-        .or_else(|| connected.iter().find(|c| names_match(&c.name, name)))
 }
 
 /// An exact device name wins over a shorter alias elsewhere in the same OMSI file.

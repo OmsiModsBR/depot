@@ -4,14 +4,13 @@
 /// reset of every view among them (#1167).
 #[test]
 fn a_button_can_reset_every_view() {
-    assert!(openomsi_game::testing::launcher::pages::PAD_GAME_ACTIONS
-        .contains(&"view_reset_all_directions"));
-    assert!(openomsi_game::testing::launcher::pages::PAD_GAME_ACTIONS.contains(&"voice_radio"));
+    assert!(omsi_launcher_ui::window::PAD_GAME_ACTIONS.contains(&"view_reset_all_directions"));
+    assert!(omsi_launcher_ui::window::PAD_GAME_ACTIONS.contains(&"voice_radio"));
     assert_eq!(
         openomsi_game::testing::launcher::pages::known_action("voice_radio").as_deref(),
         Some("Multiplayer: bus radio (hold)")
     );
-    for a in openomsi_game::testing::launcher::pages::PAD_GAME_ACTIONS {
+    for a in omsi_launcher_ui::window::PAD_GAME_ACTIONS {
         let held = a.starts_with("view_look_") || a == "voice_radio";
         let handled = held
             || openomsi_game::testing::actions::is_game_action(a)
@@ -26,4 +25,16 @@ fn a_button_can_reset_every_view() {
     assert!(openomsi_game::testing::actions::is_game_action(
         "view_look_left"
     ));
+}
+
+#[test]
+fn h_pattern_gears_have_a_clear_name() {
+    assert_eq!(
+        openomsi_game::testing::launcher::pages::known_action("kw_s_1_fest").as_deref(),
+        Some("Gear 1 (H-pattern)")
+    );
+    assert_eq!(
+        openomsi_game::testing::launcher::pages::known_action("kw_s_R_fest").as_deref(),
+        Some("Gear R (H-pattern)")
+    );
 }

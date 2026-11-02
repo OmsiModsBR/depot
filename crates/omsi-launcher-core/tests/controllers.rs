@@ -1,4 +1,7 @@
-use openomsi_game::testing::ffb_calibration::*;
+//! The force feedback direction test (`omsi_launcher_lib::controllers::Calibration`): two
+//! short opposite pulses, and what the wheel did after each.
+
+use omsi_launcher_lib::controllers::*;
 
 fn response(first: f32, second: f32) -> Option<Result<bool, &'static str>> {
     let mut c = Calibration::new(PULSE_FORCE);

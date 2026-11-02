@@ -13,6 +13,7 @@ pub(crate) mod mods;
 pub(crate) mod omsi2_modules;
 pub(crate) mod omsi2_plugins;
 pub(crate) mod overview;
+pub(crate) mod pads;
 pub(crate) mod profile;
 pub(crate) mod settings;
 pub(crate) mod setup;
