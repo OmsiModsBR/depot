@@ -5,15 +5,21 @@ use omsi_devtools_proto::{
 };
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Write};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
+
+/// A thread of the link that panicked must not take the game's frame thread with it.
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Snapshots waiting for a slow launcher. Past this the oldest is folded into the next one.
 pub const MAX_PENDING_SNAPSHOTS: usize = 8;
 /// Other messages (applied or rejected commands) waiting to be sent, and commands waiting to
 /// be read. Past this the newest is dropped and counted.
 pub const MAX_PENDING_CONTROL: usize = 256;
-/// Events one snapshot may carry. Folding past this drops the oldest events and counts them.
+/// Events a snapshot may carry once snapshots are folded (a snapshot sent while the queue has
+/// room goes as it is). Folding past this drops the oldest events and counts them.
 pub const MAX_EVENTS_PER_SNAPSHOT: usize = 1024;
 
 /// What the link had to throw away because the launcher or the tool was behind. Every count
@@ -55,19 +61,20 @@ struct Shared {
     wake: Condvar,
     inbox: Mutex<VecDeque<Command>>,
     state: state::Cell,
+    shutdown: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 impl Shared {
     /// A state change the writer must not miss: made under the queue lock, which the writer
     /// holds between looking at the state and waiting.
     fn change(&self, f: impl FnOnce(&state::Cell)) {
-        let q = self.q.lock().unwrap();
+        let q = lock(&self.q);
         f(&self.state);
         drop(q);
         self.wake.notify_all();
     }
     fn close(&self) {
-        let mut q = self.q.lock().unwrap();
+        let mut q = lock(&self.q);
         q.closed = true;
         self.state.close();
         drop(q);
@@ -76,7 +83,10 @@ impl Shared {
 }
 
 /// The game's end of the link. Every call returns without waiting for the launcher or the
-/// stream, and holds a lock only for a queue push or a drain.
+/// stream, and holds a lock only for a queue push or a drain. Messages of one kind keep their
+/// order, but control messages (`Applied`, `Rejected`) go ahead of waiting snapshots, so an
+/// `Applied { frame: N }` can arrive before the snapshots of frames before N. Queues are
+/// bounded by count (a snapshot or command is at most one frame, 1 MiB).
 pub struct GameLink {
     shared: Arc<Shared>,
 }
@@ -97,6 +107,7 @@ impl GameLink {
             wake: Condvar::new(),
             inbox: Mutex::new(VecDeque::new()),
             state: state::Cell::new(),
+            shutdown: Mutex::new(None),
         });
         let hello = Hello {
             protocol: PROTOCOL_VERSION,
@@ -119,6 +130,14 @@ impl GameLink {
         self.shared.state.get()
     }
 
+    /// What to run when this end is dropped: the caller closes its stream there (for a socket,
+    /// `shutdown` on it), which is what lets the other side see the end of the link and the
+    /// reader thread end. The link cannot do it itself because it only holds the two halves
+    /// as `Read` and `Write`. Queued messages are not flushed on drop.
+    pub fn on_drop(&self, f: impl FnOnce() + Send + 'static) {
+        *lock(&self.shared.shutdown) = Some(Box::new(f));
+    }
+
     fn live(&self) -> bool {
         !matches!(self.state(), LinkState::Refused | LinkState::Closed)
     }
@@ -131,7 +150,7 @@ impl GameLink {
         if !self.live() {
             return;
         }
-        let mut q = self.shared.q.lock().unwrap();
+        let mut q = lock(&self.shared.q);
         if q.snapshots.len() >= MAX_PENDING_SNAPSHOTS {
             if let Some(old) = q.snapshots.pop_front() {
                 q.folded += 1;
@@ -161,7 +180,7 @@ impl GameLink {
         if !self.live() {
             return;
         }
-        let pushed = self.shared.q.lock().unwrap().push_control(msg);
+        let pushed = lock(&self.shared.q).push_control(msg);
         if pushed {
             self.shared.wake.notify_one();
         }
@@ -172,7 +191,7 @@ impl GameLink {
     /// command that fails is answered with `Rejected` and left out. The game applies the rest
     /// at the start of its frame.
     pub fn poll_commands(&self, reload_files: u32) -> Vec<Command> {
-        let taken: Vec<Command> = self.shared.inbox.lock().unwrap().drain(..).collect();
+        let taken: Vec<Command> = lock(&self.shared.inbox).drain(..).collect();
         let mut ok = Vec::with_capacity(taken.len());
         for c in taken {
             match validate_command(&c, reload_files) {
@@ -185,19 +204,22 @@ impl GameLink {
 
     /// Snapshots folded into a later one because the launcher was behind.
     pub fn folded_snapshots(&self) -> u64 {
-        self.shared.q.lock().unwrap().folded
+        lock(&self.shared.q).folded
     }
 
     /// What was thrown away so far.
     pub fn lost(&self) -> Lost {
-        self.shared.q.lock().unwrap().lost
+        lock(&self.shared.q).lost
     }
 }
 
 impl Drop for GameLink {
     fn drop(&mut self) {
-        // (the writer ends now; the reader ends with the stream)
+        // (the writer ends now; the reader ends with the stream, see `on_drop`)
         self.shared.close();
+        if let Some(f) = lock(&self.shared.shutdown).take() {
+            f();
+        }
     }
 }
 
@@ -231,7 +253,7 @@ fn write_loop<W: Write>(s: Arc<Shared>, mut w: W, hello: Hello) {
     }
     loop {
         let msg = {
-            let mut q = s.q.lock().unwrap();
+            let mut q = lock(&s.q);
             loop {
                 if q.closed {
                     return;
@@ -256,7 +278,7 @@ fn write_loop<W: Write>(s: Arc<Shared>, mut w: W, hello: Hello) {
             Ok(()) => {}
             // one message too big for a frame is left out and counted; the link stays up
             Err(LinkError::Frame(FrameError::TooLong(_))) => {
-                s.q.lock().unwrap().lost.oversized += 1;
+                lock(&s.q).lost.oversized += 1;
             }
             Err(_) => {
                 s.close();
@@ -269,6 +291,11 @@ fn write_loop<W: Write>(s: Arc<Shared>, mut w: W, hello: Hello) {
 fn read_loop<R: Read>(s: Arc<Shared>, mut r: R) {
     match io::read_frame::<ToGame, _>(&mut r) {
         Ok(ToGame::Hello(h)) if check_hello(&h).is_ok() => s.change(|c| c.ready()),
+        // the stream ended inside the first frame
+        Err(LinkError::Frame(FrameError::Incomplete)) => {
+            s.close();
+            return;
+        }
         // another version, or a first message that is not a hello
         Ok(_) | Err(LinkError::Frame(_)) => {
             s.change(|c| c.refuse());
@@ -286,11 +313,20 @@ fn read_loop<R: Read>(s: Arc<Shared>, mut r: R) {
             return;
         }
         match m {
+            // a command whose shape is wrong (a path-like name, a huge text) is answered now
+            // and never held (`poll_commands` checks the file index, which needs the game)
+            Ok(ToGame::Command(c)) if validate_command(&c, u32::MAX).is_err() => {
+                let reason = validate_command(&c, u32::MAX).unwrap_err().to_string();
+                let mut q = lock(&s.q);
+                q.push_control(ToLauncher::Rejected { reason });
+                drop(q);
+                s.wake.notify_one();
+            }
             Ok(ToGame::Command(c)) => {
-                let mut inbox = s.inbox.lock().unwrap();
+                let mut inbox = lock(&s.inbox);
                 if inbox.len() >= MAX_PENDING_CONTROL {
                     drop(inbox);
-                    let mut q = s.q.lock().unwrap();
+                    let mut q = lock(&s.q);
                     q.lost.commands += 1;
                     let pushed = q.push_control(ToLauncher::Rejected {
                         reason: "too many commands waiting".into(),

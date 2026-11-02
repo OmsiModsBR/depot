@@ -9,7 +9,7 @@ use std::time::Duration;
 /// Messages from the game waiting for the tool window. When the window does not read, the
 /// link stops reading the stream, so the game's own queue (which is bounded, and never blocks
 /// its frame) takes the lag.
-pub const MAX_PENDING_FROM_GAME: usize = 1024;
+pub const MAX_PENDING_FROM_GAME: usize = 256;
 const MAX_PENDING_COMMANDS: usize = 256;
 
 /// The launcher's end of the link: what the tool window talks to.
@@ -18,6 +18,7 @@ pub struct LauncherLink {
     incoming: Receiver<ToLauncher>,
     state: Arc<state::Cell>,
     dropped: Arc<AtomicU64>,
+    shutdown: std::sync::Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 impl LauncherLink {
@@ -71,6 +72,10 @@ impl LauncherLink {
                 let mut r = reader;
                 match io::read_frame::<ToLauncher, _>(&mut r) {
                     Ok(ToLauncher::Hello(h)) if check_hello(&h).is_ok() => s.ready(),
+                    Err(LinkError::Frame(omsi_devtools_proto::FrameError::Incomplete)) => {
+                        s.close();
+                        return;
+                    }
                     Ok(_) | Err(LinkError::Frame(_)) => {
                         s.refuse();
                         return;
@@ -101,6 +106,7 @@ impl LauncherLink {
             incoming: in_rx,
             state,
             dropped: Arc::new(AtomicU64::new(0)),
+            shutdown: std::sync::Mutex::new(None),
         }
     }
 
@@ -108,10 +114,19 @@ impl LauncherLink {
         self.state.get()
     }
 
+    /// What to run when this end is dropped: the caller closes its stream there, so the game
+    /// sees the end of the link and the reader thread ends (see `GameLink::on_drop`).
+    pub fn on_drop(&self, f: impl FnOnce() + Send + 'static) {
+        *self.shutdown.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(f));
+    }
+
     /// Asks the game to do `command`. The game checks it and answers `Applied` or `Rejected`.
     /// Returns false when too many commands are waiting (nothing is queued) or the link has
-    /// ended.
+    /// ended or was refused. A command queued just before the link ends is lost.
     pub fn send(&self, command: Command) -> bool {
+        if matches!(self.state.get(), LinkState::Refused | LinkState::Closed) {
+            return false;
+        }
         match self.commands.try_send(command) {
             Ok(()) => true,
             Err(TrySendError::Full(_)) => {
@@ -142,5 +157,13 @@ impl Drop for LauncherLink {
     fn drop(&mut self) {
         // (the writer ends with the command sender; the reader ends with the stream)
         self.state.close();
+        if let Some(f) = self
+            .shutdown
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            f();
+        }
     }
 }

@@ -230,7 +230,7 @@ fn a_slow_launcher_never_blocks_the_game_and_loses_no_change() {
     }
     assert!(start.elapsed() < Duration::from_secs(1));
     assert!(game.folded_snapshots() > 0);
-    // (the first snapshot was taken by the writer, which is stuck on it)
+    // (the writer is stuck on the game's hello, so nothing is sent and everything queues)
     assert!(game.folded_snapshots() as usize >= n as usize - MAX_PENDING_SNAPSHOTS - 1);
 }
 
@@ -509,7 +509,7 @@ fn folding_merges_several_variables_the_newest_wins_and_events_are_capped() {
     );
     tool_hello(&to_game, omsi_devtools_proto::PROTOCOL_VERSION);
     wait("ready", || game.state() == LinkState::Ready);
-    // the writer takes the first message and sticks on the gate; the rest queue and fold
+    // (the gate holds every write, so the queue fills and folds)
     game.send_snapshot(snap(0, &[], &[]));
     std::thread::sleep(Duration::from_millis(50));
     let mut first = snap(1, &[("a", 1.0), ("b", 1.0)], &[]);
@@ -559,7 +559,7 @@ fn folding_merges_several_variables_the_newest_wins_and_events_are_capped() {
 }
 
 #[test]
-fn a_dropped_launcher_end_reports_closed_and_refuses_more_commands() {
+fn commands_wait_while_not_ready_and_the_257th_is_refused_and_counted() {
     let (to_game, to_launcher) = (Pipe::default(), Pipe::default());
     let tool = LauncherLink::start(to_launcher, to_game, "tool");
     for _ in 0..256 {
@@ -568,4 +568,95 @@ fn a_dropped_launcher_end_reports_closed_and_refuses_more_commands() {
     // (not ready: the commands wait, the 257th is refused and counted)
     assert!(!tool.send(Command::Reload { file_index: 0 }));
     assert_eq!(tool.dropped_commands(), 1);
+}
+
+#[test]
+fn sending_after_the_link_ended_returns_false() {
+    let (to_game, to_launcher) = (Pipe::default(), Pipe::default());
+    let tool = LauncherLink::start(to_launcher.clone(), to_game.clone(), "tool");
+    to_launcher.close();
+    wait("closed", || tool.state() == LinkState::Closed);
+    assert!(!tool.send(Command::Reload { file_index: 0 }));
+}
+
+#[test]
+fn a_stream_that_dies_inside_the_hello_is_closed_not_refused() {
+    let (to_game, to_launcher) = (Pipe::default(), Pipe::default());
+    let game = GameLink::start(to_game.clone(), to_launcher.clone(), "game");
+    let tool = LauncherLink::start(to_launcher.clone(), Pipe::default(), "tool");
+    // half a frame, then the end
+    let bytes = encode(&ToGame::Hello(Hello {
+        protocol: omsi_devtools_proto::PROTOCOL_VERSION,
+        build: "tool".into(),
+    }))
+    .unwrap();
+    to_game
+        .clone()
+        .write_all(&bytes[..bytes.len() - 2])
+        .unwrap();
+    to_game.close();
+    wait("closed", || game.state() == LinkState::Closed);
+    let half = encode(&ToLauncher::Hello(Hello {
+        protocol: omsi_devtools_proto::PROTOCOL_VERSION,
+        build: "game".into(),
+    }))
+    .unwrap();
+    // (the launcher end of another pipe)
+    let p = Pipe::default();
+    let tool2 = LauncherLink::start(p.clone(), Pipe::default(), "tool");
+    p.clone().write_all(&half[..half.len() - 2]).unwrap();
+    p.close();
+    wait("closed", || tool2.state() == LinkState::Closed);
+    drop(tool);
+}
+
+#[test]
+fn dropping_an_end_runs_the_callers_shutdown() {
+    let (to_game, to_launcher) = (Pipe::default(), Pipe::default());
+    let game = GameLink::start(to_game.clone(), to_launcher.clone(), "game");
+    let tool = LauncherLink::start(to_launcher, to_game, "tool");
+    let (g, t) = (Arc::new(Mutex::new(false)), Arc::new(Mutex::new(false)));
+    let (g2, t2) = (g.clone(), t.clone());
+    game.on_drop(move || *g2.lock().unwrap() = true);
+    tool.on_drop(move || *t2.lock().unwrap() = true);
+    drop(game);
+    drop(tool);
+    assert!(*g.lock().unwrap() && *t.lock().unwrap());
+}
+
+/// A tool window that does not read holds the link's reader at the bound; what is behind it
+/// waits in the stream and arrives, in order, once the window reads again.
+#[test]
+fn a_slow_tool_window_pushes_the_wait_back_into_the_stream() {
+    let (to_game, to_launcher) = (Pipe::default(), Pipe::default());
+    let tool = LauncherLink::start(to_launcher.clone(), to_game, "tool");
+    let mut w = to_launcher.clone();
+    w.write_all(
+        &encode(&ToLauncher::Hello(Hello {
+            protocol: omsi_devtools_proto::PROTOCOL_VERSION,
+            build: "game".into(),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let total = omsi_devtools_link::MAX_PENDING_FROM_GAME + 50;
+    for f in 0..total as u64 {
+        w.write_all(&encode(&ToLauncher::Snapshot(snap(f, &[], &[]))).unwrap())
+            .unwrap();
+    }
+    // the reader stops at the bound: bytes of the rest are still in the stream
+    wait("the reader to stall", || {
+        !to_launcher.0 .0.lock().unwrap().0.is_empty() && tool.state() == LinkState::Ready
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(!to_launcher.0 .0.lock().unwrap().0.is_empty());
+    let mut frames_seen = vec![];
+    while frames_seen.len() < total {
+        match tool.recv_timeout(Duration::from_secs(5)) {
+            Some(ToLauncher::Snapshot(s)) => frames_seen.push(s.frame),
+            Some(_) => {}
+            None => panic!("stalled after {}", frames_seen.len()),
+        }
+    }
+    assert_eq!(frames_seen, (0..total as u64).collect::<Vec<_>>());
 }
