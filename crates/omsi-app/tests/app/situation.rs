@@ -326,6 +326,20 @@ fn riders_round_trip_through_their_file() {
     apply_situation_parsed(&sit, &mut args);
     assert_eq!(args.situation_riders, riders);
 
+    // another game saving over the situation (OMSI 2, openOMSI) leaves the file behind: the
+    // passengers of the earlier save are not seated into whatever the situation is now
+    std::fs::write(&osn, b"saved elsewhere").unwrap();
+    assert!(load_riders(&osn).is_empty());
+    std::fs::write(&osn, b"saved here").unwrap();
+    save_riders(&osn, &riders);
+    assert_eq!(load_riders(&osn), riders);
+    std::fs::write(&osn, b"saved by another game").unwrap();
+    apply_situation_parsed(&sit, &mut args);
+    assert!(args.situation_riders.is_empty());
+    std::fs::write(&osn, b"saved here").unwrap();
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_riders, riders);
+
     // an empty bus saved under the same name leaves nobody behind in the older file
     assert_eq!(save_riders(&osn, &[]), 0);
     assert!(!riders_file(&osn).unwrap().exists());
@@ -354,9 +368,18 @@ fn missing_or_damaged_rider_files_load_an_empty_bus() {
         assert!(load_riders(&osn).is_empty(), "{bad:?}");
     }
     // one good line among bad ones: what can be kept is kept, and a nonsense distance is 0
+    let header = {
+        save_riders(&osn, &[rider(0, None)]);
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .to_string()
+    };
     std::fs::write(
         &file,
-        "depot-riders 1\nseat=2\tleft_km=-5\trandom=NaN\tmystery=1\nseat=\n",
+        format!("{header}\nseat=2\tleft_km=-5\trandom=NaN\tmystery=1\talt_m=1e30\nseat=\n"),
     )
     .unwrap();
     let got = load_riders(&osn);

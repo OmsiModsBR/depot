@@ -421,6 +421,23 @@ pub fn riders_file(osn: &Path) -> Option<PathBuf> {
 }
 
 const RIDERS_HEADER: &str = "depot-riders 1";
+/// Upper bounds for the numbers read back, so a damaged file cannot keep a rider aboard for
+/// ever or make the ride arithmetic overflow.
+const MAX_RIDE_KM: f32 = 1.0e5;
+const MAX_ALT_M: f32 = 1.0e6;
+
+/// FNV-1a of the situation file's bytes (0 for one that cannot be read): the `.riders` file
+/// belongs to exactly the `.osn` it was written beside. Another game saving over the `.osn`
+/// (OMSI 2, openOMSI) changes it, and the passengers of the older save are then not seated
+/// into a different trip.
+fn osn_fingerprint(osn: &Path) -> u64 {
+    let Ok(bytes) = std::fs::read(osn) else {
+        return 0;
+    };
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
 /// More riders than any bus holds; a larger file is damaged or hostile and is not read.
 const MAX_RIDERS: usize = 1024;
 const MAX_RIDERS_FILE: u64 = 1 << 20;
@@ -469,7 +486,7 @@ pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
         let _ = std::fs::remove_file(&file);
         return 0;
     }
-    let mut t = format!("{RIDERS_HEADER}\n");
+    let mut t = format!("{RIDERS_HEADER} {:016x}\n", osn_fingerprint(osn));
     for r in riders.iter().take(MAX_RIDERS) {
         let seat = r.seat.map_or("none".to_string(), |k| k.to_string());
         t.push_str(&format!(
@@ -490,10 +507,17 @@ pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
         }
         t.push('\n');
     }
-    match std::fs::write(&file, t) {
+    // (written whole under another name, then renamed over: a crash while saving, the very
+    // case this is for, leaves the old file or the new one, never half of one)
+    let tmp = file.with_extension("riders.tmp");
+    let done = std::fs::write(&tmp, t).and_then(|()| std::fs::rename(&tmp, &file));
+    match done {
         Ok(()) => riders.len().min(MAX_RIDERS),
         Err(e) => {
             log::warn!("situation: riders {}: {e}", file.display());
+            // (an older roster must not stay beside the new situation)
+            let _ = std::fs::remove_file(&tmp);
+            let _ = std::fs::remove_file(&file);
             0
         }
     }
@@ -520,12 +544,23 @@ pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
         return Vec::new();
     };
     let mut lines = text.lines();
-    if lines.next().map(str::trim) != Some(RIDERS_HEADER) {
-        log::warn!(
-            "situation: riders {} is of another format; ignored",
-            file.display()
-        );
-        return Vec::new();
+    let want = format!("{RIDERS_HEADER} {:016x}", osn_fingerprint(osn));
+    match lines.next().map(str::trim) {
+        Some(h) if h == want => {}
+        Some(h) if h.starts_with(RIDERS_HEADER) => {
+            log::warn!(
+                "situation: riders {} belongs to an earlier save of this situation; ignored",
+                file.display()
+            );
+            return Vec::new();
+        }
+        _ => {
+            log::warn!(
+                "situation: riders {} is of another format; ignored",
+                file.display()
+            );
+            return Vec::new();
+        }
     }
     let mut out = Vec::new();
     for (n, line) in lines.enumerate() {
@@ -558,7 +593,7 @@ pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
                         .ok()
                         .filter(|x: &f32| x.is_finite())
                         .unwrap_or(0.0)
-                        .max(0.0)
+                        .clamp(0.0, MAX_RIDE_KM)
                 }
                 "random" => {
                     r.request_random = v
@@ -576,6 +611,7 @@ pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
                         .ok()
                         .filter(|x: &f32| x.is_finite())
                         .unwrap_or(0.0)
+                        .clamp(0.0, MAX_ALT_M)
                 }
                 _ => {}
             }

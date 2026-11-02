@@ -562,7 +562,7 @@ impl App {
                                 self.args.situation_riders.len()
                             );
                         }
-                        if self.args.riders > 0 {
+                        if self.args.riders > 0 && self.args.situation_riders.is_empty() {
                             let centre = p.vehicle.position;
                             h.populate(&w, &renderer, &mut scene, centre);
                             h.seed_riders(self.args.riders, &p.vehicle, &w, &renderer, &mut scene);
