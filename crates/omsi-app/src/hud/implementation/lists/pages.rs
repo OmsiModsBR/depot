@@ -70,6 +70,10 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "graphics", "Graphics", || pick("graphics", "Graphics", later)),
         limit_or(app, "msaa", "Anti-aliasing", || pick("msaa", "Anti-aliasing", later)),
         limit_or(app, "render_scale", "Render scale", || pick("render_scale", "Render scale", later)),
+        // (DirectX9 only, and only while a scale below 100 % is chosen)
+        (app.output.backend() == crate::output::Backend::D3d9 && s.dx9_render_scale() > 0.0)
+            .then(|| pick("dx9_upscale", "Upscaling", "How the smaller picture is scaled up to the window's size"))
+            .flatten(),
         limit_or(app, "anisotropy", "Anisotropic", || pick("anisotropy", "Anisotropic", later)),
         // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
         // (under "DirectX9 (D3D9Ex)" the `api_limits` table hides or locks these: `limit_or`)

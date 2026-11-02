@@ -16,6 +16,7 @@ pub mod shader;
 mod sky;
 mod smoke;
 mod ui;
+mod upscale;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D9::*;
@@ -121,6 +122,8 @@ pub struct D3d9Device {
     /// `D3DFMT_D24S8`, or `D3DFMT_D24X8` when the adapter has no stencil depth for the current
     /// picture format and multisampling. Same 24 depth bits either way.
     depth_format: D3DFORMAT,
+    /// The render scale option's targets and passes ([`upscale`]).
+    scale: upscale::ScaleStore,
 }
 
 /// The format of the desktop the window's back buffer follows.
@@ -398,6 +401,7 @@ impl D3d9Device {
                 max_anisotropy: raw.MaxAnisotropy.max(1),
                 a2c: a2c,
                 depth_format,
+                scale: Default::default(),
             })
         }
     }
@@ -517,6 +521,9 @@ impl D3d9Device {
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         if let Target::Window(_) = self.target {
             self.window_size = (width.max(1), height.max(1));
+            // (the render scale's targets are made for a picture size: made again at the next
+            // scene)
+            self.drop_scale_targets();
             let mut pp = present_params(
                 self.target,
                 width,
@@ -558,6 +565,7 @@ impl D3d9Device {
             // (surfaces made in the old format are made again when next needed)
             self.offscreen = None;
             self.scene.target_depth = None;
+            self.drop_scale_targets();
         }
         if granted != msaa {
             log::warn!("d3d9: {msaa}x multisampling is not offered here; {granted}x is used");
@@ -882,6 +890,7 @@ impl RenderBackend for D3d9Device {
         let generation = self.generation.wrapping_add(1);
         let vsync = self.vsync;
         let (msaa, anisotropy) = (self.msaa.0, self.anisotropy);
+        let render_scale = (self.render_scale(), self.scale.upscale());
         let fresh = Self::open_with(self.target, w, h)?;
         // (the scene's meshes and textures go up again from their copies: the game does not
         // send them twice)
@@ -890,6 +899,7 @@ impl RenderBackend for D3d9Device {
         *self = fresh;
         self.generation = generation;
         let restored = self.restore_scene(copies).and(self.restore_ui(owners));
+        self.set_render_scale(render_scale.0.unwrap_or(0.0), render_scale.1);
         let quality = self.set_quality(msaa, anisotropy);
         self.set_vsync(vsync).and(restored).and(quality)
     }
@@ -901,3 +911,5 @@ mod scene_tests;
 mod tests;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod upscale_tests;
