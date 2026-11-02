@@ -3,7 +3,6 @@
 
 mod about;
 mod actions;
-mod api_limits;
 mod app_events;
 mod bus_service;
 mod condensation;

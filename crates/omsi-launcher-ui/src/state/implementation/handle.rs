@@ -56,7 +56,9 @@ impl State {
                         // (only the vehicles that got a file are read again)
                         if let Some(sum) = core::auto_sync_hofs(&playable) {
                             if !sum.folders.is_empty() {
-                                let _ = tx.send(Msg::VehiclesRefreshed(core::reread_vehicles(&sum.folders)));
+                                let _ = tx.send(Msg::VehiclesRefreshed(core::reread_vehicles(
+                                    &sum.folders,
+                                )));
                             }
                         }
                     });

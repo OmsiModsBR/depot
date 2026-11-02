@@ -5,29 +5,20 @@
 //! OmsiLaunch at every start (`original_engine::launch::module_args`), only while the module
 //! is in the OMSI 2 folder.
 
-use super::theme::*;
-use super::ui::{ButtonKind, Ui};
+use crate::kit::{self, Status};
 use glam::Vec2;
 use omsi_launcher_lib as core;
 use omsi_launcher_lib::original_engine::{config, modules};
-use omsi_launcher_ui::kit::{self, Status};
 use omsi_ui::paint::Align;
+use omsi_ui::theme::*;
+use omsi_ui::widgets::{ButtonKind, Ui};
 use omsi_ui::{Rect, Weight};
 use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// What a module's card asks of the launcher (it needs the launcher's state and dialog).
-#[derive(Default)]
-pub struct Asks {
-    /// The module's install ("Download and install…").
-    pub look: Option<&'static str>,
-    /// The module's removal ("Remove…").
-    pub remove: Option<&'static str>,
-    /// (in) Whether an install may start now: no game runs and no other install is open.
-    pub idle: bool,
-}
+use super::super::domain::modules::Asks;
 
 /// What is known of a module in the OMSI 2 folder, read again every few seconds.
 #[derive(Clone)]
@@ -176,7 +167,7 @@ fn button(
 }
 
 /// The card of module `id`. Returns the height it needed.
-pub fn card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks) -> f32 {
+pub fn module_card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks) -> f32 {
     let Some(def) = modules::module_def(id) else {
         return 0.0;
     };

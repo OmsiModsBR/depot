@@ -2,12 +2,12 @@
 //! (`original_engine::plugins`: off renames its `.opl` to `.opl.disabled`, on renames it
 //! back). OmsiLaunch's own plug-in links Depot to OMSI 2 and is shown locked on.
 
-use super::theme::*;
-use super::ui::Ui;
+use crate::kit;
 use glam::Vec2;
 use omsi_launcher_lib::original_engine::plugins::{self, Plugin};
-use omsi_launcher_ui::kit;
 use omsi_ui::paint::Align;
+use omsi_ui::theme::*;
+use omsi_ui::widgets::Ui;
 use omsi_ui::{Rect, Weight};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -36,7 +36,7 @@ fn found(root: &Path) -> Vec<Plugin> {
 const ROW: f32 = 44.0;
 
 /// The card. `game_runs`: no plug-in is switched while a game runs. Returns its height.
-pub fn card(ui: &mut Ui, r: Rect, root: &Path, game_runs: bool) -> f32 {
+pub fn plugins_card(ui: &mut Ui, r: Rect, root: &Path, game_runs: bool) -> f32 {
     let list = found(root);
     ui.panel(r);
     kit::heading(

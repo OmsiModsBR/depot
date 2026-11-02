@@ -2576,7 +2576,7 @@ pub struct Outside {
     /// (in) A game runs: the OMSI 2 folder's plug-ins are not switched meanwhile.
     pub game_runs: bool,
     /// A module's install or removal (Modules, OMSI 2 mode).
-    pub modules: super::omsi2_modules::Asks,
+    pub modules: omsi_launcher_ui::window::Asks,
 }
 
 pub fn settings(l: &mut Launcher, area: Rect) {
@@ -2631,7 +2631,10 @@ pub fn settings(l: &mut Launcher, area: Rect) {
     let mut per_sec = [(0usize, false); SECTIONS.len()];
     let mut n_changed = 0;
     if performance_offered(st.s, omsi2) {
-        for k in PERFORMANCE_OPTS.iter().filter_map(|(k, _)| OPTS.iter().find(|o| o.key == *k)) {
+        for k in PERFORMANCE_OPTS
+            .iter()
+            .filter_map(|(k, _)| OPTS.iter().find(|o| o.key == *k))
+        {
             if shown(k, &st) != Shown::Hidden {
                 per_sec[PERFORMANCE].0 += 1;
                 per_sec[PERFORMANCE].1 |= shown(k, &st) == Shown::Row && changed(k, &st);
@@ -3272,11 +3275,13 @@ fn own_card(
             y + 16.0 - r.y
         }
         "plugins" => plugins_card(ui, r, root),
-        "omsi2-plugins" => super::omsi2_plugins::card(ui, r, root, out.game_runs),
+        "omsi2-plugins" => omsi_launcher_ui::window::plugins_card(ui, r, root, out.game_runs),
         "omsi-prefetch" => {
-            super::omsi2_modules::card(ui, r, "omsi-prefetch", root, &mut out.modules)
+            omsi_launcher_ui::window::module_card(ui, r, "omsi-prefetch", root, &mut out.modules)
         }
-        "openhud" => super::omsi2_modules::card(ui, r, "openhud", root, &mut out.modules),
+        "openhud" => {
+            omsi_launcher_ui::window::module_card(ui, r, "openhud", root, &mut out.modules)
+        }
         "oop" => option_presets_card(ui, r, st, root),
         "preview" => preview_card(ui, r),
         "profiles" => profiles_card(ui, r, st),
