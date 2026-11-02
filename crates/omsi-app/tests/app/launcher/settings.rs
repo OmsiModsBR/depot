@@ -153,6 +153,7 @@ const BEFORE: &[&str] = &[
     "time_speed",
     "language",
     "launcher_rest",
+    "developer_mode",
     "ui_scale",
     "ui_scale_window",
     "ui_opacity",
@@ -565,6 +566,27 @@ fn the_interface_options_are_searched_counted_and_reset() {
     assert!(!listed(0, "", true, &st)
         .iter()
         .any(|o| o.key == "ui_dimming"));
+}
+
+/// Developer mode is off until the player switches it on, the switch is kept in the file, and
+/// the game's own settings parser neither needs nor changes anything for it (#500).
+#[test]
+fn developer_mode_is_off_by_default_and_the_switch_is_saved() {
+    let (mut s, mut start) = (all_rows(), start());
+    assert_eq!(s["developer_mode"], json!(false));
+    assert_eq!(default_of("developer_mode"), Some(json!(false)));
+    let off = core::settings_to_text(&s, None);
+    assert!(off.contains("developer_mode=0\n"), "{off}");
+    click(DEVELOPER, "opt-developer_mode", &mut s, &mut start);
+    assert_eq!(s["developer_mode"], json!(true));
+    let on = core::settings_to_text(&s, None);
+    assert!(on.contains("developer_mode=1\n"), "{on}");
+    let back = core::settings_from_text(Some(&on));
+    assert_eq!(back["developer_mode"], json!(true));
+    // (the game reads the same file and ends up with the same settings either way)
+    let game_off = openomsi_game::testing::settings::Settings::from_text(&off);
+    let game_on = openomsi_game::testing::settings::Settings::from_text(&on);
+    assert_eq!(format!("{game_off:?}"), format!("{game_on:?}"));
 }
 
 /// The mouse steering's smoothing is on unless switched off, and the switch is kept (#1092).
