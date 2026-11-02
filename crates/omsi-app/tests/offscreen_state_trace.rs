@@ -1,6 +1,6 @@
 //! The offscreen run's state, frame by frame (B0 of the refactoring plan), on content the
 //! test writes itself: a 210 m street of two lanes with a crossing in the middle whose two
-//! lights run a program, six AI cars on it and a 12 m bus rolling north from 30 km/h.
+//! lights run a program, AI cars on it and a 12 m bus rolling north from 30 km/h.
 //!
 //! `depot --offscreen` with `OMSI_STATE_TRACE` writes, for every frame, where the bus is and
 //! how fast it goes, every AI car, the lights, the rail signals and the player's duty (see
@@ -348,11 +348,17 @@ fn offscreen_state_trace_is_repeatable_and_shows_the_street() {
         (DRIVE * 30..=DRIVE * 30 + 1).contains(&(frames as u32)),
         "{frames} blocks: not one per frame and the last state"
     );
+    // (AI cars arrive lane by lane at the lanes' own rate and leave at the end of the street:
+    // there is no number of cars kept up, so a frame may stand empty, but the run starts with
+    // cars on the street)
+    let counts: Vec<u32> = a
+        .lines()
+        .filter_map(|l| l.strip_prefix("  cars "))
+        .filter_map(|n| n.trim().parse().ok())
+        .collect();
     assert!(
-        a.lines()
-            .filter(|l| l.starts_with("  cars "))
-            .all(|l| l != "  cars 0"),
-        "a frame without AI cars"
+        counts.first().is_some_and(|&n| n > 0),
+        "the first frame has no AI cars"
     );
     let lights: std::collections::HashSet<&str> =
         a.lines().filter(|l| l.starts_with("  lights 0:")).collect();

@@ -1813,6 +1813,9 @@ pub struct Humans {
     footfalls: Vec<ambience::Footfall>,
     /// `[trafficdensity_passenger]` factor for the current hour (set by the app).
     pub density: f32,
+    /// The same curve without the passengers factor: how many people walk the pavements
+    /// (the factor is for those waiting at stops only).
+    pub people_curve: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
     /// The daylight outside, 0 dark .. 1 (the sky's light, without the street lamps'
@@ -2105,6 +2108,7 @@ impl Humans {
             sync_frame: 0,
             footfalls: Vec::new(),
             density: 1.0,
+            people_curve: 1.0,
             time_of_day: 12.0 * 3600.0,
             daylight: 1.0,
             delay: 0.0,
@@ -3239,11 +3243,15 @@ impl Humans {
             })
             .collect();
         let crowd = (lanes.len() as f32 / 120.0).clamp(0.6, 3.0);
-        let target =
-            (self.pedestrians as f32 * crowd * self.density.clamp(0.0, 3.0)).round() as usize;
         // (walking the pavements only while fewer than half the pool do, and never
         // past the pool)
-        let target = target.min(self.max_people / 2).min(
+        let target = crate::traffic_density::walker_target(
+            self.pedestrians,
+            crowd,
+            self.people_curve,
+            self.max_people,
+        );
+        let target = target.min(
             (self.max_people
                 + self
                     .people
