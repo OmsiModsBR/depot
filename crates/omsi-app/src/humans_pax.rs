@@ -2427,6 +2427,25 @@ impl Humans {
         let Some(bn) = p.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
             return;
         };
+        // The player emptied this bus: whoever was on the way to the validator or the desk
+        // gives that up (a sale at the desk is dropped) and goes to an exit.
+        if self.empty_bus.contains(&bn.id) {
+            if self.desk_busy == Some(self.people[i].id) {
+                if let Some(m) = self.money.as_mut() {
+                    m.clear(true);
+                }
+                self.change_due = None;
+                self.request = None;
+                self.desk_busy = None;
+            }
+            let pp = self.pax_mut(i).unwrap();
+            pp.reach = false;
+            pp.talking = false;
+            pp.look_driver = false;
+            pp.sub = 0;
+            self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
+            return;
+        }
         if p.st == 7 {
             if p.ticket < TICKET_STAMP {
                 self.set_task(i, Task::SittingInBus, buses, bus_ix, world);
