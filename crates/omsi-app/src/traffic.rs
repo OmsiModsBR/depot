@@ -3169,15 +3169,7 @@ impl Traffic {
                 (
                     l.length(),
                     l.density,
-                    l.kind == LaneKind::Street
-                        && !l.no_cars
-                        && l.length() > 8.0
-                        && self
-                            .net
-                            .reach
-                            .get(i)
-                            .map(|r| *r >= omsi_sim::traffic::DEAD_END)
-                            .unwrap_or(true),
+                    l.kind == LaneKind::Street && !l.no_cars && l.length() > 8.0,
                     l.start(),
                 )
             };
