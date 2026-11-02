@@ -93,6 +93,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
         // (DirectX9 only: the other APIs draw their own snowfall)
         (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
+        (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "fewer_night_lights", "Fewer night lights", "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2")).flatten(),
         // (DirectX9 only, our own ways to ease its work)
         switch_row(app, "dx9_glass_rain", "Raindrops on glass", "Drops gather on the panes in the rain").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
         switch_row(app, "dx9_coronas", "Light coronas", "The glow round lamps and headlights").filter(|_| app.output.backend() == crate::output::Backend::D3d9),

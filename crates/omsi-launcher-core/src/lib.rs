@@ -3154,6 +3154,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["sun_glow"] = json!(true);
     // DirectX9 (D3D9Ex) only: falling snow, off unless chosen
     v["dx9_snow"] = json!(false);
+    // DirectX9 (D3D9Ex) only: fewer map lamps a spot, off unless chosen
+    v["fewer_night_lights"] = json!(false);
     // DirectX9 (D3D9Ex) only: how a render scale below 100 % is brought up
     v["dx9_upscale"] = json!("bilinear");
     // DirectX9 (D3D9Ex) only, our ways to ease its work: everything drawn, no texture ceiling
@@ -3987,6 +3989,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
             "dx9_snow" => v[&k] = json!(b(val)),
+            "fewer_night_lights" => v[&k] = json!(b(val)),
             // (bilinear or fsr1, as the game reads it)
             "dx9_upscale" => {
                 v[&k] = json!(match val.to_ascii_lowercase().as_str() {
@@ -4644,6 +4647,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
     text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", false)));
+    text.push_str(&format!(
+        "fewer_night_lights={}\n",
+        b("fewer_night_lights", false)
+    ));
     text.push_str(&format!(
         "dx9_upscale={}\n",
         if v.get("dx9_upscale").and_then(|x| x.as_str()) == Some("fsr1") {

@@ -1078,6 +1078,14 @@ pub static OPTS: &[Opt] = &[
         "Snow",
         "Snowflakes fall in snow weather",
     ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "fewer_night_lights",
+        "Fewer night lights",
+        "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
+    ),
     // (DirectX9 only, our own ways to ease its work, see `shown`)
     toggle(
         GRAPHICS,
@@ -2156,6 +2164,7 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        "fewer_night_lights" => fixed,
         // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
         "dx9_upscale" => {
             let scale = st.get("render_scale");

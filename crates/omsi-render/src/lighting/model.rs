@@ -222,6 +222,9 @@ pub struct Lighting {
     pub cloud_height: f32,
     /// The glow around the sun (the `sun_glow` setting), for a renderer that draws it.
     pub sun_glow: bool,
+    /// Map lamps one spot of the ground takes into its light, for a renderer that caps them
+    /// (0 = all).
+    pub lamp_cap: u32,
     /// Sun shadow map (off in mirrors and at night).
     pub shadows: bool,
     /// How wet the roads are (0..1): rain darkens them and makes them mirror the sky.
@@ -354,6 +357,7 @@ impl Default for Lighting {
             cloud_offset: [0.0; 2],
             cloud_height: 0.0,
             sun_glow: false,
+            lamp_cap: 0,
             shadows: true,
             snowfall: 0.0,
             wind: Vec3::ZERO,
