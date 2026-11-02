@@ -22,10 +22,21 @@ pub(crate) fn find_hof(
     names.extend(world.ailists.groups.iter().filter_map(|g| g.hof.clone()));
     // every wanted name in order: the bus's own depot files first (by file name, then by
     // the [name] inside), then the map's depot as another vehicle folder has it (a mod bus
-    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`)
+    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`), and
+    // only then a bus file of a similar name: an exact file installed anywhere wins (#46)
     for n in &names {
         if let Some(h) = omsi_vehicle::hof::depot_in(dir, n) {
             log::info!("using depot file {} (name {n})", h.path.display());
+            return Some(std::sync::Arc::new(h));
+        }
+    }
+    for n in &names {
+        if let Some(h) = omsi_vehicle::hof::depot_anywhere(n) {
+            log::info!(
+                "{} has no depot file '{n}'; using {}",
+                dir.display(),
+                h.path.display()
+            );
             return Some(std::sync::Arc::new(h));
         }
     }
@@ -38,16 +49,6 @@ pub(crate) fn find_hof(
             h.path.display()
         );
         return Some(std::sync::Arc::new(h));
-    }
-    for n in &names {
-        if let Some(h) = omsi_vehicle::hof::depot_anywhere(n) {
-            log::info!(
-                "{} has no depot file '{n}'; using {}",
-                dir.display(),
-                h.path.display()
-            );
-            return Some(std::sync::Arc::new(h));
-        }
     }
     // a map without a depot of its own: the bus's depot named like the map (#896)
     let folder = world
