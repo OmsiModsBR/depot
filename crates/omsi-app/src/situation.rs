@@ -41,7 +41,8 @@ pub(crate) fn find_hof(
         }
     }
     // the bus's own depot of the same place under another name (its Spandau 2019 where the
-    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896)
+    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896), only
+    // when the map's exact depot is installed nowhere
     let wanted: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
     if let Some(h) = omsi_vehicle::hof::depot_like(dir, &wanted) {
         log::info!(
