@@ -101,6 +101,39 @@ const CREEP_PAST: f32 = 2.0;
 /// m).
 const PRIORITY_WARN_GAP: f32 = 60.0;
 
+/// An ordinary car on an emergency vehicle's way makes room for it from this far ahead of
+/// it (m, from the emergency vehicle's front to the car's rear): it keeps to the kerb side
+/// of its lane.
+const MAKE_WAY_REACH: f32 = 70.0;
+/// ... and comes to a stop (softly, `MAKE_WAY_DECEL`) from this far, so that the emergency
+/// vehicle can steer round it (m).
+const MAKE_WAY_STOP_REACH: f32 = 45.0;
+/// How hard a car brakes to make way (m/s²): a gentle stop, not an emergency one.
+const MAKE_WAY_DECEL: f32 = 2.0;
+/// How far a car moves to the kerb side of its lane to make way (m), room permitting.
+const MAKE_WAY_SHIFT: f32 = 0.6;
+/// A car makes way for at most this long (s); when the emergency vehicle cannot get by (no
+/// lane to go round it by) the car drives on, and does not stop for it again for
+/// `MAKE_WAY_COOLDOWN` seconds, so that nobody blocks anybody for good.
+const MAKE_WAY_MAX_SECS: f32 = 10.0;
+const MAKE_WAY_COOLDOWN: f32 = 20.0;
+
+/// An ordinary car that makes way for an emergency vehicle coming up behind it
+/// (`Traffic::update_way_makers`).
+#[derive(Debug, Clone, Copy)]
+pub struct WayMaker {
+    /// When it began to make way (it began afresh after a second of not doing so).
+    pub since: f32,
+    /// The last time it was in an emergency vehicle's way.
+    pub seen: f32,
+    /// It does not make way before this time (it gave up after `MAKE_WAY_MAX_SECS`).
+    pub ignore_until: f32,
+    /// Making way now.
+    pub active: bool,
+    /// The gap from the emergency vehicle's front to this car's rear (m).
+    pub behind: f32,
+}
+
 /// Seconds a car at `st` needs to drive `dist` metres out on the other half of the road:
 /// the first `creep` metres edging out, the rest speeding up to `v_cap` (a driver standing
 /// still first reacts).
@@ -619,6 +652,9 @@ pub struct Traffic {
     pub root: std::path::PathBuf,
     /// Car-frames spent waiting for a red light (statistics).
     pub held_at_red: usize,
+    /// The cars that make way for an emergency vehicle behind them, by car id (empty while
+    /// no emergency vehicle is on the road).
+    pub way_makers: HashMap<u64, WayMaker>,
     /// Who wants a timetable bus to stop (`Humans::stop_wishes`): the buses somebody
     /// aboard wants to get off, the stops where somebody waits. None without passengers:
     /// every bus then serves every stop.
@@ -1632,6 +1668,7 @@ impl Traffic {
             sound_cfgs: HashMap::new(),
             root: root.to_path_buf(),
             held_at_red: 0,
+            way_makers: HashMap::new(),
             stop_wishes: None,
             player_still: 0.0,
             day_time: 0.0,
@@ -4002,6 +4039,107 @@ impl Traffic {
 
     /// Is what car `i` has stopped behind going to stand there for a while (a parked car, a
     /// bus serving its stop, a broken-down or abandoned car, the player's bus waiting)?
+    /// Seconds an emergency vehicle waits behind something standing before it goes round it
+    /// (an ordinary car waits four).
+    fn patience(&self, i: usize) -> f32 {
+        if self.cars[i].state.emergency {
+            1.0
+        } else {
+            4.0
+        }
+    }
+
+    /// Whether car `i`, an emergency vehicle, is held up by car `j` that is making way for it:
+    /// a car that stands aside on purpose, which it goes round at once.
+    fn clearing(&self, i: usize, j: Option<usize>) -> bool {
+        self.cars[i].state.emergency
+            && j.and_then(|j| self.cars.get(j))
+                .is_some_and(|o| self.way_makers.get(&o.id).is_some_and(|w| w.active))
+    }
+
+    /// Who makes way for the emergency vehicles on the road this frame. An ordinary car (not a
+    /// bus, not on a junction path) on the way of an emergency vehicle, between 0 and
+    /// `MAKE_WAY_REACH` metres in front of it, keeps to the kerb side of its lane and, from
+    /// `MAKE_WAY_STOP_REACH` metres, comes to a gentle stop where the road before it is free of
+    /// junctions, so that the emergency vehicle goes round it (it does not wait for it to
+    /// stand: see `Traffic::patience`). A car does this for at most `MAKE_WAY_MAX_SECS`
+    /// seconds at a time. Without an emergency vehicle on the road this is one pass over the
+    /// cars.
+    fn update_way_makers(&mut self) {
+        let now = self.time;
+        for w in self.way_makers.values_mut() {
+            w.active = false;
+        }
+        let emergency: Vec<usize> = self
+            .cars
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| {
+                c.state.emergency
+                    && !c.gone
+                    && c.park.is_none()
+                    && c.pull_out <= 0.0
+                    && (c.state.speed > 2.0 || c.lead_info.is_some_and(|(_, gap)| gap < 25.0))
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let mut found: HashMap<u64, f32> = HashMap::new();
+        for &e in &emergency {
+            let ec = &self.cars[e];
+            let ahead: HashMap<usize, f32> = self
+                .way_lanes(&ec.state, MAKE_WAY_REACH + 20.0)
+                .into_iter()
+                .collect();
+            for (j, c) in self.cars.iter().enumerate() {
+                if j == e
+                    || c.state.emergency
+                    || c.is_bus()
+                    || c.is_rail()
+                    || c.gone
+                    || c.passing.is_some()
+                    || c.park.is_some()
+                    || c.state.change.is_some()
+                    || !self.net.crossings[c.state.lane].is_empty()
+                {
+                    continue;
+                }
+                let Some(&d) = ahead.get(&c.state.lane) else {
+                    continue;
+                };
+                // from the emergency vehicle's front to this car's rear
+                let behind = d + c.state.s - c.state.rear - ec.state.front;
+                if (0.0..=MAKE_WAY_REACH).contains(&behind) {
+                    let e = found.entry(c.id).or_insert(behind);
+                    *e = e.min(behind);
+                }
+            }
+        }
+        for (id, behind) in found {
+            let w = self.way_makers.entry(id).or_insert(WayMaker {
+                since: now,
+                seen: f32::MIN,
+                ignore_until: 0.0,
+                active: false,
+                behind,
+            });
+            if now - w.seen > 1.0 {
+                w.since = now;
+            }
+            w.seen = now;
+            w.behind = behind;
+            if w.ignore_until > now {
+                continue;
+            }
+            if now - w.since > MAKE_WAY_MAX_SECS {
+                w.ignore_until = now + MAKE_WAY_COOLDOWN;
+                continue;
+            }
+            w.active = true;
+        }
+        self.way_makers
+            .retain(|_, w| w.ignore_until > now || w.seen > now - 2.0);
+    }
+
     fn standing_obstacle(
         &self,
         i: usize,
@@ -4020,6 +4158,7 @@ impl Traffic {
                 // it (not the head of a queue that waits for a light, a junction or a car),
                 // or the end of a queue standing behind a bus at its stop
                 o.standing_for(self.day_time) > 4.0
+                    || self.clearing(i, Some(j))
                     || (o.stopped > 25.0 && !o.held && self.cars[i].stopped > 6.0)
                     || (o.stopped > 3.0 && self.standing_queue(j).1)
             }
@@ -4083,7 +4222,7 @@ impl Traffic {
         if st.change.is_some()
             || !st.route.is_empty()
             || st.change_cooldown > 0.0
-            || stuck < 4.0
+            || stuck < self.patience(i)
             || !standing
             || self.cars[i].light_hold
             || self.cars[i].yielding
@@ -4169,7 +4308,7 @@ impl Traffic {
         let rolling = parked && st.speed > 0.5;
         if car.passing.is_some()
             || st.change.is_some()
-            || (car.stopped < 3.0 && !rolling)
+            || (car.stopped < self.patience(i).min(3.0) && !rolling)
             || !standing
             || car.yielding
             || car.at_stop()
@@ -4230,7 +4369,7 @@ impl Traffic {
             (self.net.lanes[w.0].traffic_light.is_some() || !self.net.crossings[w.0].is_empty())
                 && w.1 < real + st.front + obstacle_len + 25.0
         });
-        if waits_there && !parked {
+        if waits_there && !parked && !st.emergency {
             skip("it waits before a light or a junction".into());
             return;
         }
@@ -6065,6 +6204,8 @@ impl Traffic {
                 reservations.entry(l).or_default().push(i);
             }
         }
+        // who makes room for an emergency vehicle behind it
+        self.update_way_makers();
         // the light programs: requests of whoever is coming, then the cycle clocks
         for c in self.lights.iter_mut() {
             c.request.iter_mut().for_each(|r| *r = false);
@@ -6694,9 +6835,26 @@ impl Traffic {
                 .player
                 .and_then(|p| self.letting_out(i, &p))
                 .map(|g| self.cars[i].state.front + (g - 1.0).max(0.0));
+            // making way for an emergency vehicle coming up behind: a gentle stop, where the road
+            // ahead is free of junctions (it carries on through one, and stops after it)
+            let make_way_stop = self
+                .way_makers
+                .get(&self.cars[i].id)
+                .filter(|w| w.active && w.behind < MAKE_WAY_STOP_REACH)
+                .and_then(|_| {
+                    let st = &self.cars[i].state;
+                    let at = st.front + st.speed * st.speed / (2.0 * MAKE_WAY_DECEL) + 0.3;
+                    let junction_in = way
+                        .iter()
+                        .find(|w| !self.net.crossings[w.0].is_empty())
+                        .map(|w| w.1)
+                        .unwrap_or(f32::MAX);
+                    (at < junction_in - 1.0).then_some(at)
+                });
             let mut stop_at = [
                 light,
                 yield_at,
+                make_way_stop,
                 merge_wait,
                 keep_back,
                 people,
@@ -6715,6 +6873,7 @@ impl Traffic {
                 ("people", people),
                 ("pull_out", parked_wait),
                 ("let_out", let_out),
+                ("make_way", make_way_stop),
             ] {
                 if let Some(v) = v {
                     if v < why.1 {
@@ -6756,7 +6915,19 @@ impl Traffic {
                     service.feed_timetable(&mut car.vehicle, self.day_time);
                 } else if car.passing.is_none() && car.park.is_none() {
                     // round a car parked at the kerb, else in the middle of the lane
-                    let target = kerb_swerve.unwrap_or(0.0);
+                    // (making way for an emergency vehicle: over to the kerb side, where no
+                    // parked car stands on the lanes ahead)
+                    let aside = self.way_makers.get(&car.id).is_some_and(|w| w.active)
+                        && !way
+                            .iter()
+                            .any(|w| self.parked.get(&w.0).is_some_and(|v| !v.is_empty()));
+                    let room = (self.net.lanes[car.state.lane].width * 0.5 - car.half_width - 0.1)
+                        .clamp(0.0, MAKE_WAY_SHIFT);
+                    let target = kerb_swerve.unwrap_or(if aside {
+                        -self.net.oncoming_sign() * room
+                    } else {
+                        0.0
+                    });
                     if debug && (target - car.state.lateral_target).abs() > 0.3 {
                         log::info!(
                             "t={:.2}: car {} swerves to {target:+.2} (was {:+.2}, now at {:+.2})",
