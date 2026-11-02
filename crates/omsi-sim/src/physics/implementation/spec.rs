@@ -85,6 +85,15 @@ impl AxleSpec {
     }
 }
 
+/// How far forward of the model origin the physics object's centre sits (m): `[cog]`'s
+/// forward value, the middle of `[boundingbox]` for a file without one, else the origin.
+pub fn body_centre_long(def: &Vehicle) -> f32 {
+    def.cog
+        .map(|c| c[1])
+        .or(def.bounding_box.map(|b| b[4]))
+        .unwrap_or(0.0)
+}
+
 impl PhysicsSpec {
     pub fn from(def: &Vehicle) -> PhysicsSpec {
         let mass = mass_kg(def);
@@ -95,11 +104,12 @@ impl PhysicsSpec {
         } else {
             def.moment_of_inertia
         };
-        // the file's first, second and third value are pitch, yaw and roll (see `inertia`)
-        let inertia = Vec3::new(moi[0], moi[2], moi[1]) * 1000.0;
+        // the file's first, second and third value are pitch, roll and yaw (see `inertia`)
+        let inertia = Vec3::new(moi[0], moi[1], moi[2]) * 1000.0;
         let cog_xy = def.cog.map(|c| (c[0], c[1])).unwrap_or((0.0, 0.0));
         let front_long = def.axles.iter().map(|a| a.long).fold(f32::MIN, f32::max);
         let rear_long = def.axles.iter().map(|a| a.long).fold(f32::MAX, f32::min);
+        let turn_line = body_centre_long(def) + def.rot_pnt_long;
         // the kinematic model's lock: the file's, held to 10..60° (with the arm from the
         // turning line at least 1 m), and the least for a file without a usable one
         let s = (front_long - def.rot_pnt_long).abs().max(1.0);
@@ -115,8 +125,9 @@ impl PhysicsSpec {
             cog: Vec3::new(cog_xy.0, cog_xy.1, def.cog_height),
             rolling_resistance: def.rolling_resistance,
             rot_pnt_long: def.rot_pnt_long,
+            turn_line,
             front_long,
-            max_steer_deg: (def.inv_min_turn_radius * (front_long - def.rot_pnt_long).abs())
+            max_steer_deg: (def.inv_min_turn_radius * (front_long - turn_line).abs())
                 .atan()
                 .to_degrees(),
             kinematic_max_steer_deg,
@@ -296,11 +307,11 @@ impl AiSpec {
             damper[2] += w.c * w.lat * w.lat;
         }
         let half_track = wheels.iter().map(|w| w.lat.abs()).fold(0.5, f32::max);
-        // (pitch and roll: the first and the third value, as the player's body reads them - see
-        // `PhysicsSpec::inertia`)
+        // (pitch and roll: the first and the second value, as the player's body reads them -
+        // see `PhysicsSpec::inertia`)
         let mut inertia = [
             def.moment_of_inertia[0] * unit,
-            def.moment_of_inertia[2] * unit,
+            def.moment_of_inertia[1] * unit,
         ];
         if inertia[0] <= 0.0 {
             inertia[0] = mass * (front_long * front_long + rear_long * rear_long) * 0.5;

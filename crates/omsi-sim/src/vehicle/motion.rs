@@ -20,8 +20,8 @@ impl VehicleInstance {
     /// The steering (-1 full left .. 1 full right, as [`Controls::steering`]) that turns the
     /// axles to the angles `axle_angle` gives (`Axle_Steering_<axle>_L` / `_R`, rad, as a
     /// saved situation keeps them): the steering sets the curvature the vehicle turns on, a
-    /// share of `[inv_min_turnradius]`, and each axle points at its centre from
-    /// `[rot_pnt_long]` (see `RigidBody::axle_steer`), so the axle farthest from that line
+    /// share of `[inv_min_turnradius]`, and each axle points at its centre on the turning
+    /// line (`PhysicsSpec::turn_line`, see `RigidBody::axle_steer`), so the axle farthest from that line
     /// gives the curvature back. None for a vehicle that cannot steer or angles not known.
     pub fn steering_for_axle_angles(
         &self,
@@ -31,10 +31,12 @@ impl VehicleInstance {
         if def.inv_min_turn_radius <= 0.0 {
             return None;
         }
+        // (the line counted from the physics object's centre, as the body steers to it)
+        let line = crate::physics::implementation::spec::body_centre_long(def) + def.rot_pnt_long;
         let (axle, lever) = def
             .axles
             .iter()
-            .map(|a| a.long - def.rot_pnt_long)
+            .map(|a| a.long - line)
             .enumerate()
             .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))?;
         if lever.abs() < 0.1 {
