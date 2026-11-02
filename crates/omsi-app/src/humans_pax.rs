@@ -469,6 +469,9 @@ pub struct BusAtStops {
     pub request_next: Option<RequestStop>,
     pub near: Vec<i64>,
     pub all_exit: bool,
+    /// The player asked for this bus to be emptied (Alt bar, destination window): everyone on
+    /// board gets off by an open door, wherever the bus is and whatever they were going to.
+    pub forced: bool,
 }
 
 /// The trip the player's duty has the bus on, as the people at the stops see it.
@@ -887,6 +890,31 @@ fn yaw_of(d: DVec2) -> f64 {
 }
 
 impl Humans {
+    /// The player's "Make everyone get off": everyone on board `bus` heads for an exit and
+    /// leaves by the doors once they are open and the bus stands, at a stop or not. It ends
+    /// by itself when the bus is empty. Returns how many were on board.
+    pub fn force_disembark(&mut self, bus: BusId) -> usize {
+        let riders = self
+            .people
+            .iter()
+            .filter(|p| p.inside(bus) && matches!(p.state, State::Pax(_)))
+            .count();
+        if riders > 0 {
+            self.empty_bus.insert(bus);
+        }
+        riders
+    }
+
+    /// Ends the emptying of the buses that have nobody left on board.
+    pub(super) fn end_emptied_buses(&mut self) {
+        if self.empty_bus.is_empty() {
+            return;
+        }
+        let people = &self.people;
+        self.empty_bus
+            .retain(|b| people.iter().any(|p| p.inside(*b) && matches!(p.state, State::Pax(_))));
+    }
+
     /// The passenger of person `i`, if it is one.
     pub(super) fn pax(&self, i: usize) -> Option<&Pax> {
         match &self.people[i].state {
@@ -915,7 +943,10 @@ impl Humans {
         for bn in buses {
             let km = self.odometer.entry(bn.id).or_insert(0.0);
             *km += bn.speed.abs() * dt as f64 / 1000.0;
-            let mut reg = BusAtStops::default();
+            let mut reg = BusAtStops {
+                forced: self.empty_bus.contains(&bn.id),
+                ..Default::default()
+            };
             let mut request_distance = 500.0;
             for id in &ids {
                 let s = &self.stops[id];
@@ -2202,6 +2233,10 @@ impl Humans {
             Task::SittingInBus => {
                 let Some(b) = p.inside else { return };
                 let reg = at_stops.get(&b).cloned().unwrap_or_default();
+                if reg.forced {
+                    self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
+                    return;
+                }
                 let km = self.odometer.get(&b).copied().unwrap_or(0.0);
                 if let Some(bn) = bn {
                     if let Some(stop) = bn.next_stop.as_ref().or(reg.request_next.as_ref()) {
@@ -2392,6 +2427,28 @@ impl Humans {
         let Some(bn) = p.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k])) else {
             return;
         };
+        // The player emptied this bus: whoever was on the way to the validator or the desk
+        // gives that up (a sale at the desk is dropped) and goes to an exit.
+        if self.empty_bus.contains(&bn.id) {
+            if self.desk_busy == Some(self.people[i].id) {
+                if let Some(m) = self.money.as_mut() {
+                    // (both the payment and the change on the desk)
+                    m.clear(false);
+                    m.clear(true);
+                }
+                self.change_due = None;
+                self.request = None;
+                self.paid = None;
+                self.desk_busy = None;
+            }
+            let pp = self.pax_mut(i).unwrap();
+            pp.reach = false;
+            pp.talking = false;
+            pp.look_driver = false;
+            pp.sub = 0;
+            self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
+            return;
+        }
         if p.st == 7 {
             if p.ticket < TICKET_STAMP {
                 self.set_task(i, Task::SittingInBus, buses, bus_ix, world);
@@ -2470,11 +2527,11 @@ impl Humans {
             .door
             .map(|d| bn.exit_open.get(d).copied().unwrap_or(false))
             .unwrap_or(false);
-        let may_leave = door_open && (reg.next.is_some() || p.complaint == 3);
+        let may_leave = door_open && (reg.next.is_some() || reg.forced || p.complaint == 3);
         self.pax_mut(i).unwrap().short = !may_leave;
         let out = p.st == 7 && bn.speed.abs() < 1.0 && may_leave;
         if !out {
-            if reg.next.is_none() {
+            if reg.next.is_none() && !reg.forced {
                 if bn.id == BusId::Player {
                     self.stop_request = true;
                 }
