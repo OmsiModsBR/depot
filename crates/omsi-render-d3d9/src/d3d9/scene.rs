@@ -906,13 +906,21 @@ impl D3d9Device {
         frame.validate()?;
         self.ensure_scene_pipeline()?;
         self.step_glass_rain(frame);
-        let drawn = self.draw_scene_inner(
-            frame,
-            &material,
-            target.width,
-            target.height,
-            self.coverage(),
-        );
+        let native = (target.width, target.height);
+        let drawn = match self.scene_size_for(native) {
+            // (the render scale option: the scene is drawn smaller and brought up; the
+            // interface and the HUD's pictures that follow are drawn at the picture's size)
+            Some(small) => {
+                self.draw_scene_scaled(frame, &material, native, small, target.clear_rgba)
+            }
+            None => self.draw_scene_inner(
+                frame,
+                &material,
+                target.width,
+                target.height,
+                self.coverage(),
+            ),
+        };
         let restored = self.restore_scene_states();
         drawn?;
         restored?;
@@ -945,7 +953,7 @@ impl D3d9Device {
 
     /// Back to the backend's own states after a scene, whatever happened, with depth as the
     /// backend expects it.
-    fn restore_scene_states(&mut self) -> Result<()> {
+    pub(super) fn restore_scene_states(&mut self) -> Result<()> {
         // (the alpha-to-coverage and anisotropic filtering of the scene stay with it)
         self.a2c.set(&self.device, false)?;
         for stage in 0..4 {
@@ -982,7 +990,7 @@ impl D3d9Device {
     }
 
     /// The alpha-to-coverage switch for a draw to the window's picture: when it is multisampled.
-    fn coverage(&self) -> A2c {
+    pub(super) fn coverage(&self) -> A2c {
         if self.msaa.1 > 1 {
             self.a2c
         } else {
@@ -1270,7 +1278,7 @@ impl D3d9Device {
         }
     }
 
-    fn draw_scene_inner<'m>(
+    pub(super) fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,

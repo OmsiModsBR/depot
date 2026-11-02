@@ -213,11 +213,24 @@ has it back at the owner's next draw.
 Known differences: no MSAA on the interface (`omsi-ui` draws the in-game overlay without it
 too), and a picture `omsi-ui` takes from a render target (`add_view`) draws nothing.
 
+## The render scale (`d3d9/upscale.rs`, `render_scale.rs`, `shaders/upscale.hlsl`)
+
+An option for slower graphics chips, **off by default** and a **deliberate deviation from OMSI 2**, which always draws at the window's size. `D3d9Device::set_render_scale(scale, upscale)` (the game calls it every frame from its settings: `render_scale` and `dx9_upscale`) makes `draw_scene` draw the scene into a render target of `scale` times the frame's size (0.5 to 1; rounded, never beyond the frame) with a depth surface of its own and **without multisampling**, and then bring it up into the frame's picture before `draw_overlays` and the interface are drawn over it at the picture's own size, so text, the Alt bar and the HUD stay sharp.
+
+- `Upscale::Bilinear`: one full-screen pass reading the small picture through the card's bilinear filter.
+- `Upscale::Fsr1`: two passes, the edge-adaptive upsampling (`ps_easu`, twelve point reads) into a picture-sized target of its own, then the sharpening (`ps_rcas`, five reads) into the picture. Adapted to Shader Model 3.0 from AMD's FidelityFX Super Resolution 1 (MIT): source, commit, changes and the unassessed patent question are in [THIRD_PARTY.md](../../THIRD_PARTY.md). Pixel shader slots (the compiler's count, held to 460 by a test): bilinear 5, upsampling 379, sharpening 55. A device whose pixel shaders cannot take them draws with the bilinear filter and says so in the log.
+- At no scale (the default, `0`, or 100 %) nothing runs: no target is made, no pass is drawn, and the scene goes straight into the frame as it did before the option; a test holds the two pictures byte for byte equal. The targets follow the frame's size, are let go of when the device is resized or its depth format changes, and are made again at the next scene.
+- Mirrors (`draw_scene_into`) are not scaled; they have sizes of their own. The coronas, rain on glass, sky, sun glow and smoke are passes of the scene and are drawn in the small picture, with the pixel offset of its size.
+- The scale is the player's: there is no automatic governor under this API (Auto means 100 %).
+- It does not widen the hardware matrix: Shader Model 3.0 and the other floors stand, and it saves pixels, not memory (the targets add a few megabytes).
+
+Not done: screenshots are not drawn in this mode at all yet (see above), so which picture one would capture (the stretched one the player sees, or a full-size re-render) is still to be decided; it has no effect today.
+
 ## Dependencies and provenance
 
 Only the `windows` crate (Microsoft, MIT OR Apache-2.0), already used by `omsi-render`, at the
 workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader features;
-`winit` (workspace version) only for the example. All code is original to this repository.
+`winit` (workspace version) only for the example. All code is original to this repository, except `ps_easu` and `ps_rcas` of `shaders/upscale.hlsl`, which are adapted from AMD's FidelityFX Super Resolution 1 (MIT; see [THIRD_PARTY.md](../../THIRD_PARTY.md)).
 
 ## Testing
 

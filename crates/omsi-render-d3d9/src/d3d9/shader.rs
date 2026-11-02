@@ -23,6 +23,7 @@ pub(crate) const GLASS_RAIN: &str = include_str!("shaders/glass_rain.hlsl");
 pub(crate) const SKY: &str = include_str!("shaders/sky.hlsl");
 pub(crate) const SUN_GLOW: &str = include_str!("shaders/sunglow.hlsl");
 pub(crate) const SMOKE: &str = include_str!("shaders/smoke.hlsl");
+pub(crate) const UPSCALE: &str = include_str!("shaders/upscale.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -297,6 +298,25 @@ mod tests {
         let slots = reported_slots(&ps).unwrap();
         println!("smoke pixel shader: {slots} instruction slots");
         assert!(slots <= 460, "the smoke pixel shader takes {slots} slots");
+    }
+
+    #[test]
+    fn upscale_shaders_compile_for_sm3_and_fit() {
+        let vs = compile(UPSCALE, "upscale.hlsl", "vs_main", Stage::Vertex).unwrap();
+        assert_eq!(vs[0], 0xFFFE_0300);
+        for entry in ["ps_bilinear", "ps_easu", "ps_rcas"] {
+            let ps = compile(UPSCALE, "upscale.hlsl", entry, Stage::Pixel).unwrap();
+            assert_eq!(ps[0], 0xFFFF_0300);
+            // (passes of their own: each pixel shader has its 512 slots, with room to spare)
+            let slots = reported_slots(&ps).unwrap();
+            println!("upscale {entry}: {slots} instruction slots");
+            assert!(slots <= 460, "{entry} takes {slots} slots");
+            let counted = crate::caps::instruction_slots(&ps);
+            assert!(
+                counted.abs_diff(slots) <= slots / 10 + 2,
+                "{entry}: counted {counted}, the compiler {slots}"
+            );
+        }
     }
 
     #[test]

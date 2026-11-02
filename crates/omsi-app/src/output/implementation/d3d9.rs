@@ -511,6 +511,19 @@ impl D3d9Output {
         }
     }
 
+    /// The render scale option: the fraction of the window the scene is drawn at (0 = the
+    /// window's size) and whether it is brought up with the sharper pass.
+    pub(crate) fn set_render_scale(&self, scale: f32, sharp: bool) {
+        self.lock().device.set_render_scale(
+            scale,
+            if sharp {
+                omsi_render_d3d9::Upscale::Fsr1
+            } else {
+                omsi_render_d3d9::Upscale::Bilinear
+            },
+        );
+    }
+
     /// Ends and shows the frame the renderer's picture began (none: nothing happens).
     pub(crate) fn present(&self) {
         self.lock().present();

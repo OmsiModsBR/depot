@@ -33,6 +33,7 @@ const BEFORE: &[&str] = &[
     "smoke_max",
     "smoke_in_mirrors",
     "dx9_snow",
+    "dx9_upscale",
     "fullscreen",
     "resolution",
     "vsync",
