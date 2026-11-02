@@ -132,3 +132,23 @@ fn a_car_gives_up_making_way_when_the_emergency_vehicle_cannot_get_by() {
     );
     assert!(moved_after, "it stood for good: {}", describe(&w, ahead));
 }
+
+/// A car more than 70 m ahead of the emergency vehicle does not make way yet.
+#[test]
+fn a_car_far_ahead_does_not_make_way_yet() {
+    let mut w = world();
+    let a = w.x.approach[NORTH];
+    let route = vec![a, w.x.junction[NORTH], w.x.exit[NORTH], w.x.beyond[NORTH]];
+    let em = w.car(a, 5.0, 14.0, 91, true);
+    let far = w.car(a, 90.0, 14.0, 92, false);
+    w.route(em, route.clone());
+    w.route(far, route);
+    w.run(1.0, |w| {
+        assert_eq!(w.of(far).state.lateral_target, 0.0, "{}", describe(w, far));
+    });
+    assert!(w
+        .t
+        .way_makers
+        .get(&w.of(far).id)
+        .map_or(true, |m| !m.active));
+}

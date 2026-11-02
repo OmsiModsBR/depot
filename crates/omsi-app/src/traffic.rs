@@ -4090,8 +4090,6 @@ impl Traffic {
         Some(len - st.s - 1.0)
     }
 
-    /// Is what car `i` has stopped behind going to stand there for a while (a parked car, a
-    /// bus serving its stop, a broken-down or abandoned car, the player's bus waiting)?
     /// Seconds an emergency vehicle waits behind something standing before it goes round it
     /// (an ordinary car waits four).
     fn patience(&self, i: usize) -> f32 {
@@ -4153,6 +4151,7 @@ impl Traffic {
                     || c.park.is_some()
                     || c.state.change.is_some()
                     || !self.net.crossings[c.state.lane].is_empty()
+                    || !self.net.walks[c.state.lane].is_empty()
                 {
                     continue;
                 }
@@ -4206,6 +4205,8 @@ impl Traffic {
             .retain(|_, w| w.ignore_until > now || w.seen > now - 2.0);
     }
 
+    /// Is what car `i` has stopped behind going to stand there for a while (a parked car, a
+    /// bus serving its stop, a broken-down or abandoned car, the player's bus waiting)?
     fn standing_obstacle(
         &self,
         i: usize,
@@ -4435,7 +4436,7 @@ impl Traffic {
             (self.net.lanes[w.0].traffic_light.is_some() || !self.net.crossings[w.0].is_empty())
                 && w.1 < real + st.front + obstacle_len + 25.0
         });
-        if waits_there && !parked && !st.emergency {
+        if waits_there && !parked {
             skip("it waits before a light or a junction".into());
             return;
         }
@@ -6912,13 +6913,16 @@ impl Traffic {
                     let at = st.front + st.speed * st.speed / (2.0 * MAKE_WAY_DECEL) + 0.3;
                     let junction_in = way
                         .iter()
-                        .find(|w| !self.net.crossings[w.0].is_empty())
+                        .find(|w| {
+                            !self.net.crossings[w.0].is_empty() || !self.net.walks[w.0].is_empty()
+                        })
                         .map(|w| w.1)
                         .unwrap_or(f32::MAX);
                     // (nor with its rear still on the junction path it has just left)
-                    let rear_in_junction = st
-                        .prev_lane
-                        .is_some_and(|p| st.s < st.rear + 1.0 && !self.net.crossings[p].is_empty());
+                    let rear_in_junction = st.prev_lane.is_some_and(|p| {
+                        st.s < st.rear + 1.0
+                            && (!self.net.crossings[p].is_empty() || !self.net.walks[p].is_empty())
+                    });
                     (at < junction_in - 1.0 && !rear_in_junction).then_some(at)
                 });
             let mut stop_at = [
