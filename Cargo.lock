@@ -2928,6 +2928,7 @@ dependencies = [
  "naga",
  "omsi-cfg",
  "omsi-geometry",
+ "omsi-render",
  "omsi-texture",
  "pollster",
  "rayon",
