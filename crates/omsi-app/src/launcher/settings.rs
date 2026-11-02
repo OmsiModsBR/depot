@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// The page's sections, as the list on the left shows them.
-pub const SECTIONS: [&str; 12] = [
+pub const SECTIONS: [&str; 13] = [
     "General",
     "Simulation",
     "Graphics",
@@ -30,6 +30,7 @@ pub const SECTIONS: [&str; 12] = [
     "Presets and files",
     "Interface",
     "Modules",
+    "Developer",
 ];
 pub const GENERAL: usize = 0;
 const SIMULATION: usize = 1;
@@ -44,10 +45,17 @@ pub const PRESETS: usize = 9;
 pub const INTERFACE: usize = 10;
 /// OmsiLaunch's optional modules: OMSI 2 mode only (the Depot has none).
 pub const MODULES: usize = 11;
+/// The Depot's developer tools (#500): the Depot engine only.
+pub const DEVELOPER: usize = 12;
 
-/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine.
+/// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
+/// while the Depot is.
 fn section_shown(sec: usize, omsi2: bool) -> bool {
-    sec != MODULES || omsi2
+    match sec {
+        MODULES => omsi2,
+        DEVELOPER => !omsi2,
+        _ => true,
+    }
 }
 
 /// What the page remembers: the section shown, the search, "changed only".
@@ -720,6 +728,14 @@ pub static OPTS: &[Opt] = &[
         "The launcher rests while a game runs",
         "Gives the graphics card to the game",
     )),
+    // Developer
+    toggle(
+        DEVELOPER,
+        "Developer mode",
+        "developer_mode",
+        "Enable developer mode",
+        "Tools for people who make or test vehicles and maps. Off by default: while it is off, nothing of them runs. The tools themselves are not in this version yet",
+    ),
     // Simulation
     toggle(
         SIMULATION,
