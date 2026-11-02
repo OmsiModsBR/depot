@@ -4108,7 +4108,18 @@ impl Traffic {
                 };
                 // from the emergency vehicle's front to this car's rear
                 let behind = d + c.state.s - c.state.rear - ec.state.front;
-                if (0.0..=MAKE_WAY_REACH).contains(&behind) {
+                // (a car that is making way stays so until the emergency vehicle has gone
+                // right by: its rear clear of the car's front)
+                let beside = if self
+                    .way_makers
+                    .get(&c.id)
+                    .is_some_and(|w| w.seen > now - 1.0)
+                {
+                    -(ec.state.front + ec.state.rear + c.state.front + c.state.rear + 1.0)
+                } else {
+                    0.0
+                };
+                if (beside..=MAKE_WAY_REACH).contains(&behind) {
                     let e = found.entry(c.id).or_insert(behind);
                     *e = e.min(behind);
                 }
@@ -4132,6 +4143,8 @@ impl Traffic {
             }
             if now - w.since > MAKE_WAY_MAX_SECS {
                 w.ignore_until = now + MAKE_WAY_COOLDOWN;
+                // (the ten seconds count afresh after the pause)
+                w.since = w.ignore_until;
                 continue;
             }
             w.active = true;
@@ -6849,7 +6862,11 @@ impl Traffic {
                         .find(|w| !self.net.crossings[w.0].is_empty())
                         .map(|w| w.1)
                         .unwrap_or(f32::MAX);
-                    (at < junction_in - 1.0).then_some(at)
+                    // (nor with its rear still on the junction path it has just left)
+                    let rear_in_junction = st
+                        .prev_lane
+                        .is_some_and(|p| st.s < st.rear + 1.0 && !self.net.crossings[p].is_empty());
+                    (at < junction_in - 1.0 && !rear_in_junction).then_some(at)
                 });
             let mut stop_at = [
                 light,
