@@ -50,9 +50,11 @@ pub struct PhysicsSpec {
     pub kinematic_mass_kg: f32,
     /// Moments of inertia (kg m²) about the body's right, forward and up axes: pitch, roll and
     /// yaw, from the file's t m² with no unit guess and no minimum. `[momentofintertia]` gives
-    /// them in OMSI's y-up body frame: the first about the lateral axis (pitch), the second
-    /// about the vertical one (yaw) and the third about the longitudinal one (roll), whatever
-    /// order the SDK's comment names (the in-game check is in issue #49).
+    /// them about the file's own x, y and z (right, forward, up), as the SDK's comment names
+    /// them: the first about the lateral axis (pitch), the second about the longitudinal one
+    /// (roll) and the third about the vertical one (yaw). In OMSI 2 a stock bus given
+    /// `100 / 1 / 100` sways from side to side at every lateral load shift, the second value
+    /// being its roll.
     pub inertia: Vec3,
     /// Centre of gravity (m, right, forward, up from the model origin). Its height is
     /// `[schwerpunkt]`, the lever the weight shifts by as OMSI has it, and none for a file
@@ -64,6 +66,13 @@ pub struct PhysicsSpec {
     pub rolling_resistance: f32,
     /// `[rot_pnt_long]` as the file gives it.
     pub rot_pnt_long: f32,
+    /// The line a front or single vehicle turns about while its tyres hold (m forward of
+    /// the model origin): `[rot_pnt_long]` counted from the physics object's centre, which
+    /// is `[cog]`, or the middle of `[boundingbox]` for a file without one. A `[cog]` 3 m
+    /// ahead of the origin turns the bus about a point 3 m ahead of `[rot_pnt_long]`, its
+    /// rear axle dragging sideways: a file whose `[rot_pnt_long]` is its rear axle less its
+    /// `[cog]`'s forward value turns about the rear axle.
+    pub turn_line: f32,
     /// The frontmost axle (m along the body; `f32::MIN` without axles).
     pub front_long: f32,
     /// The curvature (1/m) of the full lock, `[inv_min_turnradius]` as the file gives it (a
