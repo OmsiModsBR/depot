@@ -18,6 +18,7 @@
 //! they stay.
 //!
 //! The lines are built once per zoom band - a point every fraction of a pixel is all the eye
+//! gets (`tolerance`) - so moving the map is a matrix and not a rebuild.
 //!
 //! `domain` holds what a map is to the launcher (its roads, entry points and objects) and the
 //! plan its lines are drawn from, `implementation` the view and the reading of a map, and
