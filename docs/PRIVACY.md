@@ -39,10 +39,11 @@ and edit; nothing is posted until you submit it yourself. Check the text for per
 ## The website
 
 The project's website is static, with no cookies or analytics, and its fonts are served from the
-site itself. Opening it makes your browser contact only GitHub, which sees your IP address:
+site itself. Opening it makes your browser contact GitHub, and sometimes other hosts, which see your IP address:
 
 * `api.github.com`, to read the latest release and the issue list;
-* GitHub's image hosts (for example `avatars.githubusercontent.com`), when an issue page shows avatars or an image from an issue or release text.
+* GitHub's avatar host (`avatars.githubusercontent.com`) when an issue page shows who wrote it;
+* whatever host an image inside an issue or release text points to (any `https://` address), when you open that issue or release.
 
 ## Questions
 
