@@ -24,7 +24,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 ### Privacy and documentation
 
 - **Added.** [docs/PRIVACY.md](docs/PRIVACY.md) says what the program sends over the network (nothing unless you ask, and only to the named host), that there is no telemetry, analytics or identifier, that logs stay in `~/.depot`, and that the Steam connection is deliberate. No behaviour of the program changes. (#628)
-- **Changed.** The website serves Roboto, Roboto Mono and Material Icons from its own `site/fonts` (Apache-2.0, unmodified; recorded in [THIRD_PARTY.md](THIRD_PARTY.md)) instead of Google Fonts, and its content security policy now allows fonts only from the site itself, so the site contacts only `api.github.com`. Checked in a browser for the fonts and icon ligatures. (#628)
+- **Changed.** The website serves Roboto, Roboto Mono and Material Icons from its own `site/fonts` (Apache-2.0, unmodified; recorded in [THIRD_PARTY.md](THIRD_PARTY.md)) instead of Google Fonts, and its content security policy now allows fonts only from the site itself, so the site contacts only GitHub (`api.github.com`, and its image hosts for avatars and pictures in issues). Checked in a browser for the fonts and icon ligatures. (#628)
 - **Fixed.** `SECURITY.md` no longer mentions a crash reporter, which the program does not have; it says the logs stay on the user's computer. (#628)
 
 ### Diagnostics, integrity and AI traffic

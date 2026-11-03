@@ -8,13 +8,13 @@ Settings, logs, screenshots and everything else the program writes stay on your 
 ## When the program does use the network
 
 Only for something you asked for, and only to the host named here. Nothing is sent that
-identifies you beyond what any web request carries (your IP address and the program's name and version).
+identifies you beyond what any web request carries (your IP address and the program's name; the radio also sends its version).
 
 | What | When | Host |
 | --- | --- | --- |
-| Internet radio of a bus | A bus radio is switched on; the stations are in `~/.depot/radio.cfg` (a map or radio plugin may add its own). Only `https://` addresses of public hosts. | the station's own server |
+| Internet radio of a bus | A bus radio is switched on; the stations are in `~/.depot/radio.cfg` (a map or radio plugin may add its own). Only `https://` addresses of public hosts, unless you set `OMSI_RADIO_ALLOW_HTTP=1` yourself (see [ENVIRONMENT](ENVIRONMENT.md)). | the station's own server |
 | Real weather (METAR) | You pick it in the weather menu; the station code is sent, nothing else. | `aviationweather.gov` |
-| Downloads of the hidden original OMSI 2 mode | You confirm an install or update of OmsiLaunch or a module. | `github.com` (the project's own releases) |
+| Downloads of the hidden original OMSI 2 mode | You confirm an install or update of OmsiLaunch or a module. | `api.github.com` and GitHub's download hosts (the project's own releases and modules) |
 | Links | You click one; it opens in your browser. | the project's GitHub pages, or Microsoft's .NET download page |
 
 ## Steam
@@ -30,18 +30,19 @@ multiplayer or "playing now" feature: those were removed (see [CHANGELOG](../CHA
 
 ## Logs and problem reports
 
-`game.log` and `launcher.log` are written locally and are replaced on each run. They can contain
+`game.log` and `launcher.log` are written locally and are replaced on each run (the launcher log may grow during a run). They can contain
 paths on your computer (including your Windows user name), the graphics card and the maps and
-vehicles you loaded. **Nothing sends them.** "Copy report" puts the end of the log on your
-clipboard, and "Report a problem" opens a new GitHub issue in your browser with a text you can read
+vehicles you loaded. **Nothing sends them.** In the crash dialog, "Copy report" puts the end of the log on your
+clipboard, and "Report on GitHub" (like the launcher's "Report a problem" button) opens a new GitHub issue in your browser with a text you can read
 and edit; nothing is posted until you submit it yourself. Check the text for personal paths first.
 
 ## The website
 
 The project's website is static, with no cookies or analytics, and its fonts are served from the
-site itself. Opening it makes your browser contact one third party, which sees your IP address:
+site itself. Opening it makes your browser contact only GitHub, which sees your IP address:
 
-* **GitHub** (`api.github.com`), to read the latest release and the issue list.
+* `api.github.com`, to read the latest release and the issue list;
+* GitHub's image hosts (for example `avatars.githubusercontent.com`), when an issue page shows avatars or an image from an issue or release text.
 
 ## Questions
 
