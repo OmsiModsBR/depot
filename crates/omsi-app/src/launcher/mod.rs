@@ -452,7 +452,7 @@ impl Launcher {
                 app.drive.tab = step.min(2);
                 // (the Controls page's second part is its tab, controls:1 the game controllers; the
                 // Settings page's its section, settings:5 Sound)
-                app.pages.controls_tab = step;
+                app.pages.controls.tab = step;
                 app.pages.set.sec = step.min(window::SECTIONS.len() - 1);
                 // (and the Timetable page's its tab, timetable:1 the schematic)
                 app.pages.tt.tab = step.min(2);
@@ -1650,7 +1650,7 @@ impl Launcher {
                 .and_then(|v| v.as_str())
                 == Some("square"),
         );
-        if self.page != Page::Controls || self.pages.controls_tab != 1 {
+        if self.page != Page::Controls || self.pages.controls.tab != 1 {
             self.pages.cancel_feedback_test();
         }
         let size = self.ui.size;
@@ -1667,7 +1667,7 @@ impl Launcher {
         // (and the keyboard's Reload and Add a control over Controls)
         let keys = !mobile
             && self.page == Page::Controls
-            && self.pages.controls_tab == 0
+            && self.pages.controls.tab == 0
             && self.pages.kb.dialog.is_some();
         // (and OmsiLaunch's install or removal dialogs)
         let engine = !mobile && !matches!(self.state.original.flow, state::Flow::Idle);
@@ -1921,7 +1921,7 @@ impl Launcher {
             self.pages.confirm_reset = true;
         }
         if let Some(t) = out.controls {
-            self.pages.controls_tab = t;
+            self.pages.controls.tab = t;
             self.go(Page::Controls);
         }
     }
@@ -2497,32 +2497,6 @@ impl Launcher {
     /// under it.
     pub fn page_title(&mut self, r: Rect, page: UiPage) -> Rect {
         window::page_title(&mut self.ui, r, page)
-    }
-
-    /// `page_title` with its parts given: the page's name, (where on it, the title, the line).
-    pub fn page_title_with(&mut self, r: Rect, name: &str, parts: (&str, &str, &str)) -> Rect {
-        window::page_title_with(&mut self.ui, r, name, parts)
-    }
-
-    /// `page_title_with` for a page whose tabs, `tabs_w` wide, sit at the right of its title.
-    pub fn page_title_beside(
-        &mut self,
-        r: Rect,
-        name: &str,
-        parts: (&str, &str, &str),
-        tabs_w: f32,
-    ) -> Rect {
-        window::page_title_beside(&mut self.ui, r, name, parts, tabs_w)
-    }
-
-    /// Where a page puts its tabs, `w` wide, over its `body` (`window::title_tabs`).
-    pub fn title_tabs(&self, body: Rect, w: f32) -> Rect {
-        window::title_tabs(body, w)
-    }
-
-    /// A card's title (`window::card_title`); returns the rest of `r` under it.
-    pub fn card_title(ui: &mut Ui, r: Rect, title: &str) -> Rect {
-        window::card_title(ui, r, title)
     }
 }
 

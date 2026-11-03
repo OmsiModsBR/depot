@@ -3,6 +3,7 @@
 pub(crate) mod ai;
 pub(crate) mod ai_lists;
 pub(crate) mod check;
+pub(crate) mod controls;
 pub(crate) mod drive;
 pub(crate) mod frame;
 pub(crate) mod keyboard;
