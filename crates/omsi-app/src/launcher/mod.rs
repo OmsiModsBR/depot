@@ -26,10 +26,8 @@ macro_rules! frame {
 pub(crate) mod backdrop;
 pub(crate) mod chrome;
 pub(crate) mod diagnostics;
-mod gfx;
+pub(crate) mod gfx;
 pub(crate) mod host;
-pub(crate) mod map;
-pub(crate) mod mapview;
 pub mod mobile;
 mod pads;
 pub(crate) mod pages;
@@ -203,7 +201,7 @@ pub struct Launcher {
     /// The Maps page's start: its typed date and time, and the window open over the page.
     start: window::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
-    pub mapview: mapview::MapView,
+    pub mapview: crate::mapview::MapView,
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
@@ -315,7 +313,7 @@ impl Launcher {
             prerender_seen: 0,
             backdrop: backdrop::Backdrop::default(),
             start: window::StartView::default(),
-            mapview: mapview::MapView::new(),
+            mapview: crate::mapview::MapView::new(),
             map_rect: None,
             map_tex: None,
             map_gen: 0,
@@ -1894,7 +1892,7 @@ impl Launcher {
 
     /// The Timetable page in `area`, over the launcher's map.
     pub(super) fn timetable_page(&mut self, area: Rect) {
-        let mut map = map::GameMap {
+        let mut map = crate::mapview::GameMap {
             view: &mut self.mapview,
             tex: self.map_tex,
             rect: &mut self.map_rect,
@@ -1905,7 +1903,7 @@ impl Launcher {
     /// The start panel's window open over the Maps page (start points, weather, the map to
     /// explore), over the launcher's map.
     pub(super) fn start_window(&mut self) {
-        let mut map = map::GameMap {
+        let mut map = crate::mapview::GameMap {
             view: &mut self.mapview,
             tex: self.map_tex,
             rect: &mut self.map_rect,
@@ -1928,7 +1926,7 @@ impl Launcher {
 
     /// The Drive page in `area`, over the launcher's map or the bus.
     pub(super) fn drive_page(&mut self, area: Rect) {
-        let mut map = map::GameMap {
+        let mut map = crate::mapview::GameMap {
             view: &mut self.mapview,
             tex: self.map_tex,
             rect: &mut self.map_rect,

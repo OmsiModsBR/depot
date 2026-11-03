@@ -1,30 +1,8 @@
-//! The Drive page's map: the chosen map as the game's own city map has it - every spline's
-//! and every object's `[path]`, linked to its neighbours, grouped into carriageways with
-//! their real widths, where its entry points stand and where its objects are - and the road
-//! pieces the chosen trip drives over it.
-//!
-//! It reads the map the way the navigator does (`scene::navigation_map_of`, then
-//! `nav::city_roads`), so what the launcher shows cannot drift from what the game
-//! draws on its own map. What it leaves out is what choosing a duty does not need: no
-//! meshes, no textures, no traffic, no timetable beyond the chosen trip. That read is the
-//! one thing here that costs anything (the same 0.1 - 1.5 s the game's own map costs) and it
-//! runs once per map selection, off the interface thread, with the page saying so while it
-//! does.
-//!
-//! It is not a picture but a map: dragged to move, the wheel to zoom where the cursor is, an
-//! entry point clicked to choose where the bus is put down. The chosen line's route runs over
-//! the roads in red and its stops stand on it, their names and times written beside them by
-//! the interface (`Launcher::map_labels`). The lists next to it do what a map cannot say, and
-//! they stay.
-//!
-//! The lines are built once per zoom band - a point every fraction of a pixel is all the eye
-//! gets (`tolerance`) - so moving the map is a matrix and not a rebuild.
+//! The map itself: what it shows, where it is looking, the mouse over it and the texture it
+//! is drawn into.
 
 use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
-use hashbrown::HashMap;
-use omsi_sim::traffic::Network;
 use omsi_ui::{Color, Draw, Gpu, Layer, Painter, Rect, Vertex};
-use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::Instant;
@@ -32,7 +10,10 @@ use std::time::Instant;
 // The map is drawn with the game's own city map palette and order (see `navigator`): every
 // road's dark casing first, then every road's surface over every casing, then the chosen
 // line's route in the map's own red - so the two maps are the same picture.
+use super::read::{read, Reply};
 use crate::hud::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
+use crate::mapview::domain::plan::*;
+use crate::mapview::domain::roads::Roads;
 const STOP: Color = Color::rgba(240, 240, 240, 1.0);
 // Entry points wear the launcher's accent (`omsi_ui::theme::accent`); the one under the mouse
 // a grey ring, the chosen one a white (a click on the map takes the place of a name in a list
@@ -66,100 +47,6 @@ const ZOOM_SETTLE: std::time::Duration = std::time::Duration::from_millis(140);
 
 /// What the map should show, and the mouse over it (see `omsi_launcher_ui::window::Map`).
 pub use omsi_launcher_ui::window::{MapLook as Look, Pointer};
-
-/// An entry point as the map draws it: where its marker stands, its name, and its own place
-/// in `global.cfg`'s list. That place - not its place among the drawn markers - is what the
-/// choice and the game count (`--entry` is the position in that list), so an entry point
-/// whose position cannot be resolved leaves a gap that does not shift every marker after it
-/// onto the wrong spawn.
-pub struct Entry {
-    /// Where the marker stands, in world metres.
-    pub at: DVec2,
-    /// Its name, as `global.cfg` writes it.
-    pub name: String,
-    /// Its position in `global.entry_points`.
-    pub index: usize,
-}
-
-/// A map as the map needs it: the roads the game's own city map draws, the lanes they were
-/// grouped from (the chosen trip's route runs on those), where its entry points stand and
-/// where its objects do - all in world metres.
-#[derive(Default)]
-pub struct Roads {
-    /// Every carriageway the map has, as the game groups them: points in world metres.
-    pub roads: Vec<crate::hud::nav::MapRoad>,
-    /// The linked network behind them (a trip's road pieces are lanes of it).
-    pub net: Arc<Network>,
-    /// (tile x, tile y, spline id, path) → the lane the timetable names.
-    pub lanes: HashMap<(i32, i32, i64, u16), usize>,
-    /// (tile x, tile y, spline id) → every lane of that spline (for a piece whose exact path
-    /// is not there any more).
-    pub splines: HashMap<(i32, i32, i64), Vec<usize>>,
-    /// The world point the drawn lines are measured from: an f32 cannot hold a map's own
-    /// millions of metres to the centimetre, and roads are drawn to the centimetre.
-    pub origin: DVec2,
-    /// The world rectangle the roads cover (the 1 - 99 % box: see `read_map`).
-    pub lo: DVec2,
-    pub hi: DVec2,
-    /// The entry points that could be placed, in `global.cfg`'s order - each carrying its own
-    /// place in that list (see `Entry`).
-    pub entries: Vec<Entry>,
-    /// Every placed object's world place: the trip's stops are found here.
-    pub objects: HashMap<i64, DVec2>,
-    /// The streets the map's name signs name, each once (any case), with where its first
-    /// sign stands: the Timetable page's search finds them.
-    pub streets: Vec<(String, DVec2)>,
-    /// The map's own surface (`openomsi-realmap`: water, green, built-up land, rivers, rail,
-    /// borders), drawn under the roads when the map's author ships it.
-    pub surface: Option<Arc<crate::map_surface::MapSurface>>,
-}
-
-/// What a worker read.
-struct Reply {
-    look: Look,
-    roads: Option<Arc<Roads>>,
-    trip: omsi_launcher_lib::TripPath,
-    /// What went wrong, when nothing could be read at all.
-    error: Option<String>,
-}
-
-/// The largest vertex buffer the plan asks for. The launcher's device only promises the
-/// downlevel 256 MB, and a buffer is made at the next power of two above what it holds: a
-/// big map's plan (Mapa Transcol: 7.9 million vertices, 478 MB) asked for 512 MB, was refused
-/// and drew no roads (#536). Half of the promise leaves room for that rounding.
-pub const MAX_PLAN_BUFFER_BYTES: usize = 128 * 1024 * 1024;
-
-/// The markers' buffer; the plan's pieces follow it, from [`PLAN_FIRST_BUFFER`].
-const MARKS_BUFFER: usize = 0;
-const PLAN_FIRST_BUFFER: usize = 1;
-
-/// Where a list of `total` vertices is cut so that no piece passes `max_bytes`: every cut falls
-/// between whole triangles (a multiple of three vertices), and the pieces drawn in order are
-/// the list drawn at once.
-pub fn plan_pieces(total: usize, max_bytes: usize) -> Vec<std::ops::Range<usize>> {
-    let per = (max_bytes / std::mem::size_of::<Vertex>()).max(3) / 3 * 3;
-    (0..total)
-        .step_by(per)
-        .map(|a| a..(a + per).min(total))
-        .collect()
-}
-
-/// The plan (buffers from [`PLAN_FIRST_BUFFER`]): the roads and the route as one vertex list
-/// drawn in pieces, and what it was built for - another map, another trip, or another zoom
-/// band (whose own thinning it is).
-pub struct Plan {
-    pub key: Key,
-    pub verts: Vec<Vertex>,
-    pub uploaded: bool,
-}
-
-#[derive(Clone, PartialEq)]
-pub struct Key {
-    pub global: PathBuf,
-    pub trip: String,
-    /// The simplification the plan was built with, as the bit pattern of its metres.
-    pub tolerance: u32,
-}
 
 /// The map: what it shows, where it is looking, and the texture it is drawn into.
 pub struct MapView {
@@ -710,7 +597,7 @@ impl MapView {
     }
 
     /// The picture, drawn again when what it shows or how coarse it is changed.
-    pub fn picture(&mut self, renderer: &super::gfx::Gfx) -> Option<wgpu::TextureView> {
+    pub fn picture(&mut self, renderer: &crate::launcher::gfx::Gfx) -> Option<wgpu::TextureView> {
         let (w, h) = self.size();
         let (w, h) = (w as u32, h as u32);
         if self
@@ -981,24 +868,6 @@ impl MapView {
     }
 }
 
-impl Roads {
-    /// The lanes a trip's road piece runs on: the very `[path]` the timetable names, else -
-    /// a map whose timetable still names a spline it no longer has - every lane of that
-    /// spline, so a hole in the map's own data is not a hole in the picture.
-    fn routes_of(&self, piece: &omsi_launcher_lib::RoadPiece) -> Vec<usize> {
-        if let Some(&i) = self
-            .lanes
-            .get(&(piece.tile_x, piece.tile_y, piece.spline, piece.path))
-        {
-            return vec![i];
-        }
-        self.splines
-            .get(&(piece.tile_x, piece.tile_y, piece.spline))
-            .cloned()
-            .unwrap_or_default()
-    }
-}
-
 /// A ring `r_px` out and `w_px` thick around a world point, as the camera's own metres drawn
 /// as a band (the toolkit's widths are measured on the screen, its circles are not).
 fn ring(p: &mut Painter, at: Vec3, r_px: f32, w_px: f32, c: Color, mpp: f32) {
@@ -1021,191 +890,4 @@ fn ring(p: &mut Painter, at: Vec3, r_px: f32, w_px: f32, c: Color, mpp: f32) {
 /// simplification, in metres: 12 cm there, half a pixel here).
 fn simplify(pts: &[Vec3], tol: f32) -> Vec<Vec3> {
     crate::hud::nav::simplify(pts, tol)
-}
-
-/// Read a map the way the map needs it: the roads the game's city map draws, the entry
-/// points, the objects - and the chosen trip's route with them.
-fn read(look: Look, have: Option<Arc<Roads>>) -> Reply {
-    let mut reply = Reply {
-        look,
-        roads: None,
-        trip: Default::default(),
-        error: None,
-    };
-    if let Some(r) = have {
-        reply.trip = trip_of(&reply.look);
-        reply.roads = Some(r);
-        return reply;
-    }
-    let roads = read_map(&reply.look);
-    if roads.roads.is_empty() && roads.objects.is_empty() {
-        reply.error = Some(format!("{}", reply.look.global.display()));
-    }
-    reply.trip = trip_of(&reply.look);
-    reply.roads = Some(Arc::new(roads));
-    reply
-}
-
-/// The route of the chosen trip (nothing when no trip is chosen or the map has a timetable
-/// that does not know it).
-fn trip_of(look: &Look) -> omsi_launcher_lib::TripPath {
-    if look.trip.trim().is_empty() {
-        return Default::default();
-    }
-    match omsi_launcher_lib::trip_path(&look.map, &look.date, &look.trip) {
-        Ok(t) => t,
-        Err(e) => {
-            log::debug!("trip path for {}: {e}", look.trip);
-            Default::default()
-        }
-    }
-}
-
-/// The map's own data, read the way the game reads it for its city map: every tile's paths
-/// (splines and the crossings' objects), linked, grouped into carriageways with their real
-/// widths. `look.global` is the map's `global.cfg`; the tiles stand beside it and the assets
-/// the map names under the installation it belongs to.
-fn read_map(look: &Look) -> Roads {
-    let Ok(global) = omsi_map::GlobalCfg::load(&look.global) else {
-        return Roads::default();
-    };
-    // everything that turns a tile index and a place in the tile into world metres needs
-    // this first (`[worldcoordinates]` maps use another grid)
-    omsi_map::configure_grid(&global);
-    let Some(map_dir) = look.global.parent().map(Path::to_path_buf) else {
-        return Roads::default();
-    };
-    let chrono = omsi_map::date_code(&look.date)
-        .map(|c| omsi_map::active_chrono_dirs(&map_dir, c))
-        .unwrap_or_default();
-    let size = omsi_map::tile_size();
-    // the installation the map belongs to: what its `.sli` and `.sco` files are named from.
-    // A map is a folder under a content root's `maps` (that is where the launcher's list came
-    // from), so the root that holds it is the one its assets are named from; a map outside
-    // every root falls back to the folder two steps up, as `<root>/maps/<name>`.
-    let root = omsi_cfg::content_roots()
-        .into_iter()
-        .find(|r| map_dir.starts_with(r))
-        .or_else(|| {
-            map_dir
-                .parent()
-                .and_then(|p| p.parent())
-                .map(Path::to_path_buf)
-        })
-        .unwrap_or_else(|| map_dir.clone());
-    let tiles: Vec<(i32, i32, PathBuf)> = global
-        .tiles
-        .iter()
-        .map(|t| (t.x, t.y, omsi_cfg::resolve_path(&map_dir, &t.file)))
-        .filter(|t| omsi_cfg::vfs::is_file(&t.2))
-        .collect();
-    let t0 = std::time::Instant::now();
-    let crate::scene::NavigationMap {
-        lanes,
-        road_surfaces,
-        places,
-        signs,
-    } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
-    let (roads, net) = crate::hud::nav::city_roads(lanes, &road_surfaces);
-    // the lanes the timetable can name, and the lanes of every spline behind them
-    let mut by_path = HashMap::new();
-    let mut by_spline: HashMap<(i32, i32, i64), Vec<usize>> = HashMap::new();
-    for (i, l) in net.lanes.iter().enumerate() {
-        let Some(key) = l.key else { continue };
-        by_path.insert((key.tile.0, key.tile.1, key.id, key.path), i);
-        by_spline
-            .entry((key.tile.0, key.tile.1, key.id))
-            .or_default()
-            .push(i);
-    }
-    // the entry points: on the tile the record names, else at their object (`World::
-    // entry_point_place` reads them the same way)
-    let mut entries = Vec::new();
-    for (index, ep) in global.entry_points.iter().enumerate() {
-        let p = usize::try_from(ep.group)
-            .ok()
-            .and_then(|i| global.raw_tiles.get(i))
-            .map(|t| DVec2::new(t.0 as f64 * size + ep.pos[0], t.1 as f64 * size + ep.pos[1]))
-            .or_else(|| places.get(&ep.object_id).map(|q| q.truncate()));
-        // the marker carries where it stands in `global.cfg`'s list, so one left out here
-        // (no tile, no object) does not shift the ones after it
-        if let Some(p) = p {
-            entries.push(Entry {
-                at: p,
-                name: ep.name.clone(),
-                index,
-            });
-        }
-    }
-    let objects: HashMap<i64, DVec2> = places.iter().map(|(k, v)| (*k, v.truncate())).collect();
-    // where the roads are, and where the picture is measured from
-    let (mut min, mut max) = (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN));
-    for r in &roads {
-        for q in &r.points {
-            min = min.min(q.truncate());
-            max = max.max(q.truncate());
-        }
-    }
-    if min.x == f64::MAX {
-        min = DVec2::ZERO;
-        max = DVec2::ZERO;
-    }
-    let origin = (min + max) * 0.5;
-    // Where the roads really are: one spline left in a far corner (an editor's marker, a
-    // piece of the next town) would shrink everything else to a dot, so the map opens on the
-    // 1 - 99 % box of what the roads cover instead of the extremes (the far ones are still
-    // there to be dragged to).
-    let mut xs: Vec<f32> = roads
-        .iter()
-        .flat_map(|r| r.points.iter())
-        .map(|q| q.x as f32)
-        .collect();
-    let mut ys: Vec<f32> = roads
-        .iter()
-        .flat_map(|r| r.points.iter())
-        .map(|q| q.y as f32)
-        .collect();
-    xs.sort_by(f32::total_cmp);
-    ys.sort_by(f32::total_cmp);
-    let (lo, hi) = if xs.is_empty() {
-        (min, max)
-    } else {
-        let at = |v: &Vec<f32>, t: f64| v[((v.len() - 1) as f64 * t) as usize] as f64;
-        (
-            DVec2::new(at(&xs, 0.01), at(&ys, 0.01)),
-            DVec2::new(at(&xs, 0.99), at(&ys, 0.99)),
-        )
-    };
-    log::info!(
-        "map: {} roads from {} lanes in {} tiles, {} objects, {} entry points, read in {:.2} s; roads cover ({:.0}, {:.0}) - ({:.0}, {:.0}), opened at the 1 - 99 % box ({:.0}, {:.0}) - ({:.0}, {:.0})",
-        roads.len(),
-        net.lanes.len(),
-        tiles.len(),
-        objects.len(),
-        entries.len(),
-        t0.elapsed().as_secs_f64(),
-        min.x, min.y, max.x, max.y,
-        lo.x, lo.y, hi.x, hi.y
-    );
-    let mut streets: Vec<(String, DVec2)> = Vec::new();
-    for (at, _, name) in signs {
-        if !streets.iter().any(|s| s.0.eq_ignore_ascii_case(&name)) {
-            streets.push((name, at.truncate()));
-        }
-    }
-    streets.sort_by_key(|s| s.0.to_lowercase());
-    Roads {
-        roads,
-        net: Arc::new(net),
-        lanes: by_path,
-        splines: by_spline,
-        origin,
-        lo,
-        hi,
-        entries,
-        objects,
-        streets,
-        // (after `configure_grid`: the package is put onto this game's grid)
-        surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
-    }
 }

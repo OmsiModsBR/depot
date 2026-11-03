@@ -232,9 +232,6 @@ pub mod launcher {
     pub mod dialogs {
         pub use crate::launcher::dialogs::*;
     }
-    pub mod mapview {
-        pub use crate::launcher::mapview::*;
-    }
     pub mod pages {
         pub use crate::launcher::pages::*;
     }
@@ -430,6 +427,11 @@ pub mod settings {
         pub use crate::settings::bus_seats::*;
     }
 }
+pub mod mapview {
+    pub use crate::mapview::domain::{plan::*, roads::*};
+    pub use crate::mapview::*;
+}
+
 pub mod showroom {
     pub use crate::showroom::domain::message::*;
     pub use crate::showroom::implementation::{link::*, scene::*, wire::*};

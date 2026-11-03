@@ -542,7 +542,10 @@ windows. Each was traced to a general cause, most of them read off OMSI:
   loaded tiles learn their place from the navigator's map.
 * **`omsi-ui`** - Roboto in five weights of its variable font (with substitutes for the
   symbols it lacks), Material Symbols (Rounded, filled; `assets/icons/material`,
-  rasterised by resvg), a shelf-packed RGBA atlas uploaded by region, a painter of
+  rasterised by resvg), the project's own icons (`assets/icons/custom`: original drawings
+  made for Depot, under the repository's licence; the HUD's `hud-*` line family is drawn
+  on a 16 px grid with a 1.5 px round stroke and no fill, checked by
+  `crates/omsi-ui/tests/icons.rs`), a shelf-packed RGBA atlas uploaded by region, a painter of
   anti-aliased shapes (rounded boxes, soft shadows, arcs, gradients, text, icons; world
   ribbons, discs and shapes) and the wgpu pipeline for them (layers with their own camera,
   viewport and rounded clip). `examples/headless` checks it without the game.
