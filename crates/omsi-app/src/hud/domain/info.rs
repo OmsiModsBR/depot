@@ -11,12 +11,15 @@ pub enum InfoTone {
     Badge,
     /// The speed limit: dark text on a white sign with a red frame.
     Limit,
-    /// A delay: red text.
+    /// A warning value (a tank nearly empty): red text.
     Late,
-    /// Ahead of the timetable: green text.
-    Early,
     /// A frame rate that keeps up (green dot), is going slow (amber) or struggles (red).
     Fps(u8),
+    /// The speed: white text as wide as three digits, so the bar does not move as it changes.
+    Speed,
+    /// The delay to the timetable as a chip: -1 ahead (green), 0 on time (the accent), 1 late
+    /// (red); always as wide as "+00:00".
+    Delay(i8),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,6 +29,13 @@ pub struct InfoItem {
     /// A name from the map or the timetable, drawn as it is (not looked up as an interface
     /// text, in which "Depot" or "Station" would come out in another language).
     pub raw: bool,
+    /// The icon drawn before it (`hud-time`, `hud-stop` ...; see `omsi_ui::icons`).
+    pub icon: Option<&'static str>,
+    /// What it is, under the mouse after a second (an interface text, looked up), or the whole
+    /// of a name cut short (`clip`).
+    pub tip: Option<String>,
+    /// A long name (the route) is cut short with "…" so that the next stop keeps its room.
+    pub clip: bool,
 }
 
 impl InfoItem {
@@ -34,7 +44,22 @@ impl InfoItem {
             text: text.into(),
             tone,
             raw: false,
+            icon: None,
+            tip: None,
+            clip: false,
         }
+    }
+
+    /// With the icon `icon` before it.
+    pub(crate) fn with_icon(mut self, icon: &'static str) -> InfoItem {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Named `tip` under the mouse.
+    pub(crate) fn with_tip(mut self, tip: impl Into<String>) -> InfoItem {
+        self.tip = Some(tip.into());
+        self
     }
 
     pub(crate) fn raw(text: impl Into<String>, tone: InfoTone) -> InfoItem {
@@ -54,6 +79,10 @@ pub struct InfoCell {
     pub meter: Option<f32>,
     /// The cell is lit and its meter is red (a tank under 15 %).
     pub alert: bool,
+    /// The icon left of it (`hud-fuel` ...).
+    pub icon: Option<&'static str>,
+    /// Its name under the mouse after a second.
+    pub tip: Option<String>,
 }
 
 /// The information bar: items in groups, along the top or the bottom of the screen.
@@ -69,4 +98,6 @@ pub struct InfoBar {
     pub tiered: bool,
     /// The second tier is folded away (the arrow points down).
     pub collapsed: bool,
+    /// The Essentials layout: the speed and its limit are drawn larger.
+    pub large: bool,
 }

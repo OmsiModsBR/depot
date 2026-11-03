@@ -1,17 +1,59 @@
 //! The information drawn over the picture: the frame rate, the information bar, the
 //! timetable window and a tutorial page.
 
-use super::super::super::domain::{Frame, InfoTone};
+use super::super::super::domain::{Frame, InfoItem, InfoTone};
 use super::*;
 use crate::hud::interface::output::{Renderer, Scene, TextureId};
 
+/// One item of the information bar, laid out: its text, the icon before it, how wide the
+/// two are and how tall its box is, and what it says under the mouse.
+struct Piece {
+    l: Label,
+    tone: InfoTone,
+    icon: Option<TextureId>,
+    /// The icon's side and the gap after it (0 without an icon).
+    icon_w: f32,
+    /// The text's box: the text, or the badge, the sign or the chip round it.
+    body_w: f32,
+    h: f32,
+    tip: Option<String>,
+}
+
+impl Piece {
+    fn w(&self) -> f32 {
+        self.icon_w + self.body_w
+    }
+}
+
 /// One readout of an information bar's second tier, laid out.
 struct TierCell {
+    icon: Option<TextureId>,
     items: Vec<(Label, InfoTone, f32)>,
     pub(super) w: f32,
     pub(super) h: f32,
     meter: Option<f32>,
     alert: bool,
+    tip: Option<String>,
+}
+
+/// The muted grey of the bar's icons and names.
+const INFO_MUTED: [u8; 4] = [163, 168, 178, 255];
+/// Late, a tank nearly empty: the red of the bar (and of its chip's text).
+const INFO_RED: [u8; 4] = [238, 106, 95, 255];
+const INFO_GREEN: [u8; 4] = [95, 207, 138, 255];
+
+/// The colour of an item's text by its tone.
+fn info_colour(tone: InfoTone) -> [u8; 4] {
+    match tone {
+        InfoTone::Dim => txt(INFO_MUTED),
+        InfoTone::Badge => on_accent(),
+        InfoTone::Limit => [26, 17, 0, 0],
+        InfoTone::Late => txt(INFO_RED),
+        InfoTone::Delay(1) => [255, 150, 140, 0],
+        InfoTone::Delay(-1) => [139, 230, 173, 0],
+        InfoTone::Delay(_) => accent_ink(),
+        InfoTone::Plain | InfoTone::Fps(_) | InfoTone::Speed => [255, 255, 255, 0],
+    }
 }
 
 /// The information bar's groups in rows no wider than `room` (`widths`: each group's), each
@@ -36,9 +78,9 @@ pub fn info_rows(widths: &[f32], gap: f32, room: f32) -> Vec<Vec<usize>> {
     rows
 }
 
-/// The plate (13 green, 14 amber, 15 red) of the dot beside a frame rate.
-pub fn fps_dot(fps: f32) -> u8 {
-    fps_dot_level(fps_level(fps))
+/// The colour of the dot beside a frame rate: green, amber or red (`fps_level`).
+pub fn fps_dot(fps: f32) -> [u8; 4] {
+    fps_tone(fps_level(fps))
 }
 
 /// 0 keeps up (50 and over), 1 slow (30 to 49), 2 struggles.
@@ -52,12 +94,18 @@ pub fn fps_level(fps: f32) -> u8 {
     }
 }
 
-fn fps_dot_level(level: u8) -> u8 {
-    13 + level.min(2)
+/// The colour of a frame rate's dot by its level (the plates 13 to 15).
+fn fps_tone(level: u8) -> [u8; 4] {
+    match level {
+        0 => INFO_GREEN,
+        1 => [232, 171, 58, 255],
+        _ => INFO_RED,
+    }
 }
 
 impl Ui {
-    /// The frame rate, top right, with a dot of its tone.
+    /// The frame rate, top right, with a dot of its tone: a small plate like the
+    /// information bar's.
     pub(super) fn draw_fps(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, s: f32) {
         if let Some((fps, low)) = f.fps {
             let text = match low {
@@ -66,332 +114,515 @@ impl Ui {
             };
             let l = self
                 .text
-                .label(r, scene, &text, (13.0 * s) as u32, [255, 255, 255, 200]);
+                .label(r, scene, &text, (13.0 * s) as u32, [255, 255, 255, 0]);
             let dot = 7.0 * s;
-            let x = f.width - l.w as f32 - 12.0 * s - dot - 6.0 * s;
+            let x = f.width - l.w as f32 - 18.0 * s - dot - 6.0 * s;
+            let (y0, y1) = (10.0 * s - 3.0 * s, 10.0 * s + l.h as f32 + 3.0 * s);
             // (on a plate, as the notes are: over a bright sky the outline alone was not enough)
-            let plate = self.text.plate(r, scene, 7);
-            scene.overlays.push((
-                plate,
-                [
-                    x - 5.0 * s,
-                    10.0 * s,
-                    x + l.w as f32 + dot + 11.0 * s,
-                    10.0 * s + l.h as f32,
-                ],
-            ));
-            let tone = self.text.plate(r, scene, fps_dot(fps));
-            let cy = 10.0 * s + l.h as f32 * 0.5;
+            let panel = [
+                22,
+                22,
+                22,
+                (255.0 * self.text.backdrop).round().clamp(0.0, 255.0) as u8,
+            ];
+            self.text.rounded(
+                r,
+                scene,
+                [x - 9.0 * s, y0, x + l.w as f32 + dot + 15.0 * s, y1],
+                omsi_ui::theme::corner(8.0 * s),
+                panel,
+            );
+            let cy = (y0 + y1) * 0.5;
+            self.text.rounded(
+                r,
+                scene,
+                [x, cy - dot * 0.5, x + dot, cy + dot * 0.5],
+                dot * 0.5,
+                fps_dot(fps),
+            );
+            let tx = x + dot + 6.0 * s;
+            let ty = cy - l.h as f32 * 0.5;
             scene
                 .overlays
-                .push((tone, [x, cy - dot * 0.5, x + dot, cy + dot * 0.5]));
-            let tx = x + dot + 6.0 * s;
-            scene.overlays.push((
-                l.tex,
-                [tx, 10.0 * s, tx + l.w as f32, 10.0 * s + l.h as f32],
-            ));
+                .push((l.tex, [tx, ty, tx + l.w as f32, ty + l.h as f32]));
         }
     }
 
+    /// One item of the information bar measured (and its text and icon drawn into textures):
+    /// `px` the bar's text size, `large` the Essentials layout's speed and sign.
+    #[allow(clippy::too_many_arguments)]
+    fn info_piece(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        it: &InfoItem,
+        px: u32,
+        large: bool,
+        alert: bool,
+        s: f32,
+    ) -> Piece {
+        let colour = info_colour(it.tone);
+        let size = match it.tone {
+            InfoTone::Speed if large => (28.0 * s) as u32 | BOLD,
+            InfoTone::Speed => (px as f32 + 2.0 * s) as u32 | BOLD,
+            InfoTone::Badge | InfoTone::Limit | InfoTone::Delay(_) => (px as f32 - s) as u32 | BOLD,
+            _ => px,
+        };
+        // (a long name - the route - is cut short so that the next stop keeps its room; its
+        // whole is the tooltip then)
+        let mut tip = it.tip.clone();
+        let text = if it.clip {
+            let cut = clip_to(&self.text, &it.text, px as f32, 260.0 * s);
+            if cut == it.text {
+                tip = None;
+            }
+            cut
+        } else {
+            it.text.clone()
+        };
+        let l = if it.raw {
+            self.text.label_raw(r, scene, &text, size, colour)
+        } else {
+            self.text.label(r, scene, &text, size, colour)
+        };
+        let (lw, lh) = (l.w as f32, l.h as f32);
+        let digits = |n: &str, this: &Self| this.text.width_bold(n, (size & !BOLD) as f32);
+        let (body_w, h) = match it.tone {
+            InfoTone::Badge => ((lw + 14.0 * s).max(30.0 * s), lh + 4.0 * s),
+            InfoTone::Limit => {
+                // (round, as the sign is)
+                let d = if large {
+                    32.0 * s
+                } else {
+                    (lw + 8.0 * s).max(lh + 6.0 * s)
+                };
+                (d, d)
+            }
+            InfoTone::Speed => (lw.max(digits("000", self)), lh),
+            InfoTone::Delay(_) => (lw.max(digits("+00:00", self)) + 18.0 * s, lh + 4.0 * s),
+            InfoTone::Fps(_) => (lw + 12.0 * s, lh),
+            _ => (lw, lh),
+        };
+        let icon_px = (16.0 * s).round();
+        let icon = it.icon.and_then(|name| {
+            let ink = if alert { INFO_RED } else { INFO_MUTED };
+            self.text.icon(r, scene, name, icon_px as u32, ink)
+        });
+        Piece {
+            l,
+            tone: it.tone,
+            icon,
+            icon_w: if icon.is_some() {
+                icon_px + 6.0 * s
+            } else {
+                0.0
+            },
+            body_w,
+            h: h.max(if icon.is_some() { icon_px } else { 0.0 }),
+            tip,
+        }
+    }
+
+    /// Draw an item laid out by `info_piece` from `x`, centred on the line `cy`.
+    fn draw_piece(&mut self, r: &Renderer, scene: &mut Scene, p: &Piece, x: f32, cy: f32, s: f32) {
+        let (lw, lh) = (p.l.w as f32, p.l.h as f32);
+        if let Some(icon) = p.icon {
+            let side = p.icon_w - 6.0 * s;
+            let y0 = (cy - side * 0.5).round();
+            scene
+                .overlays
+                .push((icon, [x.round(), y0, x.round() + side, y0 + side]));
+        }
+        let bx = x + p.icon_w;
+        let ty = cy - lh * 0.5;
+        let mut tx = bx + (p.body_w - lw) * 0.5;
+        match p.tone {
+            InfoTone::Badge => {
+                let hh = p.h * 0.5;
+                self.text.rounded(
+                    r,
+                    scene,
+                    [bx, cy - hh, bx + p.body_w, cy + hh],
+                    omsi_ui::theme::corner(5.0 * s),
+                    accent(),
+                );
+            }
+            InfoTone::Limit => {
+                let d = p.body_w;
+                let ring = (d * 0.11).max(2.0 * s);
+                self.text.rounded(
+                    r,
+                    scene,
+                    [bx, cy - d * 0.5, bx + d, cy + d * 0.5],
+                    d * 0.5,
+                    [214, 45, 45, 255],
+                );
+                self.text.rounded(
+                    r,
+                    scene,
+                    [
+                        bx + ring,
+                        cy - d * 0.5 + ring,
+                        bx + d - ring,
+                        cy + d * 0.5 - ring,
+                    ],
+                    d * 0.5 - ring,
+                    [244, 244, 244, 255],
+                );
+            }
+            InfoTone::Speed => tx = bx + p.body_w - lw,
+            InfoTone::Delay(kind) => {
+                let hh = p.h * 0.5;
+                let (fill, edge) = match kind {
+                    1 => (fade(INFO_RED, 0.18), fade(INFO_RED, 0.45)),
+                    -1 => (fade(INFO_GREEN, 0.16), fade(INFO_GREEN, 0.42)),
+                    _ => (fade(accent(), 0.20), fade(accent(), 0.45)),
+                };
+                let rect = [bx, cy - hh, bx + p.body_w, cy + hh];
+                // (a hairline of the chip's colour round its tint, as the mockup's chip)
+                self.text.rounded(r, scene, rect, hh, edge);
+                self.text.rounded(
+                    r,
+                    scene,
+                    [rect[0] + 1.0, rect[1] + 1.0, rect[2] - 1.0, rect[3] - 1.0],
+                    hh - 1.0,
+                    [24, 25, 28, 255],
+                );
+                self.text.rounded(
+                    r,
+                    scene,
+                    [rect[0] + 1.0, rect[1] + 1.0, rect[2] - 1.0, rect[3] - 1.0],
+                    hh - 1.0,
+                    fill,
+                );
+            }
+            InfoTone::Fps(level) => {
+                let d = 7.0 * s;
+                self.text.rounded(
+                    r,
+                    scene,
+                    [bx, cy - d * 0.5, bx + d, cy + d * 0.5],
+                    d * 0.5,
+                    fps_tone(level),
+                );
+                tx = bx + 12.0 * s;
+            }
+            _ => tx = bx,
+        }
+        scene.overlays.push((p.l.tex, [tx, ty, tx + lw, ty + lh]));
+    }
+
     /// The information bar, along the top (or the bottom) in the middle: in as many rows as
-    /// the room it has needs.
+    /// the room it has needs, on a rounded plate (two in the Split layout).
     pub(super) fn draw_info(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, s: f32) {
         self.hits.info_rect = None;
         self.hits.info_chevron = None;
+        self.hits.info_tips.clear();
         // (nothing to say - every item switched off, a layout that has only the vehicle's items
         // and no vehicle - is no empty plate)
-        if let Some(info) = f.info.as_ref().filter(|i| !i.groups.is_empty()) {
-            let px = (15.0 * s) as u32;
-            let pad = 10.0 * s;
-            let gap = 6.0 * s;
-            let group_gap = 24.0 * s;
-            let [x0, x1, top_y] = f
-                .info_room
-                .unwrap_or([12.0 * s, f.width - 12.0 * s, 8.0 * s]);
-            // (a touch screen's buttons own the corners: the bar stays in the gap between them)
-            let bottom = info.bottom && f.info_room.is_none();
-            let colour = |tone: InfoTone| match tone {
-                InfoTone::Dim => [163, 168, 178, 0],
-                InfoTone::Badge => on_accent(),
-                InfoTone::Limit => [26, 17, 0, 0],
-                InfoTone::Late => [238, 106, 95, 0],
-                InfoTone::Early => [95, 207, 138, 0],
-                InfoTone::Plain | InfoTone::Fps(_) => [255, 255, 255, 0],
-            };
-            // each item as a label and the room it takes
-            let groups: Vec<Vec<(Label, InfoTone, f32)>> = info
-                .groups
+        let Some(info) = f.info.as_ref().filter(|i| !i.groups.is_empty()) else {
+            return;
+        };
+        let px = (15.0 * s) as u32;
+        let pad = 12.0 * s;
+        let gap = 6.0 * s;
+        let group_gap = 24.0 * s;
+        let radius = omsi_ui::theme::corner(8.0 * s);
+        let [x0, x1, top_y] = f
+            .info_room
+            .unwrap_or([12.0 * s, f.width - 12.0 * s, 8.0 * s]);
+        // (a touch screen's buttons own the corners: the bar stays in the gap between them)
+        let bottom = info.bottom && f.info_room.is_none();
+        // the plate: the panel's grey as the opacity setting has it
+        let panel = [
+            22,
+            22,
+            22,
+            (255.0 * self.text.backdrop).round().clamp(0.0, 255.0) as u8,
+        ];
+        // each item laid out
+        let groups: Vec<Vec<Piece>> = info
+            .groups
+            .iter()
+            .map(|g| {
+                g.iter()
+                    .map(|it| self.info_piece(r, scene, it, px, info.large, false, s))
+                    .collect()
+            })
+            .collect();
+        // (a badge stands a little apart from the name after it)
+        let after = |p: &Piece| {
+            if p.tone == InfoTone::Badge {
+                8.0 * s
+            } else {
+                gap
+            }
+        };
+        let group_w = |g: &Vec<Piece>| {
+            g.iter().map(Piece::w).sum::<f32>()
+                + g.iter()
+                    .take(g.len().saturating_sub(1))
+                    .map(after)
+                    .sum::<f32>()
+        };
+        let widths: Vec<f32> = groups.iter().map(group_w).collect();
+        // (the arrow of a two-tier layout takes room at the end of the first tier)
+        let chev_w = if info.tiered { 30.0 * s } else { 0.0 };
+        let rows = info_rows(&widths, group_gap, (x1 - x0 - pad * 2.0 - chev_w).max(1.0));
+        let tallest = groups.iter().flatten().map(|p| p.h).fold(0.0f32, f32::max);
+        let row_h = tallest + 10.0 * s;
+        let row_w = |row: &Vec<usize>| {
+            row.iter().map(|k| widths[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
+        };
+        let lw = rows.iter().map(row_w).fold(0.0f32, f32::max);
+        let (w1, h1) = (
+            lw + chev_w + pad * 2.0,
+            row_h * rows.len() as f32 + pad * 0.5,
+        );
+        // --- the second tier: small readouts (an icon, a name over a value, a meter under it)
+        let small = (12.0 * s) as u32;
+        let icon_px = (16.0 * s).round();
+        let mut cells: Vec<TierCell> = Vec::new();
+        for c in &info.tier2 {
+            let items: Vec<(Label, InfoTone, f32)> = c
+                .items
                 .iter()
-                .map(|g| {
-                    g.iter()
-                        .map(|it| {
-                            let l = if it.raw {
-                                self.text.label_raw(r, scene, &it.text, px, colour(it.tone))
-                            } else {
-                                self.text.label(r, scene, &it.text, px, colour(it.tone))
-                            };
-                            let w = match it.tone {
-                                InfoTone::Badge => l.w as f32 + 12.0 * s,
-                                InfoTone::Limit => {
-                                    (l.w as f32 + 10.0 * s).max(l.h as f32 + 4.0 * s)
-                                }
-                                InfoTone::Fps(_) => l.w as f32 + 7.0 * s + 5.0 * s,
-                                _ => l.w as f32,
-                            };
-                            (l, it.tone, w)
-                        })
-                        .collect()
+                .map(|it| {
+                    let px_i = if it.tone == InfoTone::Dim {
+                        small
+                    } else {
+                        px | BOLD
+                    };
+                    let l = if it.raw {
+                        self.text
+                            .label_raw(r, scene, &it.text, px_i, info_colour(it.tone))
+                    } else {
+                        self.text
+                            .label(r, scene, &it.text, px_i, info_colour(it.tone))
+                    };
+                    let w = l.w as f32
+                        + if matches!(it.tone, InfoTone::Fps(_)) {
+                            12.0 * s
+                        } else {
+                            0.0
+                        };
+                    (l, it.tone, w)
                 })
                 .collect();
-            let widths: Vec<f32> = groups
-                .iter()
-                .map(|g| {
-                    g.iter().map(|i| i.2).sum::<f32>() + gap * g.len().saturating_sub(1) as f32
-                })
-                .collect();
-            // (the arrow of a two-tier layout takes room at the end of the first tier)
-            let chev_w = if info.tiered { 26.0 * s } else { 0.0 };
-            let rows = info_rows(&widths, group_gap, (x1 - x0 - pad * 2.0 - chev_w).max(1.0));
-            let lh = groups.iter().flatten().map(|i| i.0.h).max().unwrap_or(0) as f32;
-            let row_h = lh + 6.0 * s;
-            let row_w = |row: &Vec<usize>| {
-                row.iter().map(|k| widths[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
-            };
-            let lw = rows.iter().map(row_w).fold(0.0f32, f32::max);
-            let (w1, h1) = (
-                lw + chev_w + pad * 2.0,
-                row_h * rows.len() as f32 + pad * 0.5,
-            );
-            // --- the second tier: small readouts (a name over a value, a meter under it)
-            let small = (12.0 * s) as u32;
-            let cells: Vec<TierCell> = info
-                .tier2
-                .iter()
-                .map(|c| {
-                    let items: Vec<(Label, InfoTone, f32)> = c
-                        .items
-                        .iter()
-                        .map(|it| {
-                            let px_i = if it.tone == InfoTone::Dim { small } else { px };
-                            let l = if it.raw {
-                                self.text
-                                    .label_raw(r, scene, &it.text, px_i, colour(it.tone))
-                            } else {
-                                self.text.label(r, scene, &it.text, px_i, colour(it.tone))
-                            };
-                            let w = l.w as f32
-                                + if matches!(it.tone, InfoTone::Fps(_)) {
-                                    12.0 * s
-                                } else {
-                                    0.0
-                                };
-                            (l, it.tone, w)
-                        })
-                        .collect();
-                    let meter_w = if c.meter.is_some() { 48.0 * s } else { 0.0 };
-                    let w = items.iter().map(|i| i.2).fold(meter_w, f32::max);
-                    let h = items.iter().map(|i| i.0.h as f32).sum::<f32>()
-                        + if c.meter.is_some() { 7.0 * s } else { 0.0 };
-                    TierCell {
-                        items,
-                        w,
-                        h,
-                        meter: c.meter,
-                        alert: c.alert,
-                    }
-                })
-                .collect();
-            let cell_ws: Vec<f32> = cells.iter().map(|c| c.w).collect();
-            let rows2 = info_rows(&cell_ws, group_gap, (x1 - x0 - pad * 2.0).max(1.0));
-            let row2_w = |row: &Vec<usize>| {
-                row.iter().map(|k| cell_ws[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
-            };
-            let row2_h = cells.iter().map(|c| c.h).fold(0.0f32, f32::max) + 8.0 * s;
-            let (w2, h2) = if cells.is_empty() {
-                (0.0, 0.0)
+            let icon = c.icon.and_then(|name| {
+                let ink = if c.alert { INFO_RED } else { INFO_MUTED };
+                self.text.icon(r, scene, name, icon_px as u32, ink)
+            });
+            let icon_w = if icon.is_some() {
+                icon_px + 8.0 * s
             } else {
-                (
-                    rows2.iter().map(row2_w).fold(0.0f32, f32::max) + pad * 2.0,
-                    row2_h * rows2.len() as f32 + pad * 0.5,
-                )
+                0.0
             };
-            // (stacked, the two tiers are one plate as wide as the wider; split, two plates)
-            let gap2 = if info.split && h2 > 0.0 { 4.0 * s } else { 0.0 };
-            let (w, h) = if info.split {
-                (w1.max(w2), h1 + gap2 + h2)
-            } else {
-                (w1.max(w2), h1 + h2)
-            };
-            let x = (x0 + x1 - w) * 0.5;
-            let y = if bottom {
-                f.height - h - 10.0 * s
-            } else {
-                top_y
-            };
-            let p1x = (x0 + x1 - if info.split { w1 } else { w }) * 0.5;
-            let p1w = if info.split { w1 } else { w };
-            let plate = self.text.plate(r, scene, 3);
-            scene.overlays.push((
-                plate,
-                [p1x, y, p1x + p1w, y + if info.split { h1 } else { h }],
-            ));
-            let line = self.text.plate(r, scene, 10);
-            for (n, row) in rows.iter().enumerate() {
-                let ry = y + pad * 0.25 + n as f32 * row_h;
-                let mut cx = p1x + (p1w - chev_w - row_w(row)) * 0.5;
-                for (i, k) in row.iter().enumerate() {
-                    if i > 0 {
-                        let hx = cx - group_gap * 0.5;
-                        scene.overlays.push((
-                            line,
-                            [hx, ry + 3.0 * s, hx + s.max(1.0), ry + row_h - 3.0 * s],
+            let meter_w = if c.meter.is_some() { 64.0 * s } else { 0.0 };
+            let w = icon_w + items.iter().map(|i| i.2).fold(meter_w, f32::max);
+            let h = items.iter().map(|i| i.0.h as f32).sum::<f32>()
+                + if c.meter.is_some() { 10.0 * s } else { 0.0 };
+            cells.push(TierCell {
+                icon,
+                items,
+                w,
+                h: h.max(icon_px),
+                meter: c.meter,
+                alert: c.alert,
+                tip: c.tip.clone(),
+            });
+        }
+        let cell_ws: Vec<f32> = cells.iter().map(|c| c.w).collect();
+        let rows2 = info_rows(&cell_ws, group_gap, (x1 - x0 - pad * 2.0).max(1.0));
+        let row2_w = |row: &Vec<usize>| {
+            row.iter().map(|k| cell_ws[*k]).sum::<f32>() + group_gap * (row.len() - 1) as f32
+        };
+        let row2_h = cells.iter().map(|c| c.h).fold(0.0f32, f32::max) + 10.0 * s;
+        let (w2, h2) = if cells.is_empty() {
+            (0.0, 0.0)
+        } else {
+            (
+                rows2.iter().map(row2_w).fold(0.0f32, f32::max) + pad * 2.0,
+                row2_h * rows2.len() as f32 + pad * 0.5,
+            )
+        };
+        // (stacked, the two tiers are one plate as wide as the wider; split, two plates of the
+        // same width, 6 px apart)
+        let gap2 = if info.split && h2 > 0.0 { 6.0 * s } else { 0.0 };
+        let w = w1.max(w2);
+        let h = h1 + gap2 + h2;
+        let x = (x0 + x1 - w) * 0.5;
+        let y = if bottom {
+            f.height - h - 10.0 * s
+        } else {
+            top_y
+        };
+        let first_h = if info.split { h1 } else { h };
+        self.text
+            .rounded(r, scene, [x, y, x + w, y + first_h], radius, panel);
+        let line = self.text.plate(r, scene, 10);
+        for (n, row) in rows.iter().enumerate() {
+            let ry = y + pad * 0.25 + n as f32 * row_h;
+            let cy = ry + row_h * 0.5;
+            let mut cx = x + (w - chev_w - row_w(row)) * 0.5;
+            for (i, k) in row.iter().enumerate() {
+                if i > 0 {
+                    let hx = (cx - group_gap * 0.5).round();
+                    scene.overlays.push((
+                        line,
+                        [hx, ry + 6.0 * s, hx + s.max(1.0), ry + row_h - 6.0 * s],
+                    ));
+                }
+                let g = &groups[*k];
+                for (j, p) in g.iter().enumerate() {
+                    self.draw_piece(r, scene, p, cx, cy, s);
+                    if let Some(tip) = &p.tip {
+                        self.hits.info_tips.push((
+                            [cx, cy - row_h * 0.5, cx + p.w(), cy + row_h * 0.5],
+                            tip.clone(),
                         ));
                     }
-                    for (l, tone, iw) in &groups[*k] {
-                        let ty = ry + (row_h - l.h as f32) * 0.5;
-                        let mut tx = cx + (iw - l.w as f32) * 0.5;
-                        match tone {
-                            InfoTone::Badge => {
-                                let b = self.text.plate(r, scene, 4);
-                                scene.overlays.push((
-                                    b,
-                                    [cx, ty - 1.0 * s, cx + iw, ty + l.h as f32 + 1.0 * s],
-                                ));
-                            }
-                            InfoTone::Limit => {
-                                let red = self.text.plate(r, scene, 11);
-                                let white = self.text.plate(r, scene, 12);
-                                let (t0, t1) = (ty - 2.0 * s, ty + l.h as f32 + 2.0 * s);
-                                scene.overlays.push((red, [cx, t0, cx + iw, t1]));
-                                scene.overlays.push((
-                                    white,
-                                    [cx + 2.5 * s, t0 + 2.5 * s, cx + iw - 2.5 * s, t1 - 2.5 * s],
-                                ));
-                            }
-                            InfoTone::Fps(level) => {
-                                let d = self.text.plate(r, scene, fps_dot_level(*level));
-                                let c = ry + row_h * 0.5;
-                                scene
-                                    .overlays
-                                    .push((d, [cx, c - 3.5 * s, cx + 7.0 * s, c + 3.5 * s]));
-                                tx = cx + 12.0 * s;
-                            }
-                            _ => {}
+                    cx += p.w() + if j + 1 < g.len() { after(p) } else { 0.0 };
+                }
+                cx += group_gap;
+            }
+        }
+        // the arrow: a small button with a "v" (details folded away: click to show) or
+        // a "^" (click to hide), from the HUD's icon family
+        if info.tiered {
+            let cr = [x + w - chev_w - pad * 0.5, y, x + w, y + h1];
+            let hot = over_rect(f.cursor, cr);
+            let side = 24.0 * s;
+            let (bx, by) = (
+                x + w - pad - side + 2.0 * s,
+                y + pad * 0.25 + (row_h - side) * 0.5,
+            );
+            self.text.icon_button(
+                r,
+                scene,
+                [bx, by, bx + side, by + side],
+                if info.collapsed {
+                    "hud-expand"
+                } else {
+                    "hud-collapse"
+                },
+                hot,
+                false,
+                s,
+            );
+            self.hits.info_chevron = Some(cr);
+        }
+        // the second tier
+        if h2 > 0.0 {
+            let y2 = y + h1 + gap2;
+            if info.split {
+                self.text
+                    .rounded(r, scene, [x, y2, x + w, y2 + h2], radius, panel);
+            } else {
+                // (a hairline between the tiers)
+                let hy = y2.round();
+                scene
+                    .overlays
+                    .push((line, [x + pad, hy, x + w - pad, hy + s.max(1.0)]));
+            }
+            for (n, row) in rows2.iter().enumerate() {
+                let ry = y2 + pad * 0.25 + n as f32 * row2_h;
+                let mut cx = x + (w - row2_w(row)) * 0.5;
+                for (i, k) in row.iter().enumerate() {
+                    let c = &cells[*k];
+                    if i > 0 {
+                        let hx = (cx - group_gap * 0.5).round();
+                        scene.overlays.push((
+                            line,
+                            [hx, ry + 6.0 * s, hx + s.max(1.0), ry + row2_h - 6.0 * s],
+                        ));
+                    }
+                    if c.alert {
+                        // (the cell tinted: no blinking)
+                        self.text.rounded(
+                            r,
+                            scene,
+                            [
+                                cx - 8.0 * s,
+                                ry + 2.0 * s,
+                                cx + c.w + 8.0 * s,
+                                ry + row2_h - 2.0 * s,
+                            ],
+                            omsi_ui::theme::corner(6.0 * s),
+                            fade(INFO_RED, 0.16),
+                        );
+                    }
+                    if let Some(tip) = &c.tip {
+                        self.hits
+                            .info_tips
+                            .push(([cx, ry, cx + c.w, ry + row2_h], tip.clone()));
+                    }
+                    let mut tx0 = cx;
+                    if let Some(icon) = c.icon {
+                        let iy = (ry + (row2_h - icon_px) * 0.5).round();
+                        scene
+                            .overlays
+                            .push((icon, [cx.round(), iy, cx.round() + icon_px, iy + icon_px]));
+                        tx0 = cx + icon_px + 8.0 * s;
+                    }
+                    // (the name and the value on the same lines in every cell; a meter hangs
+                    // under its value, in the row's padding)
+                    let text_h = c.items.iter().map(|i| i.0.h as f32).sum::<f32>();
+                    let mut ty = ry + (row2_h - text_h) * 0.5;
+                    for (l, tone, _) in &c.items {
+                        let mut tx = tx0;
+                        if let InfoTone::Fps(level) = tone {
+                            let d = 7.0 * s;
+                            let cy = ty + l.h as f32 * 0.5;
+                            self.text.rounded(
+                                r,
+                                scene,
+                                [tx0, cy - d * 0.5, tx0 + d, cy + d * 0.5],
+                                d * 0.5,
+                                fps_tone(*level),
+                            );
+                            tx = tx0 + 12.0 * s;
                         }
                         scene
                             .overlays
                             .push((l.tex, [tx, ty, tx + l.w as f32, ty + l.h as f32]));
-                        cx += iw + gap;
+                        ty += l.h as f32;
                     }
-                    cx += group_gap - gap;
-                }
-            }
-            // the arrow: a small button with a "v" (details folded away: click to show) or
-            // a "^" (click to hide), from the HUD's icon family
-            if info.tiered {
-                let cr = [p1x + p1w - chev_w, y, p1x + p1w, y + h1];
-                let hot = over_rect(f.cursor, cr);
-                let side = 24.0 * s;
-                let (bx, by) = (
-                    cr[0] + (chev_w - side) * 0.5 - 2.0 * s,
-                    y + pad * 0.25 + (row_h - side) * 0.5,
-                );
-                self.text.icon_button(
-                    r,
-                    scene,
-                    [bx, by, bx + side, by + side],
-                    if info.collapsed {
-                        "hud-expand"
-                    } else {
-                        "hud-collapse"
-                    },
-                    hot,
-                    false,
-                    s,
-                );
-                self.hits.info_chevron = Some(cr);
-            }
-            // the second tier
-            if h2 > 0.0 {
-                let (p2x, p2w, y2) = if info.split {
-                    ((x0 + x1 - w2) * 0.5, w2, y + h1 + gap2)
-                } else {
-                    (p1x, p1w, y + h1)
-                };
-                if info.split {
-                    let plate2 = self.text.plate(r, scene, 3);
-                    scene.overlays.push((plate2, [p2x, y2, p2x + p2w, y2 + h2]));
-                } else {
-                    // (a hairline between the tiers)
-                    scene.overlays.push((
-                        line,
-                        [
-                            p2x + pad,
-                            y2 - s.max(1.0) * 0.5,
-                            p2x + p2w - pad,
-                            y2 + s.max(1.0) * 0.5,
-                        ],
-                    ));
-                }
-                for (n, row) in rows2.iter().enumerate() {
-                    let ry = y2 + pad * 0.25 + n as f32 * row2_h;
-                    let mut cx = p2x + (p2w - row2_w(row)) * 0.5;
-                    for (i, k) in row.iter().enumerate() {
-                        let c = &cells[*k];
-                        if i > 0 {
-                            let hx = cx - group_gap * 0.5;
-                            scene.overlays.push((
-                                line,
-                                [hx, ry + 4.0 * s, hx + s.max(1.0), ry + row2_h - 4.0 * s],
-                            ));
+                    if let Some(level) = c.meter {
+                        // a 6 px meter in the accent (red when the tank is marked low), with
+                        // a tick at 15 %
+                        let (mw, mh) = (64.0 * s, 6.0 * s);
+                        let my = (ty + 2.0 * s).round();
+                        let rr = omsi_ui::theme::corner(mh * 0.5);
+                        self.text.rounded(
+                            r,
+                            scene,
+                            [tx0, my, tx0 + mw, my + mh],
+                            rr,
+                            [255, 255, 255, 46],
+                        );
+                        let level = level.clamp(0.0, 1.0);
+                        if level > 0.0 {
+                            self.text.rounded(
+                                r,
+                                scene,
+                                [tx0, my, tx0 + (mw * level).max(mh), my + mh],
+                                rr,
+                                if c.alert { INFO_RED } else { accent() },
+                            );
                         }
-                        if c.alert {
-                            let hot = self.text.plate(r, scene, 16);
-                            scene.overlays.push((
-                                hot,
-                                [
-                                    cx - group_gap * 0.4,
-                                    ry + 1.0 * s,
-                                    cx + c.w + group_gap * 0.4,
-                                    ry + row2_h - 1.0 * s,
-                                ],
-                            ));
-                        }
-                        let mut ty = ry + (row2_h - c.h) * 0.5;
-                        for (l, tone, _) in &c.items {
-                            let mut tx = cx;
-                            if let InfoTone::Fps(level) = tone {
-                                let d = self.text.plate(r, scene, fps_dot_level(*level));
-                                let cy = ty + l.h as f32 * 0.5;
-                                scene
-                                    .overlays
-                                    .push((d, [cx, cy - 3.5 * s, cx + 7.0 * s, cy + 3.5 * s]));
-                                tx = cx + 12.0 * s;
-                            }
-                            scene
-                                .overlays
-                                .push((l.tex, [tx, ty, tx + l.w as f32, ty + l.h as f32]));
-                            ty += l.h as f32;
-                        }
-                        if let Some(level) = c.meter {
-                            let track = self.text.plate(r, scene, 10);
-                            let fill = self.text.plate(r, scene, if c.alert { 15 } else { 13 });
-                            let (mw, mh) = (48.0 * s, 3.0 * s);
-                            let my = ty + 4.0 * s;
-                            scene.overlays.push((track, [cx, my, cx + mw, my + mh]));
-                            if level > 0.0 {
-                                scene.overlays.push((
-                                    fill,
-                                    [cx, my, cx + mw * level.clamp(0.0, 1.0), my + mh],
-                                ));
-                            }
-                        }
-                        cx += c.w + group_gap;
+                        let tick = (tx0 + mw * 0.15).round();
+                        let white = self.text.plate(r, scene, 12);
+                        scene.overlays.push((
+                            white,
+                            [tick, my - 1.0 * s, tick + s.max(1.0), my + mh + 1.0 * s],
+                        ));
                     }
+                    cx += c.w + group_gap;
                 }
             }
-            self.hits.info_rect = Some([x, y, x + w, y + h]);
         }
+        self.hits.info_rect = Some([x, y, x + w, y + h]);
     }
 
     /// The timetable window, on the right.

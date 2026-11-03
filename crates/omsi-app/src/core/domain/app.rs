@@ -297,6 +297,8 @@ pub(crate) struct App {
     pub(crate) info_collapsed: bool,
     /// How long the cursor has rested on that arrow, for its tooltip after a second.
     pub(crate) info_chev_hover: f32,
+    /// The information bar's tooltip the mouse rests on (`info_chev_hover` counts its time).
+    pub(crate) info_tip_shown: Option<String>,
     /// A time of day the bus's script wrote (`(S.S.Time)`), for the clock at the next frame.
     pub(crate) pending_time: Option<f64>,
     /// The play time (`clock.run_time`) the last situation was saved at.

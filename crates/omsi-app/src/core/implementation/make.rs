@@ -358,6 +358,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         info_bar,
         info_collapsed,
         info_chev_hover: 0.0,
+        info_tip_shown: None,
         pending_time: None,
         world_day: None,
         autosave_t: 0.0,

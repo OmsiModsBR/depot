@@ -48,6 +48,9 @@ pub struct Hits {
     pub info_rect: Option<[f32; 4]>,
     /// The arrow of a two-tier information bar that folds its second tier away.
     pub info_chevron: Option<[f32; 4]>,
+    /// The information bar's items that say what they are under the mouse: where each was
+    /// drawn and its tooltip (an interface text, or a name cut short in full).
+    pub info_tips: Vec<([f32; 4], String)>,
 }
 
 impl Default for Hits {
@@ -74,6 +77,7 @@ impl Default for Hits {
             dd_scroll: None,
             info_rect: None,
             info_chevron: None,
+            info_tips: Vec::new(),
         }
     }
 }

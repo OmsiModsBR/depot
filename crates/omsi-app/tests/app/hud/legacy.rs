@@ -29,8 +29,10 @@ fn the_frame_rate_dot_follows_the_rate() {
     assert_eq!(fps_level(49.0), 1);
     assert_eq!(fps_level(30.0), 1);
     assert_eq!(fps_level(12.0), 2);
-    assert_eq!(fps_dot(60.0), 13);
-    assert_eq!(fps_dot(12.0), 15);
+    // (green, amber, red: the dot's colour by the level)
+    assert_eq!(fps_dot(60.0), [95, 207, 138, 255]);
+    assert_eq!(fps_dot(40.0), [232, 171, 58, 255]);
+    assert_eq!(fps_dot(12.0), [238, 106, 95, 255]);
 }
 
 #[test]

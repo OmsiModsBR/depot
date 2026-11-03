@@ -2809,20 +2809,35 @@ impl ApplicationHandler for App {
                 } else {
                     None
                 };
-                // the arrow of a two-tier information bar says what it does after a second
-                let over_chevron = self
-                    .ui
-                    .as_ref()
-                    .and_then(|u| u.hits.info_chevron)
-                    .is_some_and(|r| {
-                        let (x, y) = self.hud_cursor();
-                        x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]
-                    });
-                self.info_chev_hover = if over_chevron {
-                    self.info_chev_hover + dt
-                } else {
-                    0.0
+                // the arrow of a two-tier information bar says what it does after a second, and
+                // an item of the bar what it is (its name, or a name cut short in full)
+                let info_tip = self.ui.as_ref().and_then(|u| {
+                    let (x, y) = self.hud_cursor();
+                    let over = |r: &[f32; 4]| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+                    if u.hits.info_chevron.as_ref().is_some_and(over) {
+                        Some(
+                            if self.info_collapsed {
+                                "Show details"
+                            } else {
+                                "Hide details"
+                            }
+                            .to_string(),
+                        )
+                    } else {
+                        u.hits
+                            .info_tips
+                            .iter()
+                            .find(|(r, _)| over(r))
+                            .map(|(_, t)| t.clone())
+                    }
+                });
+                // (the second counts again when the mouse moves to another item)
+                self.info_chev_hover = match (&info_tip, &self.info_tip_shown) {
+                    (Some(t), Some(was)) if t == was => self.info_chev_hover + dt,
+                    (Some(_), _) => dt,
+                    _ => 0.0,
                 };
+                self.info_tip_shown = info_tip.clone();
                 // the interface over the picture
                 // (the pages of an open settings window)
                 let menu_tabs = match self.list_kind.as_ref() {
@@ -2851,17 +2866,9 @@ impl ApplicationHandler for App {
                     let names = describe::names(&self.args.root, &self.settings.language);
                     // next to the cursor (`ui`), when the setting asks for it
                     let tooltip = self.hover.as_ref().map(|h| names.control(h));
-                    let tooltip = if over_chevron && self.info_chev_hover >= 1.0 {
-                        Some(
-                            if self.info_collapsed {
-                                "Show details"
-                            } else {
-                                "Hide details"
-                            }
-                            .to_string(),
-                        )
-                    } else {
-                        tooltip
+                    let tooltip = match info_tip {
+                        Some(t) if self.info_chev_hover >= 1.0 => Some(t),
+                        _ => tooltip,
                     };
                     // the object editor's keys, while it is on (one quiet line)
                     // the mirror editor's keys and the panel under the cursor, while it is on
@@ -4561,51 +4568,32 @@ pub struct InfoData<'a> {
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
 /// and the trip with its next stop and delay. A group of it is one thing the player reads at
-/// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end.
+/// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end. Each
+/// readout is an icon and its value; its name is the icon's tooltip.
 pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
     use crate::hud::{InfoItem, InfoTone};
     if matches!(mode, InfoMode::TwoTier | InfoMode::Split) {
         return tiered_bar(d, mode == InfoMode::Split, bottom);
     }
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
-    let dim = |t: String| InfoItem::new(t, InfoTone::Dim);
     // (the custom layout is the full one less what is switched off, item by item: the time,
     // the speed, the trip distance, the odometer, the temperatures, the tank, the passengers,
-    // the line and the next stop)
+    // the line and the next stop; the groups keep their order, so nothing moves when one is
+    // switched on or off)
     let full = matches!(mode, InfoMode::Full | InfoMode::Custom);
     let on = |i: usize| mode != InfoMode::Custom || d.items[i];
-    let t = d.clock.time;
     let mut groups: Vec<Vec<InfoItem>> = Vec::new();
     if mode != InfoMode::Essential && on(0) {
-        let time = if full {
-            format!(
-                "{:02}:{:02}:{:02}",
-                ((t / 3600.0) as i64).rem_euclid(24),
-                ((t % 3600.0) / 60.0) as i64,
-                (t % 60.0) as i64
-            )
-        } else {
-            format!(
-                "{:02}:{:02}",
-                ((t / 3600.0) as i64).rem_euclid(24),
-                ((t % 3600.0) / 60.0) as i64
-            )
-        };
-        groups.push(vec![plain(time)]);
+        groups.push(vec![clock_item(d.clock.time, full)]);
     }
     if let Some(p) = d.player {
-        let mut speed = vec![
-            plain(format!("{:.0}", p.vehicle.motion().velocity_kmh().abs())),
-            dim("km/h".into()),
-        ];
-        if let Some(limit) = d.limit {
-            speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit));
-        }
         if on(1) {
-            groups.push(speed);
+            groups.push(speed_group(p, d.limit));
         }
         if full && on(2) {
-            groups.push(vec![plain(distance_driven(d.metres))]);
+            groups.push(vec![plain(distance_driven(d.metres))
+                .with_icon("hud-trip")
+                .with_tip("Trip")]);
         }
         if full {
             // the bus's whole mileage, as OMSI's Shift+Z overlay reads it ("Mileometer", the
@@ -4617,14 +4605,15 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
             {
                 groups.push(vec![plain(odometer_reading(
                     km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0,
-                ))]);
+                ))
+                .with_icon("hud-odometer")
+                .with_tip("Odometer")]);
             }
             if on(4) {
                 let (outside, inside) = vehicle_temperatures(p);
-                groups.push(vec![plain(format!(
-                    "EXT {:.0} °C / INT {:.0} °C",
-                    outside, inside
-                ))]);
+                groups.push(vec![plain(temperatures(outside, inside))
+                    .with_icon("hud-temperature")
+                    .with_tip("Outside / cabin")]);
             }
             // the tank as the bus's script says it (OMSI's RL_TankContent: tank_percent)
             if let Some(tank) = p
@@ -4632,34 +4621,23 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
                 .var("tank_percent")
                 .filter(|v| v.is_finite() && on(5))
             {
-                groups.push(vec![plain(format!("tank {:.0} %", (tank * 100.0).round()))]);
+                groups.push(vec![plain(format!("{:.0} %", (tank * 100.0).round()))
+                    .with_icon("hud-fuel")
+                    .with_tip("Tank")]);
             }
             // how many are aboard right now (None: the passengers are switched off for this
             // drive, so there is nothing to count)
             if let Some(n) = d.passengers.filter(|_| on(6)) {
-                groups.push(vec![plain(passengers_aboard(n, d.capacity))]);
+                groups.push(vec![plain(passengers_aboard(n, d.capacity))
+                    .with_icon("hud-passengers")
+                    .with_tip("Passengers")]);
             }
         }
         if let Some(duty) = d.duty {
             if let Some(trip) = duty.trips.get(duty.trip_index) {
-                let delay = p.vehicle.host.tt_delay;
-                let delay_item = InfoItem::new(
-                    format!(
-                        "{}{}:{:02}",
-                        if delay < 0.0 { "−" } else { "+" },
-                        (delay.abs() / 60.0) as i64,
-                        (delay.abs() % 60.0) as i64
-                    ),
-                    if delay > 60.0 {
-                        InfoTone::Late
-                    } else if delay < -60.0 {
-                        InfoTone::Early
-                    } else {
-                        InfoTone::Plain
-                    },
-                );
+                let delay = delay_item(p.vehicle.host.tt_delay);
                 if mode == InfoMode::Essential {
-                    groups.push(vec![delay_item]);
+                    groups.push(vec![delay]);
                 } else {
                     let line = if trip.line.trim().is_empty() {
                         duty.line.trim()
@@ -4668,23 +4646,27 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
                     };
                     // (names from the map are drawn as they are, not looked up as interface
                     // texts: a destination "Depot" is the map's word)
-                    let mut line_group = vec![InfoItem::raw(line, InfoTone::Badge)];
+                    let mut line_group =
+                        vec![InfoItem::raw(line, InfoTone::Badge).with_tip("Line")];
                     if full && !trip.terminus.trim().is_empty() {
-                        line_group.push(InfoItem::raw(trip.terminus.trim(), InfoTone::Plain));
+                        line_group.push(route_item(trip.terminus.trim()));
                     }
-                    if on(7) {
+                    let next = trip
+                        .stops
+                        .get(duty.next_stop)
+                        .map(|s| next_stop_item(s.name.trim()));
+                    if full {
+                        if on(7) {
+                            groups.push(line_group);
+                        }
+                        if on(8) {
+                            groups.push(next.into_iter().chain([delay]).collect());
+                        }
+                    } else {
+                        // (compact: the line's badge and the next stop are one group)
+                        line_group.extend(next);
+                        line_group.push(delay);
                         groups.push(line_group);
-                    }
-                    let mut next = Vec::new();
-                    if let Some(s) = trip.stops.get(duty.next_stop) {
-                        next.push(InfoItem::raw(
-                            format!("{} {}", omsi_ui::tr("next:"), s.name.trim()),
-                            InfoTone::Plain,
-                        ));
-                    }
-                    next.push(delay_item);
-                    if on(8) {
-                        groups.push(next);
                     }
                 }
             }
@@ -4699,119 +4681,174 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> hud::InfoBar {
             (false, Some(low)) => format!("{fps:.0} / {low:.0} fps"),
             (_, None) => format!("{fps:.0} fps"),
         };
-        groups.push(vec![InfoItem::new(text, InfoTone::Fps(level))]);
+        groups.push(vec![
+            InfoItem::new(text, InfoTone::Fps(level)).with_tip("Frame rate")
+        ]);
     }
     hud::InfoBar {
         groups,
         bottom,
+        large: mode == InfoMode::Essential,
         ..Default::default()
     }
 }
 
-/// The two-tier layouts: the driving items (time, speed and limit, the line and where it
-/// goes, the next stop with the delay) in the first tier, small readouts (trip, odometer,
-/// temperatures, passengers, the tank with its meter, the frame rate) in the second, which
-/// the arrow folds away. `split` puts the second tier on a plate of its own.
+/// The clock: hours, minutes and (`seconds`) seconds, after the clock icon.
+fn clock_item(t: f64, seconds: bool) -> crate::hud::InfoItem {
+    use crate::hud::{InfoItem, InfoTone};
+    let (h, m) = (
+        ((t / 3600.0) as i64).rem_euclid(24),
+        ((t % 3600.0) / 60.0) as i64,
+    );
+    let text = if seconds {
+        format!("{h:02}:{m:02}:{:02}", (t % 60.0) as i64)
+    } else {
+        format!("{h:02}:{m:02}")
+    };
+    InfoItem::new(text, InfoTone::Plain)
+        .with_icon("hud-time")
+        .with_tip("Current time")
+}
+
+/// The speed (as wide as three digits), its unit and the limit of the road when it has one.
+fn speed_group(p: &Player, limit: Option<f32>) -> Vec<crate::hud::InfoItem> {
+    use crate::hud::{InfoItem, InfoTone};
+    let mut speed = vec![
+        InfoItem::new(
+            format!("{:.0}", p.vehicle.motion().velocity_kmh().abs()),
+            InfoTone::Speed,
+        ),
+        InfoItem::new("km/h", InfoTone::Dim),
+    ];
+    if let Some(limit) = limit {
+        speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit).with_tip("Speed limit"));
+    }
+    speed
+}
+
+/// Where the trip goes: cut short when long (the next stop keeps its room), whole under the
+/// mouse.
+fn route_item(terminus: &str) -> crate::hud::InfoItem {
+    use crate::hud::{InfoItem, InfoTone};
+    let mut it = InfoItem::raw(terminus, InfoTone::Plain).with_tip(terminus);
+    it.clip = true;
+    it
+}
+
+/// The next stop: its name after the stop icon (the icon says what it is; "Next stop" under
+/// the mouse).
+fn next_stop_item(name: &str) -> crate::hud::InfoItem {
+    use crate::hud::{InfoItem, InfoTone};
+    InfoItem::raw(name, InfoTone::Plain)
+        .with_icon("hud-stop")
+        .with_tip("Next stop")
+}
+
+/// The delay to the timetable (`delay` seconds, negative ahead) as a chip: red when more than
+/// a minute late, green when more than a minute early, the accent in between; a true minus.
+pub fn delay_item(delay: f32) -> crate::hud::InfoItem {
+    use crate::hud::{InfoItem, InfoTone};
+    let kind = if delay > 60.0 {
+        1
+    } else if delay < -60.0 {
+        -1
+    } else {
+        0
+    };
+    InfoItem::new(
+        format!(
+            "{}{}:{:02}",
+            if delay < 0.0 { "−" } else { "+" },
+            (delay.abs() / 60.0) as i64,
+            (delay.abs() % 60.0) as i64
+        ),
+        InfoTone::Delay(kind),
+    )
+    .with_tip("early / late")
+}
+
+/// The outside and the cabin temperature with the unit once: "15 / 19 °C".
+pub fn temperatures(outside: f32, inside: f32) -> String {
+    format!("{outside:.0} / {inside:.0} °C")
+}
+
+/// The two-tier layouts: the driving items (the line and where it goes, the time, the speed
+/// and its limit, the next stop with the delay) in the first tier, small readouts (trip,
+/// odometer, temperatures, passengers, the tank with its meter, the frame rate) in the
+/// second, which the arrow folds away. `split` puts the second tier on a plate of its own.
 fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> hud::InfoBar {
     use crate::hud::{InfoCell, InfoItem, InfoTone};
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     let dim = |t: &str| InfoItem::new(t, InfoTone::Dim);
-    let t = d.clock.time;
-    let mut groups: Vec<Vec<InfoItem>> = vec![vec![plain(format!(
-        "{:02}:{:02}:{:02}",
-        ((t / 3600.0) as i64).rem_euclid(24),
-        ((t % 3600.0) / 60.0) as i64,
-        (t % 60.0) as i64
-    ))]];
+    let mut groups: Vec<Vec<InfoItem>> = vec![vec![clock_item(d.clock.time, true)]];
     let mut cells: Vec<InfoCell> = Vec::new();
-    // (a readout: its name above it when the names are on, else the name folded into the text)
-    let cell = |name: &str, with_name: String, bare: String| InfoCell {
+    // (a readout: its icon, its name above the value when the names are on; the name is the
+    // icon's tooltip either way)
+    let cell = |name: &str, icon: &'static str, value: String| InfoCell {
         items: if d.labels {
-            vec![dim(name), plain(bare)]
+            vec![dim(name), plain(value)]
         } else {
-            vec![plain(with_name)]
+            vec![plain(value)]
         },
+        icon: Some(icon),
+        tip: Some(name.to_string()),
         ..Default::default()
     };
     if let Some(p) = d.player {
-        let mut speed = vec![
-            plain(format!("{:.0}", p.vehicle.motion().velocity_kmh().abs())),
-            dim("km/h"),
-        ];
-        if let Some(limit) = d.limit {
-            speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit));
-        }
-        groups.push(speed);
         if let Some(duty) = d.duty {
             if let Some(trip) = duty.trips.get(duty.trip_index) {
-                let delay = p.vehicle.host.tt_delay;
-                let delay_item = InfoItem::new(
-                    format!(
-                        "{}{}:{:02}",
-                        if delay < 0.0 { "−" } else { "+" },
-                        (delay.abs() / 60.0) as i64,
-                        (delay.abs() % 60.0) as i64
-                    ),
-                    if delay > 60.0 {
-                        InfoTone::Late
-                    } else if delay < -60.0 {
-                        InfoTone::Early
-                    } else {
-                        InfoTone::Plain
-                    },
-                );
                 let line = if trip.line.trim().is_empty() {
                     duty.line.trim()
                 } else {
                     trip.line.trim()
                 };
-                let mut line_group = vec![InfoItem::raw(line, InfoTone::Badge)];
+                let mut line_group = vec![InfoItem::raw(line, InfoTone::Badge).with_tip("Line")];
                 if !trip.terminus.trim().is_empty() {
-                    line_group.push(InfoItem::raw(trip.terminus.trim(), InfoTone::Plain));
+                    line_group.push(route_item(trip.terminus.trim()));
                 }
-                groups.push(line_group);
-                let mut next = Vec::new();
-                if let Some(s) = trip.stops.get(duty.next_stop) {
-                    next.push(InfoItem::raw(
-                        format!("{} {}", omsi_ui::tr("next:"), s.name.trim()),
-                        InfoTone::Plain,
-                    ));
-                }
-                next.push(delay_item);
+                // (the line and where it goes first, as the bus's sign reads)
+                groups.insert(0, line_group);
+            }
+        }
+        groups.push(speed_group(p, d.limit));
+        if let Some(duty) = d.duty {
+            if let Some(trip) = duty.trips.get(duty.trip_index) {
+                let next: Vec<InfoItem> = trip
+                    .stops
+                    .get(duty.next_stop)
+                    .map(|s| next_stop_item(s.name.trim()))
+                    .into_iter()
+                    .chain([delay_item(p.vehicle.host.tt_delay)])
+                    .collect();
                 groups.push(next);
             }
         }
-        let trip = distance_driven(d.metres);
-        cells.push(cell("Trip", trip.clone(), trip));
+        cells.push(cell("Trip", "hud-trip", distance_driven(d.metres)));
         if let Some(km) = p.vehicle.var("kmcounter_km").filter(|v| v.is_finite()) {
             let km = km as f64 + p.vehicle.var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0;
-            cells.push(cell(
-                "Odometer",
-                odometer_reading(km),
-                format!("{:.1} km", km.max(0.0)),
-            ));
+            cells.push(cell("Odometer", "hud-odometer", odometer_reading(km)));
         }
         let (outside, inside) = vehicle_temperatures(p);
         cells.push(cell(
             "Outside / cabin",
-            format!("EXT {outside:.0} °C / INT {inside:.0} °C"),
-            format!("{outside:.0} °C / {inside:.0} °C"),
+            "hud-temperature",
+            temperatures(outside, inside),
         ));
         if let Some(n) = d.passengers {
             cells.push(cell(
                 "Passengers",
+                "hud-passengers",
                 passengers_aboard(n, d.capacity),
-                match d.capacity {
-                    Some(c) => format!("{n} / {c}"),
-                    None => n.to_string(),
-                },
             ));
         }
         if let Some(tank) = p.vehicle.var("tank_percent").filter(|v| v.is_finite()) {
             let level = tank.clamp(0.0, 1.0);
-            let pct = format!("{:.0} %", (level * 100.0).round());
             let low = d.low_fuel && level < 0.15;
-            let mut c = cell("Tank", format!("tank {pct}"), pct);
+            let mut c = cell(
+                "Tank",
+                "hud-fuel",
+                format!("{:.0} %", (level * 100.0).round()),
+            );
             if low {
                 if let Some(v) = c.items.last_mut() {
                     v.tone = InfoTone::Late;
@@ -4829,6 +4866,7 @@ fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> hud::InfoBar {
         };
         cells.push(InfoCell {
             items: vec![InfoItem::new(text, InfoTone::Fps(hud::fps_level(fps)))],
+            tip: Some("Frame rate".into()),
             ..Default::default()
         });
     }
@@ -4842,30 +4880,49 @@ fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> hud::InfoBar {
         split,
         tiered: true,
         collapsed: d.collapsed,
+        large: false,
     }
+}
+
+/// `v` with its whole part in groups of three, split by a thin space (the same in every
+/// language: neither the English comma nor the dot of the languages that write a decimal
+/// comma), to `decimals` places: "18 427.3".
+pub fn grouped(v: f64, decimals: usize) -> String {
+    let text = format!("{:.*}", decimals, v.max(0.0));
+    let (whole, frac) = match text.split_once('.') {
+        Some((w, f)) => (w.to_string(), Some(f.to_string())),
+        None => (text.clone(), None),
+    };
+    let mut out = String::new();
+    for (k, c) in whole.chars().enumerate() {
+        if k > 0 && (whole.len() - k) % 3 == 0 {
+            out.push('\u{2009}');
+        }
+        out.push(c);
+    }
+    if let Some(f) = frac {
+        out.push('.');
+        out.push_str(&f);
+    }
+    out
 }
 
 /// The kilometres driven this session (`Career::metres`), to a hundred metres.
 pub fn distance_driven(metres: f64) -> String {
-    format!("{:.1} km", metres.max(0.0) / 1000.0)
+    format!("{} km", grouped(metres / 1000.0, 1))
 }
 
-/// The bus's odometer to a hundred metres, as the stock cockpits show it (km and tenths).
+/// The bus's odometer to a hundred metres, as the stock cockpits show it (km and tenths);
+/// the word is the icon's tooltip.
 pub fn odometer_reading(km: f64) -> String {
-    format!("{} {:.1} km", omsi_ui::tr("Odometer"), km.max(0.0))
+    format!("{} km", grouped(km, 1))
 }
 
-/// `n` (of `capacity`, when the bus has places to count) with the word for a passenger in the
-/// interface's language (singular for one; both words are keys of the tables - the whole line
-/// is too much of a sentence to translate).
+/// How many are aboard, of how many places when the bus has places to count: "36 / 111"
+/// (the word is the icon's tooltip).
 pub fn passengers_aboard(n: usize, capacity: Option<usize>) -> String {
-    let word = omsi_ui::tr(if n == 1 && capacity.is_none() {
-        "Passenger"
-    } else {
-        "Passengers"
-    });
     match capacity {
-        Some(c) => format!("{n} / {c} {word}"),
-        None => format!("{n} {word}"),
+        Some(c) => format!("{n} / {c}"),
+        None => n.to_string(),
     }
 }
