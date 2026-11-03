@@ -37,7 +37,6 @@ mod stage;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::state::crash_of;
-pub(crate) mod dialogs;
 mod theme;
 pub(crate) mod thumbs;
 pub(crate) mod tray;
@@ -1799,9 +1798,11 @@ impl Launcher {
             );
             self.ui.push_fade(a);
             if disconnected {
-                self.draw_disconnect_dialog();
+                window::disconnect_dialog(frame!(self));
             } else if crash {
-                self.draw_crash_dialog();
+                if window::crash_dialog(frame!(self)) {
+                    self.go(Page::Settings);
+                }
             } else if reset {
                 window::reset_dialog(
                     frame!(self),

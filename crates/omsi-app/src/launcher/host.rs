@@ -33,7 +33,7 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn version(&self) -> (&'static str, &'static str) {
-        (crate::core::startup::VERSION, crate::core::startup::BUILD)
+        (crate::about::current_version(), crate::core::startup::BUILD)
     }
 
     fn repo_url(&self) -> &'static str {
