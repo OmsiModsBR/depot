@@ -30,7 +30,7 @@ impl Labels<'_> {
         self.host.action_text(&self.root, &self.lang, action)
     }
 
-    fn events(&self) -> Vec<(String, String)> {
+    pub(crate) fn events(&self) -> Vec<(String, String)> {
         self.host.actions(&self.root, &self.lang)
     }
 }
