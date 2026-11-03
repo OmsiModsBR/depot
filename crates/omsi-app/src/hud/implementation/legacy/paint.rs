@@ -218,6 +218,68 @@ impl TextCache {
         tex
     }
 
+    /// One of the interface's line icons (`omsi_ui::icons`: `hud-bus`, `hud-time` ...) as a
+    /// texture of `px` x `px` pixels in `rgba` (its alpha as the icon's coverage); `None` for
+    /// a name there is no icon of. Drawn once per name, size and colour, like a text.
+    pub(super) fn icon(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        name: &str,
+        px: u32,
+        rgba: [u8; 4],
+    ) -> Option<TextureId> {
+        let px = px.clamp(4, 256);
+        omsi_ui::icons::svg(name)?;
+        let key = (format!("\u{0}icon:{name}"), px, rgba);
+        Some(self.cached(r, scene, key, (px, px), || {
+            let mask = omsi_ui::icons::rasterize(name, px).unwrap_or_default();
+            let mut data = vec![0u8; (px * px * 4) as usize];
+            for (o, a) in data.chunks_exact_mut(4).zip(mask) {
+                o[..3].copy_from_slice(&rgba[..3]);
+                o[3] = (a as f32 * rgba[3] as f32 / 255.0).round() as u8;
+            }
+            data
+        }))
+    }
+
+    /// A small button of the HUD (the information bar's arrow ...): a rounded square of
+    /// `rect` that lights under the mouse (`hot`), the icon `name` in it - muted, bright
+    /// under the mouse, in the accent when `on`.
+    pub(super) fn icon_button(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        rect: [f32; 4],
+        name: &str,
+        hot: bool,
+        on: bool,
+        s: f32,
+    ) {
+        let side = (rect[2] - rect[0]).min(rect[3] - rect[1]);
+        if hot || on {
+            let fill = if on {
+                fade(accent(), 0.22)
+            } else {
+                [255, 255, 255, 28]
+            };
+            self.rounded(r, scene, rect, omsi_ui::theme::corner(5.0 * s), fill);
+        }
+        let ink = if on {
+            accent()
+        } else if hot {
+            [243, 244, 246, 255]
+        } else {
+            [163, 168, 178, 255]
+        };
+        let px = (side * 0.62).round().max(8.0);
+        if let Some(tex) = self.icon(r, scene, name, px as u32, ink) {
+            let (cx, cy) = ((rect[0] + rect[2]) * 0.5, (rect[1] + rect[3]) * 0.5);
+            let (x0, y0) = ((cx - px * 0.5).round(), (cy - px * 0.5).round());
+            scene.overlays.push((tex, [x0, y0, x0 + px, y0 + px]));
+        }
+    }
+
     /// A whole rounded plate of `w` x `h` pixels in one texture, anti-aliased.
     fn rrect(
         &mut self,

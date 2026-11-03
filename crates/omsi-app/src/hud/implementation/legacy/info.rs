@@ -112,7 +112,8 @@ impl Ui {
             let bottom = info.bottom && f.info_room.is_none();
             let colour = |tone: InfoTone| match tone {
                 InfoTone::Dim => [163, 168, 178, 0],
-                InfoTone::Badge | InfoTone::Limit => [26, 17, 0, 0],
+                InfoTone::Badge => on_accent(),
+                InfoTone::Limit => [26, 17, 0, 0],
                 InfoTone::Late => [238, 106, 95, 0],
                 InfoTone::Early => [95, 207, 138, 0],
                 InfoTone::Plain | InfoTone::Fps(_) => [255, 255, 255, 0],
@@ -285,35 +286,29 @@ impl Ui {
                     cx += group_gap - gap;
                 }
             }
-            // the arrow: a "v" (details folded away: click to show) or a "^" (click to hide)
+            // the arrow: a small button with a "v" (details folded away: click to show) or
+            // a "^" (click to hide), from the HUD's icon family
             if info.tiered {
                 let cr = [p1x + p1w - chev_w, y, p1x + p1w, y + h1];
-                if f.cursor.0 >= cr[0]
-                    && f.cursor.0 <= cr[2]
-                    && f.cursor.1 >= cr[1]
-                    && f.cursor.1 <= cr[3]
-                {
-                    let hl = self.text.plate(r, scene, 5);
-                    scene.overlays.push((
-                        hl,
-                        [
-                            cr[0] + 2.0 * s,
-                            cr[1] + 3.0 * s,
-                            cr[2] - 4.0 * s,
-                            cr[3] - 3.0 * s,
-                        ],
-                    ));
-                }
-                let mark = self.text.plate(r, scene, 12);
-                let u = (2.4 * s).max(1.0);
-                let (mx, my) = ((cr[0] + cr[2]) * 0.5 - u * 0.65, y + row_h * 0.5 - u * 0.5);
-                for k in -2i32..=2 {
-                    let step = if info.collapsed { 2 - k.abs() } else { k.abs() };
-                    let (px0, py0) = (mx + k as f32 * u, my + (step as f32 - 1.0) * u);
-                    scene
-                        .overlays
-                        .push((mark, [px0, py0, px0 + u * 1.2, py0 + u * 1.2]));
-                }
+                let hot = over_rect(f.cursor, cr);
+                let side = 24.0 * s;
+                let (bx, by) = (
+                    cr[0] + (chev_w - side) * 0.5 - 2.0 * s,
+                    y + pad * 0.25 + (row_h - side) * 0.5,
+                );
+                self.text.icon_button(
+                    r,
+                    scene,
+                    [bx, by, bx + side, by + side],
+                    if info.collapsed {
+                        "hud-expand"
+                    } else {
+                        "hud-collapse"
+                    },
+                    hot,
+                    false,
+                    s,
+                );
                 self.hits.info_chevron = Some(cr);
             }
             // the second tier

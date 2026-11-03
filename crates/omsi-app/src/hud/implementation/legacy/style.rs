@@ -34,8 +34,6 @@ pub(super) const THUMB: [u8; 4] = [255, 255, 255, 26];
 pub(super) const THUMB_HOT: [u8; 4] = [255, 255, 255, 90];
 /// The small capitals over a title (the launcher's section headings: 11 px, bold, dim).
 pub(super) const DIM: [u8; 4] = [142, 142, 142, 0];
-/// The ink on the accent (the launcher's primary button).
-pub(super) const ON_ACCENT: [u8; 4] = [18, 14, 8, 0];
 /// Text colours (alpha 0: no outline on the flat panel).
 pub(super) const WHITE: [u8; 4] = [236, 236, 236, 0];
 pub(super) const SOFT: [u8; 4] = [200, 200, 200, 0];
@@ -76,6 +74,15 @@ pub(super) fn accent_hot() -> [u8; 4] {
 pub(super) fn accent_ink() -> [u8; 4] {
     let [r, g, b, _] = mix(accent(), [255, 255, 255, 255], 0.4);
     [r, g, b, 0]
+}
+
+/// Text and icons on the accent (the line's badge): dark or white, whichever reads better
+/// on the accent in use (`omsi_ui::theme::on_accent`; a fixed dark ink was unreadable on
+/// the darker accents).
+pub(super) fn on_accent() -> [u8; 4] {
+    let c = omsi_ui::theme::on_accent().0;
+    let b = |v: f32| (v * 255.0).round() as u8;
+    [b(c[0]), b(c[1]), b(c[2]), 0]
 }
 
 /// The colour `t` (0 to 1) of the way from `a` to `b`.

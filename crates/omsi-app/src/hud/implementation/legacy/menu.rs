@@ -471,7 +471,7 @@ impl Ui {
                     if let Some((name, info)) = parsed {
                         let bl = self
                             .text
-                            .label(r, scene, name, (15.0 * s) as u32, ON_ACCENT);
+                            .label(r, scene, name, (15.0 * s) as u32, on_accent());
                         let (bw, bh) = (sign_w, 28.0 * s);
                         let bx = lx;
                         let sign = mix(mix(accent(), [0, 0, 0, 255], 0.11), accent_hot(), glow);
@@ -807,7 +807,7 @@ impl Ui {
                     .rounded(r, scene, go, ROW_R * s, mix(accent(), accent_hot(), a_go));
                 let l = self
                     .text
-                    .label(r, scene, button, (14.0 * s) as u32 | BOLD, ON_ACCENT);
+                    .label(r, scene, button, (14.0 * s) as u32 | BOLD, on_accent());
                 let (gx, gy) = (
                     go[0] + (go[2] - go[0] - l.w as f32) * 0.5,
                     (go[1] + go[3]) * 0.5 - l.h as f32 * 0.5,
