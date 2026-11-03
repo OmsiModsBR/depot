@@ -28,8 +28,10 @@ impl PartBody {
         // (its hubs from the `.bus` alone, as the lead body's - see `enable_rigid_body`)
         // (it turns about its own `[rot_pnt_long]` as the file gives it, 0 included, as
         // OMSI's sections do; the kinematic part's line, `TrailerPart::axle_long`, takes the
-        // farthest axle for a 0)
-        let rb = RigidBody::from_definition(&t.ty.def, &[]);
+        // farthest axle for a 0. Counting it from the `[cog]` is the front vehicle's turning
+        // line, `PhysicsSpec::turn_line`, not a section's)
+        let mut rb = RigidBody::from_definition(&t.ty.def, &[]);
+        rb.rot_pnt_long = t.ty.def.rot_pnt_long;
         let vars = (0..rb.wheels.len())
             .map(|i| {
                 let (axle, side) = (t.first_axle + i / 2, ["L", "R"][i % 2]);

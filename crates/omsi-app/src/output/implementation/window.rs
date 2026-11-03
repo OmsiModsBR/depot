@@ -112,6 +112,17 @@ impl Output {
         }
     }
 
+    /// Under "DirectX9 (D3D9Ex)": the picture the device has drawn so far into the frame
+    /// the renderer just began, as window-sized RGBA8, taken without showing that frame
+    /// (a screenshot is never on the screen). `None` under wgpu, whose renderer reads its
+    /// own picture back.
+    pub(crate) fn capture_window(&self) -> Option<Result<(u32, u32, Vec<u8>)>> {
+        #[cfg(windows)]
+        return self.d3d9.as_ref().map(|d| d.capture());
+        #[cfg(not(windows))]
+        None
+    }
+
     /// The mirror an `omsi-ui` Gpu drawing over the window's picture hands its draws to
     /// (none under wgpu).
     pub(crate) fn ui_mirror(&self) -> Option<omsi_ui::UiMirror> {

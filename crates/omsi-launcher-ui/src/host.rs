@@ -33,6 +33,9 @@ pub trait Host {
     /// The project's repository page (where a problem is reported).
     fn repo_url(&self) -> &'static str;
 
+    /// The page that lists the project's releases (Settings > Reset and files links it).
+    fn releases_url(&self) -> &'static str;
+
     /// Where the preview helper writes its log.
     fn helper_log(&self) -> std::path::PathBuf;
 
@@ -57,4 +60,21 @@ pub trait Host {
 
     /// The game controllers saved to the Depot's own file.
     fn save_controllers(&self, devices: &[DeviceCfg]) -> Result<(), String>;
+
+    /// What the graphics adapter is taken to hold for textures, in MB (0: not known yet), as
+    /// the game's texture budget reads it.
+    fn adapter_texture_mb(&self) -> i64;
+
+    /// The most a chosen texture budget may come to on that adapter, in MB (0: not known
+    /// yet): a budget above it is taken down to it.
+    fn texture_ceiling_mb(&self) -> i64 {
+        0
+    }
+
+    /// The bus radios' internet stations the player keeps (`radio.cfg`; the game's default
+    /// list while there is none), each its name and address.
+    fn own_stations(&self) -> Vec<(String, String)>;
+
+    /// `list` kept as the player's own stations: the game tunes in to them when it starts.
+    fn save_stations(&self, list: &[(String, String)]) -> std::io::Result<()>;
 }

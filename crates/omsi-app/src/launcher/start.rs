@@ -577,7 +577,7 @@ fn start_point(l: &mut Launcher) {
         body.h,
     );
     // the map first: the list and the buttons lie beside it, the pins are clicked after
-    l.mapview.want(super::drive::map_look(l));
+    l.mapview.want(omsi_launcher_ui::window::map_look(&l.state));
     l.map_background(map);
     l.ui.p().rounded_border(map, RADIUS, 1.0, EDGE);
     map_hint(l, map, "Scroll to zoom · drag to move · click a pin");
@@ -698,7 +698,7 @@ fn weather(l: &mut Launcher) {
     }
     let rest = Rect::new(body.x, body.y + 48.0, body.w, (body.h - 48.0).max(0.0));
     if l.start.choose {
-        super::drive::weather_picker(l, rest);
+        omsi_launcher_ui::window::weather_picker(frame!(l), rest);
     } else {
         l.ui.paragraph(
             "The weather develops by itself through the day and the season: clouds come and go, rain falls and the roads dry again.",
@@ -754,7 +754,7 @@ fn explore(l: &mut Launcher) {
     let (buttons, body) = dialog_foot(l, inside);
     let side_w = 240.0;
     let map = Rect::new(body.x, body.y, body.w - side_w - 16.0, body.h);
-    l.mapview.want(super::drive::map_look(l));
+    l.mapview.want(omsi_launcher_ui::window::map_look(&l.state));
     l.map_background(map);
     l.ui.p().rounded_border(map, RADIUS, 1.0, EDGE);
     map_hint(l, map, "Scroll to zoom · drag to move");

@@ -68,6 +68,30 @@ impl Map for GameMap<'_> {
     fn take_clicked(&mut self) -> Option<usize> {
         self.view.take_clicked()
     }
+
+    fn counts(&self) -> Option<(usize, usize, usize)> {
+        self.view.counts()
+    }
+
+    fn stops_placed(&self) -> &[(DVec2, usize)] {
+        self.view.stops_placed()
+    }
+
+    fn entry_name(&self, i: usize) -> Option<&str> {
+        self.view.entry_name(i)
+    }
+
+    fn entry_at(&self, i: usize) -> Option<Vec2> {
+        self.view.entry_at(i)
+    }
+
+    fn hovered(&self) -> Option<usize> {
+        self.view.hovered()
+    }
+
+    fn shown_of(&self, choice: i32) -> Option<usize> {
+        self.view.shown_of(choice)
+    }
 }
 
 /// The chosen map across `r`, the whole page behind the panels: every road the map has, its

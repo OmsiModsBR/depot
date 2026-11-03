@@ -1,33 +1,24 @@
 //! Settings > Modules in OMSI 2 mode: a card for each optional OmsiLaunch module Depot offers
-//! (#484 Omsi Prefetch). The card installs and removes the module through the same confirmed
-//! steps as OmsiLaunch itself (`original_engine::modules`, the dialog over the page) and keeps
-//! the player's choices in `~/.depot/omsi2/modules.json`; they are sent to OmsiLaunch at every
-//! start (`original_engine::launch::module_args`), only while the module is in the OMSI 2
-//! folder.
+//! (#484 Omsi Prefetch, #485 openHUD). The card installs and removes the module through the
+//! same confirmed steps as OmsiLaunch itself (`original_engine::modules`, the dialog over the
+//! page) and keeps the player's choices in `~/.depot/omsi2/modules.json`; they are sent to
+//! OmsiLaunch at every start (`original_engine::launch::module_args`), only while the module
+//! is in the OMSI 2 folder.
 
-use super::theme::*;
-use super::ui::{ButtonKind, Ui};
+use crate::kit::{self, Status};
 use glam::Vec2;
 use omsi_launcher_lib as core;
 use omsi_launcher_lib::original_engine::{config, modules};
-use omsi_launcher_ui::kit::{self, Status};
 use omsi_ui::paint::Align;
+use omsi_ui::theme::*;
+use omsi_ui::widgets::{ButtonKind, Ui};
 use omsi_ui::{Rect, Weight};
 use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// What a module's card asks of the launcher (it needs the launcher's state and dialog).
-#[derive(Default)]
-pub struct Asks {
-    /// The module's install ("Download and install…").
-    pub look: Option<&'static str>,
-    /// The module's removal ("Remove…").
-    pub remove: Option<&'static str>,
-    /// (in) Whether an install may start now: no game runs and no other install is open.
-    pub idle: bool,
-}
+use super::super::domain::modules::Asks;
 
 /// What is known of a module in the OMSI 2 folder, read again every few seconds.
 #[derive(Clone)]
@@ -78,7 +69,7 @@ fn choice(id: &str) -> (bool, Map<String, Value>) {
         let on = m
             .and_then(|m| m.get("enabled"))
             .and_then(Value::as_bool)
-            .unwrap_or(true);
+            .unwrap_or_else(|| modules::on_by_default(id));
         let settings = m
             .and_then(|m| m.get("settings"))
             .and_then(Value::as_object)
@@ -125,9 +116,9 @@ fn value_of(settings: &Map<String, Value>, s: &modules::CardSetting) -> String {
     settings
         .get(s.key)
         .and_then(scalar)
-        .map(|t| t.to_ascii_lowercase())
-        .filter(|t| s.values.contains(&t.as_str()))
-        .unwrap_or_else(|| s.default.to_string())
+        .and_then(|t| s.values.iter().find(|v| v.eq_ignore_ascii_case(&t)))
+        .unwrap_or(&s.default)
+        .to_string()
 }
 
 /// A row's name and the line under it.
@@ -176,7 +167,7 @@ fn button(
 }
 
 /// The card of module `id`. Returns the height it needed.
-pub fn card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks) -> f32 {
+pub fn module_card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks) -> f32 {
     let Some(def) = modules::module_def(id) else {
         return 0.0;
     };
@@ -197,6 +188,10 @@ pub fn card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks
         "omsi-prefetch" => (
             "Preload maps and vehicles into memory",
             "Faster loading. A separate program under its own license (%{license}).",
+        ),
+        "openhud" => (
+            "Live radar and a new pause menu",
+            "Replaces the pause menu of OMSI 2 only. A separate program under its own license (%{license}).",
         ),
         _ => ("", ""),
     };
@@ -242,6 +237,52 @@ pub fn card(ui: &mut Ui, r: Rect, id: &'static str, root: &Path, asks: &mut Asks
                 "Monitor window",
                 "A window that shows what is kept in memory while you play",
                 &[],
+            ),
+            "radar" => (
+                "Radar",
+                "A round map of the surroundings over the game view",
+                &[],
+            ),
+            "radar_corner" => (
+                "Radar corner",
+                "Where the radar sits on the screen",
+                &["Bottom left", "Bottom right", "Top left", "Top right"],
+            ),
+            "radar_zoom" => (
+                "Radar zoom",
+                "How much of the surroundings the radar shows",
+                &["Near", "Medium", "Far"],
+            ),
+            "radar_size_percent" => (
+                "Radar size",
+                "In percent of its normal size",
+                &["50%", "75%", "100%", "150%", "200%"],
+            ),
+            "radar_opacity_percent" => (
+                "Radar opacity",
+                "How solid the radar is drawn",
+                &["40%", "60%", "80%", "90%", "100%"],
+            ),
+            "pause_menu" => (
+                "New pause menu",
+                "openHUD's pause menu in place of OMSI 2's own",
+                &[],
+            ),
+            "units" => (
+                "Units",
+                "For speed and distance on the radar",
+                &["Metric", "Imperial"],
+            ),
+            "ui_scale_percent" => (
+                "Interface size",
+                "Size of openHUD's text and panels",
+                &["75%", "100%", "125%", "150%", "200%"],
+            ),
+            // (the languages openHUD has, named in their own words; Auto is English for now)
+            "language" => (
+                "Language",
+                "openHUD's own texts; Auto is English for now",
+                &["Auto", "English", "Português (Brasil)", "Deutsch"],
             ),
             _ => continue,
         };

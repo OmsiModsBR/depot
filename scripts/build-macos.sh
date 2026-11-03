@@ -22,6 +22,7 @@ cp "target/$target/release/depot" "$app/Contents/MacOS/depot"
 cp "target/$target/release/depot-launcher" "$app/Contents/MacOS/depot-launcher"
 cp "assets/steam_redist/libsteam_api.dylib" "$app/Contents/MacOS/"
 cp assets/icons/app/depot.icns "$app/Contents/Resources/depot.icns"
+cp THIRD_PARTY.md "$out/THIRD_PARTY.txt"
 # (the bundle's version is numbers only: a test build's -pr<number> is left out there)
 sed -e "s/@VERSION@/${version%%-*}/g" scripts/macos/Info.plist > "$app/Contents/Info.plist"
 codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true

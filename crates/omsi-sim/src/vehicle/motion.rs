@@ -17,6 +17,44 @@ impl VehicleInstance {
         self.controls
     }
 
+    /// The steering (-1 full left .. 1 full right, as [`Controls::steering`]) that turns the
+    /// axles to the angles `axle_angle` gives (`Axle_Steering_<axle>_L` / `_R`, rad, as a
+    /// saved situation keeps them): the steering sets the curvature the vehicle turns on, a
+    /// share of `[inv_min_turnradius]`, and each axle points at its centre on the turning
+    /// line (`PhysicsSpec::turn_line`, see `RigidBody::axle_steer`), so the axle farthest from that line
+    /// gives the curvature back. None for a vehicle that cannot steer or angles not known.
+    pub fn steering_for_axle_angles(
+        &self,
+        axle_angle: impl Fn(&str) -> Option<f32>,
+    ) -> Option<f32> {
+        let def = &self.ty.def;
+        if def.inv_min_turn_radius <= 0.0 {
+            return None;
+        }
+        // (the line counted from the physics object's centre, as the body steers to it)
+        let line = crate::physics::implementation::spec::body_centre_long(def) + def.rot_pnt_long;
+        let (axle, lever) = def
+            .axles
+            .iter()
+            .map(|a| a.long - line)
+            .enumerate()
+            .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))?;
+        if lever.abs() < 0.1 {
+            return None;
+        }
+        let sides: Vec<f32> = ["L", "R"]
+            .iter()
+            .filter_map(|s| axle_angle(&format!("Axle_Steering_{axle}_{s}")))
+            .filter(|a| a.is_finite())
+            .collect();
+        if sides.is_empty() {
+            return None;
+        }
+        let angle = sides.iter().sum::<f32>() / sides.len() as f32;
+        let steering = angle.tan() / (lever * def.inv_min_turn_radius);
+        steering.is_finite().then(|| steering.clamp(-1.0, 1.0))
+    }
+
     /// The vehicle's motion this frame, whichever model moves it (see [`VehicleMotion`]).
     pub fn motion(&self) -> &VehicleMotion {
         &self.motion

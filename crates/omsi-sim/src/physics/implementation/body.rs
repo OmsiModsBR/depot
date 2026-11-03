@@ -83,7 +83,7 @@ impl RigidBody {
             steer_deg: 0.0,
             kappa: 0.0,
             max_steer_deg: spec.max_steer_deg,
-            rot_pnt_long: spec.rot_pnt_long,
+            rot_pnt_long: spec.turn_line,
             inv_min_turn_radius: spec.inv_min_turn_radius,
             body_freq: spec.body_freq,
             empty_body_freq: spec.body_freq,

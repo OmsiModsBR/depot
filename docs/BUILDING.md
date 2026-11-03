@@ -31,6 +31,9 @@ launcher) and `dist\windows\depot-launcher.exe` (the launcher's terminal tool).
 
 Plain cargo works too: `cargo build --release -p omsi-app` builds `target\release\depot.exe`.
 
+Each build script also copies [THIRD_PARTY.md](../THIRD_PARTY.md) into the package as plain text,
+`THIRD_PARTY.txt`, so the third-party notices travel with the program.
+
 A release package is built with the version passed explicitly, and `depot --version` is checked
 before it is packed: see [Versioning and releases](VERSIONING.md).
 

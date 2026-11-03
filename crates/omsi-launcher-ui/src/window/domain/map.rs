@@ -61,4 +61,17 @@ pub trait Map {
     fn think(&mut self, rect: Rect, window: Rect, scale: f32, p: Pointer);
     /// The entry point clicked, once.
     fn take_clicked(&mut self) -> Option<usize>;
+    /// How many roads, stops and entry points the map has, once it is read.
+    fn counts(&self) -> Option<(usize, usize, usize)>;
+    /// The chosen trip's stops, where the map has them: the place and the stop's index in the
+    /// trip.
+    fn stops_placed(&self) -> &[(DVec2, usize)];
+    /// The name of entry point `i` of those shown.
+    fn entry_name(&self, i: usize) -> Option<&str>;
+    /// Entry point `i` of those shown, on the screen.
+    fn entry_at(&self, i: usize) -> Option<Vec2>;
+    /// The entry point shown under the mouse (its index among those shown).
+    fn hovered(&self) -> Option<usize>;
+    /// Which of the entry points shown is the map's entry point `choice` (-1: none).
+    fn shown_of(&self, choice: i32) -> Option<usize>;
 }

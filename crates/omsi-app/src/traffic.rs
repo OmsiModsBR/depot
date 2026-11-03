@@ -101,6 +101,39 @@ const CREEP_PAST: f32 = 2.0;
 /// m).
 const PRIORITY_WARN_GAP: f32 = 60.0;
 
+/// An ordinary car on an emergency vehicle's way makes room for it from this far ahead of
+/// it (m, from the emergency vehicle's front to the car's rear): it keeps to the kerb side
+/// of its lane.
+const MAKE_WAY_REACH: f32 = 70.0;
+/// ... and comes to a stop (softly, `MAKE_WAY_DECEL`) from this far, so that the emergency
+/// vehicle can steer round it (m).
+const MAKE_WAY_STOP_REACH: f32 = 45.0;
+/// How hard a car brakes to make way (m/s²): a gentle stop, not an emergency one.
+const MAKE_WAY_DECEL: f32 = 2.0;
+/// How far a car moves to the kerb side of its lane to make way (m), room permitting.
+const MAKE_WAY_SHIFT: f32 = 0.6;
+/// A car makes way for at most this long (s); when the emergency vehicle cannot get by (no
+/// lane to go round it by) the car drives on, and does not stop for it again for
+/// `MAKE_WAY_COOLDOWN` seconds, so that nobody blocks anybody for good.
+const MAKE_WAY_MAX_SECS: f32 = 10.0;
+const MAKE_WAY_COOLDOWN: f32 = 20.0;
+
+/// An ordinary car that makes way for an emergency vehicle coming up behind it
+/// (`Traffic::update_way_makers`).
+#[derive(Debug, Clone, Copy)]
+pub struct WayMaker {
+    /// When it began to make way (it began afresh after a second of not doing so).
+    pub since: f32,
+    /// The last time it was in an emergency vehicle's way.
+    pub seen: f32,
+    /// It does not make way before this time (it gave up after `MAKE_WAY_MAX_SECS`).
+    pub ignore_until: f32,
+    /// Making way now.
+    pub active: bool,
+    /// The gap from the emergency vehicle's front to this car's rear (m).
+    pub behind: f32,
+}
+
 /// Seconds a car at `st` needs to drive `dist` metres out on the other half of the road:
 /// the first `creep` metres edging out, the rest speeding up to `v_cap` (a driver standing
 /// still first reacts).
@@ -522,15 +555,6 @@ pub struct DormantCar {
     pub walk: u64,
 }
 
-/// How many cars a whole map keeps at most, as a multiple of the number asked for around the
-/// player (memory: a dormant car is a few dozen bytes, but each one woken is a full vehicle).
-const MAP_POPULATION_FACTOR: f32 = 8.0;
-
-fn street_lane_weight(l: &omsi_sim::traffic::Lane) -> Option<f64> {
-    (l.kind == LaneKind::Street && !l.no_cars && l.density > 0.0 && l.length() >= 8.0)
-        .then(|| l.length() as f64 * l.density.clamp(0.05, 4.0) as f64)
-}
-
 /// How long (s) a population pass of the game may spend putting cars on the road (see
 /// `Traffic::populate_budget`): a few cars, then the rest a tenth of a second later.
 pub const POPULATE_BUDGET: f64 = 0.003;
@@ -560,8 +584,6 @@ pub struct PopulateSplit {
 
 pub struct Traffic {
     pub net: Network,
-    /// Sum of the spawn weights of every street lane, updated only as tiles add lanes.
-    pub street_weight: f64,
     /// Parked cars standing in or beside a lane: per lane, (distance along it, signed
     /// lateral offset of the car's centre, + = right). A car in the lane's middle is an
     /// obstacle to stop behind; one over the kerb side is passed with a swerve to the left.
@@ -595,8 +617,15 @@ pub struct Traffic {
     pub dormant: Vec<DormantCar>,
     /// `time` when the dormant cars last moved on.
     pub dormant_time: f32,
+    /// When the lanes' spawn clocks last ran down.
+    pub spawn_time: f32,
+    /// Each street lane's wait to its next arrival (None: nothing to wait for yet, its first
+    /// fill is still to come).
+    pub lane_clocks: Vec<Option<crate::traffic_density::SpawnClock>>,
+    /// Where the last spawn pass stopped when it ran out of budget.
+    pub spawn_cursor: usize,
     pub rng: u64,
-    /// Target number of cars around the camera.
+    /// Whether random street traffic runs at all (0: none; it no longer sets the density).
     pub target: usize,
     /// Made only so that the light programs run (no traffic, no timetable): nobody is put
     /// on the roads - no aircraft, no parked car pulling out - while `target` is 0.
@@ -619,6 +648,9 @@ pub struct Traffic {
     pub root: std::path::PathBuf,
     /// Car-frames spent waiting for a red light (statistics).
     pub held_at_red: usize,
+    /// The cars that make way for an emergency vehicle behind them, by car id (empty while
+    /// no emergency vehicle is on the road).
+    pub way_makers: HashMap<u64, WayMaker>,
     /// Who wants a timetable bus to stop (`Humans::stop_wishes`): the buses somebody
     /// aboard wants to get off, the stops where somebody waits. None without passengers:
     /// every bus then serves every stop.
@@ -746,9 +778,6 @@ pub struct Traffic {
     pub keep_clear: Vec<omsi_sim::collision::Obb>,
     /// LAN play: this game draws the host's traffic instead of its own (`lan_world`).
     pub mirror: bool,
-    /// Count only the cars within this distance of this point when filling up (the
-    /// population around a LAN player, `populate_lan_centers`).
-    pub count_near: Option<(DVec3, f64)>,
     /// LAN play: where the other players are (host): the traffic is kept around them too.
     pub lan_centers: Vec<DVec3>,
 }
@@ -1602,10 +1631,8 @@ impl Traffic {
         let light_log = omsi_cfg::flags::DEBUG_LIGHTS.text();
         let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
         let lanes = 0..net.lanes.len();
-        let street_weight = net.lanes.iter().filter_map(street_lane_weight).sum();
         let mut t = Traffic {
             net,
-            street_weight,
             parked,
             parked_waiting: Vec::new(),
             lane_tiles: lane_tiles.into_iter().collect(),
@@ -1618,6 +1645,9 @@ impl Traffic {
             cars: Vec::new(),
             dormant: Vec::new(),
             dormant_time: 0.0,
+            spawn_time: 0.0,
+            lane_clocks: Vec::new(),
+            spawn_cursor: 0,
             rng: 0x9E37_79B9_7F4A_7C15,
             target,
             lights_only: false,
@@ -1632,6 +1662,7 @@ impl Traffic {
             sound_cfgs: HashMap::new(),
             root: root.to_path_buf(),
             held_at_red: 0,
+            way_makers: HashMap::new(),
             stop_wishes: None,
             player_still: 0.0,
             day_time: 0.0,
@@ -1684,7 +1715,6 @@ impl Traffic {
             twinned: Default::default(),
             keep_clear: Vec::new(),
             mirror: false,
-            count_near: None,
             lan_centers: Vec::new(),
         };
         t.sort_parked(parked_cars, lanes);
@@ -2016,19 +2046,13 @@ impl Traffic {
         }
     }
 
-    /// The street traffic density now, 1 = the map's normal level, times the options' share
-    /// of random traffic.
-    fn street_density(&self) -> f32 {
-        self.street_density_map() * self.unsched_factor
-    }
-
     fn street_density_map(&self) -> f32 {
         if !self.group_curves {
             return omsi_map::global::curve_at(
                 &self.density_curve,
                 (self.day_time.rem_euclid(86400.0) / 3600.0) as f32,
             )
-            .clamp(0.0, 2.0);
+            .max(0.0);
         }
         let groups: Vec<usize> = (0..self.groups.len())
             .filter(|&g| {
@@ -2041,7 +2065,7 @@ impl Traffic {
         if factors <= 0.0 {
             return 0.0;
         }
-        (groups.iter().map(|&g| self.group_density(g)).sum::<f32>() / factors).clamp(0.0, 2.0)
+        groups.iter().map(|&g| self.group_density(g)).sum::<f32>() / factors
     }
 
     /// How much of group `g`'s traffic `lane` carries: the path's `[rule] trafficdensity`
@@ -2267,13 +2291,14 @@ impl Traffic {
     }
 
     /// How many more vehicles without a timetable the options' `[AIMaxCountRandom]` lets on
-    /// the streets (those asleep out of range are not counted: they are not on them).
+    /// the map (those asleep out of range count: they are in circulation).
     fn random_room(&self) -> usize {
         let active = self
             .cars
             .iter()
             .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
-            .count();
+            .count()
+            + self.dormant.len();
         (self.max_random as usize).saturating_sub(active)
     }
 
@@ -2487,59 +2512,29 @@ impl Traffic {
         }
         // aircraft: a few on the flight paths, independent of the street target
         let has_air = self.types.iter().any(|t| t.2 == LaneKind::Air);
-        // the map's traffic density by hour (and group) scales the street traffic ...
-        let density = self.street_density();
-        // ... and so does how much road there is around: the same number of cars looks
-        // empty on a six-lane Berlin junction and crowded on a village lane, so the count
-        // asked for is per a neighbourhood of about 250 lanes; and as Omsi spawns on each
-        // path at a rate of its [rule] trafficdensity, paths of low density bring fewer cars
-        // and those of density 0 (or kept clear of cars) none
-        let near_density: Vec<f32> = self
-            .net
-            .lanes_starting_near(center, self.spawn_radius)
-            .into_iter()
-            .map(|i| &self.net.lanes[i])
-            .filter(|l| {
-                l.kind == LaneKind::Street
-                    && l.points
-                        .first()
-                        .map(|p| (*p - center).length() < self.spawn_radius)
-                        .unwrap_or(false)
-            })
-            .map(|l| {
-                if l.no_cars {
-                    0.0
-                } else {
-                    l.density.clamp(0.0, 4.0)
-                }
-            })
-            .collect();
-        let street_target = ((self.target as f32 * density * road_scale(&near_density)).round()
-            as usize)
-            .min(self.max_random as usize);
+        // Street traffic comes lane by lane (see `spawn_streets`): there is no number of
+        // cars asked for around the player, only the options' cap on the whole map
+        let dt = (self.time - self.spawn_time).clamp(0.0, 10.0);
         // the cars that come into range again, where they have got to
         let t = Instant::now();
-        self.wake_dormant(world, renderer, scene, center, street_target);
+        self.wake_dormant(world, renderer, scene, center);
         self.populate_split.wake = t.elapsed().as_secs_f64();
-        // the whole map's population: as dense as around the player, on every street the
-        // map has shown so far (sleeping where the player is not)
         let t = Instant::now();
-        self.fill_map(center, street_target);
+        self.spawn_streets(world, renderer, scene, center, dt);
+        // (a pass cut short by its budget leaves the time owed to the lanes it did not reach)
+        if self.spawn_cursor == 0 {
+            self.spawn_time = self.time;
+        }
         self.populate_split.fill = t.elapsed().as_secs_f64();
         let t = Instant::now();
-        for (kind, target) in [
-            (LaneKind::Street, street_target),
-            (LaneKind::Air, if has_air { 3 } else { 0 }),
-        ] {
-            // (a LAN host counts the cars round itself only: counted over the whole map,
-            // the traffic it keeps round the other players met its own target and the
-            // host drove through empty streets, #342)
-            if kind == LaneKind::Street && !self.lan_centers.is_empty() {
-                self.count_near = Some((center, self.spawn_radius));
-            }
-            self.populate_kind(world, renderer, scene, center, kind, target);
-        }
-        self.populate_lan_centers(world, renderer, scene, center, street_target);
+        self.populate_kind(
+            world,
+            renderer,
+            scene,
+            center,
+            LaneKind::Air,
+            if has_air { 3 } else { 0 },
+        );
         self.populate_split.spawn = t.elapsed().as_secs_f64();
         let t = Instant::now();
         if !self.initial {
@@ -2898,16 +2893,12 @@ impl Traffic {
             .collect();
         let total_w = acc.max(1e-3);
         let mut attempts = 0;
-        let counted_near = self.count_near.take();
         let unscheduled = self
             .cars
             .iter()
             .filter(|c| {
                 !c.is_bus()
                     && !c.gone
-                    && counted_near
-                        .map(|(p, r)| (c.vehicle.position - p).length() < r)
-                        .unwrap_or(true)
                     && self
                         .net
                         .lanes
@@ -3081,21 +3072,19 @@ impl Traffic {
     }
 
     /// The cars out of range that have come near again take their bodies back - where
-    /// nobody sees it happen, up to a little over the number asked for around the player.
+    /// nobody sees it happen.
     fn wake_dormant(
         &mut self,
         world: &World,
         renderer: &Renderer,
         scene: &mut Scene,
         center: DVec3,
-        target: usize,
     ) {
-        if self.dormant.is_empty() {
+        if self.dormant.is_empty() || self.target == 0 || self.max_random == 0 {
             return;
         }
-        let active = self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count();
-        let mut budget = (target as f32 * 1.25).ceil() as usize;
-        budget = budget.min(self.max_random as usize).saturating_sub(active);
+        // (the cap counts the cars asleep too: they wake into the cars it already counted)
+        let mut budget = self.dormant.len();
         let centers: Vec<DVec3> = std::iter::once(center)
             .chain(self.lan_centers.iter().copied())
             .collect();
@@ -3147,86 +3136,186 @@ impl Traffic {
         }
     }
 
-    /// Fill the map: the streets the map has shown so far carry as many cars per metre as
-    /// the ones around the player, the ones out of range as dormant cars (see `DormantCar`).
-    fn fill_map(&mut self, center: DVec3, street_target: usize) {
-        if street_target == 0 {
+    /// How many vehicles without a timetable are in circulation, those asleep out of range
+    /// included.
+    fn in_circulation(&self) -> usize {
+        self.cars
+            .iter()
+            .filter(|c| !c.is_bus() && c.state.route.is_empty() && !c.gone)
+            .count()
+            + self.dormant.len()
+    }
+
+    /// The street lanes of the road `lane` belongs to that run the same way, itself
+    /// included: its density is shared between them.
+    fn parallel_lanes(&self, lane: usize) -> usize {
+        let walk = |next: fn(&omsi_sim::traffic::Lane) -> Option<usize>| {
+            let (mut n, mut at) = (0, lane);
+            while let Some(o) = next(&self.net.lanes[at]) {
+                if n >= 8 || o == lane || self.net.lanes[o].kind != LaneKind::Street {
+                    break;
+                }
+                n += 1;
+                at = o;
+            }
+            n
+        };
+        1 + walk(|l| l.left) + walk(|l| l.right)
+    }
+
+    /// Street traffic, lane by lane: each street lane of the loaded map brings vehicles
+    /// on at its own random intervals (see [`crate::traffic_density`]), whether or not
+    /// the player is near or looking; the only things that stop an arrival are a vehicle
+    /// in the way at the start of the lane and the options' cap. The first time a lane is
+    /// seen it is filled in one go, at random places along it.
+    fn spawn_streets(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        center: DVec3,
+        dt: f32,
+    ) {
+        use crate::traffic_density::{
+            initial_count, lane_rate, next_interval, spawn_room, SpawnClock,
+        };
+        let n = self.net.lanes.len();
+        if self.target == 0 || self.max_random == 0 || n == 0 {
             return;
         }
-        let far = self.spawn_radius * DESPAWN_FACTOR;
-        let centers: Vec<DVec3> = std::iter::once(center)
-            .chain(self.lan_centers.iter().copied())
-            .collect();
-        let mut nearby: Vec<usize> = centers
-            .iter()
-            .flat_map(|&c| self.net.lanes_starting_near(c, self.spawn_radius))
-            .collect();
-        nearby.sort_unstable();
-        nearby.dedup();
-        let mut near = 0f64;
-        for i in nearby {
-            let l = &self.net.lanes[i];
-            let Some(w) = street_lane_weight(l) else {
-                continue;
+        if self.lane_clocks.len() < n {
+            self.lane_clocks.resize(n, None);
+        }
+        let curve = self.street_density_map();
+        let factor = self.unsched_factor;
+        let mut room = spawn_room(self.max_random as usize, self.in_circulation());
+        // (from a random lane, so that no lane has a standing claim on the cap)
+        let start = if self.spawn_cursor > 0 {
+            self.spawn_cursor.min(n)
+        } else {
+            self.rand() as usize % n
+        };
+        self.spawn_cursor = 0;
+        for i in (start..n).chain(0..start) {
+            if self.out_of_budget() {
+                self.spawn_cursor = i;
+                break;
+            }
+            let (len, density, eligible, begin) = {
+                let l = &self.net.lanes[i];
+                (
+                    l.length(),
+                    l.density,
+                    l.kind == LaneKind::Street && !l.no_cars && l.length() > 8.0,
+                    l.start(),
+                )
             };
-            let d = centers
-                .iter()
-                .map(|c| (l.start() - *c).truncate().length())
-                .fold(f64::MAX, f64::min);
-            if d < self.spawn_radius {
-                near += w;
+            let rate = if eligible {
+                lane_rate(density, curve, factor, self.parallel_lanes(i))
+            } else {
+                0.0
+            };
+            // (only on loaded ground: a lane's tile may have gone again, and its clock with it)
+            if rate <= 0.0 || !world.has_ground(begin.x, begin.y) {
+                self.lane_clocks[i] = None;
+                continue;
+            }
+            match self.lane_clocks[i] {
+                None => {
+                    // (a lane the cap left no room for is not marked filled: it is
+                    // filled when room comes)
+                    if room == 0 {
+                        continue;
+                    }
+                    let (u1, u2) = (self.rand_f() as f32, self.rand_f() as f32);
+                    for _ in 0..initial_count(rate, len, u1, u2) {
+                        if room == 0 {
+                            break;
+                        }
+                        let s = (self.rand_f() * (len as f64 - 6.0)) as f32 + 3.0;
+                        if self.place_street_car(world, renderer, scene, center, i, s) {
+                            room -= 1;
+                        }
+                    }
+                    let u = self.rand_f() as f32;
+                    self.lane_clocks[i] = next_interval(rate, len, u).map(SpawnClock::new);
+                }
+                Some(mut clock) => {
+                    if clock.step(dt) && room > 0 {
+                        // (at the start of the lane, the way it is driven)
+                        let s = 1.0f32.min(len * 0.1);
+                        if self.place_street_car(world, renderer, scene, center, i, s) {
+                            room -= 1;
+                            let u = self.rand_f() as f32;
+                            if let Some(w) = next_interval(rate, len, u) {
+                                clock.restart(w);
+                            }
+                        }
+                    }
+                    self.lane_clocks[i] = Some(clock);
+                }
             }
         }
-        if near < 50.0 {
-            return;
-        }
-        let map_target = ((street_target as f64 * self.street_weight / near)
-            .min(street_target as f64 * MAP_POPULATION_FACTOR as f64))
-            as usize;
-        // (the cap holds for the whole map: the cars asleep out of range count here)
-        let map_target = map_target.min(self.max_random as usize);
-        let present =
-            self.cars.iter().filter(|c| !c.is_bus() && !c.gone).count() + self.dormant.len();
-        if present >= map_target {
-            return;
-        }
-        // The full outside list is only needed while replenishing the map population.
-        let outside: Vec<(usize, f32)> = self
-            .net
-            .lanes
+    }
+
+    /// Put one random vehicle on street lane `lane` at `s`, if nothing stands there: a
+    /// real one where a player's range reaches it, else one asleep (see `DormantCar`).
+    #[allow(clippy::too_many_arguments)]
+    fn place_street_car(
+        &mut self,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        center: DVec3,
+        lane: usize,
+        s: f32,
+    ) -> bool {
+        let (p, h) = self.net.lanes[lane].at(s);
+        let near = std::iter::once(center)
+            .chain(self.lan_centers.iter().copied())
+            .any(|c| (p - c).truncate().length() < self.spawn_radius);
+        if self
+            .cars
             .iter()
-            .enumerate()
-            .filter_map(|(i, l)| {
-                let w = street_lane_weight(l)?;
-                let d = centers
-                    .iter()
-                    .map(|c| (l.start() - *c).truncate().length())
-                    .fold(f64::MAX, f64::min);
-                (d > far).then_some((i, w as f32))
-            })
-            .collect();
-        if outside.is_empty() {
-            return;
+            .any(|c| (c.vehicle.position - p).length() < 14.0)
+            || self
+                .dormant
+                .iter()
+                .any(|d| d.lane == lane && (d.s - s).abs() < 14.0)
+            || self
+                .parked
+                .get(&lane)
+                .map(|l| {
+                    l.iter()
+                        .any(|&(ps, lat)| (ps - s).abs() < 8.0 && lat.abs() < 1.5)
+                })
+                .unwrap_or(false)
+        {
+            return false;
         }
-        let mut acc = 0.0f32;
-        let cumulative: Vec<f32> = outside
-            .iter()
-            .map(|c| {
-                acc += c.1;
-                acc
-            })
-            .collect();
-        for _ in 0..(map_target - present).min(64) {
-            let x = self.rand_f() as f32 * acc;
-            let lane = outside[cumulative
-                .partition_point(|&c| c < x)
-                .min(outside.len() - 1)]
-            .0;
-            let s = (self.rand_f() * (self.net.lanes[lane].length() as f64 - 4.0)) as f32 + 2.0;
-            let Some(ty) = self.pick_type(LaneKind::Street, Some(lane)) else {
-                continue;
-            };
-            let seed = self.rand();
+        let Some(ty) = self.pick_type(LaneKind::Street, Some(lane)) else {
+            return false;
+        };
+        let seed = self.rand();
+        if near {
+            if !self.spawn_clear(&ty, p, h as f64) {
+                return false;
+            }
+            self.create_counted(
+                world,
+                renderer,
+                scene,
+                center,
+                LaneKind::Street,
+                lane,
+                s,
+                ty,
+                seed,
+                None,
+                None,
+                None,
+            );
+        } else {
             let scheme = if ty.paint_schemes.is_empty() {
                 None
             } else {
@@ -3246,6 +3335,7 @@ impl Traffic {
                 walk: seed | 1,
             });
         }
+        true
     }
 
     /// Put a random car of type `ty` on `lane` at `s` metres into it and return its id:
@@ -4000,6 +4090,121 @@ impl Traffic {
         Some(len - st.s - 1.0)
     }
 
+    /// Seconds an emergency vehicle waits behind something standing before it goes round it
+    /// (an ordinary car waits four).
+    fn patience(&self, i: usize) -> f32 {
+        if self.cars[i].state.emergency {
+            1.0
+        } else {
+            4.0
+        }
+    }
+
+    /// Whether car `i`, an emergency vehicle, is held up by car `j` that is making way for it:
+    /// a car that stands aside on purpose, which it goes round at once.
+    fn clearing(&self, i: usize, j: Option<usize>) -> bool {
+        self.cars[i].state.emergency
+            && j.and_then(|j| self.cars.get(j))
+                .is_some_and(|o| self.way_makers.get(&o.id).is_some_and(|w| w.active))
+    }
+
+    /// Who makes way for the emergency vehicles on the road this frame. An ordinary car (not a
+    /// bus, not on a junction path) on the way of an emergency vehicle, between 0 and
+    /// `MAKE_WAY_REACH` metres in front of it, keeps to the kerb side of its lane and, from
+    /// `MAKE_WAY_STOP_REACH` metres, comes to a gentle stop where the road before it is free of
+    /// junctions, so that the emergency vehicle goes round it (it does not wait for it to
+    /// stand: see `Traffic::patience`). A car does this for at most `MAKE_WAY_MAX_SECS`
+    /// seconds at a time. Without an emergency vehicle on the road this is one pass over the
+    /// cars.
+    fn update_way_makers(&mut self) {
+        let now = self.time;
+        for w in self.way_makers.values_mut() {
+            w.active = false;
+        }
+        let emergency: Vec<usize> = self
+            .cars
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| {
+                c.state.emergency
+                    && !c.gone
+                    && c.park.is_none()
+                    && c.pull_out <= 0.0
+                    && (c.state.speed > 2.0 || c.lead_info.is_some_and(|(_, gap)| gap < 25.0))
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let mut found: HashMap<u64, f32> = HashMap::new();
+        for &e in &emergency {
+            let ec = &self.cars[e];
+            let ahead: HashMap<usize, f32> = self
+                .way_lanes(&ec.state, MAKE_WAY_REACH + 20.0)
+                .into_iter()
+                .collect();
+            for (j, c) in self.cars.iter().enumerate() {
+                if j == e
+                    || c.state.emergency
+                    || c.is_bus()
+                    || c.is_rail()
+                    || c.gone
+                    || c.passing.is_some()
+                    || c.park.is_some()
+                    || c.state.change.is_some()
+                    || !self.net.crossings[c.state.lane].is_empty()
+                    || !self.net.walks[c.state.lane].is_empty()
+                {
+                    continue;
+                }
+                let Some(&d) = ahead.get(&c.state.lane) else {
+                    continue;
+                };
+                // from the emergency vehicle's front to this car's rear
+                let behind = d + c.state.s - c.state.rear - ec.state.front;
+                // (a car that is making way stays so until the emergency vehicle has gone
+                // right by: its rear clear of the car's front)
+                let beside = if self
+                    .way_makers
+                    .get(&c.id)
+                    .is_some_and(|w| w.seen > now - 1.0)
+                {
+                    -(ec.state.front + ec.state.rear + c.state.front + c.state.rear + 1.0)
+                } else {
+                    0.0
+                };
+                if (beside..=MAKE_WAY_REACH).contains(&behind) {
+                    let e = found.entry(c.id).or_insert(behind);
+                    *e = e.min(behind);
+                }
+            }
+        }
+        for (id, behind) in found {
+            let w = self.way_makers.entry(id).or_insert(WayMaker {
+                since: now,
+                seen: f32::MIN,
+                ignore_until: 0.0,
+                active: false,
+                behind,
+            });
+            if now - w.seen > 1.0 {
+                w.since = now;
+            }
+            w.seen = now;
+            w.behind = behind;
+            if w.ignore_until > now {
+                continue;
+            }
+            if now - w.since > MAKE_WAY_MAX_SECS {
+                w.ignore_until = now + MAKE_WAY_COOLDOWN;
+                // (the ten seconds count afresh after the pause)
+                w.since = w.ignore_until;
+                continue;
+            }
+            w.active = true;
+        }
+        self.way_makers
+            .retain(|_, w| w.ignore_until > now || w.seen > now - 2.0);
+    }
+
     /// Is what car `i` has stopped behind going to stand there for a while (a parked car, a
     /// bus serving its stop, a broken-down or abandoned car, the player's bus waiting)?
     fn standing_obstacle(
@@ -4020,6 +4225,7 @@ impl Traffic {
                 // it (not the head of a queue that waits for a light, a junction or a car),
                 // or the end of a queue standing behind a bus at its stop
                 o.standing_for(self.day_time) > 4.0
+                    || self.clearing(i, Some(j))
                     || (o.stopped > 25.0 && !o.held && self.cars[i].stopped > 6.0)
                     || (o.stopped > 3.0 && self.standing_queue(j).1)
             }
@@ -4083,7 +4289,7 @@ impl Traffic {
         if st.change.is_some()
             || !st.route.is_empty()
             || st.change_cooldown > 0.0
-            || stuck < 4.0
+            || stuck < self.patience(i)
             || !standing
             || self.cars[i].light_hold
             || self.cars[i].yielding
@@ -4169,7 +4375,7 @@ impl Traffic {
         let rolling = parked && st.speed > 0.5;
         if car.passing.is_some()
             || st.change.is_some()
-            || (car.stopped < 3.0 && !rolling)
+            || (car.stopped < self.patience(i).min(3.0) && !rolling)
             || !standing
             || car.yielding
             || car.at_stop()
@@ -4841,7 +5047,9 @@ impl Traffic {
         let st = &car.state;
         let v = st.speed.max(0.0);
         // as far as the car needs to stop without a jolt, and never less than a car length
-        let reach = (v * v / 5.0 + v + 6.0).clamp(8.0, 45.0);
+        // (an emergency vehicle drives faster: it looks further ahead, so it can still stop
+        // for somebody who steps onto a crossing it passes on red)
+        let reach = (v * v / 5.0 + v + 6.0).clamp(8.0, if st.emergency { 75.0 } else { 45.0 });
         let origin = car.vehicle.position.truncate();
         let near: Vec<&(DVec3, DVec2, bool)> = self
             .people
@@ -5025,7 +5233,10 @@ impl Traffic {
                     go
                 }
             };
-            if !go {
+            // an emergency vehicle goes through a red light; the right of way at the junction
+            // (`junction_stop`) still makes it wait for what is physically in its way, and
+            // the cross traffic gives way to it
+            if !go && !car.state.emergency {
                 stop = Some(d);
                 break;
             }
@@ -6060,6 +6271,8 @@ impl Traffic {
                 reservations.entry(l).or_default().push(i);
             }
         }
+        // who makes room for an emergency vehicle behind it
+        self.update_way_makers();
         // the light programs: requests of whoever is coming, then the cycle clocks
         for c in self.lights.iter_mut() {
             c.request.iter_mut().for_each(|r| *r = false);
@@ -6562,6 +6775,14 @@ impl Traffic {
             }
             let merge_wait = self.plan_route_change(i, &by_lane);
             let way = self.way_lanes(&self.cars[i].state, 200.0);
+            // an emergency vehicle: faster than the limit, and no stop at a red light
+            // (`light_stop`); the one lookup per car and frame is all it costs
+            let emergency = !self.cars[i].is_bus()
+                && self.cars[i]
+                    .vehicle
+                    .var("TrafficPriority")
+                    .is_some_and(|v| v > 0.5);
+            self.cars[i].state.emergency = emergency;
             // traffic lights
             let light = if self.net.lanes[self.cars[i].state.lane].kind == LaneKind::Air {
                 None
@@ -6681,9 +6902,33 @@ impl Traffic {
                 .player
                 .and_then(|p| self.letting_out(i, &p))
                 .map(|g| self.cars[i].state.front + (g - 1.0).max(0.0));
+            // making way for an emergency vehicle coming up behind: a gentle stop, where the road
+            // ahead is free of junctions (it carries on through one, and stops after it)
+            let make_way_stop = self
+                .way_makers
+                .get(&self.cars[i].id)
+                .filter(|w| w.active && w.behind < MAKE_WAY_STOP_REACH)
+                .and_then(|_| {
+                    let st = &self.cars[i].state;
+                    let at = st.front + st.speed * st.speed / (2.0 * MAKE_WAY_DECEL) + 0.3;
+                    let junction_in = way
+                        .iter()
+                        .find(|w| {
+                            !self.net.crossings[w.0].is_empty() || !self.net.walks[w.0].is_empty()
+                        })
+                        .map(|w| w.1)
+                        .unwrap_or(f32::MAX);
+                    // (nor with its rear still on the junction path it has just left)
+                    let rear_in_junction = st.prev_lane.is_some_and(|p| {
+                        st.s < st.rear + 1.0
+                            && (!self.net.crossings[p].is_empty() || !self.net.walks[p].is_empty())
+                    });
+                    (at < junction_in - 1.0 && !rear_in_junction).then_some(at)
+                });
             let mut stop_at = [
                 light,
                 yield_at,
+                make_way_stop,
                 merge_wait,
                 keep_back,
                 people,
@@ -6702,6 +6947,7 @@ impl Traffic {
                 ("people", people),
                 ("pull_out", parked_wait),
                 ("let_out", let_out),
+                ("make_way", make_way_stop),
             ] {
                 if let Some(v) = v {
                     if v < why.1 {
@@ -6743,7 +6989,19 @@ impl Traffic {
                     service.feed_timetable(&mut car.vehicle, self.day_time);
                 } else if car.passing.is_none() && car.park.is_none() {
                     // round a car parked at the kerb, else in the middle of the lane
-                    let target = kerb_swerve.unwrap_or(0.0);
+                    // (making way for an emergency vehicle: over to the kerb side, where no
+                    // parked car stands on the lanes ahead)
+                    let aside = self.way_makers.get(&car.id).is_some_and(|w| w.active)
+                        && !way
+                            .iter()
+                            .any(|w| self.parked.get(&w.0).is_some_and(|v| !v.is_empty()));
+                    let room = (self.net.lanes[car.state.lane].width * 0.5 - car.half_width - 0.1)
+                        .clamp(0.0, MAKE_WAY_SHIFT);
+                    let target = kerb_swerve.unwrap_or(if aside {
+                        -self.net.oncoming_sign() * room
+                    } else {
+                        0.0
+                    });
                     if debug && (target - car.state.lateral_target).abs() > 0.3 {
                         log::info!(
                             "t={:.2}: car {} swerves to {target:+.2} (was {:+.2}, now at {:+.2})",
@@ -8393,10 +8651,6 @@ impl Traffic {
         let mut added = self.net.lanes.len()..self.net.lanes.len();
         if n > 0 {
             added = self.net.extend(new, 1.5);
-            self.street_weight += self.net.lanes[added.clone()]
-                .iter()
-                .filter_map(street_lane_weight)
-                .sum::<f64>();
             log::debug!(
                 "traffic: {} lanes added ({} in all)",
                 added.len(),
@@ -8467,32 +8721,6 @@ fn take_from_tiles(
 // clients its light programs; a client draws the host's cars instead of its own.
 
 impl Traffic {
-    /// Street traffic around the other players of a LAN session too (host): each of them
-    /// gets its own share of cars where no other player's share lies already.
-    fn populate_lan_centers(
-        &mut self,
-        world: &World,
-        renderer: &Renderer,
-        scene: &mut Scene,
-        center: DVec3,
-        target: usize,
-    ) {
-        let centers = self.lan_centers.clone();
-        let mut done = vec![center];
-        for c in centers {
-            if done
-                .iter()
-                .any(|d| (*d - c).truncate().length() < self.spawn_radius)
-            {
-                continue;
-            }
-            self.count_near = Some((c, self.spawn_radius));
-            self.populate_kind(world, renderer, scene, c, LaneKind::Street, target);
-            self.count_near = None;
-            done.push(c);
-        }
-    }
-
     pub fn is_mirror(&self) -> bool {
         self.mirror
     }
@@ -8517,18 +8745,6 @@ pub fn mirror_light_tick(ctl: &mut TrafficLightController, dt: f32, day_time: f6
     if !ctl.held {
         ctl.time = (ctl.time + dt.max(0.0) as f64).rem_euclid(ctl.cycle_len());
     }
-}
-
-/// How many times the base street target the neighbourhood asks for, from the trafficdensity
-/// of each street lane starting near the player (0 for a no_cars lane): the count of lanes
-/// per about 250 (1 to 4) times their mean density (0 to 2).
-pub fn road_scale(near_density: &[f32]) -> f32 {
-    let road = (near_density.len() as f32 / 250.0).clamp(1.0, 4.0);
-    if near_density.is_empty() {
-        return road;
-    }
-    let mean = near_density.iter().sum::<f32>() / near_density.len() as f32;
-    road * mean.clamp(0.0, 2.0)
 }
 
 /// Whether the point `p` of a car's way lies in the player's box round `centre` (`wide` to

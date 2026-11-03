@@ -106,6 +106,11 @@ Each entry has the label, the technical change and the effect to expect.
 * **Passengers weigh on the player's bus.** *Deliberate improvement.* Technical: each person's `.hum` `[mass]`
   adds to the mass of the section they stand in, and pitch and roll damping follow the heavier body. Effect: a
   loaded bus sits lower on its springs, accelerates more slowly and needs a longer distance to stop.
+* **Saved situations keep the passengers.** *Deliberate improvement; not yet looked at in the game.* Technical: saving a
+  situation writes the riders of the player's bus (their place, destination and the ride left) in a `.riders` file
+  beside it; the `.osn` itself is unchanged, so OMSI 2 situations and older ones load with an empty bus as before.
+  Effect: after a crash or a save-and-quit the bus comes back with its passengers in their seats and standing
+  places, as well as the timetable and the trip.
 * **Steering linearity, on by default.** *Deliberate improvement.* Technical: the steering keys change the
   curvature by the same amount every millisecond, whatever the speed; the switch is under Driving help, and a
   saved setting is kept. Effect: a key press steers by the same amount at any speed (off, it steers less the
@@ -468,6 +473,7 @@ depot/
 │   ├── omsi-launcher-ui/  the launcher's window and pages
 │   ├── omsi-integrity/  integrity checks of maps, vehicles and AI lists
 │   ├── omsi-html/       the HTML engine behind in-vehicle screens
+│   ├── omsi-devtools-link/   the link for developer tools over any byte stream (not yet used)
 │   ├── omsi-devtools-proto/  messages for developer tools (not yet used by the game)
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)

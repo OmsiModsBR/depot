@@ -485,6 +485,20 @@ impl NewUi {
                 let Ok(v) = omsi_vehicle::Vehicle::load(&path) else {
                     return;
                 };
+                // a paint asked for by its number (a saved situation's `Colorscheme`) is
+                // shown by its name: the scheme of that number in the model's list
+                let paint = match paint.as_deref().map(str::trim) {
+                    Some(p) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => p
+                        .parse::<usize>()
+                        .ok()
+                        .and_then(|i| {
+                            omsi_sim::VehicleType::paint_schemes_of(&v)
+                                .into_iter()
+                                .nth(i)
+                        })
+                        .map(|s| s.name),
+                    _ => paint,
+                };
                 let card = crate::ui::bus_card(&v, &folder, paint.as_deref());
                 match shared.lock() {
                     Ok(mut s) if s.loading_gen == gen => s.bus_card = Some(card),

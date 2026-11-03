@@ -117,6 +117,62 @@ fn situation_others_preserve_their_colorscheme() {
     );
 }
 
+/// The rear sections saved after a vehicle (`[coupledWith]` -1: the vehicle before them)
+/// come back as their bends against it, for the driven bus and for a placed one; a placed
+/// vehicle after them is not one of its parts.
+#[test]
+fn an_articulated_bus_keeps_its_bend() {
+    use omsi_content::situation::{Situation, SituationVehicle};
+    let turned = |deg: f64| {
+        let h = deg.to_radians() / 2.0;
+        [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0]
+    };
+    let part = |deg: f64| SituationVehicle {
+        file: "Vehicles/MAN_NL_NG/MAN_GN92_trail.bus".into(),
+        orientation: turned(deg),
+        coupled_with: Some(-1),
+        ..Default::default()
+    };
+    let sit = Situation {
+        map: "maps/Berlin/global.cfg".into(),
+        vehicles: vec![
+            SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_GN92_main.bus".into(),
+                orientation: turned(350.0),
+                is_my_vehicle: true,
+                ..Default::default()
+            },
+            part(10.0),
+            SituationVehicle {
+                file: "Vehicles/MAN_NL_NG/MAN_GN92_main.bus".into(),
+                orientation: turned(90.0),
+                ..Default::default()
+            },
+            part(70.0),
+            SituationVehicle {
+                file: "Vehicles/MAN_SD200/MAN_SD77.bus".into(),
+                orientation: turned(0.0),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let mut args = testing::core::cli::Args::parse_from(["depot"]);
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_trailers.len(), 1);
+    assert!(
+        (args.situation_trailers[0] - 20.0).abs() < 1e-6,
+        "{:?}",
+        args.situation_trailers
+    );
+    assert_eq!(args.situation_others.len(), 2);
+    assert_eq!(args.situation_others[0].trailers.len(), 1);
+    assert!((args.situation_others[0].trailers[0] + 20.0).abs() < 1e-6);
+    assert!(args.situation_others[1].trailers.is_empty());
+    assert!(coupled_bends(&sit.vehicles, 4).is_empty());
+    assert!(coupled_bends(&sit.vehicles, 9).is_empty());
+}
+
 /// #653: a saved duty goes on at the trip of the tour it was saved on, with the rest of
 /// the tour after it.
 #[test]
@@ -277,4 +333,149 @@ fn a_locked_texture_saves_what_it_shows() {
     st.locked = true;
     st.put(1, 0, [2, 2, 2, 2]);
     assert_eq!(st.shown(), &[1, 1, 1, 1, 0, 0, 0, 0]);
+}
+
+fn rider(seat: usize, dest: Option<&str>) -> SavedRider {
+    SavedRider {
+        seat: Some(seat),
+        dest: dest.map(String::from),
+        alt: None,
+        alt_seen: false,
+        alt_m: 0.0,
+        left_km: 3.5,
+        request_random: 0.25,
+    }
+}
+
+/// #613: the passengers of a saved bus come back in the places they held, going where they
+/// were going, in a file next to the situation; names with odd characters survive it.
+#[test]
+fn riders_round_trip_through_their_file() {
+    let dir = std::env::temp_dir().join(format!("depot_sit_riders_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let osn = dir.join("Slot 1.osn");
+    let mut a = rider(0, Some("Praça\t100% \"Central\""));
+    a.alt = Some("Alt\nStop".into());
+    a.alt_seen = true;
+    a.alt_m = 800.0;
+    let mut leaving = rider(0, Some("Terminal"));
+    leaving.seat = None;
+    let riders = vec![a, rider(7, None), rider(31, Some("Terminal")), leaving];
+    assert_eq!(save_riders(&osn, &riders), 4);
+    assert_eq!(
+        riders_file(&osn).unwrap().file_name().unwrap(),
+        "Slot 1.osn.riders"
+    );
+    assert_eq!(load_riders(&osn), riders);
+
+    // the situation as read back hands them to the game
+    let mut args = Args::parse_from(["depot"]);
+    let sit = omsi_content::situation::Situation {
+        path: osn.clone(),
+        vehicles: vec![omsi_content::situation::SituationVehicle {
+            is_my_vehicle: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_riders, riders);
+
+    // another game saving over the situation (OMSI 2, openOMSI) leaves the file behind: the
+    // passengers of the earlier save are not seated into whatever the situation is now
+    std::fs::write(&osn, b"saved elsewhere").unwrap();
+    assert!(load_riders(&osn).is_empty());
+    std::fs::write(&osn, b"saved here").unwrap();
+    save_riders(&osn, &riders);
+    assert_eq!(load_riders(&osn), riders);
+    std::fs::write(&osn, b"saved by another game").unwrap();
+    apply_situation_parsed(&sit, &mut args);
+    assert!(args.situation_riders.is_empty());
+    std::fs::write(&osn, b"saved here").unwrap();
+    apply_situation_parsed(&sit, &mut args);
+    assert_eq!(args.situation_riders, riders);
+
+    // an empty bus saved under the same name leaves nobody behind in the older file
+    assert_eq!(save_riders(&osn, &[]), 0);
+    assert!(!riders_file(&osn).unwrap().exists());
+    apply_situation_parsed(&sit, &mut args);
+    assert!(args.situation_riders.is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// #613: situations without the file (every older one, every one the reference game wrote)
+/// load an empty bus as before; a damaged or foreign file never stops the load.
+#[test]
+fn missing_or_damaged_rider_files_load_an_empty_bus() {
+    let dir = std::env::temp_dir().join(format!("depot_sit_riders_bad_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let osn = dir.join("Old.osn");
+    assert!(load_riders(&osn).is_empty());
+    let file = riders_file(&osn).unwrap();
+    for bad in [
+        &b"\xff\xfe not text"[..],
+        b"depot-riders 99\nseat=1\n",
+        b"",
+        b"depot-riders 1\nseat=x\tleft_km=NaN\nnothing here\n",
+    ] {
+        std::fs::write(&file, bad).unwrap();
+        assert!(load_riders(&osn).is_empty(), "{bad:?}");
+    }
+    // one good line among bad ones: what can be kept is kept, and a nonsense distance is 0
+    let header = {
+        save_riders(&osn, &[rider(0, None)]);
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .to_string()
+    };
+    std::fs::write(
+        &file,
+        format!("{header}\nseat=2\tleft_km=-5\trandom=NaN\tmystery=1\talt_m=1e30\nseat=\n"),
+    )
+    .unwrap();
+    let got = load_riders(&osn);
+    assert_eq!(got.len(), 1);
+    assert_eq!((got[0].seat, got[0].left_km), (Some(2), 0.0));
+    assert!((0.0..=1.0).contains(&got[0].request_random));
+    // the situation file itself is untouched by any of this
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// #613: a passenger seated again rides what was left of the ride, counted from the clock
+/// of the bus they are in now, and holds the same place.
+#[test]
+fn a_rider_keeps_the_ride_that_is_left() {
+    use testing::humans::pax::{Pax, Task};
+    let mut x = Pax::new(1.1, 0.4);
+    x.inside = Some(testing::humans::BusId::Player);
+    x.seat = Some(12);
+    x.task = Task::SittingInBus;
+    x.km_start = 100.0;
+    x.ride_km = 6.0;
+    x.dest = Some("Central".into());
+    // 2 km into the ride at the odometer reading 102
+    let r = SavedRider::from_pax(&x, 102.0).unwrap();
+    assert_eq!((r.seat, r.dest.as_deref()), (Some(12), Some("Central")));
+    assert!((r.left_km - 4.0).abs() < 1e-4);
+    // the same ride at 0 km on the new clock
+    let back = r.to_pax(1.1, 0.0);
+    assert_eq!((back.seat, back.task), (Some(12), Task::SittingInBus));
+    assert!((back.km_start + back.ride_km as f64 - 4.0).abs() < 1e-4);
+    assert_eq!(back.dest.as_deref(), Some("Central"));
+    // a ride that was over saves as over, never negative
+    assert_eq!(SavedRider::from_pax(&x, 200.0).unwrap().left_km, 0.0);
+    // nobody outside a bus, or without a place, is a rider
+    x.inside = None;
+    assert!(SavedRider::from_pax(&x, 0.0).is_none());
+    x.inside = Some(testing::humans::BusId::Player);
+    x.seat = None;
+    assert!(SavedRider::from_pax(&x, 0.0).is_none());
+    // but one on the way to the door gave their place up and is still aboard
+    x.task = Task::InBusToExit;
+    assert_eq!(SavedRider::from_pax(&x, 0.0).unwrap().seat, None);
 }

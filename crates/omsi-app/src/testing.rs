@@ -146,9 +146,6 @@ pub mod evdev_buttons {
 pub mod evdev_ff {
     pub use crate::evdev_ff::*;
 }
-pub mod ffb_calibration {
-    pub use crate::ffb_calibration::*;
-}
 pub mod frame_stats {
     pub use crate::frame_stats::*;
 }
@@ -235,9 +232,6 @@ pub mod launcher {
     pub mod dialogs {
         pub use crate::launcher::dialogs::*;
     }
-    pub mod drive {
-        pub use crate::launcher::drive::*;
-    }
     pub mod mapview {
         pub use crate::launcher::mapview::*;
     }
@@ -246,12 +240,6 @@ pub mod launcher {
     }
     pub mod prerender {
         pub use crate::launcher::prerender::*;
-    }
-    pub mod settings {
-        pub use crate::launcher::settings::*;
-    }
-    pub mod start {
-        pub use crate::launcher::start::*;
     }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
@@ -474,6 +462,9 @@ pub mod tr_fill {
 }
 pub mod traffic {
     pub use crate::traffic::*;
+}
+pub mod traffic_density {
+    pub use crate::traffic_density::*;
 }
 pub mod tutorial {
     pub use crate::tutorial::*;

@@ -24,6 +24,7 @@ rayon.workspace = true
 zip.workspace = true
 sha2.workspace = true
 flate2.workspace = true
+log.workspace = true
 omsi-cfg = { path = "../omsi-cfg" }
 omsi-map = { path = "../omsi-map" }
 omsi-vehicle = { path = "../omsi-vehicle" }

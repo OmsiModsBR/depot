@@ -11914,6 +11914,20 @@ fn text_is_display(lightmap: bool, night: bool) -> bool {
     lightmap || night
 }
 
+/// The material extras of a vehicle's own text layer (`[useTextTexture]`): the letters are
+/// a blended layer over the body, and its empty texels must not be written into the depth
+/// buffer. A layer that does (a fleet number or plate whose `[matl_alpha] 2` comes without
+/// `[matl_noZwrite]`, as on the AI buses of several packs) hides whatever is drawn after it
+/// within its whole quad and shows as a solid rectangle behind the letters.
+pub fn vehicle_text_layer_extra(mut extra: MaterialExtra) -> MaterialExtra {
+    extra.no_z_write = true;
+    extra.writes_depth = false;
+    // (the layer has no transparency map of its own, so none is declared either: a stale
+    // declaration would count it as glass in the shading)
+    extra.transmap_declared = false;
+    extra
+}
+
 /// How a `[texttexture]` shows on its slot: alpha tested where the slot's `[matl_alpha]` is 1
 /// (the stock route helpers, `routearrows_busstop.sco`: blended, the empty part of the text
 /// wrote depth and cut away whatever was drawn behind it later - a bus beside the stop lost
@@ -12653,6 +12667,7 @@ impl Look {
             let mut extra = l.extra;
             extra.display = text_is_display(l.lightmap.is_some(), l.night.is_some());
             extra.screen = true;
+            let extra = vehicle_text_layer_extra(extra);
             // (the slot's own emissive stays: a text field made self-lit in its .x - the
             // emissive colour 1, 1, 1 - shines as OMSI shows it, the New Lion's City's
             // number plate and setvar screen; it was taken away, #1384)
@@ -13682,6 +13697,7 @@ impl World {
                     extra.display = text_is_display(d.lightmap.is_some(), d.night.is_some());
                     // (the bus's own screen: no glow halo, no FXAA over its letters)
                     extra.screen = true;
+                    let extra = vehicle_text_layer_extra(extra);
                     let m = renderer.add_material_extra(
                         scene,
                         Some(*tex),

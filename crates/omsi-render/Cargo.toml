@@ -22,7 +22,12 @@ winit.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Foundation"] }
 
+[features]
+# What the tests in tests/ need from inside the crate (src/testing.rs).
+test-support = []
+
 [dev-dependencies]
+omsi-render = { path = ".", features = ["test-support"] }
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
 

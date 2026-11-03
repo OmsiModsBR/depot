@@ -22,22 +22,13 @@ pub(crate) fn find_hof(
     names.extend(world.ailists.groups.iter().filter_map(|g| g.hof.clone()));
     // every wanted name in order: the bus's own depot files first (by file name, then by
     // the [name] inside), then the map's depot as another vehicle folder has it (a mod bus
-    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`)
+    // brings only the depot of its own map: see `omsi_vehicle::hof::depot_anywhere`), and
+    // only then a bus file of a similar name: an exact file installed anywhere wins (#46)
     for n in &names {
         if let Some(h) = omsi_vehicle::hof::depot_in(dir, n) {
             log::info!("using depot file {} (name {n})", h.path.display());
             return Some(std::sync::Arc::new(h));
         }
-    }
-    // the bus's own depot of the same place under another name (its Spandau 2019 where the
-    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896)
-    let wanted: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
-    if let Some(h) = omsi_vehicle::hof::depot_like(dir, &wanted) {
-        log::info!(
-            "using depot file {} (the bus's own of {wanted:?})",
-            h.path.display()
-        );
-        return Some(std::sync::Arc::new(h));
     }
     for n in &names {
         if let Some(h) = omsi_vehicle::hof::depot_anywhere(n) {
@@ -48,6 +39,17 @@ pub(crate) fn find_hof(
             );
             return Some(std::sync::Arc::new(h));
         }
+    }
+    // the bus's own depot of the same place under another name (its Spandau 2019 where the
+    // map's buses use Spandau 1986: its displays know its own codes and pictures, #896), only
+    // when the map's exact depot is installed nowhere
+    let wanted: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+    if let Some(h) = omsi_vehicle::hof::depot_like(dir, &wanted) {
+        log::info!(
+            "using depot file {} (the bus's own of {wanted:?})",
+            h.path.display()
+        );
+        return Some(std::sync::Arc::new(h));
     }
     // a map without a depot of its own: the bus's depot named like the map (#896)
     let folder = world
@@ -111,6 +113,7 @@ pub(crate) fn apply_situation(args: &mut Args) -> Result<()> {
 pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &mut Args) {
     args.situation_odometer_km = None;
     args.situation_script_textures = None;
+    args.situation_riders = Vec::new();
     args.map = sit.map.replace('\\', "/");
     // A map from an archive was saved as its whole path (`\Users\…\Archives\x.zip\Maps\
     // Novi Sad\global.cfg`), which then went after the root and the game closed at once:
@@ -197,6 +200,11 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
         }
         args.situation_strvars = v.string_vars.clone();
         args.situation_script_textures = script_texture_prefix(&sit.path, i);
+        // (the passengers it carried: a situation read from a file only)
+        if !sit.path.as_os_str().is_empty() {
+            args.situation_riders = load_riders(&sit.path);
+        }
+        args.situation_trailers = coupled_bends(&sit.vehicles, i);
         log::info!(
             "situation: player {} at {:?} line {:?} tour {:?} hof {:?}, {} vars",
             v.file,
@@ -233,6 +241,7 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
                 strvars: v.string_vars.clone(),
                 odometer_km: saved_odometer_km(v, legacy_odometer_ids),
                 script_textures: script_texture_prefix(&sit.path, i),
+                trailers: coupled_bends(&sit.vehicles, i),
             }
         })
         .collect();
@@ -242,6 +251,29 @@ pub fn apply_situation_parsed(sit: &omsi_content::situation::Situation, args: &m
             args.situation_others.len()
         );
     }
+}
+
+/// How the parts coupled behind vehicle `lead` of a situation stood against it: each part's
+/// heading less the vehicle's (degrees, -180..180), from the front. The parts are the
+/// vehicles listed after it whose `[coupledWith]` names the one before them (the number is
+/// where that one is in the list, counted from the part itself: -1).
+pub fn coupled_bends(
+    vehicles: &[omsi_content::situation::SituationVehicle],
+    lead: usize,
+) -> Vec<f64> {
+    let Some(front) = vehicles.get(lead) else {
+        return Vec::new();
+    };
+    let heading = situation_heading(&front.orientation);
+    vehicles
+        .iter()
+        .enumerate()
+        .skip(lead + 1)
+        .take_while(|(j, v)| v.coupled_with.map(|c| *j as i64 + c as i64) == Some(*j as i64 - 1))
+        .map(|(_, v)| {
+            (situation_heading(&v.orientation) - heading + 540.0).rem_euclid(360.0) - 180.0
+        })
+        .collect()
 }
 
 /// The files of a vehicle's `[scripttexture]` images saved with a situation, as OMSI
@@ -268,6 +300,11 @@ fn script_texture_file(prefix: &Path, texture: usize) -> PathBuf {
 /// earlier save under the same name go first: a later bus does not get another's. The
 /// number of images written.
 pub fn save_script_textures(osn: &Path, vehicles: &[&omsi_sim::VehicleInstance]) -> usize {
+    // (each vehicle's coupled parts are written after it, and counted)
+    let vehicles: Vec<Option<&omsi_sim::VehicleInstance>> = vehicles
+        .iter()
+        .flat_map(|v| std::iter::once(Some(*v)).chain(v.trailers.iter().map(|_| None)))
+        .collect();
     if let (Some(dir), Some(name)) = (
         osn.parent(),
         osn.file_name().map(|n| n.to_string_lossy().into_owned()),
@@ -291,7 +328,7 @@ pub fn save_script_textures(osn: &Path, vehicles: &[&omsi_sim::VehicleInstance])
     }
     let mut written = 0;
     for (v, vehicle) in vehicles.iter().enumerate() {
-        let Some(prefix) = script_texture_prefix(osn, v) else {
+        let (Some(vehicle), Some(prefix)) = (vehicle, script_texture_prefix(osn, v)) else {
             continue;
         };
         for (i, st) in vehicle.host.script_textures.iter().enumerate() {
@@ -345,6 +382,292 @@ pub fn restore_script_textures(vehicle: &mut omsi_sim::VehicleInstance, prefix: 
         }
     }
     restored
+}
+
+/// A passenger riding in the player's bus, as a situation keeps them (#613).
+///
+/// A deliberate improvement over the reference game, whose situations bring the timetable
+/// and the trip back but an empty bus. Kept: the place each rider holds (the index of the
+/// bus's `[passpos]` list: the same seat or standing place again), where they are going and
+/// how much of their ride is left. Not kept: who they look like, their ticket, their mood.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SavedRider {
+    /// The place held; none for somebody already on the way to the door (they gave their
+    /// place up), who is seated at any free one and asks for the stop again.
+    pub seat: Option<usize>,
+    pub dest: Option<String>,
+    pub alt: Option<String>,
+    pub alt_seen: bool,
+    pub alt_m: f32,
+    /// Kilometres still to ride (counts only for a rider without a destination, or past the
+    /// stop their line leaves the known route at).
+    pub left_km: f32,
+    /// Where between departure and the approach they ask to get off (0..1).
+    pub request_random: f64,
+}
+
+impl SavedRider {
+    /// The rider a passenger sitting or standing in a bus is. `odometer_km`: the kilometres
+    /// the riders' clock of that bus reads now. None for somebody not aboard with a place.
+    pub fn from_pax(x: &crate::humans::pax::Pax, odometer_km: f64) -> Option<SavedRider> {
+        x.inside?;
+        let seat = x.seat;
+        if seat.is_none() && x.task != crate::humans::pax::Task::InBusToExit {
+            return None;
+        }
+        Some(SavedRider {
+            seat,
+            dest: x.dest.clone(),
+            alt: x.alt.clone(),
+            alt_seen: x.alt_seen,
+            alt_m: x.alt_m,
+            left_km: (x.km_start + x.ride_km as f64 - odometer_km).max(0.0) as f32,
+            request_random: x.stop_request_random,
+        })
+    }
+
+    /// The passenger again, settled at their place: `odometer_km` is the riders' clock now,
+    /// so what is left of the ride counts from it.
+    pub fn to_pax(&self, walk_speed: f32, odometer_km: f64) -> crate::humans::pax::Pax {
+        use crate::humans::pax::{Pax, Task};
+        let mut p = Pax::new(walk_speed, self.request_random.clamp(0.0, 1.0));
+        p.task = Task::SittingInBus;
+        p.seat = self.seat;
+        p.dest = self.dest.clone();
+        p.alt = self.alt.clone();
+        p.alt_seen = self.alt_seen;
+        p.alt_m = self.alt_m;
+        p.km_start = odometer_km;
+        p.ride_km = self.left_km;
+        p
+    }
+}
+
+/// The file the riders of a situation are kept in, next to it: `Slot 1.osn.riders`. A file
+/// of its own so the `.osn` stays exactly what the reference game writes and reads; a
+/// situation without the file (every older one, every one the reference saved) simply
+/// loads an empty bus, as before.
+pub fn riders_file(osn: &Path) -> Option<PathBuf> {
+    let name = osn.file_name()?.to_string_lossy().into_owned();
+    Some(osn.with_file_name(format!("{name}.riders")))
+}
+
+const RIDERS_HEADER: &str = "depot-riders 1";
+/// Upper bounds for the numbers read back, so a damaged file cannot keep a rider aboard for
+/// ever or make the ride arithmetic overflow.
+const MAX_RIDE_KM: f32 = 1.0e5;
+const MAX_ALT_M: f32 = 1.0e6;
+
+/// FNV-1a of the situation file's bytes (0 for one that cannot be read): the `.riders` file
+/// belongs to exactly the `.osn` it was written beside. Another game saving over the `.osn`
+/// (OMSI 2, openOMSI) changes it, and the passengers of the older save are then not seated
+/// into a different trip.
+fn osn_fingerprint(osn: &Path) -> u64 {
+    let Ok(bytes) = std::fs::read(osn) else {
+        return 0;
+    };
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+/// More riders than any bus holds; a larger file is damaged or hostile and is not read.
+const MAX_RIDERS: usize = 1024;
+const MAX_RIDERS_FILE: u64 = 1 << 20;
+
+fn escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '%' => out.push_str("%25"),
+            '\t' => out.push_str("%09"),
+            '\n' => out.push_str("%0A"),
+            '\r' => out.push_str("%0D"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn unescape(s: &str) -> String {
+    let mut out = Vec::with_capacity(s.len());
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            let hex = std::str::from_utf8(&b[i + 1..i + 3]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Write the riders next to `osn`, or remove an older file of that name when nobody rides
+/// (a later save under the same name must not bring back the passengers of an earlier one).
+/// The number written.
+pub fn save_riders(osn: &Path, riders: &[SavedRider]) -> usize {
+    let Some(file) = riders_file(osn) else {
+        return 0;
+    };
+    if riders.is_empty() {
+        let _ = std::fs::remove_file(&file);
+        return 0;
+    }
+    let mut t = format!("{RIDERS_HEADER} {:016x}\n", osn_fingerprint(osn));
+    for r in riders.iter().take(MAX_RIDERS) {
+        let seat = r.seat.map_or("none".to_string(), |k| k.to_string());
+        t.push_str(&format!(
+            "seat={seat}\tleft_km={}\trandom={}",
+            r.left_km, r.request_random
+        ));
+        if let Some(d) = &r.dest {
+            t.push_str(&format!("\tdest={}", escape(d)));
+        }
+        if let Some(a) = &r.alt {
+            t.push_str(&format!("\talt={}", escape(a)));
+        }
+        if r.alt_seen {
+            t.push_str("\talt_seen=1");
+        }
+        if r.alt_m != 0.0 {
+            t.push_str(&format!("\talt_m={}", r.alt_m));
+        }
+        t.push('\n');
+    }
+    // (written whole under another name, then renamed over: a crash while saving, the very
+    // case this is for, leaves the old file or the new one, never half of one)
+    let tmp = file.with_extension("riders.tmp");
+    let done = write_synced(&tmp, t.as_bytes()).and_then(|()| std::fs::rename(&tmp, &file));
+    match done {
+        Ok(()) => riders.len().min(MAX_RIDERS),
+        Err(e) => {
+            log::warn!("situation: riders {}: {e}", file.display());
+            // (an older roster must not stay beside the new situation)
+            let _ = std::fs::remove_file(&tmp);
+            let _ = std::fs::remove_file(&file);
+            0
+        }
+    }
+}
+
+/// Write `bytes` to `path` and flush them to the disk before returning, so a rename of it
+/// over an older file never leaves an empty or half-written one after a crash.
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(path)?;
+    f.write_all(bytes)?;
+    f.sync_all()
+}
+
+/// The riders saved next to `osn`: none without a file; a file that cannot be read, from a
+/// newer format or damaged in places keeps what it can and says so in the log.
+pub fn load_riders(osn: &Path) -> Vec<SavedRider> {
+    let Some(file) = riders_file(osn) else {
+        return Vec::new();
+    };
+    let Ok(meta) = std::fs::metadata(&file) else {
+        return Vec::new();
+    };
+    if meta.len() > MAX_RIDERS_FILE {
+        log::warn!("situation: riders {} is too large; ignored", file.display());
+        return Vec::new();
+    }
+    let Ok(text) = std::fs::read_to_string(&file) else {
+        log::warn!(
+            "situation: riders {} could not be read; ignored",
+            file.display()
+        );
+        return Vec::new();
+    };
+    let mut lines = text.lines();
+    let want = format!("{RIDERS_HEADER} {:016x}", osn_fingerprint(osn));
+    match lines.next().map(str::trim) {
+        Some(h) if h == want => {}
+        Some(h) if h.starts_with(RIDERS_HEADER) => {
+            log::warn!(
+                "situation: riders {} belongs to an earlier save of this situation; ignored",
+                file.display()
+            );
+            return Vec::new();
+        }
+        _ => {
+            log::warn!(
+                "situation: riders {} is of another format; ignored",
+                file.display()
+            );
+            return Vec::new();
+        }
+    }
+    let mut out = Vec::new();
+    for (n, line) in lines.enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if out.len() >= MAX_RIDERS {
+            break;
+        }
+        let mut r = SavedRider::default();
+        let mut seat = false;
+        for kv in line.split('\t') {
+            let Some((k, v)) = kv.split_once('=') else {
+                continue;
+            };
+            match k {
+                "seat" if v == "none" => {
+                    r.seat = None;
+                    seat = true;
+                }
+                "seat" => {
+                    if let Ok(x) = v.parse() {
+                        r.seat = Some(x);
+                        seat = true;
+                    }
+                }
+                "left_km" => {
+                    r.left_km = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f32| x.is_finite())
+                        .unwrap_or(0.0)
+                        .clamp(0.0, MAX_RIDE_KM)
+                }
+                "random" => {
+                    r.request_random = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f64| x.is_finite())
+                        .unwrap_or(0.5)
+                }
+                "dest" => r.dest = Some(unescape(v)),
+                "alt" => r.alt = Some(unescape(v)),
+                "alt_seen" => r.alt_seen = v == "1",
+                "alt_m" => {
+                    r.alt_m = v
+                        .parse()
+                        .ok()
+                        .filter(|x: &f32| x.is_finite())
+                        .unwrap_or(0.0)
+                        .clamp(0.0, MAX_ALT_M)
+                }
+                _ => {}
+            }
+        }
+        if seat {
+            out.push(r);
+        } else {
+            log::warn!(
+                "situation: riders {} line {}: no place; skipped",
+                file.display(),
+                n + 2
+            );
+        }
+    }
+    out
 }
 
 /// The lowest height (m) a saved vehicle can plausibly stand at. A vehicle that fell through
@@ -431,12 +754,26 @@ pub(crate) fn build_situation(
             .to_string_lossy()
             .replace('/', "\\")
     };
+    // the body's rotation as OMSI writes it: a quaternion (x, y, z, w) about the up axis,
+    // then three more numbers (zero for a standing vehicle)
+    let orientation = |heading: f64| {
+        let h = heading.to_radians() / 2.0;
+        [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0]
+    };
+    // the tile and the place in it: x, height, y (a height under the world - the vehicle
+    // fell through an unloaded tile - is not saved: the ground of the place is, #33)
+    let place = |p: glam::DVec3| {
+        let (tile, (lx, ly)) = omsi_map::world_to_tile_local(p.x, p.y);
+        let z = if plausible_height(p.z) {
+            p.z
+        } else {
+            world.ground_height(p.x, p.y).unwrap_or(0.0)
+        };
+        (tile, [lx, z, ly])
+    };
     let vehicle_record = |v: &omsi_sim::VehicleInstance, mine: bool| -> SituationVehicle {
-        let (tile, (lx, ly)) = omsi_map::world_to_tile_local(v.position.x, v.position.y);
-        // the body's rotation as OMSI writes it: a quaternion (x, y, z, w) about the up axis,
-        // then three more numbers (zero for a standing vehicle)
-        let h = v.heading.to_radians() / 2.0;
-        let orientation = [0.0, h.sin(), 0.0, h.cos(), 0.0, 0.0, 0.0, 0.0, 0.0];
+        let (tile, pos) = place(v.position);
+        let orientation = orientation(v.heading);
         let vars: Vec<(String, f64)> =
             v.ty.program
                 .var_names
@@ -461,18 +798,9 @@ pub(crate) fn build_situation(
                     )
                 })
                 .collect();
-        // (a height under the world - the vehicle fell through an unloaded tile - is not
-        // saved: the ground of the place is, #33)
-        let z = if plausible_height(v.position.z) {
-            v.position.z
-        } else {
-            world
-                .ground_height(v.position.x, v.position.y)
-                .unwrap_or(0.0)
-        };
         SituationVehicle {
             file: rel(&v.ty.def.path),
-            pos: [lx, z, ly],
+            pos,
             orientation,
             tile,
             odometer_km: v.odometer_km(),
@@ -488,6 +816,33 @@ pub(crate) fn build_situation(
             string_vars,
             timetable: Vec::new(),
         }
+    };
+    // the parts coupled behind a vehicle (an articulated bus's rear sections), each where it
+    // stands and turned as it is, after the vehicle and coupled to the one before it
+    // (`[coupledWith]` -1): loaded, the bus comes back bent as it was left. They keep no
+    // variables of their own (the vehicle's scripts work them).
+    let trailer_records = |v: &omsi_sim::VehicleInstance| -> Vec<SituationVehicle> {
+        v.trailers
+            .iter()
+            .map(|t| {
+                let (tile, pos) = place(t.position);
+                SituationVehicle {
+                    file: rel(&t.ty.def.path),
+                    pos,
+                    orientation: orientation(t.body_heading()),
+                    tile,
+                    odometer_km: v.odometer_km(),
+                    paint: v
+                        .host
+                        .hof
+                        .as_ref()
+                        .map(|h| h.name.clone())
+                        .unwrap_or_default(),
+                    coupled_with: Some(-1),
+                    ..Default::default()
+                }
+            })
+            .collect()
     };
     let mut vehicles = Vec::new();
     let mut my = -1;
@@ -507,11 +862,13 @@ pub(crate) fn build_situation(
             ];
         }
         vehicles.push(rec);
+        vehicles.extend(trailer_records(&p.vehicle));
     }
     // and the vehicles placed besides it, standing where they are (only the driven one was
     // written: a session continued with the last one alone, #139)
     for q in placed {
         vehicles.push(vehicle_record(&q.vehicle, false));
+        vehicles.extend(trailer_records(&q.vehicle));
     }
     let (cam_tile, cam_local) = omsi_map::world_to_tile_local(camera.position.x, camera.position.y);
     Situation {

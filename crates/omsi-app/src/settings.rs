@@ -1590,6 +1590,16 @@ impl Settings {
         // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
         // the render scale it does, see `dx9_render_scale`: kept as saved)
         self.post_aa = "off".into();
+        // (a scale saved under Vulkan or DirectX12 carries over, fitted to the steps this API
+        // offers: 0.6 becomes 0.67; Auto stays Auto)
+        if self.render_scale > 0.0 {
+            if let Some(l) = crate::api_limits::d3d9("render_scale") {
+                let fitted = l.fit(&self.render_scale_text());
+                if let Ok(x) = fitted.parse::<f32>() {
+                    self.render_scale = x;
+                }
+            }
+        }
         // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
         // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
         if let Some(l) = crate::api_limits::d3d9("mirror_size") {

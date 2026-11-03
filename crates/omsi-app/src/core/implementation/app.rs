@@ -483,7 +483,9 @@ impl App {
                         situation_strvars: o.strvars.clone(),
                         situation_odometer_km: o.odometer_km,
                         situation_script_textures: o.script_textures.clone(),
+                        situation_riders: Vec::new(),
                         situation_others: Vec::new(),
+                        situation_trailers: o.trailers.clone(),
                         line: None,
                         tour: None,
                         trip: None,
@@ -547,7 +549,21 @@ impl App {
                         }
                     }
                     if let Some(p) = self.player.as_ref() {
-                        if self.args.riders > 0 {
+                        // the passengers a saved situation carried (#613)
+                        if !self.args.situation_riders.is_empty() {
+                            let n = h.restore_riders(
+                                &self.args.situation_riders,
+                                &p.vehicle,
+                                &w,
+                                &renderer,
+                                &mut scene,
+                            );
+                            log::info!(
+                                "situation: {n} of {} passenger(s) seated again",
+                                self.args.situation_riders.len()
+                            );
+                        }
+                        if self.args.riders > 0 && self.args.situation_riders.is_empty() {
                             let centre = p.vehicle.position;
                             h.populate(&w, &renderer, &mut scene, centre);
                             h.seed_riders(self.args.riders, &p.vehicle, &w, &renderer, &mut scene);

@@ -271,3 +271,59 @@ fn two_emergency_vehicles_do_not_wait_for_each_other() {
     }
     assert_eq!(n, 6 * 6 * 4 * 3);
 }
+
+/// Deliberate improvement: an emergency vehicle (its script sets `TrafficPriority`) drives
+/// through a red light, while an ordinary car (also one behind it) stops at it. Nobody else is
+/// on the road, so nothing is in its way; cross traffic giving way is not covered here.
+#[test]
+fn an_emergency_vehicle_does_not_stop_at_a_red_light() {
+    for emergency in [false, true] {
+        let layout = Layout {
+            junction_light: [Some((0, 0)); 4],
+            ..Default::default()
+        };
+        let mut w = World::new(
+            layout,
+            vec![TrafficLightController::new(
+                vec![vec![(0, 10_000.0)]],
+                10_000.0,
+            )],
+        );
+        let c = w.car(w.x.approach[NORTH], 40.0, 10.0, 31, emergency);
+        w.route(c, via(&w, NORTH, 0));
+        // an ordinary car behind it still stops at the red
+        let f = w.car(w.x.approach[NORTH], 15.0, 10.0, 32, false);
+        w.route(f, via(&w, NORTH, 0));
+        w.run(30.0, |_| {});
+        assert!(
+            !w.through(f),
+            "the follower went through the red: {}",
+            describe(&w, f)
+        );
+        assert_eq!(
+            w.through(c),
+            emergency,
+            "emergency {emergency}: {}",
+            describe(&w, c)
+        );
+    }
+}
+
+/// Deliberate improvement: an emergency vehicle drives well above the limit (75 km/h on a
+/// 50 km/h road), but never above 80 km/h, and an ordinary car keeps to the limit.
+#[test]
+fn an_emergency_vehicle_drives_faster_than_the_limit() {
+    for emergency in [false, true] {
+        let mut w = World::new(Layout::default(), Vec::new());
+        let c = w.car(w.x.approach[NORTH], 5.0, 5.0, 41, emergency);
+        w.route(c, via(&w, NORTH, 0));
+        let mut top = 0.0f32;
+        w.run(20.0, |w| top = top.max(w.of(c).state.speed));
+        let kmh = top * 3.6;
+        if emergency {
+            assert!((70.0..=80.5).contains(&kmh), "top speed {kmh:.1} km/h");
+        } else {
+            assert!(kmh < 58.0, "top speed {kmh:.1} km/h");
+        }
+    }
+}

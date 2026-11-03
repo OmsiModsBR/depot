@@ -1,10 +1,11 @@
 mod bicycle_cap;
+mod emergency_way;
 mod group_density;
 mod junction;
 mod junction_arrival;
 mod junction_scenarios;
 mod lane_permission;
 mod parked_lane;
-mod road_scale;
 mod signal_entry;
+mod spawn_density;
 mod way_user;

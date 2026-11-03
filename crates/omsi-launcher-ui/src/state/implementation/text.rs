@@ -8,6 +8,16 @@ pub fn game_listed(pid: Option<u32>, instances: &[core::Instance]) -> bool {
     pid.is_some_and(|p| instances.iter().any(|i| i.pid == p))
 }
 
+/// A weather's precipitation as the core puts it ("rain 40%", "snow 10%", "dry"), in the
+/// player's language.
+pub fn precip_text(p: &str) -> String {
+    match (p.strip_prefix("rain "), p.strip_prefix("snow ")) {
+        (Some(n), _) => omsi_ui::tr("rain %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        (_, Some(n)) => omsi_ui::tr("snow %{n}%").replace("%{n}", n.trim_end_matches('%')),
+        _ => omsi_ui::tr(p).into_owned(),
+    }
+}
+
 pub fn hhmm(seconds: f64) -> String {
     let s = seconds.max(0.0).round() as i64;
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)

@@ -12,7 +12,7 @@
 mod about;
 mod actions;
 mod ambience;
-mod api_limits;
+use omsi_launcher_ui::api_limits;
 mod career;
 mod describe;
 mod driver;
@@ -58,6 +58,7 @@ mod settings;
 mod showroom;
 mod tiles;
 mod traffic;
+mod traffic_density;
 
 mod app_events;
 mod bus_service;
@@ -71,7 +72,6 @@ mod duty_start;
 mod evdev_buttons;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod evdev_ff;
-mod ffb_calibration;
 mod frame_stats;
 mod ground_gap;
 mod hpattern;

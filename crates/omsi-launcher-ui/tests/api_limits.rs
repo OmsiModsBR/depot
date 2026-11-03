@@ -1,4 +1,6 @@
-use openomsi_game::testing::api_limits::*;
+//! What a graphics API leaves out of the graphics options (`omsi_launcher_ui::api_limits`).
+
+use omsi_launcher_ui::api_limits::*;
 
 #[test]
 fn each_option_is_in_the_table_once_with_a_reason() {

@@ -1158,7 +1158,7 @@ impl DirectInput {
         else {
             return false;
         };
-        let limit = crate::ffb_calibration::MAX_PULSE_FORCE;
+        let limit = omsi_launcher_lib::controllers::MAX_PULSE_FORCE;
         let mut constant = DICONSTANTFORCE {
             lMagnitude: (force.clamp(-limit, limit) * DI_FFNOMINALMAX as f32) as i32,
         };
@@ -1167,7 +1167,7 @@ impl DirectInput {
         let mut effect = DIEFFECT {
             dwSize: std::mem::size_of::<DIEFFECT>() as u32,
             dwFlags: DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS,
-            dwDuration: crate::ffb_calibration::PULSE_MS * 1000,
+            dwDuration: omsi_launcher_lib::controllers::PULSE_MS * 1000,
             cAxes: 1,
             rgdwAxes: axes.as_mut_ptr(),
             rglDirection: direction.as_mut_ptr(),

@@ -17,6 +17,10 @@ impl omsi_launcher_ui::Host for Keys {
     fn repo_url(&self) -> &'static str {
         ""
     }
+
+    fn releases_url(&self) -> &'static str {
+        "https://example.org/depot/releases"
+    }
     fn helper_log(&self) -> std::path::PathBuf {
         std::path::PathBuf::new()
     }
@@ -36,6 +40,18 @@ impl omsi_launcher_ui::Host for Keys {
         None
     }
     fn save_controllers(&self, _: &[DeviceCfg]) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn adapter_texture_mb(&self) -> i64 {
+        0
+    }
+
+    fn own_stations(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
+    fn save_stations(&self, _: &[(String, String)]) -> std::io::Result<()> {
         Ok(())
     }
 }

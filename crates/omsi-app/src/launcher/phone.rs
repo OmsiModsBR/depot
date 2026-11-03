@@ -385,7 +385,7 @@ fn play(l: &mut Launcher, body: Rect) {
         let label = if l.state.choice.paint.is_empty() {
             l.state
                 .bus()
-                .map(super::drive::default_livery_label)
+                .map(omsi_launcher_ui::window::default_livery_label)
                 .unwrap_or("Default paint")
                 .to_string()
         } else {
@@ -529,7 +529,7 @@ fn play(l: &mut Launcher, body: Rect) {
         Some("play_arrow"),
         ButtonKind::Primary,
     ) {
-        super::drive::start_from_phone(l);
+        omsi_launcher_ui::window::start_from_phone(frame!(l));
     }
 }
 
@@ -745,7 +745,7 @@ fn bus_sheet(l: &mut Launcher, r: Rect) -> bool {
             sub = format!(
                 "{sub}{}{}",
                 if sub.is_empty() { "" } else { " · " },
-                super::drive::liveries_text(v.paints.len())
+                omsi_launcher_ui::window::liveries_text(v.paints.len())
             );
             if !v.missing_packs.is_empty() {
                 sub = format!("{sub} · parts missing");
@@ -815,7 +815,7 @@ fn livery_sheet(l: &mut Launcher, r: Rect) -> bool {
     let default_paint = l
         .state
         .bus()
-        .map(super::drive::default_livery_label)
+        .map(omsi_launcher_ui::window::default_livery_label)
         .unwrap_or("Default paint")
         .to_string();
     let chosen = l.state.choice.paint.clone();
@@ -1144,8 +1144,8 @@ fn roadbook_sheet(l: &mut Launcher, r: Rect) -> bool {
             Weight::Regular,
             TEXT_DIM,
         );
-        super::drive::ibis_box(
-            l,
+        omsi_launcher_ui::window::ibis_box(
+            frame!(l),
             Rect::new(r.x + 8.0, r.bottom() - ibis_h, r.w - 16.0, ibis_h),
         );
         return false;
@@ -1225,8 +1225,8 @@ fn roadbook_sheet(l: &mut Launcher, r: Rect) -> bool {
         y - v.y + 4.0
     });
     let _ = line;
-    super::drive::ibis_box(
-        l,
+    omsi_launcher_ui::window::ibis_box(
+        frame!(l),
         Rect::new(r.x + 8.0, r.bottom() - ibis_h, r.w - 16.0, ibis_h),
     );
     false
@@ -1325,9 +1325,10 @@ fn tour_sheet(l: &mut Launcher, r: Rect) -> bool {
     };
     let mut tours: Vec<&omsi_launcher_lib::TourInfo> = line.tours.iter().collect();
     tours.sort_by(|a, b| {
-        b.runs
-            .cmp(&a.runs)
-            .then_with(|| super::drive::natural(&a.number).cmp(&super::drive::natural(&b.number)))
+        b.runs.cmp(&a.runs).then_with(|| {
+            omsi_launcher_ui::window::natural(&a.number)
+                .cmp(&omsi_launcher_ui::window::natural(&b.number))
+        })
     });
     let items: Vec<(String, String, bool, Option<String>)> = tours
         .iter()
@@ -1736,9 +1737,10 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
         return done;
     }
 
-    if let Some(custom) =
-        super::drive::selected_weather_as_custom(&l.state.config.root, &l.state.choice.weather)
-    {
+    if let Some(custom) = omsi_launcher_ui::window::selected_weather_as_custom(
+        &l.state.config.root,
+        &l.state.choice.weather,
+    ) {
         if l.ui.button(
             "ps-edit-current-weather",
             Rect::new(right.x, right.y, right.w, 42.0),
@@ -1752,7 +1754,7 @@ fn time_sheet(l: &mut Launcher, r: Rect) -> bool {
         }
     }
 
-    let home = super::drive::nearest_airport(&l.state.config.root, &l.state.choice.map);
+    let home = omsi_launcher_lib::start::nearest_airport(&l.state.config.root, &l.state.choice.map);
     let custom = crate::weather_setup::CustomWeather::default().encode();
     let items: Vec<(String, String, String)> = [
         (
@@ -1884,15 +1886,15 @@ fn embedded(l: &mut Launcher, page: Page, body: Rect, back: bool) {
     );
     l.ui.push_clip(Rect::new(body.x, body.y + top, body.w, body.h - top), 0.0);
     match page {
-        Page::Drive => super::drive::draw(l, content),
+        Page::Drive => l.drive_page(content),
         // (the phone chooses the bus and the map in its sheets, see `Sheet`)
-        Page::Vehicles | Page::Maps => super::drive::draw(l, content),
+        Page::Vehicles | Page::Maps => l.drive_page(content),
         Page::Diagnostics => super::diagnostics::draw(l, content),
         Page::Multiplayer => {}
         Page::Profile => {
             omsi_launcher_ui::window::profile(frame!(l), &mut l.pages.profile, content)
         }
-        Page::Settings => super::settings::settings(l, content),
+        Page::Settings => l.settings_page(content),
         Page::Controls => super::pages::controls(l, content),
         Page::Mods => omsi_launcher_ui::window::mods(frame!(l), content),
         Page::Tutorials => omsi_launcher_ui::window::tutorials(frame!(l), content),
