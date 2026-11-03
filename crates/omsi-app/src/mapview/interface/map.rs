@@ -1,7 +1,7 @@
 //! The game's side of the pages' map (`omsi_launcher_ui::window::Map`): the launcher's map
 //! view (`mapview`), and its picture as the window last drew it.
 
-use super::mapview::MapView;
+use crate::mapview::MapView;
 use glam::{DVec2, Vec2};
 use omsi_launcher_ui::window::{Map, MapLook, Pointer};
 use omsi_ui::paint::Align;
@@ -97,7 +97,7 @@ impl Map for GameMap<'_> {
 /// The chosen map across `r`, the whole page behind the panels: every road the map has, its
 /// entry points and the chosen trip's route, read from the tile files (see `mapview`), or a
 /// word while it is read.
-pub(super) fn background(
+pub(crate) fn background(
     ui: &mut Ui,
     view: &MapView,
     tex: Option<usize>,

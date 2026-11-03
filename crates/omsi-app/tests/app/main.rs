@@ -34,6 +34,7 @@ mod line_times;
 #[cfg(target_os = "macos")]
 mod mac_game_controller;
 mod map_surface;
+mod mapview;
 mod money;
 mod on_foot;
 mod output;
