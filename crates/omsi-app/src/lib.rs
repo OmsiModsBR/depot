@@ -32,6 +32,7 @@ mod mac_game_controller;
 #[cfg(target_os = "macos")]
 mod mac_hid;
 mod map_surface;
+mod mapview;
 mod menu;
 mod money;
 mod output;

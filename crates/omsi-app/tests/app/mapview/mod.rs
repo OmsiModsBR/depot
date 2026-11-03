@@ -1,5 +1,5 @@
 use glam::DVec2;
-use openomsi_game::testing::launcher::mapview::*;
+use openomsi_game::testing::mapview::*;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
