@@ -74,6 +74,56 @@ pub(super) fn player_triangle(
     tri(1.0, fill, ui);
 }
 
+/// The player's bus on the map, seen from above: a rounded body `k` pixels long from its
+/// middle to its nose, in `fill` (the interface accent) with a white outline round a dark
+/// edge, a windscreen, and a small nub ahead of the nose that says which way it heads
+/// (`angle`: radians clockwise from up on the screen). Never an arrow, which read as the
+/// mouse pointer.
+pub fn player_bus(ui: &mut Painter, at: Vec2, angle: f32, k: f32, fill: Color) {
+    let (sn, cs) = angle.sin_cos();
+    // local: x to the right, y ahead (up on the screen before turning)
+    let turn = |x: f32, y: f32| at + Vec2::new(x * cs + y * sn, x * sn - y * cs) * k;
+    let body = |grow: f32| -> Vec<Vec2> {
+        rounded(
+            0.42 + grow,
+            -1.0 - grow,
+            1.0 + grow,
+            0.30 + grow,
+            0.14 + grow,
+        )
+        .into_iter()
+        .map(|(x, y)| turn(x, y))
+        .collect()
+    };
+    let nub = |grow: f32| {
+        [
+            turn(0.0, 1.62 + grow * 1.6),
+            turn(0.28 + grow, 1.16 - grow * 0.4),
+            turn(-0.28 - grow, 1.16 - grow * 0.4),
+        ]
+    };
+    let dark = Color::rgba(8, 8, 8, 0.92);
+    // (dark edge, white outline, the bus in the accent: readable on the light and dark maps)
+    let (edge, ring) = (0.24, 0.13);
+    ui.convex(&body(edge), dark);
+    let [a, b, c] = nub(edge);
+    ui.tri(a, b, c, dark, dark, dark);
+    ui.convex(&body(ring), Color::WHITE);
+    let [a, b, c] = nub(ring * 0.6);
+    ui.tri(a, b, c, Color::WHITE, Color::WHITE, Color::WHITE);
+    ui.convex(&body(0.0), fill);
+    let glass = Color::rgba(18, 20, 24, 0.85);
+    ui.convex(
+        &[
+            turn(-0.30, 0.50),
+            turn(0.30, 0.50),
+            turn(0.22, 0.82),
+            turn(-0.22, 0.82),
+        ],
+        glass,
+    );
+}
+
 /// What a vehicle looks like on the map: a road vehicle (bus, trolleybus), a tram, a metro train, a train.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Icon {
@@ -221,7 +271,8 @@ pub(super) const TEXT: Color = Color::rgba(235, 235, 235, 1.0);
 // (the second texts - units, the day, the times - bright enough to read on a lit cab)
 pub(super) const TEXT_DIM: Color = Color::rgba(178, 178, 178, 1.0);
 pub(super) const LATE: Color = Color::rgba(235, 85, 70, 1.0);
-pub(super) const EARLY: Color = Color::rgba(90, 160, 240, 1.0);
+/// Ahead of the timetable: green, as the information bar's chip (red late, green early).
+pub(super) const EARLY: Color = Color::rgba(95, 207, 138, 1.0);
 pub(super) const ON_TIME: Color = Color::rgba(110, 200, 120, 1.0);
 pub(super) const WARN: Color = Color::rgba(235, 170, 60, 1.0);
 pub const STOP_REQUEST: Color = Color::hex(0xF0A030);

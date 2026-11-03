@@ -56,6 +56,66 @@ fn a_turned_city_map_reads_points_and_drags_through_the_turn() {
     }
 }
 
+/// The city map's buttons say what they do under the mouse (header, zoom, compass), nothing
+/// over the map itself or while it is dragged.
+#[test]
+fn the_city_maps_buttons_have_tooltips() {
+    let mut n = Navigator::new(true, 0.85, "bottom-left");
+    n.city.open = true;
+    n.city.rect = [100.0, 50.0, 1100.0, 850.0];
+    for (k, id) in [3u8, 2, 1, 0, 4, 5, 6].into_iter().enumerate() {
+        n.city
+            .buttons
+            .push((Rect::new(900.0 - 40.0 * k as f32, 8.0, 32.0, 32.0), id));
+    }
+    n.map_move(100.0 + 916.0, 50.0 + 24.0);
+    assert_eq!(n.map_tip(), Some("Close"));
+    n.map_move(100.0 + 876.0, 50.0 + 24.0);
+    assert_eq!(n.map_tip(), Some("Zoom out"));
+    n.map_move(100.0 + 836.0, 50.0 + 24.0);
+    assert_eq!(n.map_tip(), Some("Zoom in"));
+    n.map_move(100.0 + 676.0, 50.0 + 24.0);
+    assert_eq!(n.map_tip(), Some("City map orientation"));
+    // (on the map, or outside the window, there is no tooltip)
+    n.map_move(500.0, 500.0);
+    assert_eq!(n.map_tip(), None);
+    n.map_move(20.0, 20.0);
+    assert_eq!(n.map_tip(), None);
+    // (nor while the map is dragged)
+    n.map_move(100.0 + 916.0, 50.0 + 24.0);
+    n.city.drag = Some((1016.0, 74.0));
+    assert_eq!(n.map_tip(), None);
+    n.city.drag = None;
+    n.city.open = false;
+    assert_eq!(n.map_tip(), None);
+}
+
+/// The player's bus on the maps is a pictogram in the colour it is given (the accent), on a
+/// white outline and a dark edge, never an arrow: whole triangles, turned with the heading.
+#[test]
+fn the_players_bus_is_a_pictogram_in_the_accent() {
+    let accent = Color::rgba(240, 163, 10, 1.0);
+    let mut p = Painter::new();
+    player_bus(&mut p, Vec2::new(100.0, 100.0), 0.0, 10.0, accent);
+    assert!(!p.verts.is_empty() && p.verts.len() % 3 == 0);
+    let has = |p: &Painter, c: Color| p.verts.iter().any(|v| v.color == c.0);
+    assert!(has(&p, accent) && has(&p, Color::WHITE));
+    // heading up: the nub is ahead, above the middle; turned a quarter right, it is right of it
+    let top = p.verts.iter().map(|v| v.pos[1]).fold(f32::MAX, f32::min);
+    assert!(top < 100.0 - 14.0, "{top}");
+    let mut q = Painter::new();
+    player_bus(
+        &mut q,
+        Vec2::new(100.0, 100.0),
+        std::f32::consts::FRAC_PI_2,
+        10.0,
+        accent,
+    );
+    let right = q.verts.iter().map(|v| v.pos[0]).fold(f32::MIN, f32::max);
+    assert!(right > 100.0 + 14.0, "{right}");
+    assert_eq!(p.verts.len(), q.verts.len());
+}
+
 /// A press and a small wobble is a click (the city map), a longer move drags the
 /// navigator, and the place reads back from the setting it is saved as (#940).
 #[test]
@@ -123,8 +183,8 @@ use omsi_sim::traffic::{Lane, LaneKey, LaneKind};
 use omsi_ui::{Layer, Painter};
 use openomsi_game::testing;
 use openomsi_game::testing::hud::nav::draw::{
-    rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon, Icon,
-    STOP_REQUEST,
+    player_bus, rects_overlap, spaced_markers, stop_label_rect, stop_request_icon, vehicle_icon,
+    Icon, STOP_REQUEST,
 };
 use openomsi_game::testing::hud::nav::geometry::{
     confirm_road_surfaces, road_geometry, visible_road_lanes,

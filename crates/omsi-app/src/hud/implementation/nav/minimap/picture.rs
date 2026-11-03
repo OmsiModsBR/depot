@@ -2,8 +2,9 @@
 //! and the header, drawn into the navigator's texture.
 
 use super::super::draw::{
-    arrow, focus_marker, level, player_triangle, rects_overlap, spaced_markers, stop_request_icon,
-    traffic_kind, vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT, TEXT_DIM, WARN,
+    arrow, focus_marker, level, player_bus, player_triangle, rects_overlap, spaced_markers,
+    stop_request_icon, traffic_kind, vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT,
+    TEXT_DIM, WARN,
 };
 use super::super::geometry::build_roads;
 use super::super::route::{build_route, lane_from_right, RouteStyle};
@@ -470,15 +471,7 @@ impl Navigator {
         if let (Some((at, heading)), Some(_)) = (self.bus_marker, f.focus) {
             if let Some(bp) = project(vpm, vp, rel(at)) {
                 let a = (angle_diff(self.cam_heading, heading) as f32).to_radians();
-                arrow(
-                    &mut ui,
-                    bp,
-                    a,
-                    7.0 * s,
-                    1.25,
-                    Color::rgba(10, 10, 10, 0.8),
-                    TEXT_DIM,
-                );
+                player_bus(&mut ui, bp, a, 7.5 * s, TEXT_DIM);
             }
         }
         if let (Some(focus), Some(bp)) = (f.focus, project(vpm, vp, rel(f.bus))) {
@@ -494,16 +487,9 @@ impl Navigator {
                 ring,
             );
         } else if let Some(bp) = project(vpm, vp, rel(f.bus)) {
+            // (the bus in the interface's accent, never an arrow like the mouse's)
             let a = (angle_diff(self.cam_heading, f.heading) as f32).to_radians();
-            arrow(
-                &mut ui,
-                bp,
-                a,
-                9.0 * s,
-                1.25,
-                Color::rgba(10, 10, 10, 0.8),
-                TEXT,
-            );
+            player_bus(&mut ui, bp, a, 9.5 * s, omsi_ui::theme::accent());
         }
 
         // the map's icons (terminals, stations, the garage): pictures of the package's sheet,
@@ -624,7 +610,8 @@ impl Navigator {
 
         // Temperatures stay in the navigator header on every bus. The simulator always keeps
         // Cabinair_Temp, while scripts that model heating/air conditioning can overwrite it.
-        let mut temp = format!("EXT {:.0}°C · INT {:.0}°C", f.outside_temp, f.inside_temp);
+        // ("18 / 21 °C" after a thermometer, as the information bar writes them)
+        let mut temp = format!("{:.0} / {:.0} °C", f.outside_temp, f.inside_temp);
         let mut left_edge = (if limit.is_some() { x + 24.0 * s } else { x }) + 6.0 * s;
         let right_edge = chip.x - 6.0 * s;
         // the line as a badge in the accent (when there is room for it)
@@ -651,17 +638,36 @@ impl Navigator {
             }
         }
         if right_edge > left_edge {
-            let rect = Rect::new(left_edge, top.y, right_edge - left_edge, top.h);
-            let center = self.fonts.fit(&temp, 11.5 * s, Weight::Bold, rect.w);
-            ui.text_in(
+            let icon = 15.0 * s;
+            let room = right_edge - left_edge;
+            let center = self.fonts.fit(
+                &temp,
+                12.5 * s,
+                Weight::Bold,
+                (room - icon - 5.0 * s).max(0.0),
+            );
+            let tw = self.fonts.width(&center, 12.5 * s, Weight::Bold);
+            // (the icon only where it fits beside the text)
+            let with_icon = tw + icon + 5.0 * s <= room;
+            let x0 = left_edge + (room - tw - if with_icon { icon + 5.0 * s } else { 0.0 }) * 0.5;
+            if with_icon {
+                ui.icon(
+                    &mut self.atlas,
+                    "hud-temperature",
+                    Vec2::new(x0 + icon * 0.5, top.center().y),
+                    icon,
+                    TEXT_DIM,
+                );
+            }
+            ui.text(
                 &mut self.atlas,
                 &self.fonts,
                 &center,
-                11.5 * s,
+                12.5 * s,
                 Weight::Bold,
-                rect,
-                Align::Center,
-                TEXT_DIM,
+                Vec2::new(x0 + if with_icon { icon + 5.0 * s } else { 0.0 }, base),
+                Align::Left,
+                TEXT,
             );
         }
 
@@ -683,9 +689,9 @@ impl Navigator {
             if !text.is_empty() {
                 ui.icon(
                     &mut self.atlas,
-                    "location_on",
+                    "hud-destination",
                     Vec2::new(pad + 7.0 * s, row.center().y),
-                    15.0 * s,
+                    14.0 * s,
                     TEXT_DIM,
                 );
                 let text =
@@ -821,6 +827,7 @@ impl Navigator {
                     },
                 }
                 if let Some(d) = f.delay {
+                    // a chip as the information bar's: red late, green early, the accent on time
                     let (txt, c) = if d > 59.0 {
                         (
                             format!("+{}:{:02}", (d / 60.0) as i32, (d % 60.0) as i32),
@@ -832,17 +839,26 @@ impl Navigator {
                             EARLY,
                         )
                     } else {
-                        (wd.on_time.to_string(), ON_TIME)
+                        (wd.on_time.to_string(), omsi_ui::theme::accent())
                     };
+                    let tw = self.fonts.width(&txt, 12.0 * s, Weight::Bold);
+                    let chip = Rect::new(
+                        y2.right() - tw - 16.0 * s,
+                        y2.center().y - 9.5 * s,
+                        tw + 16.0 * s,
+                        19.0 * s,
+                    );
+                    ui.rounded(chip, chip.h * 0.5, c.alpha(0.18));
+                    ui.rounded_border(chip, chip.h * 0.5, 1.0, c.alpha(0.45));
                     ui.text_in(
                         &mut self.atlas,
                         &self.fonts,
                         &txt,
-                        12.5 * s,
+                        12.0 * s,
                         Weight::Bold,
-                        y2,
-                        Align::Right,
-                        c,
+                        chip,
+                        Align::Center,
+                        c.lighten(0.25),
                     );
                 }
             }

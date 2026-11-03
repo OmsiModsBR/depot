@@ -405,6 +405,32 @@ impl Navigator {
         }
     }
 
+    /// What the city map's button under the mouse does, for its tooltip after a second
+    /// (an interface text): the header's buttons and the compass.
+    pub fn map_tip(&self) -> Option<&'static str> {
+        if !self.city.open || self.city.drag.is_some() {
+            return None;
+        }
+        let (x, y) = self.city.hover?;
+        let local = Vec2::new(x - self.city.rect[0], y - self.city.rect[1]);
+        let id = self
+            .city
+            .buttons
+            .iter()
+            .find(|(r, _)| r.contains(local))
+            .map(|b| b.1)?;
+        Some(match id {
+            0 => "Follow bus",
+            1 => "Zoom in",
+            2 => "Zoom out",
+            3 => "Close",
+            4 => "Lines",
+            5 => "Terrain",
+            6 => "City map orientation",
+            _ => return None,
+        })
+    }
+
     /// The world point (x, y) under the window point, when the map is open and the point
     /// is on it.
     pub fn map_point(&self, x: f32, y: f32) -> Option<DVec2> {
@@ -541,24 +567,25 @@ fn distance_text(d: f64) -> String {
 /// The header's colour: the in-game windows' panel, solid.
 const WINDOW_BAR: Color = Color::hex(0x202124);
 
-/// A button of the map in the new look: dark and outlined, or (`on`) outlined in the accent
-/// on its faint shade. Returns the ink for what is written on it.
-fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool) -> Color {
-    ui.rounded(
-        r,
-        6.0 * s,
-        if on {
-            omsi_ui::theme::accent_soft()
-        } else {
-            v5::CARD
-        },
-    );
+/// A button of the map in the new look: dark and outlined, a shade lighter under the mouse
+/// (`hot`), or (`on`) outlined in the accent on its faint shade. Its ink, for the icon and
+/// the label: the accent when on, else bright.
+fn outlined(ui: &mut Painter, r: Rect, s: f32, on: bool, hot: bool) -> Color {
+    let radius = omsi_ui::theme::corner(5.0 * s);
+    let fill = if on {
+        omsi_ui::theme::accent_soft()
+    } else {
+        v5::CARD
+    };
+    ui.rounded(r, radius, if hot { fill.lighten(0.08) } else { fill });
     ui.rounded_border(
         r,
-        6.0 * s,
+        radius,
         1.0,
         if on {
             omsi_ui::theme::accent()
+        } else if hot {
+            v5::LINE.lighten(0.15)
         } else {
             v5::LINE
         },
