@@ -234,9 +234,12 @@ impl Ui {
     pub(super) fn draw_tooltip(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, s: f32) {
         self.vr_tooltip_overlay = None;
         if let Some(t) = f.tooltip.as_ref().filter(|t| !t.is_empty()) {
-            let l = self
-                .text
-                .label(r, scene, t, (14.0 * s) as u32, [255, 255, 255, 235]);
+            let (px, ink) = ((14.0 * s) as u32, [255, 255, 255, 235]);
+            let l = if f.tooltip_raw {
+                self.text.label_raw(r, scene, t, px, ink)
+            } else {
+                self.text.label(r, scene, t, px, ink)
+            };
             let mut x = f.cursor.0.clamp(0.0, f.width) + 16.0 * s;
             let mut y = f.cursor.1 + 2.0 * s;
             if x + l.w as f32 > f.width {
