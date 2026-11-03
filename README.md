@@ -446,6 +446,7 @@ The pages live in [`docs/`](docs) and are also published as the website
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
+| [Privacy](docs/PRIVACY.md) | what the program sends over the network (nothing unless you ask) and where its logs stay |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.PATCH` scheme and how a release is made |
 | [Release notes](docs/releases) | one page per release: [0.3.0](docs/releases/0.3.0.md), [0.2.52](docs/releases/0.2.52.md), [0.2.17](docs/releases/0.2.17.md) |
 | [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |

@@ -50,3 +50,17 @@ be removed by deleting `ps_easu` and `ps_rcas` and the `Fsr1` choice.
 
 FSR 2, FSR 3 and the FidelityFX SDK are different works with their own licences and are not
 used.
+
+## Roboto, Roboto Mono and Material Icons (website fonts)
+
+| | |
+| --- | --- |
+| Used for | The project website (`site/`), served from the site itself so that opening it contacts no third party |
+| Where | `site/fonts/` (five WOFF2 files, the licence text and a provenance README) |
+| Source | Fontsource packages on npm: `@fontsource/roboto` 5.0.8, `@fontsource/roboto-mono` 5.0.8, `@fontsource/material-icons` 5.2.5 |
+| Author / owner | Google LLC and the Roboto / Material Icons authors |
+| Licence | Apache-2.0 (`site/fonts/LICENSE-Apache-2.0.txt`) |
+| Method | **Redistributed unmodified** (Latin subset files as published by Fontsource); no code is adapted |
+| Taken in | 2026-11-03, replacing the former requests to Google Fonts |
+
+These fonts are part of the website only and are not in the game or the launcher.
