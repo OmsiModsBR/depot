@@ -1,7 +1,7 @@
 //! The information drawn over the picture: the frame rate, the information bar, the
 //! timetable window and a tutorial page.
 
-use super::super::super::domain::{Frame, InfoItem, InfoTone};
+use super::super::super::domain::{Frame, InfoItem, InfoTip, InfoTone};
 use super::*;
 use crate::hud::interface::output::{Renderer, Scene, TextureId};
 
@@ -16,7 +16,8 @@ struct Piece {
     /// The text's box: the text, or the badge, the sign or the chip round it.
     body_w: f32,
     h: f32,
-    tip: Option<String>,
+    /// The tooltip, and whether it is a name drawn as it is.
+    tip: Option<(String, bool)>,
 }
 
 impl Piece {
@@ -94,7 +95,7 @@ pub fn fps_level(fps: f32) -> u8 {
     }
 }
 
-/// The colour of a frame rate's dot by its level (the plates 13 to 15).
+/// The colour of a frame rate's dot by its level (`fps_level`): green, amber, red.
 fn fps_tone(level: u8) -> [u8; 4] {
     match level {
         0 => INFO_GREEN,
@@ -170,8 +171,10 @@ impl Ui {
         };
         // (a long name - the route - is cut short so that the next stop keeps its room; its
         // whole is the tooltip then)
-        let mut tip = it.tip.clone();
+        let mut tip = it.tip.clone().map(|t| (t, false));
         let text = if it.clip {
+            // (the whole of a name from the map is drawn as it is, like the name)
+            tip = tip.map(|(t, _)| (t, it.raw));
             let cut = clip_to(&self.text, &it.text, px as f32, 260.0 * s);
             if cut == it.text {
                 tip = None;
@@ -476,11 +479,12 @@ impl Ui {
                 let g = &groups[*k];
                 for (j, p) in g.iter().enumerate() {
                     self.draw_piece(r, scene, p, cx, cy, s);
-                    if let Some(tip) = &p.tip {
-                        self.hits.info_tips.push((
-                            [cx, cy - row_h * 0.5, cx + p.w(), cy + row_h * 0.5],
-                            tip.clone(),
-                        ));
+                    if let Some((tip, raw)) = &p.tip {
+                        self.hits.info_tips.push(InfoTip {
+                            rect: [cx, cy - row_h * 0.5, cx + p.w(), cy + row_h * 0.5],
+                            text: tip.clone(),
+                            raw: *raw,
+                        });
                     }
                     cx += p.w() + if j + 1 < g.len() { after(p) } else { 0.0 };
                 }
@@ -553,9 +557,11 @@ impl Ui {
                         );
                     }
                     if let Some(tip) = &c.tip {
-                        self.hits
-                            .info_tips
-                            .push(([cx, ry, cx + c.w, ry + row2_h], tip.clone()));
+                        self.hits.info_tips.push(InfoTip {
+                            rect: [cx, ry, cx + c.w, ry + row2_h],
+                            text: tip.clone(),
+                            raw: false,
+                        });
                     }
                     let mut tx0 = cx;
                     if let Some(icon) = c.icon {

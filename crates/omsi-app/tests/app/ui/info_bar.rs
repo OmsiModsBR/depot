@@ -197,15 +197,20 @@ fn the_information_bars_items_have_tooltips_and_a_long_route_is_cut_short() {
         info.groups[0] = route("829", terminus);
         f.info = Some(info);
         hud.draw(&r, &mut scene, &f, 0.1);
-        let tips: Vec<&str> = hud.hits.info_tips.iter().map(|t| t.1.as_str()).collect();
+        let tips: Vec<&str> = hud.hits.info_tips.iter().map(|t| t.text.as_str()).collect();
         for name in ["Current time", "Next stop", "Trip", "Odometer", "Tank"] {
             assert!(tips.contains(&name), "{name}: {tips:?}");
         }
         assert_eq!(tips.contains(&terminus), cut, "{tips:?}");
+        // (the route's whole is a name from the map, drawn as it is; the rest are looked up)
+        for t in &hud.hits.info_tips {
+            assert_eq!(t.raw, t.text == terminus, "{t:?}");
+        }
         // (cut short, the bar still fits the window)
         let rect = hud.hits.info_rect.unwrap();
         assert!(rect[2] - rect[0] < 1280.0 - 24.0, "{rect:?}");
-        for (r, _) in &hud.hits.info_tips {
+        for t in &hud.hits.info_tips {
+            let r = t.rect;
             assert!(r[0] >= rect[0] && r[2] <= rect[2], "{r:?} {rect:?}");
         }
     }
@@ -249,7 +254,15 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
     };
     let out = std::env::var("DEPOT_INFO_BAR_PNG").ok();
     let size = (1280u32, 360u32);
-    use omsi_ui::theme::{set_accent, Accent};
+    use omsi_ui::theme::{current_accent, set_accent, Accent};
+    // (the accent is global: put back the one before even when an assertion fails)
+    struct Restore(Accent);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_accent(self.0);
+        }
+    }
+    let _restore = Restore(current_accent());
     let long = {
         let mut b = bar(false, false, false, false);
         b.groups[0] = route(
@@ -339,7 +352,6 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
             .unwrap();
         }
     }
-    set_accent(Accent::Amber);
     // (folded away, the bar is just the first tier: shorter than with the second)
     assert!(heights[3].1 < heights[0].1);
 }

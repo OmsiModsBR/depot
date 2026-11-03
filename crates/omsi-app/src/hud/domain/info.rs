@@ -34,7 +34,8 @@ pub struct InfoItem {
     /// What it is, under the mouse after a second (an interface text, looked up), or the whole
     /// of a name cut short (`clip`).
     pub tip: Option<String>,
-    /// A long name (the route) is cut short with "…" so that the next stop keeps its room.
+    /// A long name (the route) is cut short with "…" so that the next stop keeps its room;
+    /// its whole is then the tip (drawn as it is when the item is `raw`).
     pub clip: bool,
 }
 

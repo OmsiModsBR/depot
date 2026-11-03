@@ -2815,20 +2815,21 @@ impl ApplicationHandler for App {
                     let (x, y) = self.hud_cursor();
                     let over = |r: &[f32; 4]| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
                     if u.hits.info_chevron.as_ref().is_some_and(over) {
-                        Some(
+                        Some((
                             if self.info_collapsed {
                                 "Show details"
                             } else {
                                 "Hide details"
                             }
                             .to_string(),
-                        )
+                            false,
+                        ))
                     } else {
                         u.hits
                             .info_tips
                             .iter()
-                            .find(|(r, _)| over(r))
-                            .map(|(_, t)| t.clone())
+                            .find(|t| over(&t.rect))
+                            .map(|t| (t.text.clone(), t.raw))
                     }
                 });
                 // (the city map's buttons, while it is open, say what they do the same way: the
@@ -2837,15 +2838,15 @@ impl ApplicationHandler for App {
                     .navigator
                     .as_ref()
                     .and_then(|n| n.map_tip())
-                    .map(str::to_string);
+                    .map(|t| (t.to_string(), false));
                 let info_tip = if map_tip.is_some() { map_tip } else { info_tip };
                 // (the second counts again when the mouse moves to another item)
                 self.info_chev_hover = match (&info_tip, &self.info_tip_shown) {
-                    (Some(t), Some(was)) if t == was => self.info_chev_hover + dt,
+                    (Some((t, _)), Some(was)) if t == was => self.info_chev_hover + dt,
                     (Some(_), _) => dt,
                     _ => 0.0,
                 };
-                self.info_tip_shown = info_tip.clone();
+                self.info_tip_shown = info_tip.as_ref().map(|(t, _)| t.clone());
                 // the interface over the picture
                 // (the pages of an open settings window)
                 let menu_tabs = match self.list_kind.as_ref() {
@@ -2879,9 +2880,9 @@ impl ApplicationHandler for App {
                             .navigator
                             .as_ref()
                             .is_some_and(|n| n.map_tip().is_some());
-                    let tooltip = match info_tip {
-                        Some(t) if self.info_chev_hover >= 1.0 => Some(t),
-                        _ => tooltip,
+                    let (tooltip, tooltip_raw) = match info_tip {
+                        Some((t, raw)) if self.info_chev_hover >= 1.0 => (Some(t), raw),
+                        _ => (tooltip, false),
                     };
                     // the object editor's keys, while it is on (one quiet line)
                     // the mirror editor's keys and the panel under the cursor, while it is on
@@ -3185,6 +3186,7 @@ impl ApplicationHandler for App {
                                     && (!covered || (map_open && map_tip_due))
                                     && self.game_menu.is_none()
                             }),
+                            tooltip_raw,
                             // (switched off: none, `Settings::notes`; nor over the city map,
                             // whose header they covered once they stood on the timetable's line)
                             notes: if self.settings.notes && !map_open && self.game_menu.is_none() {
