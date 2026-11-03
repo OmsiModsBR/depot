@@ -786,48 +786,9 @@ impl Navigator {
                 ));
                 let line2 = parts.join("  ·  ");
                 let y2 = Rect::new(pad, bottom.y + 24.0 * s, pw - 2.0 * pad, 18.0 * s);
-                match note {
-                    Some((t, c)) => {
-                        ui.text_in(
-                            &mut self.atlas,
-                            &self.fonts,
-                            t,
-                            12.5 * s,
-                            Weight::Medium,
-                            y2,
-                            Align::Left,
-                            c,
-                        );
-                    }
-                    None => match &jam_note {
-                        Some((t, c)) => {
-                            ui.text_in(
-                                &mut self.atlas,
-                                &self.fonts,
-                                &format!("{line2}  ·  {t}"),
-                                12.5 * s,
-                                Weight::Medium,
-                                y2,
-                                Align::Left,
-                                *c,
-                            );
-                        }
-                        None => {
-                            ui.text_in(
-                                &mut self.atlas,
-                                &self.fonts,
-                                &line2,
-                                12.5 * s,
-                                Weight::Medium,
-                                y2,
-                                Align::Left,
-                                TEXT_DIM,
-                            );
-                        }
-                    },
-                }
-                if let Some(d) = f.delay {
-                    // a chip as the information bar's: red late, green early, the accent on time
+                // the delay: a chip as the information bar's, red late, green early, the accent
+                // on time
+                let chip = f.delay.map(|d| {
                     let (txt, c) = if d > 59.0 {
                         (
                             format!("+{}:{:02}", (d / 60.0) as i32, (d % 60.0) as i32),
@@ -842,12 +803,36 @@ impl Navigator {
                         (wd.on_time.to_string(), omsi_ui::theme::accent())
                     };
                     let tw = self.fonts.width(&txt, 12.0 * s, Weight::Bold);
-                    let chip = Rect::new(
+                    let rect = Rect::new(
                         y2.right() - tw - 16.0 * s,
                         y2.center().y - 9.5 * s,
                         tw + 16.0 * s,
                         19.0 * s,
                     );
+                    (txt, c, rect)
+                });
+                // (the line left of it is cut short so that the two never touch)
+                let left = match &chip {
+                    Some((_, _, r)) => Rect::new(y2.x, y2.y, (r.x - 8.0 * s - y2.x).max(0.0), y2.h),
+                    None => y2,
+                };
+                let (t, c) = match (&note, &jam_note) {
+                    (Some((t, c)), _) => (t.to_string(), *c),
+                    (None, Some((t, c))) => (format!("{line2}  ·  {t}"), *c),
+                    (None, None) => (line2, TEXT_DIM),
+                };
+                let t = self.fonts.fit(&t, 12.5 * s, Weight::Medium, left.w);
+                ui.text_in(
+                    &mut self.atlas,
+                    &self.fonts,
+                    &t,
+                    12.5 * s,
+                    Weight::Medium,
+                    left,
+                    Align::Left,
+                    c,
+                );
+                if let Some((txt, c, chip)) = chip {
                     ui.rounded(chip, chip.h * 0.5, c.alpha(0.18));
                     ui.rounded_border(chip, chip.h * 0.5, 1.0, c.alpha(0.45));
                     ui.text_in(
