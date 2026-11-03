@@ -229,9 +229,6 @@ pub mod launcher {
     pub mod diagnostics {
         pub use crate::launcher::diagnostics::*;
     }
-    pub mod dialogs {
-        pub use crate::launcher::dialogs::*;
-    }
     pub mod pages {
         pub use crate::launcher::pages::*;
     }

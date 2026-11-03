@@ -7,13 +7,14 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::Instant;
 
+use super::read::{read, Reply};
+use crate::mapview::domain::plan::*;
+use crate::mapview::domain::roads::Roads;
+
 // The map is drawn with the game's own city map palette and order (see `navigator`): every
 // road's dark casing first, then every road's surface over every casing, then the chosen
 // line's route in the map's own red - so the two maps are the same picture.
-use super::read::{read, Reply};
 use crate::hud::nav::{ROAD, ROAD_CASING, ROAD_MAIN, ROUTE};
-use crate::mapview::domain::plan::*;
-use crate::mapview::domain::roads::Roads;
 const STOP: Color = Color::rgba(240, 240, 240, 1.0);
 // Entry points wear the launcher's accent (`omsi_ui::theme::accent`); the one under the mouse
 // a grey ring, the chosen one a white (a click on the map takes the place of a name in a list

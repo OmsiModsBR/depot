@@ -1,6 +1,5 @@
 mod backdrop;
 mod chrome;
-mod dialogs;
 mod pages;
 mod prerender;
 mod settings;

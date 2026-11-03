@@ -17,6 +17,7 @@ pub(crate) mod overview;
 pub(crate) mod pads;
 pub(crate) mod phone;
 pub(crate) mod profile;
+pub(crate) mod report;
 pub(crate) mod settings;
 pub(crate) mod setup;
 pub(crate) mod start;

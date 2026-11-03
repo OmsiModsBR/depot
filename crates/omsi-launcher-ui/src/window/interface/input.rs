@@ -45,6 +45,7 @@ pub use super::super::implementation::phone::{
     foot as phone_foot, phone, status as phone_toast, PAGE_H,
 };
 pub use super::super::implementation::profile::*;
+pub use super::super::implementation::report::*;
 pub use super::super::implementation::settings::{reset_dialog, section_body, settings};
 pub use super::super::implementation::setup::*;
 pub use super::super::implementation::start::{
