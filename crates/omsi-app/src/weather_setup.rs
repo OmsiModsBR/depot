@@ -10,9 +10,7 @@ pub(crate) use omsi_content::weather::psychro::{
 use omsi_render::{Renderer, Scene};
 use std::path::Path;
 
-pub(crate) use omsi_launcher_lib::weather::{
-    custom_weather, CustomWeather, CUSTOM_CLOUDS, CUSTOM_PRECIP,
-};
+pub(crate) use omsi_launcher_lib::weather::{custom_weather, CustomWeather};
 
 /// Weather from `--weather`, else the clear-sky default.
 pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
