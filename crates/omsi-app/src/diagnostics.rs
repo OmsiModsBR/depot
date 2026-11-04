@@ -14,7 +14,7 @@ pub fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -> Optio
                 && *s == b.scan_code
                 && (m & !KEY_HOLD) == (b.modifier & !KEY_HOLD)
         });
-    (!stock).then(|| crate::keys::key_name(b.scan_code as i64, b.modifier as i64))
+    (!stock).then(|| crate::input::keys::key_name(b.scan_code as i64, b.modifier as i64))
 }
 
 /// Why the bus is not moving although the throttle is pressed: the things a driver checks

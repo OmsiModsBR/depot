@@ -2,7 +2,7 @@
 
 use crate::core::app::App;
 use crate::core::startup::shift_held_now;
-use crate::keys;
+use crate::input::keys;
 use crate::player::{digit_of, fallback_action};
 use crate::situation::apply_situation;
 use winit::event_loop::ActiveEventLoop;
@@ -1000,14 +1000,15 @@ impl App {
         self.menu_top = None;
         match code {
             KeyCode::Escape
-                if crate::game_controller_menu::is_controller_list(self.list_kind.as_ref())
-                    || matches!(
-                        self.list_kind,
-                        Some(
-                            crate::hud::lists::ListKind::Events
-                                | crate::hud::lists::ListKind::Keyboard(_)
-                        )
-                    ) =>
+                if crate::input::game_controller_menu::is_controller_list(
+                    self.list_kind.as_ref(),
+                ) || matches!(
+                    self.list_kind,
+                    Some(
+                        crate::hud::lists::ListKind::Events
+                            | crate::hud::lists::ListKind::Keyboard(_)
+                    )
+                ) =>
             {
                 if let Some(kind) = self.list_kind.clone() {
                     if let Some(back) = crate::hud::lists::run(self, &kind, "back") {
@@ -1125,7 +1126,7 @@ impl App {
                 | KeyCode::AltRight => {}
                 KeyCode::Escape => self.cancel_key_capture(),
                 KeyCode::Delete | KeyCode::Backspace => self.apply_key_capture(None, 0),
-                _ => match crate::keys::dik_code(code) {
+                _ => match crate::input::keys::dik_code(code) {
                     Some(scan) => {
                         let chord = omsi_content::input::chord(
                             self.keys.contains(&KeyCode::ShiftLeft)

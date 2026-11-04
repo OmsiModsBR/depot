@@ -1,5 +1,5 @@
 //! The game's side of the Controls page's game controllers tab (`omsi_launcher_ui::window::Pads`):
-//! the devices as the game reads them (`crate::controllers`), kept open between frames in
+//! the devices as the game reads them (`crate::input::controllers`), kept open between frames in
 //! `PagesView::pad_io`.
 
 use super::pages::PagesView;
@@ -9,7 +9,7 @@ use omsi_launcher_ui::window::Pads;
 
 /// The devices the tab has taken, the window they belong to (Windows) and the game's folder.
 pub(crate) struct GamePads<'a> {
-    pub io: &'a mut Option<crate::controllers::Devices>,
+    pub io: &'a mut Option<crate::input::controllers::Devices>,
     pub hwnd: Option<isize>,
     pub root: &'a str,
 }
@@ -18,7 +18,7 @@ impl Pads for GamePads<'_> {
     fn open(&mut self, feedback: bool) {
         // (the ones taken before are given up first)
         *self.io = None;
-        *self.io = Some(crate::controllers::Devices::new(self.hwnd, feedback));
+        *self.io = Some(crate::input::controllers::Devices::new(self.hwnd, feedback));
     }
 
     fn close(&mut self) {
@@ -51,11 +51,11 @@ impl Pads for GamePads<'_> {
     }
 
     fn read_cfg(&self) -> Vec<DeviceCfg> {
-        crate::controllers::read_cfg(std::path::Path::new(self.root))
+        crate::input::controllers::read_cfg(std::path::Path::new(self.root))
     }
 
     fn held_gears(&self, devices: &[DeviceCfg]) -> bool {
-        crate::hpattern::has_held_bindings(devices)
+        crate::input::hpattern::has_held_bindings(devices)
     }
 }
 

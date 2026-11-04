@@ -1,8 +1,8 @@
 //! In-game controller configuration. Edits are saved before installing mappings on the
 //! existing controller; opening this UI never creates another hardware connection.
-use crate::controllers::{DeviceCfg, Func};
 use crate::core::app::App;
 use crate::hud::lists::{ListKind, Move, HEADING};
+use crate::input::controllers::{DeviceCfg, Func};
 
 pub fn is_controller_list(kind: Option<&ListKind>) -> bool {
     matches!(
@@ -23,14 +23,14 @@ fn configurations(app: &App) -> Vec<DeviceCfg> {
     app.controllers
         .as_ref()
         .map(|c| c.configuration())
-        .unwrap_or_else(|| crate::controllers::read_cfg(&app.args.root))
+        .unwrap_or_else(|| crate::input::controllers::read_cfg(&app.args.root))
 }
 
 fn index(devices: &[DeviceCfg], name: &str) -> Option<usize> {
     devices.iter().position(|d| d.name == name).or_else(|| {
         devices
             .iter()
-            .position(|d| crate::controllers::names_match(&d.name, name))
+            .position(|d| crate::input::controllers::names_match(&d.name, name))
     })
 }
 
@@ -151,7 +151,7 @@ pub fn parent(kind: &ListKind) -> Option<ListKind> {
     })
 }
 
-pub fn axis_rows(d: &DeviceCfg, live: Option<&crate::controllers::Connected>) -> Rows {
+pub fn axis_rows(d: &DeviceCfg, live: Option<&crate::input::controllers::Connected>) -> Rows {
     AXES.iter()
         .enumerate()
         .map(|(a, label)| {
@@ -189,7 +189,7 @@ pub fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows
         .buttons
         .len()
         .max(d.latching.iter().max().map(|b| b + 1).unwrap_or(0))
-        .min(crate::controllers::HAT_BUTTONS + 16)
+        .min(crate::input::controllers::HAT_BUTTONS + 16)
     {
         let action = d.buttons.get(b).map(|x| x.0.as_str()).unwrap_or("");
         if action.is_empty() && !d.latching.contains(&b) {
@@ -290,7 +290,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     .filter(|d| {
                         !connected
                             .iter()
-                            .any(|c| crate::controllers::names_match(&d.name, &c.name))
+                            .any(|c| crate::input::controllers::names_match(&d.name, &c.name))
                     })
                     .collect();
                 if !offline.is_empty() {
@@ -366,7 +366,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     second: "0".into(),
                     ..Default::default()
                 });
-            let live = crate::controllers::find_connected(&connected, name);
+            let live = crate::input::controllers::find_connected(&connected, name);
             match (*tab).min(DEVICE_TABS.len() - 1) {
                 0 => {
                     out.push((
@@ -387,7 +387,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                         .settings
                         .ctrl_off
                         .split('|')
-                        .any(|n| crate::controllers::names_match(n, name));
+                        .any(|n| crate::input::controllers::names_match(n, name));
                     out.push((
                         crate::hud::lists::row(
                             "Use this device",
@@ -453,7 +453,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             let d = index(&devices, name)
                 .map(|i| devices[i].clone())
                 .unwrap_or_default();
-            let live = crate::controllers::find_connected(&connected, name)
+            let live = crate::input::controllers::find_connected(&connected, name)
                 .and_then(|c| c.axes.iter().find(|(k, _)| k == a))
                 .map(|(_, v)| format!("{v:+.2}"))
                 .unwrap_or_else(|| "Disconnected".into());
@@ -485,7 +485,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                     ),
                     format!("reverse {a}"),
                 ));
-                let curve = crate::controllers::AXIS_SHAPES
+                let curve = crate::input::controllers::AXIS_SHAPES
                     .iter()
                     .find(|s| s.1 == d.axis_flags[*a] & (4 | 8 | 0x10))
                     .map(|s| s.0)
@@ -502,18 +502,18 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
             let d = index(&devices, name)
                 .map(|i| devices[i].clone())
                 .unwrap_or_default();
-            let live = crate::controllers::find_connected(&connected, name);
+            let live = crate::input::controllers::find_connected(&connected, name);
             let count = d
                 .buttons
                 .len()
                 .max(live.map(|c| c.buttons).unwrap_or(0))
                 .max(d.latching.iter().max().map(|b| b + 1).unwrap_or(0))
                 .max(32)
-                .min(crate::controllers::HAT_BUTTONS + 16);
+                .min(crate::input::controllers::HAT_BUTTONS + 16);
             let names = crate::describe::names(&app.args.root, &app.settings.language);
-            for b in (0..count.min(crate::controllers::HAT_BUTTONS))
-                .chain(crate::controllers::HAT_BUTTONS..crate::controllers::HAT_BUTTONS + 16)
-            {
+            for b in (0..count.min(crate::input::controllers::HAT_BUTTONS)).chain(
+                crate::input::controllers::HAT_BUTTONS..crate::input::controllers::HAT_BUTTONS + 16,
+            ) {
                 let action = d.buttons.get(b).map(|x| x.0.as_str()).unwrap_or("");
                 let value = if action.is_empty() {
                     "Unassigned".into()
@@ -583,8 +583,8 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
 }
 
 pub fn button_label(b: usize) -> String {
-    if b >= crate::controllers::HAT_BUTTONS {
-        let h = b - crate::controllers::HAT_BUTTONS;
+    if b >= crate::input::controllers::HAT_BUTTONS {
+        let h = b - crate::input::controllers::HAT_BUTTONS;
         omsi_ui::tr("Hat %{n} %{dir}")
             .replace("%{n}", &(h / 4 + 1).to_string())
             .replace(
@@ -615,7 +615,7 @@ fn switched(now: bool, mv: Move) -> bool {
 }
 
 fn save(app: &mut App, devices: Vec<DeviceCfg>) {
-    match crate::controllers::save_cfg(&devices) {
+    match crate::input::controllers::save_cfg(&devices) {
         Ok(()) => {
             if let Some(c) = app.controllers.as_mut() {
                 c.install_cfg(devices);
@@ -644,7 +644,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         return Some(match verb {
             "controller" => ListKind::Controller(arg.to_string(), 0),
             "reload_controllers" => {
-                match crate::controllers::read_cfg_checked(&app.args.root) {
+                match crate::input::controllers::read_cfg_checked(&app.args.root) {
                     Ok(devices) => {
                         if let Some(c) = app.controllers.as_mut() {
                             c.install_cfg(devices);
@@ -697,7 +697,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             "capture_button" => return Some(ListKind::ControllerCapture(name.clone())),
             "button" => {
                 if let Ok(b) = arg.parse::<usize>() {
-                    if b < crate::controllers::HAT_BUTTONS + 16 {
+                    if b < crate::input::controllers::HAT_BUTTONS + 16 {
                         return Some(ListKind::ControllerButtonSettings(name.clone(), b));
                     }
                 }
@@ -713,8 +713,10 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .collect();
-        let on = !off.iter().any(|n| crate::controllers::names_match(n, name));
-        off.retain(|n| !crate::controllers::names_match(n, name));
+        let on = !off
+            .iter()
+            .any(|n| crate::input::controllers::names_match(n, name));
+        off.retain(|n| !crate::input::controllers::names_match(n, name));
         if !switched(on, mv) {
             off.push(name.clone());
         }
@@ -756,13 +758,13 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         "curve" => {
             if let Some(a) = axis {
                 let curve = d.axis_flags[a] & (4 | 8 | 0x10);
-                let current = crate::controllers::AXIS_SHAPES
+                let current = crate::input::controllers::AXIS_SHAPES
                     .iter()
                     .position(|s| s.1 == curve)
                     .unwrap_or(0);
-                let to = step(current, crate::controllers::AXIS_SHAPES.len(), mv);
-                d.axis_flags[a] =
-                    (d.axis_flags[a] & !(4 | 8 | 0x10)) | crate::controllers::AXIS_SHAPES[to].1;
+                let to = step(current, crate::input::controllers::AXIS_SHAPES.len(), mv);
+                d.axis_flags[a] = (d.axis_flags[a] & !(4 | 8 | 0x10))
+                    | crate::input::controllers::AXIS_SHAPES[to].1;
             } else {
                 return Some(kind.clone());
             }
@@ -784,7 +786,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
             if let Some(b) = arg
                 .parse::<usize>()
                 .ok()
-                .filter(|b| *b < crate::controllers::HAT_BUTTONS + 16)
+                .filter(|b| *b < crate::input::controllers::HAT_BUTTONS + 16)
             {
                 let on = switched(d.latching.contains(&b), mv);
                 d.latching.retain(|x| *x != b);
@@ -798,7 +800,7 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Opt
         }
         "bind" if matches!(mv, Move::Next) => {
             if let Some(b) = button {
-                if b >= crate::controllers::HAT_BUTTONS + 16 {
+                if b >= crate::input::controllers::HAT_BUTTONS + 16 {
                     return Some(kind.clone());
                 }
                 d.buttons
@@ -849,8 +851,8 @@ pub(crate) fn frame(app: &mut App) {
             .iter()
             .find(|(n, b, down)| {
                 *down
-                    && *b < crate::controllers::HAT_BUTTONS + 16
-                    && crate::controllers::names_match(n, &name)
+                    && *b < crate::input::controllers::HAT_BUTTONS + 16
+                    && crate::input::controllers::names_match(n, &name)
             })
             .map(|(_, b, _)| *b)
     });

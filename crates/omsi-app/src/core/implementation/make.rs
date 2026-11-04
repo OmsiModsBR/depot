@@ -11,13 +11,14 @@ use super::startup::{
     ENHANCED_PLUS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
 use crate::duty_start::place_on_duty;
-use crate::input_script::parse_input_script;
+use crate::input::input_script::parse_input_script;
+use crate::input::touch;
 use crate::offscreen::run_offscreen;
 use crate::output::ORBIT_DEFAULT;
 use crate::services::run_export;
 use crate::situation::apply_situation;
 use crate::ui_language;
-use crate::{hud, puddles, radio, rain, real_time, touch, tutorial};
+use crate::{hud, puddles, radio, rain, real_time, tutorial};
 use anyhow::Result;
 use std::time::Instant;
 

@@ -1,12 +1,13 @@
-//! Input that is not the input script: the keyboard, the mouse, the game menu's lists and the
-//! object editor's keys.
+//! The game's input: the keyboard, the mouse, the game menu's lists and the object editor's
+//! keys; game controllers (wheels, pedals, joysticks, gamepads) through DirectInput, evdev and
+//! macOS's HID and GameController, with their configuration page; the touch controls; head
+//! tracking; the input script; and what a key, a menu or a page asks the game to do (`actions`).
+//!
+//! In three parts: `domain/` holds the key codes and the H-pattern gates, `interface/` what the
+//! rest of the game reaches of the input, and `implementation/` the procedures.
 
-mod editor_input;
-pub(crate) mod keyboard;
-pub(crate) mod menus;
-pub(crate) mod mouse;
+pub(crate) mod domain;
+pub(crate) mod implementation;
+mod interface;
 
-pub(crate) use keyboard::route_char;
-pub(crate) use keyboard::ROUTE_NUMBER_MAX;
-pub(crate) use menus::*;
-pub(crate) use mouse::*;
+pub(crate) use interface::*;

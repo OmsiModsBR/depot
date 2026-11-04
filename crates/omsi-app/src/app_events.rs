@@ -844,9 +844,9 @@ impl ApplicationHandler for App {
                 let hwnd = self
                     .window
                     .as_deref()
-                    .and_then(crate::controllers::window_handle);
+                    .and_then(crate::input::controllers::window_handle);
                 let ctl = self.controllers.get_or_insert_with(|| {
-                    crate::controllers::Controllers::new(&self.args.root, hwnd)
+                    crate::input::controllers::Controllers::new(&self.args.root, hwnd)
                 });
                 ctl.set_focus(self.window_focused);
                 ctl.deadzone = self.settings.ctrl_deadzone;
@@ -915,7 +915,7 @@ impl ApplicationHandler for App {
                     .map(|p| p.vehicle.motion().velocity_kmh())
                     .unwrap_or(0.0);
                 let wheel_bump = ctl.wheel_bump(driving.and_then(|p| p.vehicle.rigid()), kmh, dt);
-                ctl.feedback(crate::controllers::FfInput {
+                ctl.feedback(crate::input::controllers::FfInput {
                     on: driving.is_some(),
                     kmh,
                     lateral_accel: driving
@@ -942,7 +942,7 @@ impl ApplicationHandler for App {
                     micro: 0.0,
                     dt,
                 });
-                crate::game_controller_menu::frame(self);
+                crate::input::game_controller_menu::frame(self);
                 // OMSI's mouse control: the cursor's place across steers, above the middle
                 // of the window is the throttle, below it the brake.
                 // Steering as OMSI has it: the whole width of the
@@ -980,9 +980,10 @@ impl ApplicationHandler for App {
                 } else if let Some((x, p)) = stick {
                     let now = p.vehicle.controls().steering;
                     let kmh = p.vehicle.motion().velocity_kmh() as f32;
-                    self.pad_kmh = crate::controllers::smooth_toward(self.pad_kmh, kmh, dt, 0.4);
-                    let target = crate::controllers::gamepad_steering(x, self.pad_kmh);
-                    self.pad_steer_target = crate::controllers::smooth_toward(
+                    self.pad_kmh =
+                        crate::input::controllers::smooth_toward(self.pad_kmh, kmh, dt, 0.4);
+                    let target = crate::input::controllers::gamepad_steering(x, self.pad_kmh);
+                    self.pad_steer_target = crate::input::controllers::smooth_toward(
                         self.pad_steer_target,
                         target,
                         dt,
@@ -1145,7 +1146,7 @@ impl ApplicationHandler for App {
                             }
                             return false;
                         }
-                        if crate::actions::is_game_action(&n) {
+                        if crate::input::actions::is_game_action(&n) {
                             if *down {
                                 game.push(n);
                             }
@@ -1360,11 +1361,10 @@ impl ApplicationHandler for App {
                                     .headtrack_failed
                                     .is_none_or(|t| t.elapsed().as_secs_f32() > 5.0)
                             {
-                                let hwnd = self
-                                    .window
-                                    .as_ref()
-                                    .and_then(|window| crate::controllers::window_handle(window));
-                                self.headtrack = crate::headtrack::HeadTracker::start(
+                                let hwnd = self.window.as_ref().and_then(|window| {
+                                    crate::input::controllers::window_handle(window)
+                                });
+                                self.headtrack = crate::input::headtrack::HeadTracker::start(
                                     self.settings.head_tracking_port,
                                     &self.settings.head_tracking_bind,
                                     hwnd,
@@ -2410,10 +2410,9 @@ impl ApplicationHandler for App {
                     // stock file makes it the ticket desk camera, which this then turned
                     // straight ahead again whenever it was switched to, #733)
                     if self.keys.contains(&KeyCode::Home)
-                        && !self
-                            .game_keys
-                            .iter()
-                            .any(|b| Some(b.scan_code) == crate::keys::dik_code(KeyCode::Home))
+                        && !self.game_keys.iter().any(|b| {
+                            Some(b.scan_code) == crate::input::keys::dik_code(KeyCode::Home)
+                        })
                     {
                         self.look = (0.0, 0.0);
                         self.orbit = ORBIT_DEFAULT;
@@ -3402,7 +3401,7 @@ impl ApplicationHandler for App {
                                     if let Some(over) =
                                         self.touch.picture(r, s.config.width, s.config.height)
                                     {
-                                        crate::touch::composite(&mut px, &over);
+                                        crate::input::touch::composite(&mut px, &over);
                                     }
                                 }
                                 image::save_buffer(

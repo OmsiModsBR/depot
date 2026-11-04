@@ -59,7 +59,7 @@ pub mod about {
     pub use crate::about::*;
 }
 pub mod actions {
-    pub use crate::actions::*;
+    pub use crate::input::actions::*;
 }
 pub mod api_limits {
     pub use crate::api_limits::*;
@@ -86,7 +86,7 @@ pub mod condensation {
     }
 }
 pub mod controllers {
-    pub use crate::controllers::*;
+    pub use crate::input::controllers::*;
 }
 pub mod core {
     pub mod app {
@@ -130,7 +130,7 @@ pub mod diagnostics {
 }
 #[cfg(windows)]
 pub mod dinput {
-    pub use crate::dinput::*;
+    pub use crate::input::dinput::*;
 }
 pub mod editor {
     pub use crate::editor::*;
@@ -140,23 +140,23 @@ pub mod env_file {
 }
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub mod evdev_buttons {
-    pub use crate::evdev_buttons::*;
+    pub use crate::input::evdev_buttons::*;
 }
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub mod evdev_ff {
-    pub use crate::evdev_ff::*;
+    pub use crate::input::evdev_ff::*;
 }
 pub mod frame_stats {
     pub use crate::frame_stats::*;
 }
 pub mod game_controller_menu {
-    pub use crate::game_controller_menu::*;
+    pub use crate::input::game_controller_menu::*;
 }
 pub mod headtrack {
-    pub use crate::headtrack::*;
+    pub use crate::input::headtrack::*;
 }
 pub mod hpattern {
-    pub use crate::hpattern::*;
+    pub use crate::input::hpattern::*;
 }
 pub mod hud {
     pub use crate::hud::domain::*;
@@ -202,20 +202,20 @@ pub mod humans {
 }
 pub mod input {
     pub mod keyboard {
-        pub use crate::input::keyboard::*;
+        pub use crate::input::implementation::keyboard::*;
     }
     pub mod mouse {
-        pub use crate::input::mouse::*;
+        pub use crate::input::implementation::mouse::*;
     }
     pub mod menus {
-        pub use crate::input::menus::*;
+        pub use crate::input::implementation::menus::*;
     }
 }
 pub mod journey {
     pub use crate::journey::*;
 }
 pub mod keys {
-    pub use crate::keys::*;
+    pub use crate::input::keys::*;
 }
 pub mod launcher {
     pub use crate::launcher::*;
@@ -244,7 +244,7 @@ pub mod line_times {
 }
 #[cfg(target_os = "macos")]
 pub mod mac_game_controller {
-    pub use crate::mac_game_controller::*;
+    pub use crate::input::mac_game_controller::*;
 }
 pub mod map_surface {
     pub use crate::map_surface::*;
@@ -438,7 +438,7 @@ pub mod tiles {
     pub use crate::tiles::*;
 }
 pub mod touch {
-    pub use crate::touch::*;
+    pub use crate::input::touch::*;
 }
 pub mod tr_fill {
     pub use crate::tr_fill::*;
@@ -529,7 +529,7 @@ pub mod ui {
         /// The Esc menu's column of a session with every line (tests).
         pub fn test_column(paused: bool) -> MenuFrame {
             crate::ui::domain::menu::menu_frame(
-                &crate::input::menus::GAME_MENU,
+                &crate::input::implementation::menus::GAME_MENU,
                 Some(0),
                 &|_| false,
                 "08:42".into(),

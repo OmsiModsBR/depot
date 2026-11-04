@@ -20,7 +20,7 @@ pub struct PagesView {
     /// The Controls page's game controllers tab (`omsi_launcher_ui::window::pads_tab`).
     pub pads: omsi_launcher_ui::window::PadsView,
     /// The devices that tab has taken (`super::pads::GamePads`).
-    pub pad_io: Option<crate::controllers::Devices>,
+    pub pad_io: Option<crate::input::controllers::Devices>,
     pub tt: omsi_launcher_ui::window::TimetableView,
     /// The Diagnostics page's tab and its integrity check (`integrity`).
     pub diag: super::diagnostics::DiagView,
@@ -106,7 +106,7 @@ pub fn controls(l: &mut Launcher, area: Rect) {
     let hwnd = l
         .window
         .as_deref()
-        .and_then(crate::controllers::window_handle);
+        .and_then(crate::input::controllers::window_handle);
     let root = l.state.config.root.clone();
     let mut pads = super::pads::GamePads {
         io: &mut l.pages.pad_io,

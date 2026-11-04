@@ -210,7 +210,7 @@ pub(crate) struct App {
     #[cfg(steam)]
     pub(crate) steam: Option<crate::steam::Steam>,
     /// Head tracking (Settings → head tracking), started with the first frame that wants it.
-    pub(crate) headtrack: Option<crate::headtrack::HeadTracker>,
+    pub(crate) headtrack: Option<crate::input::headtrack::HeadTracker>,
     /// When head tracking last failed to start (tried again a few seconds later).
     pub(crate) headtrack_failed: Option<std::time::Instant>,
     /// Last TrackIR/OpenTrack output scales, used to keep the displayed camera position
@@ -221,7 +221,7 @@ pub(crate) struct App {
     /// Last inversion state; inversion is a direction change, not a new camera origin.
     pub(crate) headtrack_invert_last: Option<[bool; 6]>,
     /// Steering wheels, pedals, joysticks and gamepads (`Inputs/gamectrler.cfg`).
-    pub(crate) controllers: Option<crate::controllers::Controllers>,
+    pub(crate) controllers: Option<crate::input::controllers::Controllers>,
     /// OMSI's mouse control (`toggel_mouse_ctrl`, O): the cursor's place steers (across) and
     /// works the pedals (up throttle, down brake).
     pub(crate) mouse_drive: bool,
@@ -388,7 +388,7 @@ pub(crate) struct App {
     /// for the CPU time a frame costs (the wall time says little on a busy machine).
     pub(crate) cpu_mark: Option<(f64, Instant, u32)>,
     /// The on-screen controls of a phone (see `touch.rs`).
-    pub(crate) touch: crate::touch::Touch,
+    pub(crate) touch: crate::input::touch::Touch,
 }
 
 /// A bus whose mirrors are frozen, and the seconds since they were first drawn.

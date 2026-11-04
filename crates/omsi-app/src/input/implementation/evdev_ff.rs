@@ -49,7 +49,7 @@ impl Wheel {
             let Ok(dev_name) = std::fs::read_to_string(format!("{sys}/name")) else {
                 continue;
             };
-            if !crate::controllers::names_match(dev_name.trim(), name) {
+            if !crate::input::controllers::names_match(dev_name.trim(), name) {
                 continue;
             }
             let caps =
@@ -189,7 +189,7 @@ fn constant_force_device(name: Option<&str>) -> bool {
                 let Ok(device_name) = std::fs::read_to_string(device.join("name")) else {
                     return false;
                 };
-                if !crate::controllers::names_match(device_name.trim(), name) {
+                if !crate::input::controllers::names_match(device_name.trim(), name) {
                     return false;
                 }
             }
