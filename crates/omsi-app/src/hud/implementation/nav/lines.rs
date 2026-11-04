@@ -1,4 +1,4 @@
-use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER};
+use crate::world::map_surface::{GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER};
 use omsi_ui::Color;
 
 /// The texts of the lines panel and of the "you are on" chip. A language without its own gets English.

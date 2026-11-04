@@ -5,7 +5,7 @@
 //! the route goes (`Navigator::arrow_spots`) and the objects are put into the world
 //! outside the tiles (`World::add_helper_object`), the ones behind the bus taken away.
 
-use crate::scene::{TileGpu, World};
+use crate::world::scene::{TileGpu, World};
 use glam::DVec3;
 use omsi_render::{Renderer, Scene};
 

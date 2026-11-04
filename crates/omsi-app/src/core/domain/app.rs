@@ -12,11 +12,11 @@ use crate::player::Player;
 use crate::puddles;
 use crate::radio;
 use crate::rain;
-use crate::scene::World;
 use crate::schedule;
 use crate::settings;
-use crate::tiles;
 use crate::traffic;
+use crate::world::scene::World;
+use crate::world::tiles;
 use omsi_render::{Camera, Renderer, Scene, SurfaceState};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -42,8 +42,8 @@ pub(crate) struct App {
     /// The game menu's vehicle chooser is open, with this vehicle chosen (index into
     /// `vehicle_list`), and the vehicles it offers (name, path).
     pub(crate) chooser: Option<usize>,
-    /// The object editor, while it is on (`crate::editor`).
-    pub(crate) editor: Option<crate::editor::Editor>,
+    /// The object editor, while it is on (`crate::world::editor`).
+    pub(crate) editor: Option<crate::world::editor::Editor>,
     pub(crate) vehicle_list: Vec<(String, String)>,
     /// The drop-down open over a row of the settings window, if one is.
     pub(crate) dropdown: Option<crate::hud::lists::Dropdown>,
@@ -268,7 +268,7 @@ pub(crate) struct App {
     pub(crate) editor_drag: bool,
     pub(crate) editor_sync_t: f32,
     /// Placing a vehicle with the mouse (the spawner): see `placing`.
-    pub(crate) placing: Option<crate::placing::Placing>,
+    pub(crate) placing: Option<crate::world::placing::Placing>,
     /// The chooser shows the administration's lines (label, action) instead of vehicles.
     pub(crate) admin_list: Option<Vec<(String, String)>>,
     /// Which of the game menu's lists `admin_list` holds (see `hud::lists`).

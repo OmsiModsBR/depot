@@ -133,7 +133,7 @@ pub mod dinput {
     pub use crate::input::dinput::*;
 }
 pub mod editor {
-    pub use crate::editor::*;
+    pub use crate::world::editor::*;
 }
 pub mod env_file {
     pub use crate::env_file::*;
@@ -247,7 +247,7 @@ pub mod mac_game_controller {
     pub use crate::input::mac_game_controller::*;
 }
 pub mod map_surface {
-    pub use crate::map_surface::*;
+    pub use crate::world::map_surface::*;
 }
 pub mod money {
     pub use crate::money::*;
@@ -301,10 +301,10 @@ pub mod rain {
     pub use crate::rain::*;
 }
 pub mod scene {
-    pub use crate::scene::*;
+    pub use crate::world::scene::*;
 
     pub mod ground_query {
-        pub use crate::scene::ground_query::*;
+        pub use crate::world::scene::ground_query::*;
     }
 }
 pub mod schedule {
@@ -435,7 +435,7 @@ pub mod spawn {
     pub use crate::spawn::load_coupled_parts;
 }
 pub mod tiles {
-    pub use crate::tiles::*;
+    pub use crate::world::tiles::*;
 }
 pub mod touch {
     pub use crate::input::touch::*;
@@ -617,5 +617,5 @@ pub mod weather_setup {
     pub use crate::weather_setup::*;
 }
 pub mod world_load {
-    pub use crate::world_load::*;
+    pub use crate::world::world_load::*;
 }

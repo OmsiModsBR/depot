@@ -94,12 +94,12 @@ fn read_map(look: &Look) -> Roads {
         .filter(|t| omsi_cfg::vfs::is_file(&t.2))
         .collect();
     let t0 = std::time::Instant::now();
-    let crate::scene::NavigationMap {
+    let crate::world::scene::NavigationMap {
         lanes,
         road_surfaces,
         places,
         signs,
-    } = crate::scene::navigation_map_of(&root, &tiles, &chrono);
+    } = crate::world::scene::navigation_map_of(&root, &tiles, &chrono);
     let (roads, net) = crate::hud::nav::city_roads(lanes, &road_surfaces);
     // the lanes the timetable can name, and the lanes of every spline behind them
     let mut by_path = HashMap::new();
@@ -200,6 +200,6 @@ fn read_map(look: &Look) -> Roads {
         objects,
         streets,
         // (after `configure_grid`: the package is put onto this game's grid)
-        surface: crate::map_surface::MapSurface::open(&map_dir).map(Arc::new),
+        surface: crate::world::map_surface::MapSurface::open(&map_dir).map(Arc::new),
     }
 }

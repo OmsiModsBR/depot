@@ -694,7 +694,9 @@ impl App {
             let hit = self
                 .cursor_ray_now()
                 .zip(self.world.clone())
-                .and_then(|((o, d, _), w)| crate::placing::ground_hit(&w, o, d.as_dvec3(), 2000.0));
+                .and_then(|((o, d, _), w)| {
+                    crate::world::placing::ground_hit(&w, o, d.as_dvec3(), 2000.0)
+                });
             match hit {
                 Some(at) => self.place_bus_at(at.truncate()),
                 None => {

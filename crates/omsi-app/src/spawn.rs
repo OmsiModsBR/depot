@@ -2,8 +2,8 @@
 
 use crate::core::cli::{parse_triggers, Args};
 use crate::player::Player;
-use crate::scene::{self, World};
 use crate::situation::{find_hof, start_clock};
+use crate::world::scene::{self, World};
 use anyhow::{Context, Result};
 use glam::{DVec3, Vec3};
 use omsi_render::{Renderer, Scene};
@@ -332,7 +332,7 @@ pub(crate) fn spawn_player(
                 // (a bridge over the place, a lower level) is not this one
                 if let Some(g) = world.stand_height(pos.x, pos.y, pos.z) {
                     vehicle.position.z = g;
-                } else if crate::scene::drive_probe(
+                } else if crate::world::scene::drive_probe(
                     &world.terrains,
                     &world.surfaces,
                     pos.x,

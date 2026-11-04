@@ -1,4 +1,4 @@
-//! The object editor's keys, mouse and wheel (the editor itself is `crate::editor`).
+//! The object editor's keys, mouse and wheel (the editor itself is `crate::world::editor`).
 
 use crate::core::app::App;
 use winit::keyboard::KeyCode;
@@ -21,7 +21,7 @@ impl App {
             ));
             return;
         }
-        let ed = crate::editor::Editor::default();
+        let ed = crate::world::editor::Editor::default();
         let msg = self
             .world
             .as_ref()
@@ -41,28 +41,28 @@ impl App {
             return false;
         };
         let (eye, fwd, yaw) = (cam.position, cam.forward(), cam.yaw as f64);
-        let Some(action) = crate::editor::action_for(code, shift, ctrl, yaw) else {
+        let Some(action) = crate::world::editor::action_for(code, shift, ctrl, yaw) else {
             return false;
         };
         let Some(world) = self.world.clone() else {
             return false;
         };
         let msg = match action {
-            crate::editor::Action::Leave => {
+            crate::world::editor::Action::Leave => {
                 self.toggle_editor();
                 return true;
             }
-            crate::editor::Action::Pick => {
+            crate::world::editor::Action::Pick => {
                 let ed = self.editor.as_mut().unwrap();
                 ed.pick(&world, eye, fwd);
                 ed.describe(&world)
             }
-            crate::editor::Action::NextPick => {
+            crate::world::editor::Action::NextPick => {
                 let ed = self.editor.as_mut().unwrap();
                 ed.next_pick();
                 ed.describe(&world)
             }
-            crate::editor::Action::Save => {
+            crate::world::editor::Action::Save => {
                 let content = crate::core::startup::content_dir();
                 let ed = self.editor.as_ref().unwrap();
                 match content.map(|c| ed.save(&world, &self.args.map, &c, &self.args.root)) {
@@ -81,10 +81,10 @@ impl App {
                     None => "Not saved: no content folder".to_string(),
                 }
             }
-            a @ (crate::editor::Action::Ground(_)
-            | crate::editor::Action::Flatten
-            | crate::editor::Action::Brush(_)) => {
-                let at = crate::editor::Editor::aim(&world, eye, fwd);
+            a @ (crate::world::editor::Action::Ground(_)
+            | crate::world::editor::Action::Flatten
+            | crate::world::editor::Action::Brush(_)) => {
+                let at = crate::world::editor::Editor::aim(&world, eye, fwd);
                 let (msg, tiles) = self.editor.as_mut().unwrap().ground(&world, at, &a);
                 if !tiles.is_empty() {
                     log::info!("map editor: ground of tiles {tiles:?} at {at:?}");
@@ -169,7 +169,7 @@ impl App {
             return;
         };
         let (o, d) = self.world_cursor_ray(cam, (s.config.width, s.config.height));
-        let Some(hit) = crate::placing::ground_hit(&world, o, d.as_dvec3(), 400.0) else {
+        let Some(hit) = crate::world::placing::ground_hit(&world, o, d.as_dvec3(), 400.0) else {
             return;
         };
         let (Some(r), Some(scene), Some(ed)) = (
@@ -192,9 +192,9 @@ impl App {
         let shift =
             self.keys.contains(&KeyCode::ShiftLeft) || self.keys.contains(&KeyCode::ShiftRight);
         let action = if shift {
-            crate::editor::Action::Move(glam::DVec3::Z * 0.1 * amount as f64)
+            crate::world::editor::Action::Move(glam::DVec3::Z * 0.1 * amount as f64)
         } else {
-            crate::editor::Action::Turn(5.0 * amount as f64)
+            crate::world::editor::Action::Turn(5.0 * amount as f64)
         };
         let (Some(world), Some(r), Some(scene)) = (
             self.world.clone(),

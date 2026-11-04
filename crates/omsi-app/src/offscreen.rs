@@ -19,7 +19,6 @@ use crate::player::Player;
 use crate::puddles;
 use crate::quit;
 use crate::rain;
-use crate::scene::{self, World};
 use crate::schedule;
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
@@ -31,7 +30,8 @@ use crate::weather_setup::{
     apply_weather, cloud_drift_at, initial_wetness, load_weather, precip_of, setup_sky,
     weather_lighting,
 };
-use crate::world_load::load_world;
+use crate::world::scene::{self, World};
+use crate::world::world_load::load_world;
 use anyhow::Result;
 use glam::{DVec3, Vec3};
 use omsi_geometry::util::{wrap_deg, wrap_deg_f32};
@@ -360,7 +360,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             while s < len {
                 let (p, _) = l.at(s);
                 if (p.truncate() - center.truncate()).length() < 400.0 {
-                    let g = crate::scene::drive_probe(
+                    let g = crate::world::scene::drive_probe(
                         &world.terrains,
                         &world.surfaces,
                         p.x,
@@ -390,7 +390,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         .iter()
                         .map(|&d| {
                             let w = p.truncate() + glam::DVec2::new(dir.y, -dir.x) * d;
-                            crate::scene::drive_probe(
+                            crate::world::scene::drive_probe(
                                 &world.terrains,
                                 &world.surfaces,
                                 w.x,
@@ -815,7 +815,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 // second, and at once when the ground is not under it any more)
                 if omsi_cfg::flags::AUTOPILOT.is_set() {
                     let at = player.vehicle.position;
-                    let under = crate::scene::drive_probe(
+                    let under = crate::world::scene::drive_probe(
                         &world.terrains,
                         &world.surfaces,
                         at.x,
@@ -2121,7 +2121,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         points += 1;
                         // (from the ground under the wheel, as the tyre probes: 0.8 of a
                         // half-metre radius over it)
-                        let g = crate::scene::drive_probe(
+                        let g = crate::world::scene::drive_probe(
                             &world.terrains,
                             &world.surfaces,
                             w.x,
@@ -2129,7 +2129,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                             p.z + 0.4,
                         );
                         let g = match g.below {
-                            Some(b) => crate::scene::drive_probe(
+                            Some(b) => crate::world::scene::drive_probe(
                                 &world.terrains,
                                 &world.surfaces,
                                 w.x,
@@ -2421,7 +2421,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             log::info!("road check: {naked} of {checked} points along the driving lanes have no road surface under them ({:.1}%)", naked as f32 / checked.max(1) as f32 * 100.0);
             // OMSI_CHECK_SPLINES: chained splines whose ends do not meet in height
             if omsi_cfg::flags::CHECK_SPLINES.is_set() {
-                let ends = crate::scene::SPLINE_ENDS.lock();
+                let ends = crate::world::scene::SPLINE_ENDS.lock();
                 let mut bad: Vec<(f64, String)> = Vec::new();
                 for (id, (a, b, prev, next, file)) in ends.iter() {
                     for (me, other) in [(*b, *next), (*a, *prev)] {
@@ -2847,7 +2847,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 nav.add_lanes(world.lanes.lock().clone());
             }
             nav.set_map(world.navigation_map());
-            nav.set_surface(crate::map_surface::MapSurface::open(&world.map_dir));
+            nav.set_surface(crate::world::map_surface::MapSurface::open(&world.map_dir));
             nav.set_chrono(world.chrono_dirs.read().clone());
             if let Ok(v) = omsi_cfg::env::var("OMSI_NAV_LINES") {
                 nav.debug_lines(&v);

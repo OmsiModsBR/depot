@@ -1,7 +1,7 @@
 //! Money on the cash desk: coins a passenger pays with (`[ticket_sale_money_point]`) and the
 //! change the driver hands out with `GiveChangeCoin` (`[ticket_sale_change_point]`).
 
-use crate::scene::World;
+use crate::world::scene::World;
 use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
 use omsi_content::Currency;
@@ -334,7 +334,7 @@ impl TicketBlocks {
             let data = mesh_from_o3d(&m);
             let id = renderer.add_mesh(scene, &data);
             let inst = renderer.add_instance(scene, id, DVec3::ZERO, Mat4::IDENTITY, mats);
-            let local = crate::tiles::attachment_matrix(&omsi_scenery::sco::Attachment {
+            let local = crate::world::tiles::attachment_matrix(&omsi_scenery::sco::Attachment {
                 ops: a.ops.clone(),
             });
             blocks.push((inst, local, n, data));

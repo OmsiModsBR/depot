@@ -3,8 +3,8 @@
 use crate::core::app::App;
 use crate::humans;
 use crate::player::Player;
-use crate::scene::World;
 use crate::traffic;
+use crate::world::scene::World;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};
 

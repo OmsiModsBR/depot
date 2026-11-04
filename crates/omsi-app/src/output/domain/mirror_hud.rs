@@ -1,7 +1,7 @@
 //! The copies of the bus's mirrors laid over the picture: the panels, how each lays its
 //! mirror's picture out, and the editor's state.
 
-use crate::scene::MirrorGlass;
+use crate::world::scene::MirrorGlass;
 use glam::Vec3;
 use omsi_render::TextureId;
 

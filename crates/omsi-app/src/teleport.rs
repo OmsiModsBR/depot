@@ -13,7 +13,8 @@ pub(crate) fn teleport(app: &mut App, at: glam::DVec3, heading: f64) {
     let ground = app.world.as_ref().and_then(|w| {
         let near = (at.z != 0.0)
             .then(|| {
-                crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below
+                crate::world::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5)
+                    .below
             })
             .flatten()
             .filter(|b| (at.z - b).abs() < 3.0);
@@ -52,7 +53,8 @@ pub(crate) fn guard_fall(app: &mut App, dt: f32) {
     // had fallen through the world and was put up there), and the highest there is
     let (under, ground) = match app.world.as_ref() {
         Some(w) => (
-            crate::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5).below,
+            crate::world::scene::drive_probe(&w.terrains, &w.surfaces, at.x, at.y, at.z + 1.5)
+                .below,
             w.walk_height(at.x, at.y),
         ),
         None => (None, None),

@@ -560,12 +560,16 @@ pub fn read_tile(path: &Path, chrono_dirs: &[PathBuf]) -> Option<Tile> {
                     // filled the new tunnel and the old water stood over the new road,
                     // #923, #925)
                     if patch.has_terrain
-                        && omsi_cfg::vfs::is_file(&crate::scene::tile_companion(&p, ".terrain"))
+                        && omsi_cfg::vfs::is_file(&crate::world::scene::tile_companion(
+                            &p, ".terrain",
+                        ))
                     {
                         tile.terrain_from = Some(p.clone());
                     }
                     if patch.has_water
-                        && omsi_cfg::vfs::is_file(&crate::scene::tile_companion(&p, ".water"))
+                        && omsi_cfg::vfs::is_file(&crate::world::scene::tile_companion(
+                            &p, ".water",
+                        ))
                     {
                         tile.water_from = Some(p.clone());
                         tile.has_water = true;
@@ -592,12 +596,12 @@ pub fn read_tile(path: &Path, chrono_dirs: &[PathBuf]) -> Option<Tile> {
 /// The `.terrain` file of a tile read by [`read_tile`] from `path`: an active chrono
 /// patch's own where it brings one (see `Tile::terrain_from`).
 pub fn terrain_file(tile: &Tile, path: &Path) -> PathBuf {
-    crate::scene::tile_companion(tile.terrain_from.as_deref().unwrap_or(path), ".terrain")
+    crate::world::scene::tile_companion(tile.terrain_from.as_deref().unwrap_or(path), ".terrain")
 }
 
 /// The `.water` file of a tile read by [`read_tile`] from `path` (see `Tile::water_from`).
 pub fn water_file(tile: &Tile, path: &Path) -> PathBuf {
-    crate::scene::tile_companion(tile.water_from.as_deref().unwrap_or(path), ".water")
+    crate::world::scene::tile_companion(tile.water_from.as_deref().unwrap_or(path), ".water")
 }
 
 /// The transform of `[new_attachment]` point `a` in its parent's frame (x right, y forward,
@@ -1020,8 +1024,8 @@ pub fn tile_row_objects(
 /// made is missing), statistics and seconds.
 type Batch = (
     Vec<(i32, i32)>,
-    Vec<crate::scene::Prepared>,
-    crate::scene::LoadStats,
+    Vec<crate::world::scene::Prepared>,
+    crate::world::scene::LoadStats,
     f64,
 );
 
@@ -1097,7 +1101,7 @@ pub fn initial_stall_due(
 /// frame, and the tiles beyond `unload_radius` of all of them are taken away again, so the
 /// memory a map needs is bounded by the view distance and not by the size of the map.
 pub struct Streamer {
-    world: std::sync::Arc<crate::scene::World>,
+    world: std::sync::Arc<crate::world::scene::World>,
     tiles: Vec<(i32, i32, PathBuf)>,
     /// Indices into `tiles`, including duplicate coordinates, in map-file order.
     tile_lookup: hashbrown::HashMap<(i32, i32), Vec<usize>>,
@@ -1106,14 +1110,14 @@ pub struct Streamer {
     tx: std::sync::mpsc::Sender<Batch>,
     rx: std::sync::mpsc::Receiver<Batch>,
     inflight: bool,
-    queue: std::collections::VecDeque<crate::scene::PendingUpload>,
+    queue: std::collections::VecDeque<crate::world::scene::PendingUpload>,
     /// Tiles in flight or waiting for upload.
     requested: hashbrown::HashSet<(i32, i32)>,
     /// Tiles that could not be made (a damaged file): not asked for again.
     failed: hashbrown::HashSet<(i32, i32)>,
     /// The first area around the start: (tiles, of which uploaded).
     initial: Option<(hashbrown::HashSet<(i32, i32)>, usize)>,
-    pub stats: crate::scene::LoadStats,
+    pub stats: crate::world::scene::LoadStats,
     pub loaded_total: usize,
     pub unloaded_total: usize,
     /// Seconds the worker spent preparing, and the longest upload work of one frame.
@@ -1142,7 +1146,7 @@ impl Streamer {
     /// Start streaming around `centers`: the tiles within `initial_radius` of them form the
     /// first area, which is what the loading screen waits for.
     pub fn new(
-        world: std::sync::Arc<crate::scene::World>,
+        world: std::sync::Arc<crate::world::scene::World>,
         centers: &[DVec3],
         load_radius: f64,
         initial_radius: f64,
@@ -1392,7 +1396,7 @@ impl Streamer {
                     );
                 }
             }
-            let mut stats = crate::scene::LoadStats::default();
+            let mut stats = crate::world::scene::LoadStats::default();
             self.world.commit_upload(p, &mut stats);
             self.stats.objects += stats.objects;
             self.stats.trees += stats.trees;

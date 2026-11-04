@@ -1,7 +1,7 @@
 //! Per-frame light sources: scenery coronas/map lights by night, vehicle lights from
 //! their script variables (`[light_enh_2]`, `[spotlight]` + `Spot_Select`, `[interiorlight]`).
 
-use crate::scene::{LightSwitch, World};
+use crate::world::scene::{LightSwitch, World};
 use glam::{DVec3, Vec3};
 use omsi_render::{Corona, LightMode, Lighting, PointLight, Scene};
 
@@ -146,7 +146,7 @@ pub fn vehicle_lights(
             None => v.body_rotation(),
         }
     };
-    coronas.extend(crate::scene::model_lights_faded(
+    coronas.extend(crate::world::scene::model_lights_faded(
         &ty.model,
         &mesh_xf,
         v.position,
@@ -164,7 +164,7 @@ pub fn vehicle_lights(
                 None => t.body_rotation(),
             }
         };
-        coronas.extend(crate::scene::model_lights_faded(
+        coronas.extend(crate::world::scene::model_lights_faded(
             &t.ty.model,
             &part_mesh_xf,
             t.position,
@@ -721,7 +721,7 @@ pub fn corona_texture_id(model_dir: &std::path::Path, name: &str) -> u16 {
         .and_then(|t| t.root.clone())
         .unwrap_or_default();
     let mut id = 0;
-    for d in crate::scene::texture_dirs(&root, model_dir) {
+    for d in crate::world::scene::texture_dirs(&root, model_dir) {
         let p = omsi_cfg::resolve_path(&d, name);
         if omsi_cfg::vfs::is_file(&p) {
             id = texture_id_of(p);

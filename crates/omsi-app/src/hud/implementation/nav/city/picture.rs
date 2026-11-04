@@ -99,7 +99,7 @@ impl Navigator {
         if let (true, Some(sf)) = (self.show_surface, self.surface.clone()) {
             // (the contour lines are fainter the wider the view: the strength is part of the key)
             let strength = if self.show_contours {
-                crate::map_surface::contour_strength(self.city.mpp)
+                crate::world::map_surface::contour_strength(self.city.mpp)
             } else {
                 0.0
             };
@@ -599,18 +599,18 @@ impl Navigator {
                     // (asking starts the worker once; until it is done the lines have no heights. This also covers a
                     // terrain view that was already on when the map opened)
                     sf.request_contour_marks();
-                    let weight = |m: &crate::map_surface::ContourMark| {
+                    let weight = |m: &crate::world::map_surface::ContourMark| {
                         if m.index {
                             Weight::Medium
                         } else {
                             Weight::Regular
                         }
                     };
-                    let label_box = |p: Vec2, m: &crate::map_surface::ContourMark| {
+                    let label_box = |p: Vec2, m: &crate::world::map_surface::ContourMark| {
                         let tw = self.fonts.width(&format!("{} m", m.height), px, weight(m));
                         Rect::new(p.x - tw * 0.5, p.y - px * 0.7, tw, px * 1.3)
                     };
-                    let marks = crate::map_surface::marks_to_write(
+                    let marks = crate::world::map_surface::marks_to_write(
                         sf.contour_marks().unwrap_or(&[]),
                         self.city.mpp,
                         s,

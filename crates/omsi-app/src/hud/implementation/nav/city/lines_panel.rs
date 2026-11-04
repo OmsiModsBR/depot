@@ -7,7 +7,7 @@ use super::super::lines::{
 };
 use super::super::{LinesHit, Navigator};
 use super::*;
-use crate::map_surface::{GROUP_BRT, GROUP_EXPRESS};
+use crate::world::map_surface::{GROUP_BRT, GROUP_EXPRESS};
 use glam::{DVec3, Vec2};
 use hashbrown::HashMap;
 use omsi_ui::paint::Align;
@@ -371,7 +371,7 @@ impl Navigator {
             ty += 30.0 * s;
         }
         // the groups of the buses
-        if self.city.lines.modal == crate::map_surface::MODAL_BUS {
+        if self.city.lines.modal == crate::world::map_surface::MODAL_BUS {
             let mut tx = x0 + pad;
             for (k, label) in [
                 (0u8, lt.all),
@@ -521,7 +521,7 @@ impl Navigator {
             .filter(|&i| {
                 sf.line_on(i, self.date)
                     && sf.lines()[i].modal == modal
-                    && (modal != crate::map_surface::MODAL_BUS
+                    && (modal != crate::world::map_surface::MODAL_BUS
                         || filter == 0
                         || sf.lines()[i].group == filter)
             })
@@ -542,7 +542,7 @@ impl Navigator {
         &self,
         sheet: &crate::line_times::Sheet,
         i: usize,
-        sf: &crate::map_surface::MapSurface,
+        sf: &crate::world::map_surface::MapSurface,
     ) -> usize {
         let order = sheet.order(
             sf.lines()[i]
@@ -561,7 +561,7 @@ impl Navigator {
     fn sheet_panel(
         &mut self,
         ui: &mut Painter,
-        sf: &crate::map_surface::MapSurface,
+        sf: &crate::world::map_surface::MapSurface,
         timetable: &crate::line_times::LineTimes,
         i: usize,
         area: Rect,
@@ -806,7 +806,7 @@ impl Navigator {
     pub(super) fn sheet_labels(
         &mut self,
         ui: &mut Painter,
-        sf: &crate::map_surface::MapSurface,
+        sf: &crate::world::map_surface::MapSurface,
         i: usize,
         s: f32,
         to_screen: &dyn Fn(DVec3) -> Vec2,

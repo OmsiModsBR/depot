@@ -19,7 +19,7 @@
 //! Shift), F flattens it to the height at the middle, [ and ] make the brush smaller and
 //! larger.
 
-use crate::scene::{ObjectEdit, World};
+use crate::world::scene::{ObjectEdit, World};
 use glam::{DVec3, Vec3};
 use hashbrown::HashMap;
 use std::path::{Path, PathBuf};
@@ -37,7 +37,7 @@ pub struct Added {
     pub moved: DVec3,
     pub turned: f64,
     pub deleted: bool,
-    gpu: Option<crate::scene::TileGpu>,
+    gpu: Option<crate::world::scene::TileGpu>,
 }
 
 #[derive(Default)]
@@ -414,7 +414,7 @@ impl Editor {
                     let Some(src) = world.tile_source(tx, ty) else {
                         continue;
                     };
-                    let file = crate::scene::tile_companion(&src, ".terrain");
+                    let file = crate::world::scene::tile_companion(&src, ".terrain");
                     let t = match load_ground(&file) {
                         Ok(t) => t,
                         // a file that cannot be read is not "no ground": leave the tile
