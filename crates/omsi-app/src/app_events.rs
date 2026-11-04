@@ -2832,6 +2832,14 @@ impl ApplicationHandler for App {
                             .map(|t| (t.text.clone(), t.raw))
                     }
                 });
+                // (the city map's buttons, while it is open, say what they do the same way: the
+                // map lies over the bar)
+                let map_tip = self
+                    .navigator
+                    .as_ref()
+                    .and_then(|n| n.map_tip())
+                    .map(|t| (t.to_string(), false));
+                let info_tip = if map_tip.is_some() { map_tip } else { info_tip };
                 // (the second counts again when the mouse moves to another item)
                 self.info_chev_hover = match (&info_tip, &self.info_tip_shown) {
                     (Some((t, _)), Some(was)) if t == was => self.info_chev_hover + dt,
@@ -2867,6 +2875,11 @@ impl ApplicationHandler for App {
                     let names = describe::names(&self.args.root, &self.settings.language);
                     // next to the cursor (`ui`), when the setting asks for it
                     let tooltip = self.hover.as_ref().map(|h| names.control(h));
+                    let map_tip_due = self.info_chev_hover >= 1.0
+                        && self
+                            .navigator
+                            .as_ref()
+                            .is_some_and(|n| n.map_tip().is_some());
                     let (tooltip, tooltip_raw) = match info_tip {
                         Some((t, raw)) if self.info_chev_hover >= 1.0 => (Some(t), raw),
                         _ => (tooltip, false),
@@ -3166,10 +3179,11 @@ impl ApplicationHandler for App {
                                     false
                                 }
                             },
+                            // (over the open city map only its buttons' names)
                             tooltip: tooltip.filter(|_| {
                                 self.settings.tooltips
                                     && !self.dragging
-                                    && !covered
+                                    && (!covered || (map_open && map_tip_due))
                                     && self.game_menu.is_none()
                             }),
                             tooltip_raw,

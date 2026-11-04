@@ -2,8 +2,8 @@
 //! the stops, the header, the cards and the buttons, drawn into the window's texture.
 
 use super::super::draw::{
-    arrow, focus_marker, player_triangle, rects_overlap, rot, spaced_markers, stop_label_rect,
-    traffic_kind, vehicle_icon, DRIVEN, STREET, TEXT, TEXT_DIM,
+    arrow, focus_marker, player_bus, player_triangle, rects_overlap, rot, spaced_markers,
+    stop_label_rect, traffic_kind, vehicle_icon, DRIVEN, STREET, TEXT, TEXT_DIM,
 };
 use super::super::geometry::{road_colors, road_geometry, simplify};
 use super::super::lines::{line_color, lines_text};
@@ -386,7 +386,8 @@ impl Navigator {
             .and_then(|sf| sf.player_style(f.line.as_deref()))
         {
             Some((fill, _)) => fill,
-            None => TEXT,
+            // (the bus in the accent, as it is drawn)
+            None => omsi_ui::theme::accent(),
         };
         let legend = (!lines_open).then(|| self.legend_layout(&lt, you, w, h, s));
         // street names along their roads, where there is room (stops' names go first)
@@ -882,13 +883,11 @@ impl Navigator {
             );
         }
         if let Some((at, heading)) = self.bus_marker.filter(|_| f.focus.is_some()) {
-            arrow(
+            player_bus(
                 &mut ui,
                 to_screen(at),
                 (heading.to_radians() - phi) as f32,
-                8.0 * s,
-                1.3,
-                Color::rgba(10, 10, 10, 0.9),
+                8.5 * s,
                 TEXT_DIM,
             );
         }
@@ -915,14 +914,13 @@ impl Navigator {
                 ring,
             );
         } else {
-            arrow(
+            // (the bus in the interface's accent, never an arrow like the mouse's)
+            player_bus(
                 &mut ui,
                 to_screen(f.bus),
                 (f.heading.to_radians() - phi) as f32,
-                10.0 * s,
-                1.3,
-                Color::rgba(10, 10, 10, 0.9),
-                TEXT,
+                11.0 * s,
+                omsi_ui::theme::accent(),
             );
         }
         // the map's icons: terminals, BRT stations, the garage
@@ -947,13 +945,21 @@ impl Navigator {
         let bs = 32.0 * s;
         let by = head.y + (head.h - bs) * 0.5;
         let mut bx = w - pad - bs;
-        for (icon, id) in [("close", 3u8), ("remove", 2), ("add", 1)] {
+        // (the mouse over the window, in the picture's pixels: a button under it lights)
+        let pointer = self
+            .city
+            .hover
+            .map(|(x, y)| Vec2::new(x - self.city.rect[0], y - self.city.rect[1]));
+        let hot = |r: &Rect| pointer.is_some_and(|p| r.contains(p));
+        // close, then the zoom pair as one group, all from the HUD's icon family
+        for (icon, id) in [("hud-close", 3u8), ("hud-minus", 2), ("hud-plus", 1)] {
             let r = Rect::new(bx, by, bs, bs);
-            let ink = outlined(&mut ui, r, s, false);
-            ui.icon(&mut self.atlas, icon, r.center(), 18.0 * s, ink);
+            let ink = outlined(&mut ui, r, s, false, hot(&r));
+            ui.icon(&mut self.atlas, icon, r.center(), 16.0 * s, ink);
             self.city.buttons.push((r, id));
-            bx -= bs + 8.0 * s;
+            bx -= bs + if id == 3 { 12.0 } else { 4.0 } * s;
         }
+        bx -= 8.0 * s;
         // following the bus, the lines (only where the map's package has bus lines) and the
         // terrain view (only where it carries contour lines): lit in the accent while on
         let has_contours =
@@ -968,37 +974,19 @@ impl Navigator {
             }
             let bw = self.fonts.width(label, 13.0 * s, Weight::Bold) + 44.0 * s;
             let r = Rect::new(bx + bs - bw, by, bw, bs);
-            let ink = outlined(&mut ui, r, s, on);
+            let ink = outlined(&mut ui, r, s, on, hot(&r));
             let (cx, cy) = (r.x + 17.0 * s, r.center().y);
-            if id == 5 {
-                // (a mountain pictogram)
-                let cy = cy + 6.0 * s;
-                ui.tri(
-                    Vec2::new(cx - 10.0 * s, cy),
-                    Vec2::new(cx - 1.0 * s, cy - 12.0 * s),
-                    Vec2::new(cx + 6.0 * s, cy),
-                    ink,
-                    ink,
-                    ink,
-                );
-                let back = ink.alpha(0.6);
-                ui.tri(
-                    Vec2::new(cx - 2.0 * s, cy),
-                    Vec2::new(cx + 6.0 * s, cy - 8.0 * s),
-                    Vec2::new(cx + 13.0 * s, cy),
-                    back,
-                    back,
-                    back,
-                );
-            } else {
-                ui.icon(
-                    &mut self.atlas,
-                    if id == 0 { "my_location" } else { "route" },
-                    Vec2::new(cx, cy),
-                    16.0 * s,
-                    ink,
-                );
-            }
+            ui.icon(
+                &mut self.atlas,
+                match id {
+                    0 => "hud-follow",
+                    4 => "hud-lines",
+                    _ => "hud-terrain",
+                },
+                Vec2::new(cx, cy),
+                16.0 * s,
+                ink,
+            );
             ui.text_in(
                 &mut self.atlas,
                 &self.fonts,
