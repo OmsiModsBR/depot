@@ -1,3 +1,5 @@
+mod prerender;
+
 use openomsi_game::testing::showroom::*;
 use std::sync::mpsc::channel;
 use std::time::Duration;

@@ -4,4 +4,5 @@ pub use super::super::domain::look::Look;
 pub use super::super::domain::shape::Shape;
 pub use super::super::implementation::helper::*;
 pub use super::super::implementation::kept::*;
+pub use super::super::implementation::prerender::{shape as prerender_shape, Prerender};
 pub use super::super::implementation::preview::*;

@@ -32,7 +32,6 @@ pub mod mobile;
 mod pads;
 pub(crate) mod pages;
 pub mod phone;
-pub(crate) mod prerender;
 mod stage;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -190,7 +189,7 @@ pub struct Launcher {
     thumbs: thumbs::Thumbs,
     /// The pictures of the library's vehicles drawn ahead of time, and how many were made
     /// when the small pictures were last asked for again (`paint_thumbs`).
-    prerender: prerender::Prerender,
+    prerender: showroom::Prerender,
     prerender_seen: usize,
     /// The Scene background's picture (Settings > Interface > Background).
     backdrop: backdrop::Backdrop,
@@ -305,7 +304,7 @@ impl Launcher {
             preview_tex: None,
             map_pic: MapPicture::default(),
             thumbs: thumbs::Thumbs::default(),
-            prerender: prerender::Prerender::default(),
+            prerender: showroom::Prerender::default(),
             prerender_seen: 0,
             backdrop: backdrop::Backdrop::default(),
             start: window::StartView::default(),
@@ -2160,7 +2159,7 @@ impl Launcher {
     /// for that paint (`prerender`), made smaller on the thumbnails' thread. A paint with no
     /// picture yet shows its initial, and its picture comes in once it has been drawn.
     fn paint_thumbs(&mut self) {
-        let shape = prerender::shape();
+        let shape = showroom::prerender_shape();
         let root = std::path::PathBuf::from(&self.state.config.root);
         let looks: Vec<showroom::Look> = self
             .vehicles
