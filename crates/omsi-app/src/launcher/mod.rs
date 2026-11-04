@@ -1824,7 +1824,7 @@ impl Launcher {
             } else if self.browser.is_none() && diag {
                 diagnostics::dialog(self);
             } else {
-                self.draw_browser();
+                window::browser(frame!(self), &mut self.browser, &mut self.pages.setup);
             }
             self.ui.pop_fade();
         }
