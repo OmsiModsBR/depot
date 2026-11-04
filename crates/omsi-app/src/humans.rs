@@ -38,9 +38,9 @@
 //! neighbourhood changed and nobody uses it, a stop whose tile went takes its people with
 //! it, and nobody stands or walks where the ground is not loaded.
 
-use crate::ambience;
 use crate::situation::SavedRider;
 use crate::traffic::Traffic;
+use crate::weather::ambience;
 use crate::world::scene::World;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};

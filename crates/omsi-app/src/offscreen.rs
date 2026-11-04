@@ -16,9 +16,7 @@ use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
 use crate::player::Player;
-use crate::puddles;
 use crate::quit;
-use crate::rain;
 use crate::schedule;
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
@@ -26,7 +24,9 @@ use crate::situation::{build_situation, start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
-use crate::weather_setup::{
+use crate::weather::puddles;
+use crate::weather::rain;
+use crate::weather::weather_setup::{
     apply_weather, cloud_drift_at, initial_wetness, load_weather, precip_of, setup_sky,
     weather_lighting,
 };
@@ -2578,7 +2578,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     world.set_lamps(&renderer, &mut scene, daylight.lamps_on);
     world.update_night_modes(&renderer, &mut scene, &clock, daylight.brightness);
     // (the physical model at the map's own place and the picture's moment)
-    let weather = crate::weather_model::refresh(&clock).unwrap_or(weather);
+    let weather = crate::weather::weather_model::refresh(&clock).unwrap_or(weather);
     // a run starts with the roads already in the state this weather would leave them
     let mut wetness = initial_wetness(&weather);
     if let Some(v) = omsi_cfg::flags::WETNESS.number() {
@@ -2637,9 +2637,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             it.next().unwrap_or(30.0) as usize,
             it.next().unwrap_or(1.0) > 0.5,
         );
-        let mut ci = crate::condensation::inputs_for(&p.vehicle, &weather, people, 0);
+        let mut ci = crate::weather::condensation::inputs_for(&p.vehicle, &weather, people, 0);
         ci.engine = engine;
-        let mut cabin = crate::condensation::CabinAir::new();
+        let mut cabin = crate::weather::condensation::CabinAir::new();
         for _ in 0..(minutes * 60.0) as usize {
             cabin.step(1.0, &ci);
         }

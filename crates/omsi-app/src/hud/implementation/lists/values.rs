@@ -16,16 +16,17 @@ pub(in crate::hud) fn cloud_index(kind: &str) -> Option<usize> {
 }
 
 /// Set the kind of precipitation (an index of `PRECIP_KINDS`) of the weather set by hand.
-pub(in crate::hud) fn custom_state(app: &App) -> crate::weather_setup::CustomWeather {
-    if let Some(mut c) = crate::weather_setup::custom_weather(app.args.weather.as_deref()) {
+pub(in crate::hud) fn custom_state(app: &App) -> crate::weather::weather_setup::CustomWeather {
+    if let Some(mut c) = crate::weather::weather_setup::custom_weather(app.args.weather.as_deref())
+    {
         // Wetness keeps evolving while driving; never restore an old serialized value just
         // because another custom field (brightness, humidity, etc.) was edited.
         c.road_wetness = app.wetness;
         return c;
     }
     match app.weather.as_ref() {
-        Some(w) => crate::weather_setup::CustomWeather::from_weather(w, 1.0, app.wetness),
-        None => crate::weather_setup::CustomWeather::default(),
+        Some(w) => crate::weather::weather_setup::CustomWeather::from_weather(w, 1.0, app.wetness),
+        None => crate::weather::weather_setup::CustomWeather::default(),
     }
 }
 

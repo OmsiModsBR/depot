@@ -69,7 +69,7 @@ pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> 
             let mut v = vec![(tr("Automatic (nearest the map)"), "metar_src ".to_string())];
             let own = &app.settings.metar_station;
             current = Some(0);
-            for (i, (code, label)) in crate::weather_setup::metar_airports(&app.args.root)
+            for (i, (code, label)) in crate::weather::weather_setup::metar_airports(&app.args.root)
                 .into_iter()
                 .enumerate()
             {
@@ -258,7 +258,7 @@ pub(crate) fn weather_name(app: &App) -> String {
         .args
         .weather
         .as_deref()
-        .is_some_and(|p| p.starts_with(crate::weather_setup::REPORT))
+        .is_some_and(|p| p.starts_with(crate::weather::weather_setup::REPORT))
     {
         if let Some(n) = app
             .weather

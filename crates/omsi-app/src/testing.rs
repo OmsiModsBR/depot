@@ -71,7 +71,7 @@ pub mod bus_service {
     pub use crate::bus_service::*;
 }
 pub mod condensation {
-    pub use crate::condensation::*;
+    pub use crate::weather::condensation::*;
 
     /// The cabin's air as a test reads it.
     pub trait CabinAirInternals {
@@ -284,7 +284,7 @@ pub mod player {
     pub use crate::player::*;
 }
 pub mod puddles {
-    pub use crate::puddles::*;
+    pub use crate::weather::puddles::*;
 }
 pub mod quit {
     pub use crate::quit::*;
@@ -298,7 +298,7 @@ pub mod radio {
     pub use crate::radio::*;
 }
 pub mod rain {
-    pub use crate::rain::*;
+    pub use crate::weather::rain::*;
 }
 pub mod scene {
     pub use crate::world::scene::*;
@@ -608,13 +608,13 @@ pub mod ui {
     }
 }
 pub mod weather_cycle {
-    pub use crate::weather_cycle::*;
+    pub use crate::weather::weather_cycle::*;
 }
 pub mod weather_model {
-    pub use crate::weather_model::*;
+    pub use crate::weather::weather_model::*;
 }
 pub mod weather_setup {
-    pub use crate::weather_setup::*;
+    pub use crate::weather::weather_setup::*;
 }
 pub mod world_load {
     pub use crate::world::world_load::*;

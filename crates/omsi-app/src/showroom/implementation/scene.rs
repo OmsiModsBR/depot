@@ -655,7 +655,7 @@ fn lighting_for(args: &Args, weather: &omsi_content::weather::Weather) -> Lighti
     let mut l = weather_lighting(
         &daylight,
         weather,
-        crate::weather_setup::cloud_drift_at(weather, clock.time),
+        crate::weather::weather_setup::cloud_drift_at(weather, clock.time),
         0.0,
         true,
     );

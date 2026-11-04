@@ -437,7 +437,7 @@ impl Spray {
     }
 
     /// One frame of the vehicles near the camera: their tyres and bodies (see
-    /// [`vehicle_tyres`], [`rain::vehicle_boxes`](crate::rain::vehicle_boxes)), then
+    /// [`vehicle_tyres`], [`rain::vehicle_boxes`](crate::weather::rain::vehicle_boxes)), then
     /// [`Spray::update`].
     pub fn frame(
         &mut self,
@@ -455,7 +455,7 @@ impl Spray {
                 continue;
             }
             vehicle_tyres(v, key, &mut tyres);
-            bodies.extend(crate::rain::vehicle_boxes(v).into_iter().map(
+            bodies.extend(crate::weather::rain::vehicle_boxes(v).into_iter().map(
                 |(origin, heading, bb)| Body {
                     origin,
                     heading,

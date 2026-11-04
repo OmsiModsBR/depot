@@ -4,7 +4,6 @@
 mod about;
 mod app_events;
 mod bus_service;
-mod condensation;
 mod core;
 mod crate_root;
 mod describe;
@@ -23,11 +22,9 @@ mod money;
 mod on_foot;
 mod output;
 mod player;
-mod puddles;
 #[cfg(unix)]
 mod quit;
 mod radio;
-mod rain;
 mod schedule;
 mod schedule_paper;
 mod screenshot_name;
@@ -39,7 +36,5 @@ mod tr_fill;
 mod traffic;
 mod tutorial;
 mod ui;
-mod weather_cycle;
-mod weather_model;
-mod weather_setup;
+mod weather;
 mod world;

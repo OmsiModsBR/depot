@@ -15,13 +15,13 @@ pub(crate) use omsi_launcher_lib::weather::{custom_weather, CustomWeather};
 /// Weather from `--weather`, else the clear-sky default.
 pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
     // no weather chosen, or `natural`: the physical model (weather_model.rs)
-    if crate::weather_model::is_natural(args.weather.as_deref()) {
-        let w = crate::weather_model::start(&crate::situation::start_clock(args));
+    if crate::weather::weather_model::is_natural(args.weather.as_deref()) {
+        let w = crate::weather::weather_model::start(&crate::situation::start_clock(args));
         scene::SNOW_WEATHER.store(w.snow, std::sync::atomic::Ordering::Relaxed);
         omsi_sim::host::set_ambient_weather(w.temp.0, w.temp.1);
         return w;
     }
-    crate::weather_model::stop();
+    crate::weather::weather_model::stop();
     let rel = chosen_weather(args);
     if let Some(w) = CustomWeather::parse(&rel).map(|c| c.to_weather()) {
         log::info!(
@@ -76,7 +76,7 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
 fn chosen_weather(args: &Args) -> String {
     args.weather
         .clone()
-        .filter(|w| !crate::weather_cycle::is_cycle(Some(w)))
+        .filter(|w| !crate::weather::weather_cycle::is_cycle(Some(w)))
         .unwrap_or_else(|| "Weather/#CAVOK.owt".into())
 }
 
@@ -106,8 +106,8 @@ fn read_weather(
 /// of the textures asks for it before the session's weather is loaded, and for another
 /// player's weather too.
 pub fn weather_snow(args: &Args) -> (bool, bool) {
-    let w = if crate::weather_model::is_natural(args.weather.as_deref()) {
-        crate::weather_model::WeatherModel::new(
+    let w = if crate::weather::weather_model::is_natural(args.weather.as_deref()) {
+        crate::weather::weather_model::WeatherModel::new(
             &crate::situation::start_clock(args),
             &omsi_sim::daylight::place(),
         )
@@ -431,7 +431,7 @@ pub(crate) fn weather_lighting(
     lighting.cloud_density = density;
     lighting.cloud_offset = offset;
     lighting.cloud_height = w.clouds.1;
-    let model_sky = *crate::weather_model::CURRENT
+    let model_sky = *crate::weather::weather_model::CURRENT
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let (kind, rate) = precip_of(w);

@@ -3,7 +3,7 @@
 use crate::output::camera_arm;
 use crate::output::{ray_may_hit, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::schedule;
-use crate::weather_setup::debug_sound_every;
+use crate::weather::weather_setup::debug_sound_every;
 use crate::world::scene;
 use glam::{DVec3, Vec3};
 use omsi_render::{Camera, Renderer, Scene};

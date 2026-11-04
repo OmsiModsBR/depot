@@ -1,7 +1,6 @@
 //! The window's game at work: `App`'s per-frame and loading procedures, the streamed map's
 //! start, the missing content's notice, the cockpit camera's glide and the stand-in picture.
 
-use crate::ambience;
 use crate::career;
 use crate::core::cli::{parse_time, Args};
 use crate::core::domain::app::{wrap_deg, App};
@@ -18,7 +17,8 @@ use crate::settings;
 use crate::situation::{start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
 use crate::traffic;
-use crate::weather_setup::{initial_wetness, load_weather, setup_sky};
+use crate::weather::ambience;
+use crate::weather::weather_setup::{initial_wetness, load_weather, setup_sky};
 use crate::world::scene::World;
 use crate::world::tiles;
 use crate::world::world_load::{load_world, open_world, spawn_point};
@@ -310,20 +310,20 @@ impl App {
         let mut scene = renderer.new_scene();
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
-        if crate::weather_cycle::is_cycle(self.args.weather.as_deref()) {
+        if crate::weather::weather_cycle::is_cycle(self.args.weather.as_deref()) {
             let seed = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos() as u64)
                 .unwrap_or(7);
-            let mut c = crate::weather_cycle::Cycle::new(seed);
+            let mut c = crate::weather::weather_cycle::Cycle::new(seed);
             let month = start_clock(&self.args).day_month().1;
-            let all = crate::weather_cycle::installed();
+            let all = crate::weather::weather_cycle::installed();
             let clear = omsi_content::weather::Weather {
                 fog: (50000.0, 1.0),
                 ..Default::default()
             };
             let r = c.rand();
-            self.args.weather = crate::weather_cycle::pick(&all, &clear, "", month, r);
+            self.args.weather = crate::weather::weather_cycle::pick(&all, &clear, "", month, r);
             log::info!("weather cycle: starting with {:?}", self.args.weather);
             self.weather_cycle = Some(c);
         }
