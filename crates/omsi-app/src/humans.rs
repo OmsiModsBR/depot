@@ -38,8 +38,8 @@
 //! neighbourhood changed and nobody uses it, a stop whose tile went takes its people with
 //! it, and nobody stands or walks where the ground is not loaded.
 
+use crate::gameplay::traffic::Traffic;
 use crate::situation::SavedRider;
-use crate::traffic::Traffic;
 use crate::weather::ambience;
 use crate::world::scene::World;
 use glam::{DVec2, DVec3, Mat4, Vec3};
@@ -3245,7 +3245,7 @@ impl Humans {
         let crowd = (lanes.len() as f32 / 120.0).clamp(0.6, 3.0);
         // (walking the pavements only while fewer than half the pool do, and never
         // past the pool)
-        let target = crate::traffic_density::walker_target(
+        let target = crate::gameplay::traffic_density::walker_target(
             self.pedestrians,
             crowd,
             self.people_curve,

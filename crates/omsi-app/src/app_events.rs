@@ -71,6 +71,8 @@ use crate::core::app::{App, FrozenMirrors};
 use crate::core::startup::process_cpu_seconds;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::gameplay::traffic;
+use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::humans;
@@ -78,8 +80,6 @@ use crate::lights;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
 use crate::quit;
-use crate::traffic;
-use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather::puddles;
 use crate::weather::weather_setup::{
     apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
@@ -775,7 +775,7 @@ impl ApplicationHandler for App {
                         t.player_blinker = self
                             .player
                             .as_ref()
-                            .map(|p| crate::traffic_link::indicator(&p.vehicle))
+                            .map(|p| crate::gameplay::traffic_link::indicator(&p.vehicle))
                             .unwrap_or(0);
                         t.tick(dt, self.player.as_ref().map(|p| player_outline(p)));
                         if let Some(w) = self.world.as_ref() {
@@ -1273,7 +1273,7 @@ impl ApplicationHandler for App {
                             q.vehicle.update(dt);
                         }
                         q.sync_transforms(r, scene, false);
-                        let f = crate::traffic_link::vehicle_box(
+                        let f = crate::gameplay::traffic_link::vehicle_box(
                             &q.vehicle,
                             [2.5, 11.5, 3.0, 0.0, 0.0, 1.5],
                         );

@@ -1,7 +1,7 @@
 //! Scheduled AI buses: the map's timetable lines (`TTData`) put buses on their tracks at the
 //! tour departure times; they follow the track lanes and stop at the trip's stations.
 
-use crate::traffic::Traffic;
+use crate::gameplay::traffic::Traffic;
 use crate::world::scene::World;
 use hashbrown::{HashMap, HashSet};
 use omsi_render::{Renderer, Scene};
@@ -1437,7 +1437,7 @@ impl Schedule {
         world: &World,
         renderer: &Renderer,
         scene: &mut Scene,
-        traffic: Option<&mut crate::traffic::Traffic>,
+        traffic: Option<&mut crate::gameplay::traffic::Traffic>,
         day_time: f64,
     ) {
         let t0 = std::time::Instant::now();
@@ -1457,11 +1457,11 @@ impl Schedule {
             if !seen.insert(ty.def.path.clone()) {
                 continue;
             }
-            crate::traffic::warm_up(world, ty, hof.clone());
+            crate::gameplay::traffic::warm_up(world, ty, hof.clone());
             t.prime_pull_out_room(ty, true);
             for (tr, _) in t.trailer_chain(ty) {
                 if seen.insert(tr.def.path.clone()) {
-                    crate::traffic::warm_up(world, &tr, None);
+                    crate::gameplay::traffic::warm_up(world, &tr, None);
                 }
             }
         }
@@ -1469,7 +1469,7 @@ impl Schedule {
         for ty in &pooled {
             if seen.insert(ty.def.path.clone()) {
                 let hof = self.pool_hof(ty.def.dir(), world);
-                crate::traffic::warm_up(world, ty, hof);
+                crate::gameplay::traffic::warm_up(world, ty, hof);
             }
         }
         // what was read ahead and not used (textures of variants the AI never shows)
@@ -1608,8 +1608,10 @@ impl Schedule {
                 .or_else(|| (ty.def.default_paint.trim() == "<nouse>").then_some(0))
         } else {
             Some(
-                ((h >> 42) % ty.paint_schemes.len().min(crate::traffic::AI_SCHEMES) as u64)
-                    as usize,
+                ((h >> 42)
+                    % ty.paint_schemes
+                        .len()
+                        .min(crate::gameplay::traffic::AI_SCHEMES) as u64) as usize,
             )
         };
         Some(Choice {

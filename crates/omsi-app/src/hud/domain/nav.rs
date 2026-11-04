@@ -9,7 +9,7 @@ use omsi_render::TextureId;
 use omsi_sim::traffic::Network;
 use omsi_ui::{Atlas, Color, Fonts, Gpu, Rect};
 
-use crate::traffic::Traffic;
+use crate::gameplay::traffic::Traffic;
 
 // --- colours (sRGB) -------------------------------------------------------------------
 

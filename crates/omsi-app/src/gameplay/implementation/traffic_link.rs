@@ -1,9 +1,9 @@
 //! What the traffic is told about the player and the LAN buses.
 
 use crate::core::app::App;
+use crate::gameplay::traffic;
 use crate::humans;
 use crate::player::Player;
-use crate::traffic;
 use crate::world::scene::World;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};

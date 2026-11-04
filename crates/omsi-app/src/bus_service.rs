@@ -419,7 +419,7 @@ impl BusService {
         self.stops.pop_front();
         self.near_d = f32::INFINITY;
         self.serve = None;
-        crate::traffic::ibis_to_next_stop(vehicle, self.stops.len());
+        crate::gameplay::traffic::ibis_to_next_stop(vehicle, self.stops.len());
         let air = ctx.net.lanes[st.lane].kind == LaneKind::Air;
         if self.stops.is_empty() && !self.route_open && !air {
             self.set_phase(Phase::TripDone);
@@ -590,7 +590,7 @@ impl BusService {
                 self.stops.pop_front();
                 self.near_d = f32::INFINITY;
                 self.serve = None;
-                crate::traffic::ibis_to_next_stop(vehicle, self.stops.len());
+                crate::gameplay::traffic::ibis_to_next_stop(vehicle, self.stops.len());
                 if !ctx.passing {
                     st.lateral_target = ctx.kerb_swerve.unwrap_or(0.0);
                 }

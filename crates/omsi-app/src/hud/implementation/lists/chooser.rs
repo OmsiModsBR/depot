@@ -714,7 +714,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     }
                 }
                 "traffic_clear" if step => {
-                    crate::traffic_link::clear_ai_traffic(app);
+                    crate::gameplay::traffic_link::clear_ai_traffic(app);
                 }
                 other if step => {
                     app.page_action(other);

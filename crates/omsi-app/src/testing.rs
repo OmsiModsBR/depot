@@ -454,10 +454,10 @@ pub mod tr_fill {
     }
 }
 pub mod traffic {
-    pub use crate::traffic::*;
+    pub use crate::gameplay::traffic::*;
 }
 pub mod traffic_density {
-    pub use crate::traffic_density::*;
+    pub use crate::gameplay::traffic_density::*;
 }
 pub mod tutorial {
     pub use crate::tutorial::*;

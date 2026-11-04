@@ -3,6 +3,7 @@
 
 use crate::career;
 use crate::core::cli::Args;
+use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::humans;
@@ -11,7 +12,6 @@ use crate::player::Player;
 use crate::radio;
 use crate::schedule;
 use crate::settings;
-use crate::traffic;
 use crate::weather::ambience;
 use crate::weather::puddles;
 use crate::weather::rain;

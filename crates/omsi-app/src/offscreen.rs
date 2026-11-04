@@ -6,6 +6,8 @@ use crate::core::memory::texture_budget;
 use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::gameplay::traffic;
+use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::humans;
@@ -22,8 +24,6 @@ use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
-use crate::traffic;
-use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::weather::puddles;
 use crate::weather::rain;
 use crate::weather::weather_setup::{
@@ -569,7 +569,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 .is_some_and(|v| v > 0.5);
             t.player_blinker = player
                 .as_ref()
-                .map(|p| crate::traffic_link::indicator(&p.vehicle))
+                .map(|p| crate::gameplay::traffic_link::indicator(&p.vehicle))
                 .unwrap_or(0);
             t.tick(dt, player.as_ref().map(|p| player_outline(p)));
             world.set_switches(&t.switch_requests());
