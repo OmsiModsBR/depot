@@ -742,22 +742,18 @@ impl VehiclesView {
         } else {
             (Status::Found, "Files found")
         };
-        let bw = ui.width(worst.1, 12.0 * TEXT_SCALE, Weight::Medium) + 20.0;
-        let badge = Rect::new(r.right() - 17.0 - bw, r.y + 58.0, bw, 24.0);
-        ui.p().rounded(badge, 4.0, worst.0.color().alpha(0.12));
-        ui.p()
-            .rounded_border(badge, 4.0, 1.0, worst.0.color().alpha(0.5));
-        ui.text_in(
-            worst.1,
-            badge,
-            12.0 * TEXT_SCALE,
-            Weight::Medium,
-            worst.0.color(),
-            Align::Center,
-        );
-        let tip: Vec<String> = files
-            .iter()
-            .map(|(label, _, note)| format!("{label}: {note}"))
+        // (a small dot in the status's colour at the right, so the model's name has the room;
+        // the words and every file are under the mouse)
+        let badge = Rect::new(r.right() - 17.0 - 20.0, r.y + 60.0, 20.0, 20.0);
+        let dot = glam::Vec2::new(badge.x + badge.w / 2.0, badge.y + badge.h / 2.0);
+        ui.p().circle(dot, 7.0, worst.0.color().alpha(0.25));
+        ui.p().circle(dot, 4.5, worst.0.color());
+        let tip: Vec<String> = std::iter::once(omsi_ui::tr(worst.1).into_owned())
+            .chain(
+                files
+                    .iter()
+                    .map(|(label, _, note)| format!("{label}: {note}")),
+            )
             .collect();
         ui.tooltip(badge, &tip.join("\n"));
         // (the model in bold, the maker under it; the folder and the file are under the mouse)
