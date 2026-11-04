@@ -614,22 +614,30 @@ impl VehiclesView {
                 if !searching && folded.contains(&group) {
                     continue;
                 }
-                let row = Rect::new(view.x, y, view.w - 8.0, ROW_H);
+                // (the name alone, on a second line when it is long - the row grows for it -
+                // so it is read whole; whether it is original content, a mod or needs a pack
+                // is on the dot of the details card)
+                let name = model_label(v);
+                let (px, lh) = (LIB_PX * TEXT_SCALE, LIB_LH);
+                let name_w = view.w - 8.0 - 40.0;
+                let lines = ui.lines_as_is(&name, name_w, px, Weight::Bold, 2).0.len();
+                let row_h = ROW_H + LIB_LH * (lines as f32 - 1.0);
+                let row = Rect::new(view.x, y, view.w - 8.0, row_h);
                 if ui.row(&format!("vehicles:row:{i}"), row, i == selected) {
                     picked = Some(i);
                 }
                 if ui.rect_visible(row) {
-                    // (the name alone: whether it is original content, a mod or needs a
-                    // pack is on the dot of the details card)
-                    clipped(
-                        ui,
-                        &model_label(v),
+                    let first = row.center().y - lh * (lines as f32 - 1.0) * 0.5;
+                    ui.text_lines_as_is(
+                        &name,
                         row.x + 16.0,
-                        row.center().y,
-                        row.w - 40.0,
-                        13.5,
+                        first,
+                        name_w,
+                        px,
                         Weight::Bold,
                         FG,
+                        2,
+                        lh,
                     );
                     ui.icon(
                         "o-chevron",
@@ -638,7 +646,7 @@ impl VehiclesView {
                         MUTED,
                     );
                 }
-                y += ROW_H;
+                y += row_h;
             }
             y - view.y
         });
@@ -753,41 +761,49 @@ impl VehiclesView {
         )
         .collect();
         ui.tooltip(badge, &tip.join("\n"));
-        // (the model in bold, the maker under it; the folder and the file are under the mouse)
+        // (the model in bold - on two lines when it is long, the card moving down for it - the
+        // maker under it; the whole name, the folder and the file are under the mouse)
         let name = model_label(v);
         let name_w = badge.x - 12.0 - (r.x + 19.0);
-        let title = Rect::new(r.x + 19.0, r.y + 46.0, name_w, 50.0);
-        clipped(
-            ui,
+        let lines = ui.text_lines_as_is(
             &name,
             r.x + 19.0,
             r.y + 62.0,
             name_w,
-            16.0,
+            16.0 * TEXT_SCALE,
             Weight::Bold,
             FG,
+            2,
+            TITLE_LH,
         );
+        let more = TITLE_LH * (lines as f32 - 1.0);
+        let title = Rect::new(r.x + 19.0, r.y + 46.0, name_w, 50.0 + more);
         clipped(
             ui,
             &omsi_ui::tr(&maker_label(v)),
             r.x + 19.0,
-            r.y + 84.0,
+            r.y + 84.0 + more,
             name_w,
             12.5,
             Weight::Regular,
             MUTED,
         );
+        let whole = if name == v.name {
+            String::new()
+        } else {
+            format!("{name}\n")
+        };
         ui.tooltip(
             title,
             &format!(
-                "{}\n{}\n{}",
+                "{whole}{}\n{}\n{}",
                 v.name,
                 v.folder,
                 v.file.rsplit('/').next().unwrap_or("")
             ),
         );
         // (a bus that borrows from a pack that is not installed says so before anything else)
-        let mut top = r.y + 104.0;
+        let mut top = r.y + 104.0 + more;
         if !v.missing_packs.is_empty() {
             top = detail_rows(
                 ui,
@@ -1096,9 +1112,14 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
 
 /// A detail row's height.
 const ROW: f32 = 29.0;
-/// A library row's and a manufacturer heading's height.
+/// A library row's height (one whose name takes one line) and a manufacturer heading's.
 const ROW_H: f32 = 44.0;
 const GROUP_H: f32 = 36.0;
+/// The size of a name in the library, and the step between its two lines when it needs them.
+const LIB_PX: f32 = 13.5;
+const LIB_LH: f32 = 18.0;
+/// The step between the two lines of a long model name over the details card.
+const TITLE_LH: f32 = 22.0;
 /// A paint tile's size, and the picture in it (the shape of the small pictures the host makes).
 const TILE_W: f32 = 148.0;
 const THUMB_H: f32 = 84.0;

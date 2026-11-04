@@ -838,22 +838,82 @@ impl Ui {
     /// A text that is not the interface's own, as it is, left in `r` and vertically centred,
     /// cut with an ellipsis to fit; resting the mouse on a cut one shows the whole of it.
     pub fn text_in_as_is(&mut self, text: &str, r: Rect, px: f32, weight: Weight, c: Color) {
-        let mut shown = text.to_string();
-        if self.fonts.width_as_is(text, px, weight) > r.w {
-            let mut cut: Vec<char> = text.chars().collect();
-            shown.clear();
-            while !cut.is_empty() {
-                cut.pop();
-                let t = cut.iter().collect::<String>().trim_end().to_string() + "…";
-                if self.fonts.width_as_is(&t, px, weight) <= r.w {
-                    shown = t;
-                    break;
-                }
-            }
+        let shown = self.cut_as_is(text, r.w, px, weight);
+        if shown != text {
             self.tooltip_whole(r, text);
         }
         let base = r.center().y + self.fonts.cap_height(px, weight) * 0.5;
         self.text_as_is(&shown, Vec2::new(r.x, base), px, weight, c, Align::Left);
+    }
+
+    /// `text` as it is when it fits `width`; otherwise as much of it as fits with an ellipsis.
+    fn cut_as_is(&self, text: &str, width: f32, px: f32, weight: Weight) -> String {
+        if self.fonts.width_as_is(text, px, weight) <= width {
+            return text.to_string();
+        }
+        let mut cut: Vec<char> = text.chars().collect();
+        while !cut.is_empty() {
+            cut.pop();
+            let t = cut.iter().collect::<String>().trim_end().to_string() + "…";
+            if self.fonts.width_as_is(&t, px, weight) <= width {
+                return t;
+            }
+        }
+        String::new()
+    }
+
+    /// The lines [`Ui::text_lines_as_is`] would draw: `text` as it is, broken at spaces (and
+    /// inside a word wider than a line) to `width`, at most `max` of them, the last one cut
+    /// with an ellipsis when the text goes on past it. True with them when it was cut.
+    pub fn lines_as_is(
+        &self,
+        text: &str,
+        width: f32,
+        px: f32,
+        weight: Weight,
+        max: usize,
+    ) -> (Vec<String>, bool) {
+        let max = max.max(1);
+        let mut lines = self.wrap_as_is(text.trim(), width, px, weight);
+        if lines.len() <= max {
+            return (lines, false);
+        }
+        let rest = lines[max - 1..].join(" ");
+        lines.truncate(max - 1);
+        // (the rest was too wide for the line, or the wrap would have kept it on one)
+        lines.push(self.cut_as_is(&rest, width, px, weight));
+        (lines, true)
+    }
+
+    /// A name that is not the interface's own (a vehicle's, a map's), as it is, on up to `max`
+    /// lines `lh` apart from `x`, the first one vertically centred on `cy`, so a long name is
+    /// read whole instead of cut on one line. When even `max` lines are not enough the last one
+    /// ends in an ellipsis and resting the mouse on the text shows the whole of it. Returns how
+    /// many lines were drawn.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_lines_as_is(
+        &mut self,
+        text: &str,
+        x: f32,
+        cy: f32,
+        width: f32,
+        px: f32,
+        weight: Weight,
+        c: Color,
+        max: usize,
+        lh: f32,
+    ) -> usize {
+        let (lines, cut) = self.lines_as_is(text, width, px, weight, max);
+        let cap = self.fonts.cap_height(px, weight) * 0.5;
+        for (n, line) in lines.iter().enumerate() {
+            let base = cy + n as f32 * lh + cap;
+            self.text_as_is(line, Vec2::new(x, base), px, weight, c, Align::Left);
+        }
+        if cut {
+            let r = Rect::new(x, cy - lh * 0.5, width, lh * lines.len() as f32);
+            self.tooltip_whole(r, text.trim());
+        }
+        lines.len()
     }
 
     /// A tooltip with the whole of `text` (a cut name's), after the mouse rests on `r`: not
@@ -2635,6 +2695,43 @@ mod tests {
         };
         assert_eq!(frames(long).as_deref(), Some(long));
         assert_eq!(frames("Short"), None);
+    }
+
+    /// A long name breaks onto a second line instead of being cut; one too long even for two
+    /// ends in an ellipsis and shows its whole under the mouse; a short one stays on one line.
+    #[test]
+    fn a_long_name_takes_two_lines_before_it_is_cut() {
+        let ui = Ui::new();
+        let w = 180.0;
+        let (one, cut) = ui.lines_as_is("Citaro", w, 13.0, Weight::Bold, 2);
+        assert_eq!((one.len(), cut), (1, false));
+        let name = "Millennium V MB O500U BT5 Voith DIWA";
+        let (two, cut) = ui.lines_as_is(name, w, 13.0, Weight::Bold, 2);
+        assert!(!cut, "{two:?}");
+        assert_eq!(two.len(), 2);
+        assert_eq!(two.join(" "), name);
+        let long =
+            "Millennium V Mercedes-Benz O-500UA Bluetec 5 Voith DIWA D884.5 four speed gearbox";
+        let (two, cut) = ui.lines_as_is(long, w, 13.0, Weight::Bold, 2);
+        assert!(cut);
+        assert_eq!(two.len(), 2);
+        assert!(two[1].ends_with('…'), "{two:?}");
+        for line in &two {
+            assert!(
+                ui.fonts.width_as_is(line, 13.0, Weight::Bold) <= w,
+                "{line}"
+            );
+        }
+        let mut ui = Ui::new();
+        let mut tip = None;
+        for _ in 0..20 {
+            ui.begin(Vec2::new(400.0, 300.0), 1.0, 0.1);
+            ui.input.mouse = Vec2::new(40.0, 22.0);
+            let n = ui.text_lines_as_is(long, 10.0, 20.0, w, 13.0, Weight::Bold, TEXT, 2, 17.0);
+            assert_eq!(n, 2);
+            tip = ui.tooltip.clone().map(|t| t.0);
+        }
+        assert_eq!(tip.as_deref(), Some(long));
     }
 
     #[test]
