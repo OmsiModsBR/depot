@@ -2,37 +2,23 @@
 //! comes through `openomsi_game::testing` (the `test-support` feature).
 
 mod about;
-mod actions;
 mod app_events;
 mod bus_service;
 mod condensation;
-mod controllers;
 mod core;
 mod crate_root;
 mod describe;
 mod diagnostics;
-#[cfg(windows)]
-mod dinput;
 mod editor;
 mod env_file;
-#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-mod evdev_buttons;
-#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-mod evdev_ff;
 mod frame_stats;
-mod game_controller_menu;
-mod headtrack;
-mod hpattern;
 mod hud;
 mod humans;
 mod input;
 mod journey;
-mod keys;
 mod launcher;
 mod lights;
 mod line_times;
-#[cfg(target_os = "macos")]
-mod mac_game_controller;
 mod map_surface;
 mod mapview;
 mod money;
@@ -53,7 +39,6 @@ mod settings;
 mod showroom;
 mod situation;
 mod tiles;
-mod touch;
 mod tr_fill;
 mod traffic;
 mod tutorial;

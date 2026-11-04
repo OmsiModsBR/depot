@@ -905,7 +905,9 @@ pub(in crate::hud) fn pages_of(app: &App, kind: &ListKind) -> Option<(Vec<Page>,
         ListKind::ControllerDevices(_)
         | ListKind::Controller(..)
         | ListKind::ControllerAxis(..)
-        | ListKind::ControllerButtonSettings(..) => crate::game_controller_menu::pages(app, kind)?,
+        | ListKind::ControllerButtonSettings(..) => {
+            crate::input::game_controller_menu::pages(app, kind)?
+        }
         _ => return None,
     };
     let pages: Vec<Page> = pages.into_iter().filter(|p| !p.1.is_empty()).collect();

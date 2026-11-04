@@ -1,8 +1,8 @@
 //! `OMSI_INPUT`: scripted keyboard, mouse and camera input for window runs, and its key names.
 
-use crate::actions::dump_display_textures;
 use crate::core::app::App;
 use crate::describe;
+use crate::input::actions::dump_display_textures;
 use crate::output::{ORBIT_MAX, ORBIT_MIN};
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;

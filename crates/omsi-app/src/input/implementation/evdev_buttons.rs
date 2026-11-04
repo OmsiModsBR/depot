@@ -56,7 +56,7 @@ impl ButtonDevices {
                 std::fs::read_to_string(format!("{sys}/capabilities/{kind}")).unwrap_or_default()
             };
             let key_bits = caps("key");
-            let keys = crate::controllers::key_bitmap_buttons(&key_bits);
+            let keys = crate::input::controllers::key_bitmap_buttons(&key_bits);
             // (joystick and gamepad buttons only, and a device with two axes or more is gilrs's.
             // A gaming mouse reports buttons in the joystick range too, a keyboard's media keys
             // come as a device of their own: whatever moves a pointer or has keyboard keys is
@@ -66,7 +66,7 @@ impl ButtonDevices {
                 || has_keyboard_keys(&key_bits)
                 || !keys
                     .iter()
-                    .any(|c| crate::controllers::code_button(*c).is_some())
+                    .any(|c| crate::input::controllers::code_button(*c).is_some())
                 || udev_says_no_joystick(&node)
             {
                 continue;
@@ -77,7 +77,7 @@ impl ButtonDevices {
                 .open(format!("/dev/input/{node}"))
             {
                 Ok(file) => {
-                    let buttons = crate::controllers::declared_button_count(&name);
+                    let buttons = crate::input::controllers::declared_button_count(&name);
                     log::info!("game controller: {name} (/dev/input/{node}), {buttons} buttons, no axes: read from evdev");
                     self.devices.push(Device {
                         name,
@@ -113,7 +113,8 @@ impl ButtonDevices {
                             if kind != EV_KEY || value > 1 {
                                 continue;
                             }
-                            if let Some(b) = crate::controllers::evdev_button_number(&d.name, code)
+                            if let Some(b) =
+                                crate::input::controllers::evdev_button_number(&d.name, code)
                             {
                                 out.push((d.name.clone(), b, value == 1));
                             }

@@ -32,7 +32,7 @@ pub fn button_index(i: usize) -> usize {
     if i < 12 {
         i
     } else {
-        crate::controllers::HAT_BUTTONS + (i - 12)
+        crate::input::controllers::HAT_BUTTONS + (i - 12)
     }
 }
 

@@ -1,6 +1,5 @@
 //! The offscreen run: a scripted session rendered to pictures (`--offscreen`).
 
-use crate::actions::dump_display_textures;
 use crate::career;
 use crate::core::cli::{parse_time, parse_triggers, Args};
 use crate::core::memory::texture_budget;
@@ -10,6 +9,7 @@ use crate::diagnostics::{log_physics, standing_reasons};
 use crate::hud;
 use crate::hud::nav;
 use crate::humans;
+use crate::input::actions::dump_display_textures;
 use crate::lights;
 use crate::money;
 use crate::output::{

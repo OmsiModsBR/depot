@@ -58,19 +58,22 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn key_name(&self, scan: i64, modifier: i64) -> String {
-        crate::keys::key_name(scan, modifier)
+        crate::input::keys::key_name(scan, modifier)
     }
 
     fn dik_code(&self, key: winit::keyboard::KeyCode) -> Option<i32> {
-        crate::keys::dik_code(key)
+        crate::input::keys::dik_code(key)
     }
 
     fn controllers_file(&self) -> Option<std::path::PathBuf> {
         crate::core::startup::content_dir().map(|d| d.join("Inputs").join("gamectrler.cfg"))
     }
 
-    fn save_controllers(&self, devices: &[crate::controllers::DeviceCfg]) -> Result<(), String> {
-        crate::controllers::save_cfg(devices)
+    fn save_controllers(
+        &self,
+        devices: &[crate::input::controllers::DeviceCfg],
+    ) -> Result<(), String> {
+        crate::input::controllers::save_cfg(devices)
     }
 
     fn adapter_texture_mb(&self) -> i64 {

@@ -39,7 +39,9 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         | ListKind::ControllerButtons(_)
         | ListKind::ControllerButtonSettings(..)
         | ListKind::ControllerButton(..)
-        | ListKind::ControllerCapture(_) => return crate::game_controller_menu::items(app, kind),
+        | ListKind::ControllerCapture(_) => {
+            return crate::input::game_controller_menu::items(app, kind)
+        }
         ListKind::Controls => {
             return vec![
                 opens(
@@ -441,7 +443,10 @@ pub(crate) fn menu_extras(
         ),
         ListKind::ControllerButtonSettings(name, b) => (
             MenuKind::Options,
-            Some((crate::game_controller_menu::button_label(*b), name.clone())),
+            Some((
+                crate::input::game_controller_menu::button_label(*b),
+                name.clone(),
+            )),
             None,
         ),
         ListKind::ControllerButton(_, b) => (
@@ -449,7 +454,7 @@ pub(crate) fn menu_extras(
             Some((
                 format!(
                     "{}: choose an action",
-                    crate::game_controller_menu::button_label(*b)
+                    crate::input::game_controller_menu::button_label(*b)
                 ),
                 String::new(),
             )),
@@ -603,8 +608,8 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
 /// Do a line of the list, a setting changed as `mv` says (Enter and a click on a line are
 /// `Move::Next`; the arrows and a click on a slider or a stepper the others).
 pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -> Option<ListKind> {
-    if crate::game_controller_menu::is_controller_list(Some(kind)) {
-        return crate::game_controller_menu::run(app, kind, action, mv);
+    if crate::input::game_controller_menu::is_controller_list(Some(kind)) {
+        return crate::input::game_controller_menu::run(app, kind, action, mv);
     }
     if action == "back" {
         return match kind {

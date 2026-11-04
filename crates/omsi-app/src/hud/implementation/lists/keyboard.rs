@@ -95,7 +95,7 @@ impl App {
                 self.key_capture = None;
                 self.install_keyboard_cfg(cfg);
                 let key = scan
-                    .map(|s| crate::keys::key_name(s as i64, (hold | chord) as i64))
+                    .map(|s| crate::input::keys::key_name(s as i64, (hold | chord) as i64))
                     .unwrap_or_else(|| "(unbound)".into());
                 self.service_msg = Some((
                     format!(
@@ -153,7 +153,7 @@ pub(in crate::hud) fn keyboard_pages(app: &App) -> Vec<Page> {
             let key = if app.key_capture == Some((is_game, i)) {
                 "press a key…".into()
             } else {
-                crate::keys::key_name(b.scan_code as i64, b.modifier as i64)
+                crate::input::keys::key_name(b.scan_code as i64, b.modifier as i64)
             };
             rows.push((
                 row(

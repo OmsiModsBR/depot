@@ -9,7 +9,7 @@ pub(crate) fn is_gate(name: &str) -> bool {
     gate == "r" || gate == "n" || gate.parse::<u32>().is_ok()
 }
 
-pub fn has_held_bindings(cfg: &[crate::controllers::DeviceCfg]) -> bool {
+pub fn has_held_bindings(cfg: &[crate::input::controllers::DeviceCfg]) -> bool {
     cfg.iter().any(|d| {
         d.buttons
             .iter()

@@ -127,7 +127,7 @@ pub fn state_release_events(name: &str, state: &RawState) -> Vec<(String, usize,
             if down {
                 out.push((
                     name.to_string(),
-                    crate::controllers::HAT_BUTTONS + hat * 4 + dir,
+                    crate::input::controllers::HAT_BUTTONS + hat * 4 + dir,
                     false,
                 ));
             }
@@ -1127,7 +1127,7 @@ impl DirectInput {
                     if was[dir] != now[dir] {
                         self.events.push((
                             d.name.clone(),
-                            crate::controllers::HAT_BUTTONS + k * 4 + dir,
+                            crate::input::controllers::HAT_BUTTONS + k * 4 + dir,
                             now[dir],
                         ));
                     }
@@ -1195,7 +1195,7 @@ impl DirectInput {
     /// The force on the wheel of device `name`: -1 (full to the left) .. 1. Set at most 100
     /// times a second (each is a message to the device), which is also the rate that fixes
     /// how fast a vibration can be: past about half of it a tremble comes out of the motor
-    /// as a beat of its own, so `crate::controllers` keeps the tarmac's grain and the
+    /// as a beat of its own, so `crate::input::controllers` keeps the tarmac's grain and the
     /// engine's buzz below it.
     /// Returns whether a force-feedback effect with this exact device name exists.
     pub fn set_force(&mut self, name: &str, f: f32) -> bool {

@@ -112,7 +112,7 @@ pub struct Player {
     pub(crate) trailer_renders: Vec<scene::VehicleRender>,
     pub(crate) axes: omsi_sim::KeyboardAxes,
     /// A game controller's pedals and steering this frame (they win over the keys).
-    pub(crate) analog: crate::controllers::Analog,
+    pub(crate) analog: crate::input::controllers::Analog,
     /// The interior cameras chosen (OMSI's
     /// `view_interiorcam_minus`/`_plus`): the driver's and the passengers' camera numbers.
     pub(crate) cam_choice: (usize, usize),
@@ -895,11 +895,11 @@ impl Player {
             return true;
         }
         let suffix = if pressed { "" } else { "_off" };
-        if let Some(gate) = crate::hpattern::resolve(&self.vehicle.ty.program, name) {
+        if let Some(gate) = crate::input::hpattern::resolve(&self.vehicle.ty.program, name) {
             if pressed {
                 self.clutch_for_gate(&gate);
             }
-            if let Some(done) = crate::hpattern::action(
+            if let Some(done) = crate::input::hpattern::action(
                 &mut self.vehicle,
                 &gate,
                 pressed,
@@ -1798,7 +1798,7 @@ impl Player {
     pub(crate) fn gate_gear(&self) -> Option<i32> {
         let program = &self.vehicle.ty.program;
         program.trigger("kw_s_1")?;
-        let v = crate::actions::gate_gear_var(program).and_then(|v| self.vehicle.var(&v));
+        let v = crate::input::actions::gate_gear_var(program).and_then(|v| self.vehicle.var(&v));
         Some(v.unwrap_or(0.0).round() as i32)
     }
 

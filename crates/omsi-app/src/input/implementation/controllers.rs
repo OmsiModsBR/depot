@@ -184,30 +184,30 @@ pub fn wheel_steering(
 }
 
 /// The devices of every kind: gilrs (gamepads everywhere; on macOS and Linux every device),
-/// and on Windows DirectInput for everything a gamepad is not (`crate::dinput`) - many wheels
+/// and on Windows DirectInput for everything a gamepad is not (`crate::input::dinput`) - many wheels
 /// never show up in the system's newer interface that gilrs uses there.
 pub struct Devices {
     pub gilrs: Option<Gilrs>,
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-    pub calibration_wheel: Option<crate::evdev_ff::Wheel>,
+    pub calibration_wheel: Option<crate::input::evdev_ff::Wheel>,
     /// Whether a gilrs device is also a native evdev constant-force wheel.
     /// `connected()` runs every frame, so cache the /sys lookup by device name.
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     pub ff_wheels: std::cell::RefCell<std::collections::HashMap<String, bool>>,
     /// Linux: devices with buttons only (a gear shifter), which gilrs does not list
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-    pub button_devices: crate::evdev_buttons::ButtonDevices,
+    pub button_devices: crate::input::evdev_buttons::ButtonDevices,
     #[cfg(windows)]
-    pub di: Option<crate::dinput::DirectInput>,
+    pub di: Option<crate::input::dinput::DirectInput>,
     /// macOS: Xbox-type controllers, which gilrs and `hid` cannot read at all (see
     /// `mac_game_controller`).
     #[cfg(target_os = "macos")]
-    pub gc: crate::mac_game_controller::GcPads,
+    pub gc: crate::input::mac_game_controller::GcPads,
     /// macOS: every axis element of every wheel and joystick, as last read (see `mac_hid`)
     #[cfg(target_os = "macos")]
-    pub hid: Option<crate::mac_hid::MacHid>,
+    pub hid: Option<crate::input::mac_hid::MacHid>,
     #[cfg(target_os = "macos")]
-    pub hid_axes: Vec<crate::mac_hid::HidAxes>,
+    pub hid_axes: Vec<crate::input::mac_hid::HidAxes>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub hats: Vec<(String, [i8; 8])>,
 }
@@ -224,7 +224,7 @@ impl Devices {
         // kicks on every start and the wheel buzzes. A wheel's forces go through evdev_ff,
         // so gilrs's force feedback stays off while one is connected.
         #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-        let gilrs_ff = !crate::evdev_ff::wheel_connected();
+        let gilrs_ff = !crate::input::evdev_ff::wheel_connected();
         #[cfg(not(all(target_os = "linux", target_pointer_width = "64")))]
         let gilrs_ff = true;
         let gilrs = gilrs::GilrsBuilder::new()
@@ -234,7 +234,7 @@ impl Devices {
             .map_err(|e| log::info!("game controllers: {e}"))
             .ok();
         #[cfg(windows)]
-        let di = hwnd.and_then(|h| crate::dinput::DirectInput::new(h, ff));
+        let di = hwnd.and_then(|h| crate::input::dinput::DirectInput::new(h, ff));
         #[cfg(not(windows))]
         let _ = (hwnd, ff);
         Devices {
@@ -244,13 +244,13 @@ impl Devices {
             #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
             ff_wheels: Default::default(),
             #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-            button_devices: crate::evdev_buttons::ButtonDevices::new(),
+            button_devices: crate::input::evdev_buttons::ButtonDevices::new(),
             #[cfg(windows)]
             di,
             #[cfg(target_os = "macos")]
-            gc: crate::mac_game_controller::GcPads::new(),
+            gc: crate::input::mac_game_controller::GcPads::new(),
             #[cfg(target_os = "macos")]
-            hid: crate::mac_hid::MacHid::new(),
+            hid: crate::input::mac_hid::MacHid::new(),
             #[cfg(target_os = "macos")]
             hid_axes: Vec::new(),
             #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -260,7 +260,7 @@ impl Devices {
 
     /// macOS: the HID device that is this gilrs pad (see `same_hid_device`).
     #[cfg(target_os = "macos")]
-    fn hid_of(&self, pad: &gilrs::Gamepad<'_>) -> Option<&crate::mac_hid::HidAxes> {
+    fn hid_of(&self, pad: &gilrs::Gamepad<'_>) -> Option<&crate::input::mac_hid::HidAxes> {
         let id = pad.vendor_id().zip(pad.product_id());
         self.hid_axes
             .iter()
@@ -283,7 +283,7 @@ impl Devices {
         let mut wheels = self.ff_wheels.borrow_mut();
         *wheels
             .entry(name.to_string())
-            .or_insert_with(|| crate::evdev_ff::wheel_named(name))
+            .or_insert_with(|| crate::input::evdev_ff::wheel_named(name))
     }
 
     fn direct_input(&self) -> bool {
@@ -339,7 +339,7 @@ impl Devices {
         {
             let _ = axis;
             if self.calibration_wheel.is_none() {
-                self.calibration_wheel = crate::evdev_ff::Wheel::open(name);
+                self.calibration_wheel = crate::input::evdev_ff::Wheel::open(name);
             }
             return self
                 .calibration_wheel
@@ -1144,7 +1144,7 @@ pub struct Controllers {
     /// either changes.
     rumble: Vec<(gilrs::GamepadId, gilrs::ff::Effect, f32, f32, f32)>,
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-    wheel: Option<crate::evdev_ff::Wheel>,
+    wheel: Option<crate::input::evdev_ff::Wheel>,
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     wheel_tried: Option<(String, std::time::Instant)>,
 }
@@ -1624,7 +1624,7 @@ impl Controllers {
                 });
             if other || retry {
                 self.wheel_tried = Some((name.clone(), std::time::Instant::now()));
-                self.wheel = crate::evdev_ff::Wheel::open(&name);
+                self.wheel = crate::input::evdev_ff::Wheel::open(&name);
             }
             if let Some(w) = self.wheel.as_mut() {
                 let cfg = find_device_cfg(&self.cfg, &name);
