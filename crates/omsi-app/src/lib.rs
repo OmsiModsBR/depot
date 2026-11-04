@@ -15,6 +15,7 @@ mod career;
 mod describe;
 mod driver;
 mod env_file;
+mod gameplay;
 mod hud;
 mod humans;
 mod journey;
@@ -41,8 +42,6 @@ mod schedule;
 mod schedule_paper;
 mod settings;
 mod showroom;
-mod traffic;
-mod traffic_density;
 
 mod app_events;
 mod bus_service;
@@ -66,7 +65,6 @@ mod situation;
 mod spawn;
 mod state_trace;
 mod teleport;
-mod traffic_link;
 mod tutorial;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).

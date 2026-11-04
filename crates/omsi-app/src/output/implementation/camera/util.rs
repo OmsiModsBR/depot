@@ -1,8 +1,8 @@
 //! Camera helpers: the default and follow cameras, picking rays, the orbit distance, and the mirrors.
 
 use crate::core::cli::Args;
+use crate::gameplay::traffic;
 use crate::output::interface::output::{Player, World};
-use crate::traffic;
 use crate::world::scene;
 use glam::{DVec3, Vec3};
 use omsi_render::{Camera, Renderer, Scene};

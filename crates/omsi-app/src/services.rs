@@ -43,7 +43,7 @@ pub(crate) fn on_petrol_station(world: &World, v: &omsi_sim::VehicleInstance) ->
 }
 
 fn petrol_station_test(world: &World, v: &omsi_sim::VehicleInstance, log: bool) -> bool {
-    let f = crate::traffic_link::vehicle_box(v, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
+    let f = crate::gameplay::traffic_link::vehicle_box(v, [2.5, 11.5, 3.0, 0.0, 0.0, 1.5]);
     let me = omsi_sim::collision::Obb {
         center: glam::DVec2::new(f.x, f.y),
         half: glam::DVec2::new(f.width as f64 * 0.5, f.length as f64 * 0.5),

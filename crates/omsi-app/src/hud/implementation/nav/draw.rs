@@ -6,7 +6,7 @@ use omsi_ui::{Atlas, Color, Painter, Rect};
 /// raise, `cp_SHTANGALEV` or `shtanga_lev_rot`), a tram, a bus (one on a timetable or
 /// showing a line), or any other car; and the line it shows, if it is public transport.
 pub(super) fn traffic_kind(
-    c: &crate::traffic::AiCar,
+    c: &crate::gameplay::traffic::AiCar,
     surface: Option<&crate::world::map_surface::MapSurface>,
     line_of: Option<&dyn Fn(u64) -> Option<String>>,
 ) -> (Color, Option<String>, Icon) {

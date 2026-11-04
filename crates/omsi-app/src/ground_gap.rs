@@ -233,7 +233,7 @@ impl GroundGap {
         world: &World,
         t: f32,
         player: Option<&omsi_sim::VehicleInstance>,
-        traffic: Option<&crate::traffic::Traffic>,
+        traffic: Option<&crate::gameplay::traffic::Traffic>,
     ) {
         let centre = player.map(|v| v.position);
         if let Some(v) = player {
@@ -301,7 +301,7 @@ impl GroundGap {
 /// `OMSI_GROUND_LANES=1`: along every street lane of the loaded tiles, every metre, how far
 /// the drawn ground (from 3 m over the lane, as OMSI's wheels ask it) lies over or under
 /// the lane's own height - what an AI car's wheels meet where it follows its lane.
-pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
+pub fn check_lanes(world: &World, traffic: &crate::gameplay::traffic::Traffic) {
     if !omsi_cfg::flags::GROUND_LANES.is_set() {
         return;
     }
