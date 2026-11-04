@@ -667,10 +667,67 @@ impl App {
                         n.add_lanes(std::mem::take(&mut *w.lanes.lock()));
                     }
                 }
+                self.first_populate(&w, renderer, scene);
                 self.world = Some(w);
             }
         }
         self.last = Instant::now();
+    }
+
+    /// The traffic's first population pass, made while the loading screen is still up: it
+    /// puts the whole first set of cars on the road at once (it has no budget), and in the
+    /// first frame of the drive it cost tens of milliseconds (22 ms for 40 cars, 43 ms for 99).
+    /// The frame's own passes come after it with their budget, as for every later pass.
+    pub(crate) fn first_populate(&mut self, w: &World, renderer: &Renderer, scene: &mut Scene) {
+        let sight = self
+            .camera
+            .as_ref()
+            .zip(self.surface.as_ref())
+            .and_then(|(c, s)| self.sight_extent(c, (s.config.width, s.config.height)));
+        let aspect = self
+            .surface
+            .as_ref()
+            .map(|s| s.config.width as f64 / s.config.height.max(1) as f64)
+            .unwrap_or(16.0 / 9.0);
+        let fog = self
+            .weather
+            .as_ref()
+            .map(|w| w.fog.0 as f64)
+            .unwrap_or(50000.0);
+        let center = self
+            .player
+            .as_ref()
+            .map(|p| p.vehicle.position)
+            .or(self.camera.as_ref().map(|c| c.position))
+            .unwrap_or(DVec3::ZERO);
+        let view = self.camera.as_ref().map(|c| c.forward().as_dvec3());
+        let Some(t) = self.traffic.as_mut() else {
+            return;
+        };
+        if !t.initial {
+            return;
+        }
+        crate::traffic_link::traffic_inputs(
+            t,
+            self.camera.as_ref(),
+            aspect,
+            sight,
+            fog,
+            &self.clock,
+            self.humans.as_ref(),
+            self.player.as_ref(),
+            &renderer.options,
+        );
+        let started = Instant::now();
+        t.populate_budget = None;
+        t.populate_seen(w, renderer, scene, center, view);
+        let split = t.populate_split;
+        log::info!(
+            "traffic: first population on the loading screen in {:.1} ms ({} cars made in {:.1} ms)",
+            started.elapsed().as_secs_f64() * 1000.0,
+            split.created,
+            split.create * 1000.0
+        );
     }
 
     /// The first area of a streamed map is loading: show how far it got, and start the rest
