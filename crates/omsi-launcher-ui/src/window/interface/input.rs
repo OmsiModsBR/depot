@@ -25,6 +25,7 @@ pub use super::super::implementation::ai_edit::{ai_traffic_dialog, change_row};
 pub use super::super::implementation::ai_traffic::{
     ai_traffic_tab, nice_step, shown_name, trim_num, weight_text,
 };
+pub use super::super::implementation::bars::{game_banner, nav, status_bar};
 pub use super::super::implementation::browser::browser;
 pub use super::super::implementation::controls::controls;
 pub use super::super::implementation::dialog::*;

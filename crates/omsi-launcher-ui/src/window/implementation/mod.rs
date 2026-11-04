@@ -2,6 +2,7 @@
 
 pub(crate) mod ai_edit;
 pub(crate) mod ai_traffic;
+pub(crate) mod bars;
 pub(crate) mod browser;
 pub(crate) mod controls;
 pub(crate) mod dialog;
