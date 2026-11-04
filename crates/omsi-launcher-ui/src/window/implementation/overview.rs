@@ -18,7 +18,9 @@ pub fn diagnostics_overview(f: &mut Frame, area: Rect, seen: &Overview) -> Optio
     build_card(f, left, seen);
     let open = folder_card(f, right);
     let y2 = y + 316.0;
-    let rest = (area.bottom() - y2 - 24.0).max(200.0);
+    // (never shorter than what it holds, so its note keeps the room under it the other two
+    // cards give theirs)
+    let rest = (area.bottom() - y2 - 24.0).max(LOG_CARD_H);
     log_card(f, Rect::new(area.x, y2, area.w, rest));
     open
 }
@@ -81,16 +83,28 @@ pub fn diagnostics_status(f: &mut Frame, r: Rect, seen: &Overview) {
     }
 }
 
-/// A label and its value on one line of a card, `y` its middle.
-fn line(ui: &mut Ui, r: Rect, y: f32, label: &str, value: &str) {
+/// The log card's least height: its three lines, the switch, the button and the note under
+/// it, with the room at its foot the other cards keep under theirs.
+const LOG_CARD_H: f32 = 290.0;
+
+/// Where the values of a card's lines start: the usual column, or after the longest of its
+/// labels when a translation is longer, the same for every line of the card so they align.
+fn value_x(ui: &Ui, r: Rect, labels: &[&str]) -> f32 {
+    let widest = labels
+        .iter()
+        .map(|l| {
+            ui.fonts
+                .width(&omsi_ui::tr(l), 13.0 * TEXT_SCALE, Weight::Regular)
+        })
+        .fold(0.0, f32::max);
+    (r.x + 170.0).max(r.x + 19.0 + widest + 14.0)
+}
+
+/// A label and its value on one line of a card, `y` its middle, the value from `x`.
+fn line(ui: &mut Ui, r: Rect, y: f32, x: f32, label: &str, value: &str) {
     ui.p()
         .rect(Rect::new(r.x + 1.0, y - 20.0, r.w - 2.0, 1.0), LINE);
     text(ui, label, r.x + 19.0, y, 13.0, Weight::Regular, MUTED);
-    // (the value starts after the label when a translation is longer than the usual column)
-    let label_w = ui
-        .fonts
-        .width(&omsi_ui::tr(label), 13.0 * TEXT_SCALE, Weight::Regular);
-    let x = (r.x + 170.0).max(r.x + 19.0 + label_w + 14.0);
     clipped(
         ui,
         value,
@@ -106,15 +120,16 @@ fn line(ui: &mut Ui, r: Rect, y: f32, label: &str, value: &str) {
 fn build_card(f: &mut Frame, r: Rect, seen: &Overview) {
     let (version, build) = f.host.version();
     card(f.ui, r, "This build", None);
-    line(f.ui, r, r.y + 72.0, "Version", version);
-    line(f.ui, r, r.y + 112.0, "Build", build);
-    line(f.ui, r, r.y + 152.0, "System", std::env::consts::OS);
+    let x = value_x(f.ui, r, &["Version", "Build", "System", "Graphics"]);
+    line(f.ui, r, r.y + 72.0, x, "Version", version);
+    line(f.ui, r, r.y + 112.0, x, "Build", build);
+    line(f.ui, r, r.y + 152.0, x, "System", std::env::consts::OS);
     let adapter = if seen.adapter.is_empty() {
         "not known yet".to_string()
     } else {
         seen.adapter.to_string()
     };
-    line(f.ui, r, r.y + 192.0, "Graphics", &adapter);
+    line(f.ui, r, r.y + 192.0, x, "Graphics", &adapter);
     let b = Rect::new(r.x + 19.0, r.bottom() - 84.0, r.w - 38.0, 44.0);
     if action(
         f.ui,
@@ -143,10 +158,12 @@ fn folder_card(f: &mut Frame, r: Rect) -> Option<Page> {
     let root = f.state.config.root.clone();
     let missing = omsi_cfg::missing_original_essentials(std::path::Path::new(&root));
     card(f.ui, r, "OMSI 2 folder", None);
+    let x = value_x(f.ui, r, &["Folder"]);
     line(
         f.ui,
         r,
         r.y + 72.0,
+        x,
         "Folder",
         if root.trim().is_empty() {
             "not chosen"
@@ -186,11 +203,13 @@ fn folder_card(f: &mut Frame, r: Rect) -> Option<Page> {
 fn log_card(f: &mut Frame, r: Rect) {
     let log = core::data_dir().join("game.log");
     card(f.ui, r, "The game's log", None);
-    line(f.ui, r, r.y + 72.0, "File", &log.to_string_lossy());
+    let x = value_x(f.ui, r, &["File", "Launcher", "Preview helper"]);
+    line(f.ui, r, r.y + 72.0, x, "File", &log.to_string_lossy());
     line(
         f.ui,
         r,
         r.y + 108.0,
+        x,
         "Launcher",
         &core::data_dir().join("launcher.log").to_string_lossy(),
     );
@@ -198,6 +217,7 @@ fn log_card(f: &mut Frame, r: Rect) {
         f.ui,
         r,
         r.y + 144.0,
+        x,
         "Preview helper",
         &f.host.helper_log().to_string_lossy(),
     );
@@ -222,12 +242,7 @@ fn log_card(f: &mut Frame, r: Rect) {
         row,
         "Each is written again when it starts (the game's with each game). With the detailed log on, the next games also write everything they load and every failure, so the file is larger.",
     );
-    let b = Rect::new(
-        r.x + 19.0,
-        (r.y + 206.0).max(r.bottom() - 84.0),
-        r.w - 38.0,
-        44.0,
-    );
+    let b = Rect::new(r.x + 19.0, r.bottom() - 84.0, r.w - 38.0, 44.0);
     if action(
         f.ui,
         "diagnostics:copy-log",
@@ -253,4 +268,30 @@ pub fn url_encode(text: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A long label (a translation) moves the values of every line of its card, so they stay
+    /// in one column; short ones keep the usual column.
+    #[test]
+    fn the_values_of_a_card_start_in_one_column() {
+        let ui = Ui::new();
+        let r = Rect::new(0.0, 0.0, 900.0, 290.0);
+        assert_eq!(value_x(&ui, r, &["File", "Launcher"]), 170.0);
+        let long = "A label much longer than the usual column of a card";
+        let x = value_x(&ui, r, &["File", long]);
+        assert!(x > 170.0);
+        assert_eq!(x, value_x(&ui, r, &[long, "File"]));
+    }
+
+    /// The log card at its least height still has its button under the switch, so the note
+    /// under the button keeps the room at the card's foot the other cards give theirs.
+    #[test]
+    fn the_log_card_has_room_for_its_note() {
+        // (the switch's row ends at 198; the button and its note take the last 84)
+        assert!(LOG_CARD_H - 84.0 >= 206.0);
+    }
 }
