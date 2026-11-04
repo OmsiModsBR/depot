@@ -2,6 +2,7 @@
 
 pub(crate) mod ai;
 pub(crate) mod ai_lists;
+pub(crate) mod browser;
 pub(crate) mod check;
 pub(crate) mod controls;
 pub(crate) mod drive;
