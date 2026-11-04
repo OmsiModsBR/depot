@@ -343,7 +343,9 @@ impl App {
         ) {
             if let Some(h) = self.humans.as_mut() {
                 h.evict(
-                    crate::humans::BusId::Ai(crate::humans::placed_bus_id(old.uid)),
+                    crate::gameplay::humans::BusId::Ai(crate::gameplay::humans::placed_bus_id(
+                        old.uid,
+                    )),
                     &w,
                 );
             }
@@ -1817,7 +1819,8 @@ impl App {
         let map = crate::screenshot_name::folder_of(&self.args.map).unwrap_or_default();
         // in a vehicle: at the wheel, or aboard the own bus on foot; not on foot outside it
         let aboard = self.player.is_some()
-            && (self.on_foot.is_none() || self.foot_bus() == Some(crate::humans::BusId::Player));
+            && (self.on_foot.is_none()
+                || self.foot_bus() == Some(crate::gameplay::humans::BusId::Player));
         let vehicle = if aboard {
             self.args
                 .bus
@@ -1846,7 +1849,7 @@ impl App {
     /// On foot, the own bus is within reach: inside it, or standing by it (a hand's reach
     /// round its body; a click still has to hit one of its meshes).
     pub(crate) fn foot_reaches_bus(&self) -> bool {
-        if self.foot_bus() == Some(crate::humans::BusId::Player) {
+        if self.foot_bus() == Some(crate::gameplay::humans::BusId::Player) {
             return true;
         }
         match (self.player.as_ref(), self.camera.as_ref()) {

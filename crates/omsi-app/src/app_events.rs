@@ -71,11 +71,11 @@ use crate::core::app::{App, FrozenMirrors};
 use crate::core::startup::process_cpu_seconds;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::gameplay::humans;
 use crate::gameplay::traffic;
 use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
-use crate::humans;
 use crate::lights;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
@@ -451,7 +451,7 @@ impl ApplicationHandler for App {
                 // seat of it after getting up (its inside is drawn and heard from inside)
                 self.in_cab = matches!(self.view.as_str(), "driver" | "pax")
                     || (self.view == "foot"
-                        && self.foot_bus() == Some(crate::humans::BusId::Player));
+                        && self.foot_bus() == Some(crate::gameplay::humans::BusId::Player));
                 let now = Instant::now();
                 let raw_dt = (now - self.last).as_secs_f32();
                 self.log_frame(raw_dt);
@@ -1860,7 +1860,7 @@ impl ApplicationHandler for App {
                     h.set_duty(self.duty.as_ref());
                     // (the riders leave a bus the driver has walked away from)
                     h.driver_away = self.on_foot.as_ref().is_some_and(|f| {
-                        let own = Some(crate::humans::BusId::Player);
+                        let own = Some(crate::gameplay::humans::BusId::Player);
                         f.seat.map(|s| s.0) != own && f.inside.map(|i| i.0) != own
                     });
                     h.people_curve = w
@@ -2649,7 +2649,7 @@ impl ApplicationHandler for App {
                                     (
                                         h.riding(),
                                         crate::weather::condensation::open_doors(
-                                            &h.cabin_doors(crate::humans::BusId::Player),
+                                            &h.cabin_doors(crate::gameplay::humans::BusId::Player),
                                         ),
                                     )
                                 })

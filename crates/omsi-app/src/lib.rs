@@ -17,7 +17,6 @@ mod driver;
 mod env_file;
 mod gameplay;
 mod hud;
-mod humans;
 mod journey;
 mod launcher;
 mod lights;

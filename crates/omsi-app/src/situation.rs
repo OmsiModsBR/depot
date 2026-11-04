@@ -409,10 +409,10 @@ pub struct SavedRider {
 impl SavedRider {
     /// The rider a passenger sitting or standing in a bus is. `odometer_km`: the kilometres
     /// the riders' clock of that bus reads now. None for somebody not aboard with a place.
-    pub fn from_pax(x: &crate::humans::pax::Pax, odometer_km: f64) -> Option<SavedRider> {
+    pub fn from_pax(x: &crate::gameplay::humans::pax::Pax, odometer_km: f64) -> Option<SavedRider> {
         x.inside?;
         let seat = x.seat;
-        if seat.is_none() && x.task != crate::humans::pax::Task::InBusToExit {
+        if seat.is_none() && x.task != crate::gameplay::humans::pax::Task::InBusToExit {
             return None;
         }
         Some(SavedRider {
@@ -428,8 +428,8 @@ impl SavedRider {
 
     /// The passenger again, settled at their place: `odometer_km` is the riders' clock now,
     /// so what is left of the ride counts from it.
-    pub fn to_pax(&self, walk_speed: f32, odometer_km: f64) -> crate::humans::pax::Pax {
-        use crate::humans::pax::{Pax, Task};
+    pub fn to_pax(&self, walk_speed: f32, odometer_km: f64) -> crate::gameplay::humans::pax::Pax {
+        use crate::gameplay::humans::pax::{Pax, Task};
         let mut p = Pax::new(walk_speed, self.request_random.clamp(0.0, 1.0));
         p.task = Task::SittingInBus;
         p.seat = self.seat;

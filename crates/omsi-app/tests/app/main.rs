@@ -12,7 +12,6 @@ mod env_file;
 mod frame_stats;
 mod gameplay;
 mod hud;
-mod humans;
 mod input;
 mod journey;
 mod launcher;

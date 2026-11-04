@@ -314,12 +314,12 @@ impl App {
                     }
                     let riders = self.humans.as_ref().map(|h| {
                         (
-                            h.people_in(crate::humans::BusId::Player),
+                            h.people_in(crate::gameplay::humans::BusId::Player),
                             self.placed
                                 .iter()
                                 .map(|q| {
-                                    h.people_in(crate::humans::BusId::Ai(
-                                        crate::humans::placed_bus_id(q.uid),
+                                    h.people_in(crate::gameplay::humans::BusId::Ai(
+                                        crate::gameplay::humans::placed_bus_id(q.uid),
                                     ))
                                 })
                                 .collect::<Vec<_>>(),
