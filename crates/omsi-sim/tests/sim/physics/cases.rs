@@ -1117,14 +1117,15 @@ fn the_lock_is_the_files_turning_radius() {
 
 #[test]
 fn a_wheel_far_from_the_weight_carries_nothing() {
-    // the centre of gravity behind the rear axle: the front wheels carry nothing (an OMSI
-    // strut only pushes), not a fifth of an even share
+    // the struts share the weight out about the model's origin, as OMSI 2's turn the body:
+    // `[cog]` behind the rear axle moves no load off the front wheels
     let def = Vehicle {
         cog: Some([0.0, -4.0, 1.2]),
         ..bus()
     };
-    let loads = wheel_rest_loads(&def);
-    assert_eq!(loads[0], 0.0);
+    assert_eq!(wheel_rest_loads(&def), wheel_rest_loads(&bus()));
+    // a part resting on its joint, its centre of gravity behind the rear axle: the front
+    // wheels carry nothing (an OMSI strut only pushes), not a fifth of an even share
     let (loads, _) = wheel_rest_loads_supported(
         &Vehicle {
             cog: Some([0.0, -8.0, 1.2]),

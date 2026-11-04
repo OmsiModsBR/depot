@@ -55,7 +55,8 @@ fn reach(rb: &RigidBody) -> f32 {
 }
 
 /// I1: standing, the static loads of the wheels carry the weight, Σ 2 L_e = m g, and
-/// balance it about the centre of gravity, Σ 2 L_e y_e = m g c_y.
+/// balance about the model's origin, Σ 2 L_e y_e = 0, wherever `[cog]` puts the centre of
+/// gravity (OMSI 2's struts turn the body about the origin).
 #[test]
 fn i1_the_static_loads_carry_and_balance_the_weight() {
     for (name, def) in [
@@ -76,10 +77,9 @@ fn i1_the_static_loads_carry_and_balance_the_weight() {
             (load - weight).abs() <= 1e-5 * weight,
             "{name}: the wheels carry {load} N of {weight} N"
         );
-        let want = weight * rb.cog().y;
         assert!(
-            (moment - want).abs() <= 1e-5 * weight * reach(&rb),
-            "{name}: moment {moment} N m, the weight's {want} N m"
+            moment.abs() <= 1e-5 * weight * reach(&rb),
+            "{name}: moment {moment} N m about the origin"
         );
     }
 }
