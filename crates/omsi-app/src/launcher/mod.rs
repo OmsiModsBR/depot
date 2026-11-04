@@ -37,7 +37,6 @@ mod stage;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::state::crash_of;
-mod theme;
 pub(crate) mod thumbs;
 pub(crate) mod tray;
 pub(crate) mod ui;
@@ -48,11 +47,9 @@ use omsi_launcher_lib as core;
 use omsi_launcher_ui::picture::MapPicture;
 use omsi_launcher_ui::window;
 use omsi_launcher_ui::Page as UiPage;
-use omsi_ui::paint::Align;
-use omsi_ui::{Draw, Rect, Weight};
+use omsi_ui::{Draw, Rect};
 use std::sync::Arc;
 use std::time::Instant;
-use theme::*;
 use ui::{Key, Ui};
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -1764,8 +1761,21 @@ impl Launcher {
                 Page::Setup => self.setup_page(content),
             }
             // the rail over the page (a scrolled page passes under it)
-            self.rail();
-            self.status_bar();
+            let page = self.page.shown().unwrap_or(UiPage::Drive);
+            let (logo, top, compact) = (self.logo, self.top_nav(), self.sidebar_compact());
+            match window::nav(frame!(self), page, logo, top, compact) {
+                Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
+                Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
+                _ => {}
+            }
+            let rail_w = if mobile::mobile() {
+                mobile::RAIL_W_MOBILE
+            } else {
+                self.rail_w()
+            };
+            if window::status_bar(frame!(self), rail_w) {
+                self.go(Page::Setup);
+            }
             // (dialogs and what lies over the pages stay solid)
             omsi_ui::theme::set_glass(false);
         }
@@ -1831,7 +1841,7 @@ impl Launcher {
         // a game starts: the last picture before the launcher gives its graphics device up
         // (see `frame`), which stays in the window until the game ends
         if !mobile && self.state.in_game() && !self.awake() {
-            self.draw_game_banner();
+            window::game_banner(&mut self.ui);
         }
         // (over everything, dialogs too: the window can always be moved, sized and closed)
         if chrome::own_frame() {
@@ -1839,45 +1849,6 @@ impl Launcher {
             self.chrome.clicked =
                 omsi_launcher_ui::shell::caption_buttons(&mut self.ui, w, self.chrome.maximized);
         }
-    }
-
-    /// Over the launcher's last picture while a game runs: why the launcher does not move.
-    fn draw_game_banner(&mut self) {
-        let size = self.ui.size;
-        let full = Rect::new(0.0, 0.0, size.x, size.y);
-        self.ui.solid(full);
-        self.ui.p().rect(full, omsi_ui::Color::rgba(0, 0, 0, 0.62));
-        let text = "The launcher rests while you drive, so that the game has the graphics card to itself. It is back as soon as the game ends.";
-        let w = (size.x - 48.0).min(520.0);
-        let th = self
-            .ui
-            .paragraph_height(text, w - 48.0, 13.0, Weight::Regular);
-        let h = 80.0 + th;
-        let r = Rect::new((size.x - w) * 0.5, (size.y - h) * 0.5, w, h);
-        self.ui.panel(r);
-        let inner = Rect::new(r.x + 24.0, r.y + 20.0, r.w - 48.0, r.h - 40.0);
-        self.ui.icon(
-            "directions_bus",
-            Vec2::new(inner.x + 14.0, inner.y + 14.0),
-            26.0,
-            accent(),
-        );
-        self.ui.text_in(
-            "The game is running",
-            Rect::new(inner.x + 38.0, inner.y, inner.w - 38.0, 28.0),
-            18.0,
-            Weight::Bold,
-            TEXT,
-            Align::Left,
-        );
-        self.ui.paragraph(
-            text,
-            Vec2::new(inner.x, inner.y + 40.0),
-            inner.w,
-            13.0,
-            Weight::Regular,
-            TEXT_DIM,
-        );
     }
 
     /// The bus preview in `r`: the game's picture of it, or a word while it loads. The mouse
@@ -2074,80 +2045,6 @@ impl Launcher {
             let points = w.inner_size().width as f32 / w.scale_factor() as f32;
             points < 1300.0
         })
-    }
-
-    /// The sidebar over the page's left side (a scrolled page passes under it), or the top
-    /// bar over its top: the pages, and the driver at the sidebar's foot.
-    fn rail(&mut self) {
-        let size = self.ui.size;
-        let jobs = self
-            .state
-            .jobs
-            .iter()
-            .filter(|j| j.finished.is_none())
-            .count();
-        let mut badges = Vec::new();
-        if jobs > 0 {
-            badges.push((UiPage::Mods, jobs.to_string(), accent()));
-        }
-        let (level, name) = match &self.state.profile {
-            Some(p) => (p.level, p.name.clone()),
-            None => (1, self.state.config.profile.clone()),
-        };
-        // (no driver yet: no level to show, and the foot asks for one - it opens Profile)
-        let ask = name.is_empty();
-        let name = if ask { "No driver".to_string() } else { name };
-        let level = if ask {
-            "Create".to_string()
-        } else {
-            omsi_ui::tr("Level %{level}").replace("%{level}", &level.to_string())
-        };
-        let page = self.page.shown().unwrap_or(UiPage::Drive);
-        // the Depot | OMSI 2 switch: only with the flag on and OmsiLaunch installed
-        let engine = self
-            .state
-            .original
-            .switch_shown(&self.state.config.original_engine)
-            .then(|| omsi_launcher_ui::shell::EngineSwitch {
-                omsi2: self
-                    .state
-                    .original
-                    .engine(&self.state.config.original_engine)
-                    == omsi_launcher_lib::original_engine::Engine::Omsi2,
-                locked: self.state.in_game(),
-            });
-        let nav = if self.top_nav() {
-            omsi_launcher_ui::shell::TopBar {
-                page,
-                logo: self.logo,
-                badges: &badges,
-                engine,
-            }
-            .draw(&mut self.ui, size.x)
-        } else {
-            omsi_launcher_ui::shell::Sidebar {
-                page,
-                logo: self.logo,
-                badges: &badges,
-                footer: (&name, &level),
-                engine,
-                footer_ask: ask,
-                compact: self.sidebar_compact(),
-            }
-            .draw(&mut self.ui, size.y)
-        };
-        match nav {
-            Some(omsi_launcher_ui::shell::Nav::Page(p)) => self.go(Page::of(p)),
-            Some(omsi_launcher_ui::shell::Nav::Footer) => self.go(Page::Profile),
-            Some(omsi_launcher_ui::shell::Nav::Engine(omsi2)) => {
-                self.state.engine_set_mode(if omsi2 {
-                    omsi_launcher_lib::original_engine::Engine::Omsi2
-                } else {
-                    omsi_launcher_lib::original_engine::Engine::Depot
-                })
-            }
-            None => {}
-        }
     }
 
     /// Give the Vehicles and Maps pages the host's catalogs when those differ from what the
@@ -2393,103 +2290,6 @@ impl Launcher {
         if std::mem::take(&mut self.pages.setup.other_root) {
             self.prerender.looking();
         }
-    }
-
-    /// The foot of the page (on a computer): nothing while all is well. A problem or a game
-    /// running shows as one line, Windows 11's InfoBar in small: the OMSI 2 folder not chosen
-    /// (with the button that fixes it) or the game running. The preview helper is no status:
-    /// the picture it draws says so itself (`preview_badge`). Returns where the message line
-    /// can start.
-    fn status_chips(&mut self, x: f32, cy: f32) -> f32 {
-        let games = self.state.instances.iter().filter(|i| i.running).count();
-        let (tone, icon, text, action) = if !self.root_ok() {
-            (
-                WARN,
-                "warning",
-                "OMSI 2 folder: not chosen",
-                Some("Open Setup"),
-            )
-        } else if games > 0 {
-            (accent(), "info", "Game: running", None)
-        } else {
-            return x;
-        };
-        let button_w = action.map_or(0.0, |a| self.ui.width(a, 12.0, Weight::Medium) + 24.0);
-        let w = 36.0 + self.ui.width(text, 12.5, Weight::Regular) + 14.0 + button_w + 6.0;
-        let r = Rect::new(x, cy - 16.0, w, 32.0);
-        let a = self.ui.appear(
-            omsi_ui::widgets::id_of("status:bar"),
-            omsi_ui::theme::MOTION_NORMAL,
-        );
-        self.ui.solid(r);
-        self.ui.p().rounded(
-            r,
-            omsi_ui::theme::corner(RADIUS),
-            omsi_ui::theme::surface(PANEL.mix(tone, 0.12)),
-        );
-        self.ui
-            .p()
-            .rounded_border(r, omsi_ui::theme::corner(RADIUS), 1.0, tone.alpha(0.35));
-        self.ui.push_fade(a);
-        self.ui.icon(icon, Vec2::new(r.x + 18.0, cy), 16.0, tone);
-        self.ui.text_in(
-            text,
-            Rect::new(r.x + 36.0, r.y, w - 36.0 - button_w, r.h),
-            12.5,
-            Weight::Medium,
-            TEXT,
-            Align::Left,
-        );
-        if let Some(label) = action {
-            let b = Rect::new(r.right() - button_w - 4.0, r.y + 4.0, button_w, 24.0);
-            if self
-                .ui
-                .button("status:action", b, label, None, ui::ButtonKind::Normal)
-            {
-                self.go(Page::Setup);
-            }
-        }
-        self.ui.pop_fade();
-        r.right() + 12.0
-    }
-
-    fn status_bar(&mut self) {
-        let size = self.ui.size;
-        let rail_w = if mobile::mobile() {
-            mobile::RAIL_W_MOBILE
-        } else {
-            self.rail_w()
-        };
-        let left = if mobile::mobile() {
-            rail_w + 20.0
-        } else {
-            self.status_chips(rail_w + 28.0, size.y - 22.0)
-        };
-        let (text, err, at) = self.state.status.clone();
-        if text.is_empty() {
-            return;
-        }
-        let fade = if err {
-            1.0
-        } else {
-            (1.0 - (at.elapsed().as_secs_f32() - 6.0) / 1.5).clamp(0.0, 1.0)
-        };
-        if fade <= 0.0 {
-            return;
-        }
-        let first = text.lines().next().unwrap_or("").to_string();
-        let r = Rect::new(left, size.y - 34.0, (size.x - left - 20.0).max(0.0), 24.0);
-        if mobile::mobile() {
-            // (readable over a page scrolled under it)
-            self.ui.p().rect(
-                Rect::new(rail_w, size.y - 34.0, size.x - rail_w, 34.0),
-                RAIL.alpha(0.92),
-            );
-        }
-        let c = if err { DANGER } else { TEXT_DIM };
-        self.ui
-            .text_in(&first, r, 12.0, Weight::Regular, c.alpha(fade), Align::Left);
-        self.ui.tooltip(r, &text);
     }
 
     /// A page's heading (`omsi_launcher_ui::window::page_title`); returns the page's body
