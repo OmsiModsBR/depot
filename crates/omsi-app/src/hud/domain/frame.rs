@@ -73,6 +73,8 @@ pub struct Frame<'a> {
     pub vr: bool,
     /// The name of what the cursor points at (a switch, a part), shown next to it.
     pub tooltip: Option<String>,
+    /// The tooltip is a name from the map, drawn as it is (not looked up as an interface text).
+    pub tooltip_raw: bool,
     /// The chat, when a LAN session runs and the chat is not switched off.
     pub chat: Option<ChatView<'a>>,
     /// The chat's own size on top of `ui_scale` (`Settings::chat_size`).

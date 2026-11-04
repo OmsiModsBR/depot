@@ -55,8 +55,6 @@ impl TextCache {
             // an opaque panel as designed (translucent dark panels show the sky through
             // them), unless the opacity setting asks for less
             3 => vec![22, 22, 22, 255],
-            // the chosen line: the interface's accent
-            4 => accent().to_vec(),
             // a line the mouse is over, the next stop
             5 => vec![255, 255, 255, 28],
             // a hairline between groups (the card's border colour)
@@ -65,15 +63,8 @@ impl TextCache {
             6 => vec![0, 0, 0, 120],
             // a hairline between the information bar's groups
             10 => vec![255, 255, 255, 46],
-            // behind a readout that warns (a tank nearly empty)
-            16 => vec![238, 106, 95, 41],
-            // the speed limit's red frame and white sign
-            11 => vec![208, 48, 48, 255],
+            // white (the tick on the information bar's tank meter)
             12 => vec![235, 235, 235, 255],
-            // the frame rate's dot: keeps up, slow, struggling
-            13 => vec![95, 207, 138, 255],
-            14 => vec![232, 171, 58, 255],
-            15 => vec![238, 106, 95, 255],
             // behind a note or the tooltip (the old HUD's 40 %)
             7 => vec![0, 0, 0, 102],
             _ => vec![10, 12, 16, 150],

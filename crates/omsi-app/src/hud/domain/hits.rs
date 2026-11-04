@@ -48,6 +48,19 @@ pub struct Hits {
     pub info_rect: Option<[f32; 4]>,
     /// The arrow of a two-tier information bar that folds its second tier away.
     pub info_chevron: Option<[f32; 4]>,
+    /// The information bar's items that say what they are under the mouse: where each was
+    /// drawn and its tooltip (an interface text, or a name cut short in full).
+    pub info_tips: Vec<InfoTip>,
+}
+
+/// One tooltip of the information bar: where its item was drawn and what it says.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InfoTip {
+    pub rect: [f32; 4],
+    pub text: String,
+    /// A name from the map (the whole of a route cut short), drawn as it is: not looked up as
+    /// an interface text.
+    pub raw: bool,
 }
 
 impl Default for Hits {
@@ -74,6 +87,7 @@ impl Default for Hits {
             dd_scroll: None,
             info_rect: None,
             info_chevron: None,
+            info_tips: Vec::new(),
         }
     }
 }

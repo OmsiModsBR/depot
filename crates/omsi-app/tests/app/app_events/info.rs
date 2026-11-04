@@ -1,4 +1,7 @@
-use openomsi_game::testing::app_events::{distance_driven, odometer_reading, passengers_aboard};
+use openomsi_game::testing::app_events::{
+    delay_item, distance_driven, grouped, odometer_reading, passengers_aboard, temperatures,
+};
+use openomsi_game::testing::hud::InfoTone;
 
 #[test]
 fn the_distance_driven_is_written_in_kilometres() {
@@ -6,25 +9,56 @@ fn the_distance_driven_is_written_in_kilometres() {
     assert_eq!(distance_driven(12_345.0), "12.3 km");
 }
 
+/// Kilometres and tenths, the thousands split by a thin space (the word is the icon's
+/// tooltip).
 #[test]
 fn the_odometer_reads_kilometres_and_tenths() {
-    assert_eq!(odometer_reading(75_556.639), "Odometer 75556.6 km");
+    assert_eq!(odometer_reading(75_556.639), "75\u{2009}556.6 km");
+    assert_eq!(odometer_reading(18_427.3), "18\u{2009}427.3 km");
+    assert_eq!(odometer_reading(412.94), "412.9 km");
+    assert_eq!(distance_driven(1_234_567.0), "1\u{2009}234.6 km");
 }
 
-/// The count stands before the word, which is singular for one passenger (in the
-/// tables' language; without a lookup the English key is drawn as it is).
+/// Groups of three from the right, in no language's own separator, never before a sign or a
+/// lone digit.
 #[test]
-fn one_passenger_is_written_in_the_singular() {
-    assert_eq!(passengers_aboard(0, None), "0 Passengers");
-    assert_eq!(passengers_aboard(1, None), "1 Passenger");
-    assert_eq!(passengers_aboard(23, None), "23 Passengers");
+fn large_numbers_are_split_in_thousands() {
+    assert_eq!(grouped(0.0, 1), "0.0");
+    assert_eq!(grouped(999.96, 1), "1\u{2009}000.0");
+    assert_eq!(grouped(123_456_789.0, 0), "123\u{2009}456\u{2009}789");
+    assert_eq!(grouped(-5.0, 1), "0.0");
 }
 
-/// With the places the bus has, the count is "aboard / places" and the word is the plural.
+/// The count alone, or "aboard / places" when the bus has places to count; the word is the
+/// icon's tooltip.
 #[test]
 fn the_passengers_come_with_the_places_of_the_bus() {
-    assert_eq!(passengers_aboard(36, Some(111)), "36 / 111 Passengers");
-    assert_eq!(passengers_aboard(1, Some(40)), "1 / 40 Passengers");
+    assert_eq!(passengers_aboard(0, None), "0");
+    assert_eq!(passengers_aboard(23, None), "23");
+    assert_eq!(passengers_aboard(36, Some(111)), "36 / 111");
+    assert_eq!(passengers_aboard(1, Some(40)), "1 / 40");
+}
+
+#[test]
+fn the_temperatures_share_one_unit() {
+    assert_eq!(temperatures(15.4, 18.6), "15 / 19 °C");
+    assert_eq!(temperatures(-3.0, 21.0), "-3 / 21 °C");
+}
+
+/// The delay is a chip: red over a minute late, green over a minute early, the accent in
+/// between; a true minus sign ahead, a plus behind.
+#[test]
+fn the_delay_chip_says_late_early_or_on_time() {
+    let late = delay_item(192.0);
+    assert_eq!(late.text, "+3:12");
+    assert_eq!(late.tone, InfoTone::Delay(1));
+    let early = delay_item(-100.0);
+    assert_eq!(early.text, "−1:40");
+    assert_eq!(early.tone, InfoTone::Delay(-1));
+    assert_eq!(delay_item(59.0).tone, InfoTone::Delay(0));
+    assert_eq!(delay_item(-59.0).tone, InfoTone::Delay(0));
+    assert_eq!(delay_item(-59.0).text, "−0:59");
+    assert!(late.tip.is_some());
 }
 
 #[test]
@@ -83,13 +117,19 @@ fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
         collapsed: false,
     };
     let bar = info_bar(&data, InfoMode::Full, true);
-    assert!(bar.bottom);
+    assert!(bar.bottom && !bar.large);
+    // (the clock after its icon, named under the mouse)
+    assert_eq!(bar.groups[0][0].icon, Some("hud-time"));
+    assert!(bar.groups[0][0].tip.is_some());
     assert_eq!(bar.groups.len(), 2);
     assert!(bar.groups[1][0].text.starts_with("74 fps"));
     let compact = info_bar(&data, InfoMode::Compact, false);
     assert_eq!(compact.groups[1][0].text, "74 / 52 fps");
     // (asked for, the frame rate is there in every layout)
-    assert_eq!(info_bar(&data, InfoMode::Essential, false).groups.len(), 1);
+    let essentials = info_bar(&data, InfoMode::Essential, false);
+    assert_eq!(essentials.groups.len(), 1);
+    // (the Essentials layout draws its speed and sign larger)
+    assert!(essentials.large && !compact.large);
 }
 
 /// The two-tier layouts: the clock in the first tier, the frame rate among the readouts of

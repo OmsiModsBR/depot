@@ -554,6 +554,7 @@ pub mod ui {
                 cursor: (0.0, 0.0),
                 vr: false,
                 tooltip: None,
+                tooltip_raw: false,
                 chat: None,
                 chat_size: 1.0,
                 notes: &[],
