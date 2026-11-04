@@ -13,8 +13,9 @@
 //! (an app does not start processes of its own).
 //!
 //! `domain` holds the bus shown, the picture's shape and the messages, `implementation` the
-//! showroom, the helper, the link and the kept pictures, `interface` what the launcher and the
-//! game call (`input`) and what it reads from the rest of the game (`output`).
+//! showroom, the helper, the link, the kept pictures and the Vehicles page's pictures drawn
+//! ahead of time, `interface` what the launcher and the game call (`input`) and what it reads
+//! from the rest of the game (`output`).
 
 pub(crate) mod domain;
 pub(crate) mod implementation;

@@ -232,9 +232,6 @@ pub mod launcher {
     pub mod pages {
         pub use crate::launcher::pages::*;
     }
-    pub mod prerender {
-        pub use crate::launcher::prerender::*;
-    }
     pub mod thumbs {
         pub use crate::launcher::thumbs::*;
     }
@@ -433,6 +430,9 @@ pub mod showroom {
     pub use crate::showroom::domain::message::*;
     pub use crate::showroom::implementation::{link::*, scene::*, wire::*};
     pub use crate::showroom::*;
+    pub mod prerender {
+        pub use crate::showroom::implementation::prerender::*;
+    }
 }
 pub mod situation {
     pub use crate::situation::*;

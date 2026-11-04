@@ -1,7 +1,6 @@
 mod backdrop;
 mod chrome;
 mod pages;
-mod prerender;
 mod settings;
 mod thumbs;
 mod tray;
