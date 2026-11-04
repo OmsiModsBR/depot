@@ -726,10 +726,9 @@ impl App {
                     // under the list: everyone on board gets off (for a map whose run ends
                     // with people still on the bus)
                     Event::Check(0) => {
-                        let left = self
-                            .humans
-                            .as_mut()
-                            .map_or(0, |h| h.force_disembark(crate::humans::BusId::Player));
+                        let left = self.humans.as_mut().map_or(0, |h| {
+                            h.force_disembark(crate::gameplay::humans::BusId::Player)
+                        });
                         if left > 0 {
                             log::info!("destination window: {left} passengers asked to get off");
                             self.service_msg =

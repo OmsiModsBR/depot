@@ -7642,9 +7642,9 @@ impl Traffic {
     /// `PAX_Exit<i>_Req`) and who stands in its doorways (`_Busy`): the stock AI door
     /// scripts open the rear doors only for a stop request, which comes from the exit
     /// requests.
-    pub fn set_pax_requests(&mut self, id: u64, doors: &crate::humans::DoorWants) {
+    pub fn set_pax_requests(&mut self, id: u64, doors: &crate::gameplay::humans::DoorWants) {
         if let Some(c) = self.cars.iter_mut().find(|c| c.id == id) {
-            crate::humans::Humans::write_door_requests(&mut c.vehicle, doors);
+            crate::gameplay::humans::Humans::write_door_requests(&mut c.vehicle, doors);
         }
     }
 

@@ -3,10 +3,10 @@
 
 use crate::career;
 use crate::core::cli::Args;
+use crate::gameplay::humans;
 use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
-use crate::humans;
 use crate::menu;
 use crate::player::Player;
 use crate::radio;

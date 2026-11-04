@@ -1,8 +1,8 @@
 //! What the traffic is told about the player and the LAN buses.
 
 use crate::core::app::App;
+use crate::gameplay::humans;
 use crate::gameplay::traffic;
-use crate::humans;
 use crate::player::Player;
 use crate::world::scene::World;
 use glam::DVec3;

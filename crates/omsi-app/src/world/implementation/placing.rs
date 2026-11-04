@@ -229,7 +229,9 @@ impl App {
             ) {
                 if let Some(h) = self.humans.as_mut() {
                     h.evict(
-                        crate::humans::BusId::Ai(crate::humans::placed_bus_id(q.uid)),
+                        crate::gameplay::humans::BusId::Ai(crate::gameplay::humans::placed_bus_id(
+                            q.uid,
+                        )),
                         &w,
                     );
                 }

@@ -12,7 +12,7 @@
 //! own, eased as theirs are; the camera eases into each new view instead of cutting.
 
 use crate::core::app::App;
-use crate::humans::{AvatarCmd, BusId, Humans};
+use crate::gameplay::humans::{AvatarCmd, BusId, Humans};
 use glam::{DVec2, DVec3};
 use omsi_sim::collision::Obb;
 use winit::keyboard::KeyCode;
@@ -360,7 +360,7 @@ impl App {
         p.axes.release_all();
         // the people's animation carries the walker: without passengers, a crowd of one
         if self.humans.is_none() {
-            let mut h = crate::humans::Humans::new(&self.args.root);
+            let mut h = crate::gameplay::humans::Humans::new(&self.args.root);
             h.avatar_only = true;
             h.set_cabin(&mut p.vehicle);
             self.humans = Some(h);
@@ -580,7 +580,7 @@ impl App {
             let p = self.player.as_ref().unwrap();
             let v = &p.vehicle;
             if self.humans.is_none() {
-                let mut h = crate::humans::Humans::new(&self.args.root);
+                let mut h = crate::gameplay::humans::Humans::new(&self.args.root);
                 h.avatar_only = true;
                 self.humans = Some(h);
             }
@@ -641,7 +641,7 @@ impl App {
     /// started as a pedestrian).
     pub(crate) fn start_on_foot(&mut self, pos: DVec3, heading: f64) {
         if self.humans.is_none() {
-            let mut h = crate::humans::Humans::new(&self.args.root);
+            let mut h = crate::gameplay::humans::Humans::new(&self.args.root);
             h.avatar_only = true;
             self.humans = Some(h);
         }

@@ -194,10 +194,10 @@ pub mod hud {
     }
 }
 pub mod humans {
-    pub use crate::humans::*;
+    pub use crate::gameplay::humans::*;
 
     pub mod pax {
-        pub use crate::humans::pax::*;
+        pub use crate::gameplay::humans::pax::*;
     }
 }
 pub mod input {
