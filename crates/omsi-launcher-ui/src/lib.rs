@@ -7,6 +7,7 @@
 //! game, for pictures (`offscreen`, the `launcher_shot` example) and tests.
 
 pub mod api_limits;
+pub mod backdrop;
 pub mod host;
 pub mod kit;
 pub mod look;
@@ -18,6 +19,7 @@ pub mod picture;
 pub mod sample;
 pub mod shell;
 pub mod state;
+pub mod thumbs;
 pub mod vehicles;
 pub mod window;
 

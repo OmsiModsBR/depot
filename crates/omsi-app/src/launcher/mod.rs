@@ -23,7 +23,6 @@ macro_rules! frame {
     };
 }
 
-pub(crate) mod backdrop;
 pub(crate) mod chrome;
 pub(crate) mod diagnostics;
 pub(crate) mod gfx;
@@ -36,7 +35,6 @@ mod stage;
 pub(crate) use omsi_launcher_ui::state;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 pub(crate) use omsi_launcher_ui::state::crash_of;
-pub(crate) mod thumbs;
 pub(crate) mod tray;
 pub(crate) mod ui;
 
@@ -186,13 +184,13 @@ pub struct Launcher {
     /// pixels not yet on the GPU or being read, and its texture with its width over height.
     map_pic: MapPicture,
     /// The small pictures of the Maps library's rows.
-    thumbs: thumbs::Thumbs,
+    thumbs: omsi_launcher_ui::thumbs::Thumbs,
     /// The pictures of the library's vehicles drawn ahead of time, and how many were made
     /// when the small pictures were last asked for again (`paint_thumbs`).
     prerender: showroom::Prerender,
     prerender_seen: usize,
     /// The Scene background's picture (Settings > Interface > Background).
-    backdrop: backdrop::Backdrop,
+    backdrop: omsi_launcher_ui::backdrop::Backdrop,
     /// The Maps page's start: its typed date and time, and the window open over the page.
     start: window::StartView,
     /// The chosen map's picture (see `mapview`): where it is this frame and its texture.
@@ -303,10 +301,10 @@ impl Launcher {
             preview_rect: None,
             preview_tex: None,
             map_pic: MapPicture::default(),
-            thumbs: thumbs::Thumbs::default(),
+            thumbs: omsi_launcher_ui::thumbs::Thumbs::default(),
             prerender: showroom::Prerender::default(),
             prerender_seen: 0,
-            backdrop: backdrop::Backdrop::default(),
+            backdrop: omsi_launcher_ui::backdrop::Backdrop::default(),
             start: window::StartView::default(),
             mapview: crate::mapview::MapView::new(),
             map_rect: None,
@@ -1978,16 +1976,18 @@ impl Launcher {
             return false;
         }
         let root = std::path::PathBuf::from(&self.state.config.root);
-        let map = |file: &str| backdrop::Want::Map {
+        let map = |file: &str| omsi_launcher_ui::backdrop::Want::Map {
             root: root.clone(),
             file: file.to_string(),
+            folder: crate::screenshot_name::folder_of(file).unwrap_or_default(),
         };
         self.backdrop.game_running(self.state.in_game());
         let want = match self.page {
             Page::Maps => self.maps.current().map(map),
-            Page::Vehicles if self.preview.has_picture() => {
-                self.preview.showing().map(backdrop::Want::Bus)
-            }
+            Page::Vehicles if self.preview.has_picture() => self
+                .preview
+                .showing()
+                .map(omsi_launcher_ui::backdrop::Want::Bus),
             // (while the next bus is drawn, the picture before stays: not a screenshot between)
             Page::Vehicles if self.preview.loading() => self.backdrop.wanted().cloned(),
             Page::Vehicles => None,
@@ -1996,7 +1996,8 @@ impl Launcher {
                 .map(|m| map(m)),
             _ => None,
         };
-        self.backdrop.want(want.unwrap_or(backdrop::Want::Latest));
+        self.backdrop
+            .want(want.unwrap_or(omsi_launcher_ui::backdrop::Want::Latest));
         let Some((tex, aspect)) = self.backdrop.shown() else {
             return false;
         };
