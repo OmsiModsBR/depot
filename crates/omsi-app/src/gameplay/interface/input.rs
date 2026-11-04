@@ -12,6 +12,8 @@ pub(crate) mod humans {
     /// The passengers: their types and their procedures.
     pub mod pax {
         pub use crate::gameplay::domain::humans::pax::*;
+        // the procedures are only named from outside by the tests (`testing.rs`)
+        #[cfg(feature = "test-support")]
         pub use crate::gameplay::implementation::humans::pax::*;
     }
 }
