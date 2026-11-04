@@ -455,6 +455,7 @@ impl ApplicationHandler for App {
                 let now = Instant::now();
                 let raw_dt = (now - self.last).as_secs_f32();
                 self.log_frame(raw_dt);
+                self.log_profile_window(raw_dt);
                 let profiling = omsi_cfg::flags::PROFILE.is_set();
                 let waited: f64 = ["acquire", "present", "gpu"]
                     .iter()

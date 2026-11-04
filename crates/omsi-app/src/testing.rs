@@ -93,6 +93,9 @@ pub mod core {
         pub use crate::core::domain::app::*;
         pub use crate::core::implementation::app::*;
     }
+    pub mod applog {
+        pub use crate::core::implementation::applog::profile_window;
+    }
     pub mod cli {
         pub use crate::core::domain::cli::*;
     }
