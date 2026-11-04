@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use glam::{DVec3, Mat4, Vec3};
 
-use crate::scene::World;
+use crate::world::scene::World;
 
 /// One wheel of a model: the meshes turned by the same `Wheel_Rotation_*` variable, taken
 /// by the tallest (the tyre, not its hub cap): its centre and half height at rest.
@@ -161,14 +161,14 @@ impl GroundGap {
             let tyre = centre.z - r as f64;
             // what is drawn under the tyre, from 2 m over its hub: a tyre sunk into the road
             // is under the road, and asked from the hub that found the ground below it
-            let drawn = crate::scene::drawn_ground(
+            let drawn = crate::world::scene::drawn_ground(
                 &world.terrains,
                 &world.surfaces,
                 centre.x,
                 centre.y,
                 centre.z + 2.0,
             );
-            let wheel = crate::scene::drive_probe(
+            let wheel = crate::world::scene::drive_probe(
                 &world.terrains,
                 &world.surfaces,
                 centre.x,
@@ -324,9 +324,13 @@ pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
         while s < len {
             let (p, _) = l.at(s);
             s += 1.0;
-            let Some(d) =
-                crate::scene::drawn_ground(&world.terrains, &world.surfaces, p.x, p.y, p.z + 3.0)
-            else {
+            let Some(d) = crate::world::scene::drawn_ground(
+                &world.terrains,
+                &world.surfaces,
+                p.x,
+                p.y,
+                p.z + 3.0,
+            ) else {
                 none += 1;
                 continue;
             };
@@ -334,9 +338,14 @@ pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
             // and what the wheels stand on there (the faces under 3 m over the lane, as
             // OMSI asks), against the window an AI car looks in (0.6 m over its lane,
             // 0.1 m under it)
-            if let Some(w) =
-                crate::scene::drive_probe(&world.terrains, &world.surfaces, p.x, p.y, p.z + 3.0)
-                    .below
+            if let Some(w) = crate::world::scene::drive_probe(
+                &world.terrains,
+                &world.surfaces,
+                p.x,
+                p.y,
+                p.z + 3.0,
+            )
+            .below
             {
                 let off = w - p.z;
                 let k = edges.iter().position(|e| off < *e).unwrap_or(edges.len());
@@ -422,8 +431,14 @@ pub fn check_lanes(world: &World, traffic: &crate::traffic::Traffic) {
                 let w = p + right * side;
                 tried += 1;
                 let g = |x: f64, y: f64| {
-                    crate::scene::drive_probe(&world.terrains, &world.surfaces, x, y, p.z + 1.0)
-                        .below
+                    crate::world::scene::drive_probe(
+                        &world.terrains,
+                        &world.surfaces,
+                        x,
+                        y,
+                        p.z + 1.0,
+                    )
+                    .below
                 };
                 let Some(here) = g(w.x, w.y) else { continue };
                 let around: Vec<f64> = [(0.03, 0.0), (-0.03, 0.0), (0.0, 0.03), (0.0, -0.03)]

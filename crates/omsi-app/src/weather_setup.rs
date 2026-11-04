@@ -3,7 +3,7 @@
 use crate::core::cli::Args;
 use crate::core::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
 use crate::lights;
-use crate::scene;
+use crate::world::scene;
 pub(crate) use omsi_content::weather::psychro::{
     absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
 };

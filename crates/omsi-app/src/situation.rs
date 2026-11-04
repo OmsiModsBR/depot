@@ -2,7 +2,7 @@
 
 use crate::core::cli::{parse_time, Args};
 use crate::player::Player;
-use crate::scene::{self, World};
+use crate::world::scene::{self, World};
 use anyhow::{anyhow, Result};
 use omsi_render::Camera;
 use std::path::{Path, PathBuf};

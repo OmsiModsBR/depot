@@ -562,7 +562,7 @@ impl App {
                         self.skip_next_stop();
                         return;
                     }
-                    // the object editor (`crate::editor`)
+                    // the object editor (`crate::world::editor`)
                     KeyCode::KeyE if ctrl && shift_now => {
                         self.toggle_editor();
                         return;

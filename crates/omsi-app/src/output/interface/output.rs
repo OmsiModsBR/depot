@@ -3,4 +3,4 @@
 
 pub(in crate::output) use crate::core::app::App;
 pub(in crate::output) use crate::player::Player;
-pub(in crate::output) use crate::scene::World;
+pub(in crate::output) use crate::world::scene::World;

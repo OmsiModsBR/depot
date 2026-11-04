@@ -461,7 +461,7 @@ impl Navigator {
 
     /// The name of the street under the pointer, from the map's package: any street the package names, also where
     /// the game has no road (not while the map is dragged or the pointer is on the lines panel).
-    fn hover_street(&mut self) -> Option<(Option<crate::map_surface::Street>, Option<f32>)> {
+    fn hover_street(&mut self) -> Option<(Option<crate::world::map_surface::Street>, Option<f32>)> {
         let (x, y) = self.city.hover?;
         let r = self.city.rect;
         if self.city.drag.is_some()

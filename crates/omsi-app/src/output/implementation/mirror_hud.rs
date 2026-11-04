@@ -17,7 +17,7 @@ use super::super::domain::mirror_hud::{
     MirrorHud, Panel, Turn, HINT, LEFT, MARGIN, MAX_ASPECT, MAX_H, MIN_ASPECT, MIN_H, RIGHT,
 };
 use super::super::interface::output::{Player, World};
-use crate::scene::MirrorGlass;
+use crate::world::scene::MirrorGlass;
 use omsi_render::{Renderer, Scene};
 use winit::keyboard::KeyCode;
 

@@ -33,7 +33,7 @@ pub fn vr_mirror_updates(budget: &mut f32, dt: f32, rate: f32, mirrors: usize) -
 
 /// Whether the tile under `at` has its wheel surfaces loaded (always, without a world). A
 /// vehicle whose tile is not is held where it is: stepped, it falls through the world.
-fn ground_loaded_at(world: Option<&crate::scene::World>, at: glam::DVec3) -> bool {
+fn ground_loaded_at(world: Option<&crate::world::scene::World>, at: glam::DVec3) -> bool {
     world.is_none_or(|w| {
         let k = (
             (at.x / omsi_map::tile_size()).floor() as i32,
@@ -2077,7 +2077,8 @@ impl ApplicationHandler for App {
                 }
                 // --on-foot: the bus the start put down goes, the player stands beside it
                 if self.args.on_foot && self.world.is_some() {
-                    let entry = crate::world_load::spawn_point(&self.args, self.world.as_deref());
+                    let entry =
+                        crate::world::world_load::spawn_point(&self.args, self.world.as_deref());
                     self.args.on_foot = false;
                     if self.player.is_some() {
                         self.remove_driven_vehicle();

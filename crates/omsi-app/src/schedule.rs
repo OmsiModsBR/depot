@@ -1,8 +1,8 @@
 //! Scheduled AI buses: the map's timetable lines (`TTData`) put buses on their tracks at the
 //! tour departure times; they follow the track lanes and stop at the trip's stations.
 
-use crate::scene::World;
 use crate::traffic::Traffic;
+use crate::world::scene::World;
 use hashbrown::{HashMap, HashSet};
 use omsi_render::{Renderer, Scene};
 use omsi_sim::traffic::{LaneKey, Network};
@@ -395,8 +395,8 @@ pub struct Schedule {
     retry_at: HashMap<usize, f64>,
     /// Vehicle sets being read ahead on the workers, with the type to upload them with, and
     /// those read and waiting for their upload.
-    fleet_reading: HashMap<crate::scene::VehicleKey, Arc<VehicleType>>,
-    fleet_ready: Arc<parking_lot::Mutex<Vec<crate::scene::VehicleKey>>>,
+    fleet_reading: HashMap<crate::world::scene::VehicleKey, Arc<VehicleType>>,
+    fleet_ready: Arc<parking_lot::Mutex<Vec<crate::world::scene::VehicleKey>>>,
     /// Time of day of the last look at the next departures' vehicles.
     fleet_check: f64,
     /// Per trip and profile: when its bus is at its stations.
@@ -1644,7 +1644,7 @@ impl Schedule {
         day_time: f64,
     ) -> Vec<(Arc<VehicleType>, Option<usize>)> {
         let mut out = Vec::new();
-        let mut seen: HashSet<crate::scene::VehicleKey> = HashSet::new();
+        let mut seen: HashSet<crate::world::scene::VehicleKey> = HashSet::new();
         let end = self
             .departures
             .partition_point(|d| d.time <= day_time - self.day_base + fleet_ahead());
@@ -1702,7 +1702,7 @@ impl Schedule {
         }
         self.fleet_check = day_time;
         let sets = self.upcoming_sets(world, traffic, day_time);
-        let keep: HashSet<crate::scene::VehicleKey> = sets
+        let keep: HashSet<crate::world::scene::VehicleKey> = sets
             .iter()
             .map(|(t, s)| (t.def.path.clone(), *s))
             .chain(self.fleet_reading.keys().cloned())

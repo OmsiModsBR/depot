@@ -21,7 +21,12 @@ pub(crate) struct Placing {
 
 /// Where the ray from `o` along `d` first meets the ground (the terrain, the streets), up
 /// to `max` metres away.
-pub(crate) fn ground_hit(w: &crate::scene::World, o: DVec3, d: DVec3, max: f64) -> Option<DVec3> {
+pub(crate) fn ground_hit(
+    w: &crate::world::scene::World,
+    o: DVec3,
+    d: DVec3,
+    max: f64,
+) -> Option<DVec3> {
     let above = |t: f64| -> Option<bool> {
         let p = o + d * t;
         w.ground_height(p.x, p.y).map(|g| p.z > g)

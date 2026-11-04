@@ -7,7 +7,7 @@ use omsi_ui::{Atlas, Color, Painter, Rect};
 /// showing a line), or any other car; and the line it shows, if it is public transport.
 pub(super) fn traffic_kind(
     c: &crate::traffic::AiCar,
-    surface: Option<&crate::map_surface::MapSurface>,
+    surface: Option<&crate::world::map_surface::MapSurface>,
     line_of: Option<&dyn Fn(u64) -> Option<String>>,
 ) -> (Color, Option<String>, Icon) {
     let v = &c.vehicle;
@@ -22,8 +22,8 @@ pub(super) fn traffic_kind(
         // a tram, a metro train or a train, by what the map says its vehicles are (the others: a tram)
         let kind = surface.and_then(|s| s.rail_kind(&v.ty.def.path.to_string_lossy()));
         let (color, icon) = match kind {
-            Some(crate::map_surface::MODAL_METRO) => (METRO, Icon::Metro),
-            Some(crate::map_surface::MODAL_RAIL) => (TRAIN, Icon::Train),
+            Some(crate::world::map_surface::MODAL_METRO) => (METRO, Icon::Metro),
+            Some(crate::world::map_surface::MODAL_RAIL) => (TRAIN, Icon::Train),
             _ => (TRAM, Icon::Tram),
         };
         return (color, shown.or_else(|| line_of.and_then(|f| f(c.id))), icon);

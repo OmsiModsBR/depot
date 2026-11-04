@@ -9,7 +9,7 @@
 //! `[boogies]`.
 
 use crate::player::Player;
-use crate::scene::World;
+use crate::world::scene::World;
 use glam::DVec3;
 use omsi_geometry::util::wrap_deg;
 use omsi_sim::traffic::{LaneKind, Network};

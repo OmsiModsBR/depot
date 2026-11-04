@@ -2,9 +2,9 @@
 
 use crate::core::cli::{parse_cam, Args};
 use crate::output::default_camera;
-use crate::scene::World;
 use crate::situation::start_clock;
 use crate::weather_setup::weather_snow;
+use crate::world::scene::World;
 use anyhow::Result;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};

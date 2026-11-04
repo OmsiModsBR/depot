@@ -286,8 +286,8 @@ pub struct Navigator {
     pub(in crate::hud) streets: Option<std::sync::Arc<Streets>>,
     /// The map's own surface (`Maps/<Map>/openomsi-realmap`), once read, its names, and a
     /// number that changes when it arrives (the meshes are built again).
-    pub(in crate::hud) surface: Option<std::sync::Arc<crate::map_surface::MapSurface>>,
-    pub(in crate::hud) surface_labels: Vec<crate::map_surface::Label>,
+    pub(in crate::hud) surface: Option<std::sync::Arc<crate::world::map_surface::MapSurface>>,
+    pub(in crate::hud) surface_labels: Vec<crate::world::map_surface::Label>,
     pub(in crate::hud) surface_version: u64,
     /// The surface is drawn (the `nav_surface` setting).
     pub show_surface: bool,
@@ -316,7 +316,7 @@ pub struct Navigator {
             Network,
             HashMap<i64, DVec3>,
             Streets,
-            Option<crate::map_surface::MapSurface>,
+            Option<crate::world::map_surface::MapSurface>,
             Vec<std::path::PathBuf>,
         )>,
     >,
@@ -404,7 +404,7 @@ pub struct CityMap {
     pub(in crate::hud) compass: Option<Rect>,
     pub(in crate::hud) hover_cache: Option<(
         (i64, i64, i64, bool),
-        (Option<crate::map_surface::Street>, Option<f32>),
+        (Option<crate::world::map_surface::Street>, Option<f32>),
     )>,
     pub(in crate::hud) target: Option<(TextureId, u32, u32)>,
     /// The roads mesh (buffer 3): the map version it was built for, its size and anchor.

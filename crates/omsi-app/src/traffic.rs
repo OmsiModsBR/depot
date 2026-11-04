@@ -7,7 +7,7 @@
 const LONG_WAIT_CLAIM: f32 = 45.0;
 const GRIDLOCK_WAIT: f32 = 45.0;
 use crate::bus_service::{BusService, Phase};
-use crate::scene::{VehicleRender, World};
+use crate::world::scene::{VehicleRender, World};
 use anyhow::Result;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
@@ -2706,7 +2706,7 @@ impl Traffic {
             return;
         }
         let debug = omsi_cfg::flags::DEBUG_TRAFFIC.is_set() || forced.is_some();
-        let mut candidates: Vec<(i64, crate::scene::ParkedObject)> = world
+        let mut candidates: Vec<(i64, crate::world::scene::ParkedObject)> = world
             .parked_objects
             .lock()
             .iter()
@@ -3422,7 +3422,7 @@ impl Traffic {
         // (`OMSI_AI_WAY_ONLY=1`: on the way and the plain sampler, as before - A/B runs)
         vehicle.contact = (kind == LaneKind::Street && !omsi_cfg::flags::AI_WAY_ONLY.is_set())
             .then(|| {
-                std::sync::Arc::new(crate::scene::DriveGround {
+                std::sync::Arc::new(crate::world::scene::DriveGround {
                     terrains: world.terrains.clone(),
                     surfaces: world.surfaces.clone(),
                 }) as std::sync::Arc<dyn omsi_sim::physics::Ground>
@@ -8332,7 +8332,7 @@ impl Traffic {
                 None => (omsi_sim::traffic::UNLINKED_PHASE, false),
             };
             let (r, y, g) = TrafficLightController::lamps(state);
-            let value = |lamp: &crate::scene::LightObject, var: &str| -> f32 {
+            let value = |lamp: &crate::world::scene::LightObject, var: &str| -> f32 {
                 // Custom signals can shift phases or blink the standard channels (Numazu
                 // pedestrian lamps). Use their script outputs whenever they are available.
                 let scripted = lamp.script.as_ref().and_then(|script| {
@@ -8345,10 +8345,10 @@ impl Traffic {
                         s.var(var)
                     }
                 });
-                crate::scene::traffic_lamp_value(
+                crate::world::scene::traffic_lamp_value(
                     var,
                     scripted,
-                    crate::scene::standard_traffic_lamp(var, r, y, g, request),
+                    crate::world::scene::standard_traffic_lamp(var, r, y, g, request),
                 )
             };
             if let Some(script) = lamp.script.as_ref() {
@@ -8439,7 +8439,7 @@ impl Traffic {
                     scene,
                     *inst,
                     *slot,
-                    if crate::scene::change_picks_item(value(lamp, var)) {
+                    if crate::world::scene::change_picks_item(value(lamp, var)) {
                         *item
                     } else {
                         *base
@@ -8471,7 +8471,7 @@ impl Traffic {
                             scripted
                                 .or_else(|| v.trim().parse::<f32>().ok())
                                 .or_else(|| {
-                                    crate::scene::standard_traffic_lamp(v, r, y, g, request)
+                                    crate::world::scene::standard_traffic_lamp(v, r, y, g, request)
                                 })
                         };
                         let (alpha, light) = slots.values(&known);
@@ -8517,21 +8517,21 @@ impl Traffic {
             }
             c.render.hidden = false;
             if let Some(cam) = self.camera {
-                let far = (c.vehicle.position - cam).length() > crate::scene::DISPLAYS_FAR;
+                let far = (c.vehicle.position - cam).length() > crate::world::scene::DISPLAYS_FAR;
                 let due = c.render.display_tick != tick;
                 c.render.displays_far = far && !due;
                 if far && due {
                     c.render.display_tick = tick;
                 }
             }
-            crate::scene::sync_vehicle_textures(
+            crate::world::scene::sync_vehicle_textures(
                 renderer,
                 scene,
                 &mut c.vehicle,
                 &c.render,
                 &mut budget,
             );
-            crate::scene::sync_vehicle_materials(renderer, scene, &c.vehicle, &mut c.render);
+            crate::world::scene::sync_vehicle_materials(renderer, scene, &c.vehicle, &mut c.render);
             // a coupled part runs no scripts of its own: its plates, its displays and its
             // switched materials follow the leading vehicle's, as the player's own rear
             // sections do (without this an AI bus's rear section kept the blank textures and
@@ -8539,7 +8539,7 @@ impl Traffic {
             {
                 let mut trailers = std::mem::take(&mut c.vehicle.trailers);
                 for (t, r) in trailers.iter_mut().zip(c.trailer_renders.iter_mut()) {
-                    crate::scene::sync_vehicle_part(renderer, scene, &c.vehicle, t, r);
+                    crate::world::scene::sync_vehicle_part(renderer, scene, &c.vehicle, t, r);
                 }
                 c.vehicle.trailers = trailers;
             }
@@ -8554,7 +8554,7 @@ impl Traffic {
                     .map(|cam| (c.vehicle.position - cam).length() < SKIN_DISTANCE)
                     .unwrap_or(true);
                 if near {
-                    crate::scene::sync_skinned(
+                    crate::world::scene::sync_skinned(
                         renderer,
                         scene,
                         &mut c.vehicle,

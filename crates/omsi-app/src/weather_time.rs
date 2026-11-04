@@ -57,7 +57,7 @@ impl App {
         self.weather_blend = None;
         self.weather_cycle = None;
         self.wetness = custom.road_wetness;
-        crate::scene::SNOW_WEATHER.store(to.snow, std::sync::atomic::Ordering::Relaxed);
+        crate::world::scene::SNOW_WEATHER.store(to.snow, std::sync::atomic::Ordering::Relaxed);
         omsi_sim::host::set_ambient_weather(to.temp.0, to.temp.1);
         self.weather = Some(to);
         if clouds_changed {
@@ -367,7 +367,7 @@ impl App {
         let wire = crate::weather_setup::report_wire(&to).unwrap_or_else(|| file.clone());
         let name = to.name.clone();
         let from = self.weather.clone().unwrap_or_default();
-        crate::scene::SNOW_WEATHER.store(to.snow, std::sync::atomic::Ordering::Relaxed);
+        crate::world::scene::SNOW_WEATHER.store(to.snow, std::sync::atomic::Ordering::Relaxed);
         omsi_sim::host::set_ambient_weather(to.temp.0, to.temp.1);
         self.args.weather = Some(file.clone());
         self.weather_cycle = None;

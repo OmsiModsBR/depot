@@ -2,8 +2,8 @@
 
 use crate::core::cli::Args;
 use crate::output::interface::output::{Player, World};
-use crate::scene;
 use crate::traffic;
+use crate::world::scene;
 use glam::{DVec3, Vec3};
 use omsi_render::{Camera, Renderer, Scene};
 

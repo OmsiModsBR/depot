@@ -49,7 +49,7 @@ pub struct Roads {
     pub streets: Vec<(String, DVec2)>,
     /// The map's own surface (`openomsi-realmap`: water, green, built-up land, rivers, rail,
     /// borders), drawn under the roads when the map's author ships it.
-    pub surface: Option<Arc<crate::map_surface::MapSurface>>,
+    pub surface: Option<Arc<crate::world::map_surface::MapSurface>>,
 }
 
 impl Roads {

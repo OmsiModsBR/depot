@@ -36,7 +36,7 @@ use super::{
     debug_pax, doorways_taken, places_taken, BusId, BusNow, Cabin, DoorWants, Humans, Leg, PedWalk,
     Place, Seat, State, LEFT_HAND,
 };
-use crate::scene::World;
+use crate::world::scene::World;
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_render::{Renderer, Scene};

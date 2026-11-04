@@ -394,7 +394,7 @@ impl DriverFigure {
     /// `pick` chooses among the map's drivers (`drivers.txt`): 0 for the player, a vehicle's
     /// own number for the traffic.
     pub fn new(
-        world: &crate::scene::World,
+        world: &crate::world::scene::World,
         renderer: &Renderer,
         scene: &mut Scene,
         v: &VehicleInstance,
@@ -405,7 +405,7 @@ impl DriverFigure {
     }
 
     fn new_with(
-        world: &crate::scene::World,
+        world: &crate::world::scene::World,
         renderer: &Renderer,
         scene: &mut Scene,
         v: &VehicleInstance,
@@ -622,7 +622,7 @@ impl DriverFigure {
         renderer: &Renderer,
         scene: &mut Scene,
         v: &VehicleInstance,
-        render: &crate::scene::VehicleRender,
+        render: &crate::world::scene::VehicleRender,
         dt: f32,
         show: bool,
         mirror_only: bool,
@@ -1806,7 +1806,7 @@ fn find_shifter(v: &VehicleInstance, hip: Vec3, heading: f32) -> Option<Shifter>
 /// wheel of its buses - Spandau and Grundorf name `humans\\axyz\\man01.hum`; OMSI
 /// reads the list with the map, the original), chosen by `pick`; without the list OMSI's own
 /// driver figure `Humans/*/DBC_man04_driver.hum`. Each file is read once.
-fn driver_type(world: &crate::scene::World, pick: u64) -> Option<Arc<HumanType>> {
+fn driver_type(world: &crate::world::scene::World, pick: u64) -> Option<Arc<HumanType>> {
     let listed: Vec<std::path::PathBuf> =
         omsi_map::ailists::load_list(&world.map_dir.join("drivers.txt"))
             .iter()

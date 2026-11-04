@@ -101,7 +101,7 @@ impl Navigator {
     }
 
     /// Read the whole map's road network on a worker (once per session).
-    pub fn start_map(&mut self, world: std::sync::Arc<crate::scene::World>) {
+    pub fn start_map(&mut self, world: std::sync::Arc<crate::world::scene::World>) {
         if self.building.is_some() || self.global.is_some() {
             return;
         }
@@ -109,7 +109,7 @@ impl Navigator {
         std::thread::Builder::new()
             .name("navigator map".into())
             .spawn(move || {
-                let surface = crate::map_surface::MapSurface::open(&world.map_dir);
+                let surface = crate::world::map_surface::MapSurface::open(&world.map_dir);
                 let m = world.navigation_map();
                 let mut net = Network {
                     lanes: m.lanes,
@@ -132,7 +132,7 @@ impl Navigator {
     }
 
     /// The map's network given at once (an offscreen picture reads it on its own thread).
-    pub fn set_map(&mut self, map: crate::scene::NavigationMap) {
+    pub fn set_map(&mut self, map: crate::world::scene::NavigationMap) {
         let mut net = Network {
             lanes: map.lanes,
             ..Default::default()
@@ -153,7 +153,7 @@ impl Navigator {
     }
 
     /// The map's package, given at once (an offscreen picture reads it on its own thread).
-    pub fn set_surface(&mut self, surface: Option<crate::map_surface::MapSurface>) {
+    pub fn set_surface(&mut self, surface: Option<crate::world::map_surface::MapSurface>) {
         if let Some(s) = surface {
             let mut labels = s.labels();
             labels.sort_by(|a, b| b.rank.cmp(&a.rank));

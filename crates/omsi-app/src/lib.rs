@@ -15,20 +15,16 @@ use omsi_launcher_ui::api_limits;
 mod career;
 mod describe;
 mod driver;
-mod editor;
 mod env_file;
-mod export;
 mod hud;
 mod humans;
 mod journey;
 mod launcher;
 mod lights;
-mod map_surface;
 mod mapview;
 mod menu;
 mod money;
 mod output;
-mod placing;
 mod radio;
 mod rail_drive;
 mod screenshot_name;
@@ -36,6 +32,7 @@ mod screenshot_name;
 mod steam;
 mod tr_fill;
 mod ui;
+mod world;
 
 mod condensation;
 mod line_times;
@@ -43,12 +40,10 @@ mod puddles;
 mod quit;
 mod rain;
 mod real_time;
-mod scene;
 mod schedule;
 mod schedule_paper;
 mod settings;
 mod showroom;
-mod tiles;
 mod traffic;
 mod traffic_density;
 
@@ -80,7 +75,6 @@ mod weather_cycle;
 mod weather_model;
 mod weather_setup;
 mod weather_time;
-mod world_load;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).
 #[cfg(feature = "test-support")]

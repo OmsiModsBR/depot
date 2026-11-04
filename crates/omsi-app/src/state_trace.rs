@@ -47,7 +47,7 @@ impl StateTrace {
         &mut self,
         i: usize,
         t: f32,
-        world: &crate::scene::World,
+        world: &crate::world::scene::World,
         player: Option<&Player>,
         traffic: Option<&Traffic>,
         duty: Option<&PlayerDuty>,

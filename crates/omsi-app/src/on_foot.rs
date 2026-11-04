@@ -212,7 +212,7 @@ fn push_out(p: DVec2, o: &Obb, r: f64) -> DVec2 {
 /// in the way.
 fn outside_spot(
     h: &mut Humans,
-    world: Option<&crate::scene::World>,
+    world: Option<&crate::world::scene::World>,
     v: &omsi_sim::VehicleInstance,
     others: &[Obb],
     side: f64,
@@ -241,7 +241,7 @@ fn outside_spot(
 /// Where one stands outside vehicle `v` by its door (outside point) `door`: clear of the
 /// body, on the ground; None where a wall or another vehicle is in the way.
 fn outside_at(
-    world: Option<&crate::scene::World>,
+    world: Option<&crate::world::scene::World>,
     v: &omsi_sim::VehicleInstance,
     others: &[Obb],
     door: DVec3,

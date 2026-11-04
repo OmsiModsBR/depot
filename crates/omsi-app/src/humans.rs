@@ -39,9 +39,9 @@
 //! it, and nobody stands or walks where the ground is not loaded.
 
 use crate::ambience;
-use crate::scene::World;
 use crate::situation::SavedRider;
 use crate::traffic::Traffic;
+use crate::world::scene::World;
 use glam::{DVec2, DVec3, Mat4, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_geometry::util::{angle_diff, wrap_deg};

@@ -17,7 +17,7 @@
 //! `OMSI_DEBUG_CAMERA=1` logs the decision per type and what the arm hits.
 
 use crate::output::interface::output::World;
-use crate::scene::ObjectType;
+use crate::world::scene::ObjectType;
 use glam::{DVec3, Mat4, Vec3};
 
 /// How far the camera keeps from what it hits (m): a little more than the near plane.
@@ -232,8 +232,8 @@ pub fn classify(ot: &ObjectType) -> BlockerShape {
             .map(|slot| {
                 let texture = o3d_mats.get(slot).map(|m| m.texture.as_str()).unwrap_or("");
                 !shadow
-                    && !crate::scene::is_null_texture(texture)
-                    && crate::scene::material_alpha(o3d_mats, slot, &base)
+                    && !crate::world::scene::is_null_texture(texture)
+                    && crate::world::scene::material_alpha(o3d_mats, slot, &base)
                         == omsi_render::AlphaMode::Opaque
             })
             .collect();

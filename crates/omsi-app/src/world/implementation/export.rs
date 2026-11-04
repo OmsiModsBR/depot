@@ -117,7 +117,7 @@ pub fn export_glb(
                     Some(m) => *m,
                     None => {
                         // `null.bmp` is the exporters' "no texture": the material colour alone
-                        let img = if crate::scene::is_null_texture(&tex_name) {
+                        let img = if crate::world::scene::is_null_texture(&tex_name) {
                             None
                         } else {
                             match image_index.get(&tex_name.to_ascii_lowercase()) {
