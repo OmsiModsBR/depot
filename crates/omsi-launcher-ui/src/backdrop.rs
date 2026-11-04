@@ -22,8 +22,12 @@ pub const KEPT: usize = 24;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Want {
     /// The map's picture (its file as the map list names it, under the OMSI 2 folder), else the
-    /// latest screenshot of that map, else the latest of any.
-    Map { root: PathBuf, file: String },
+    /// latest screenshot of that map (its folder as screenshots name it), else the latest of any.
+    Map {
+        root: PathBuf,
+        file: String,
+        folder: String,
+    },
     /// The bus (its preview's `tag`), offered with `offer_bus` when its picture comes.
     Bus(u64),
     /// The latest screenshot.
@@ -63,22 +67,28 @@ pub fn blur(img: &image::DynamicImage) -> image::RgbaImage {
 
 /// The picture of a map: its own "picture" file, else the latest screenshot of it, else any;
 /// and whether it is (or would have been) a screenshot.
-fn map_picture(root: &std::path::Path, file: &str) -> (Option<image::RgbaImage>, bool) {
+fn map_picture(
+    root: &std::path::Path,
+    file: &str,
+    folder: &str,
+) -> (Option<image::RgbaImage>, bool) {
     let global = omsi_cfg::find_in_roots(file)
         .map(|(_, p)| p)
         .unwrap_or_else(|| omsi_cfg::resolve_path(root, file));
     let own = global
         .parent()
-        .and_then(super::MapPicture::find)
-        .and_then(|f| super::MapPicture::read(&f));
+        .and_then(crate::picture::MapPicture::find)
+        .and_then(|f| crate::picture::MapPicture::read(&f));
     if own.is_some() {
         return (own, false);
     }
-    let folder = crate::screenshot_name::folder_of(file).unwrap_or_default();
-    let shot = omsi_launcher_lib::screenshots::for_map(&folder)
+    let shot = omsi_launcher_lib::screenshots::for_map(folder)
         .pop()
         .or_else(omsi_launcher_lib::screenshots::latest);
-    (shot.and_then(|p| super::MapPicture::read(&p)), true)
+    (
+        shot.and_then(|p| crate::picture::MapPicture::read(&p)),
+        true,
+    )
 }
 
 impl Backdrop {
@@ -92,17 +102,17 @@ impl Backdrop {
             return;
         }
         let job: Box<dyn FnOnce() -> (Option<image::RgbaImage>, bool) + Send> = match &want {
-            Want::Map { root, file } => {
-                let (root, file) = (root.clone(), file.clone());
+            Want::Map { root, file, folder } => {
+                let (root, file, folder) = (root.clone(), file.clone(), folder.clone());
                 Box::new(move || {
-                    let (img, shot) = map_picture(&root, &file);
+                    let (img, shot) = map_picture(&root, &file, &folder);
                     (img.map(|i| blur(&image::DynamicImage::ImageRgba8(i))), shot)
                 })
             }
             Want::Latest => Box::new(|| {
                 (
                     omsi_launcher_lib::screenshots::latest()
-                        .and_then(|p| super::MapPicture::read(&p))
+                        .and_then(|p| crate::picture::MapPicture::read(&p))
                         .map(|i| blur(&image::DynamicImage::ImageRgba8(i))),
                     true,
                 )

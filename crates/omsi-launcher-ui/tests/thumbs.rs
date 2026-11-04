@@ -1,4 +1,4 @@
-use openomsi_game::testing::launcher::thumbs::*;
+use omsi_launcher_ui::thumbs::*;
 
 #[test]
 fn a_picture_is_cut_to_the_thumbnails_shape() {

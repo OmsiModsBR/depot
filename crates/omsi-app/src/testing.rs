@@ -220,9 +220,6 @@ pub mod keys {
 pub mod launcher {
     pub use crate::launcher::*;
 
-    pub mod backdrop {
-        pub use crate::launcher::backdrop::*;
-    }
     pub mod chrome {
         pub use crate::launcher::chrome::*;
     }
@@ -231,9 +228,6 @@ pub mod launcher {
     }
     pub mod pages {
         pub use crate::launcher::pages::*;
-    }
-    pub mod thumbs {
-        pub use crate::launcher::thumbs::*;
     }
     pub mod tray {
         pub use crate::launcher::tray::*;

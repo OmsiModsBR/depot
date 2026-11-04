@@ -1,4 +1,4 @@
-use openomsi_game::testing::launcher::backdrop::*;
+use omsi_launcher_ui::backdrop::*;
 use std::sync::mpsc::channel;
 
 #[test]
