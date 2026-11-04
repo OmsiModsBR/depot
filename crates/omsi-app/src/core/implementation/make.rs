@@ -18,7 +18,8 @@ use crate::output::ORBIT_DEFAULT;
 use crate::services::run_export;
 use crate::situation::apply_situation;
 use crate::ui_language;
-use crate::{hud, puddles, radio, rain, real_time, tutorial};
+use crate::weather::{puddles, rain};
+use crate::{hud, radio, real_time, tutorial};
 use anyhow::Result;
 use std::time::Instant;
 
@@ -250,7 +251,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         frame_stats: Default::default(),
         fps_low: None,
         rain: rain::Rain::new(),
-        cabin_air: crate::condensation::CabinAir::new(),
+        cabin_air: crate::weather::condensation::CabinAir::new(),
         spray: puddles::Spray::new(),
         lamps_on: None,
         menu: None,

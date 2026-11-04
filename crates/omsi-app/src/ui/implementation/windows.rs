@@ -118,7 +118,9 @@ impl App {
                     String::new(),
                     omsi_ui::tr("Automatic (nearest the map)").to_string(),
                 )];
-                stations.extend(crate::weather_setup::metar_airports(&self.args.root));
+                stations.extend(crate::weather::weather_setup::metar_airports(
+                    &self.args.root,
+                ));
                 let own = &self.settings.metar_station;
                 let station = Some(
                     stations

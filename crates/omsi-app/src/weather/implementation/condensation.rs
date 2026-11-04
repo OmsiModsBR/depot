@@ -247,7 +247,7 @@ pub fn inputs_for(
     riders: usize,
     doors_open: usize,
 ) -> CabinInputs {
-    let (kind, rate) = crate::weather_setup::precip_of(w);
+    let (kind, rate) = crate::weather::weather_setup::precip_of(w);
     let [x, y, z] =
         v.ty.def
             .bounding_box

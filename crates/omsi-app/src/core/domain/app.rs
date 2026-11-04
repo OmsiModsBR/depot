@@ -1,7 +1,6 @@
 //! The window's game: `App` and the state it carries from frame to frame, with the cockpit
 //! camera's glide and the mirrors a bus has frozen.
 
-use crate::ambience;
 use crate::career;
 use crate::core::cli::Args;
 use crate::hud;
@@ -9,12 +8,13 @@ use crate::hud::nav;
 use crate::humans;
 use crate::menu;
 use crate::player::Player;
-use crate::puddles;
 use crate::radio;
-use crate::rain;
 use crate::schedule;
 use crate::settings;
 use crate::traffic;
+use crate::weather::ambience;
+use crate::weather::puddles;
+use crate::weather::rain;
 use crate::world::scene::World;
 use crate::world::tiles;
 use omsi_render::{Camera, Renderer, Scene, SurfaceState};
@@ -79,7 +79,7 @@ pub(crate) struct App {
     pub(crate) fps_low: Option<f32>,
     pub(crate) rain: rain::Rain,
     /// The player's bus's cabin air and the condensation on its glass.
-    pub(crate) cabin_air: crate::condensation::CabinAir,
+    pub(crate) cabin_air: crate::weather::condensation::CabinAir,
     /// What the tyres throw up from the water on the roads (see `puddles`).
     pub(crate) spray: puddles::Spray,
     pub(crate) lamps_on: Option<bool>,
@@ -358,9 +358,9 @@ pub(crate) struct App {
     /// up frame by frame so that a change of wind does not throw the sky around.
     pub(crate) cloud_drift: [f32; 2],
     /// A change of weather coming in (see `weather_cycle`).
-    pub(crate) weather_blend: Option<crate::weather_cycle::Blend>,
+    pub(crate) weather_blend: Option<crate::weather::weather_cycle::Blend>,
     /// The weather cycle, when the weather chosen is `cycle`.
-    pub(crate) weather_cycle: Option<crate::weather_cycle::Cycle>,
+    pub(crate) weather_cycle: Option<crate::weather::weather_cycle::Cycle>,
     /// The METAR sync's download under way (see `tick_metar`), and the seconds to the next one.
     pub(crate) metar_rx: Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
     /// The current METAR receiver is a single manual fetch rather than the continuous sync.

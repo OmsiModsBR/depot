@@ -479,7 +479,7 @@ impl WeatherModel {
             wind: (wind_dir, wind_speed),
             temp: (
                 self.temp,
-                crate::weather_setup::absolute_humidity(self.temp, rh * 100.0),
+                crate::weather::weather_setup::absolute_humidity(self.temp, rh * 100.0),
             ),
             pressure: 1013.0 + p,
             clouds: (kind.into(), lcl.max(200.0)),

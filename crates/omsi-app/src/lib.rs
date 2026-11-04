@@ -10,7 +10,6 @@
 //! the game in one window of one process.
 
 mod about;
-mod ambience;
 use omsi_launcher_ui::api_limits;
 mod career;
 mod describe;
@@ -32,13 +31,11 @@ mod screenshot_name;
 mod steam;
 mod tr_fill;
 mod ui;
+mod weather;
 mod world;
 
-mod condensation;
 mod line_times;
-mod puddles;
 mod quit;
-mod rain;
 mod real_time;
 mod schedule;
 mod schedule_paper;
@@ -71,10 +68,6 @@ mod state_trace;
 mod teleport;
 mod traffic_link;
 mod tutorial;
-mod weather_cycle;
-mod weather_model;
-mod weather_setup;
-mod weather_time;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).
 #[cfg(feature = "test-support")]

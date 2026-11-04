@@ -827,7 +827,10 @@ pub(in crate::hud) fn world_pages(app: &App) -> Vec<Page> {
                     .replace("%{humidity}", &format!("{:.0}", v))
                     .replace(
                         "%{dew}",
-                        &format!("{:.0}", crate::weather_setup::dew_point_c(dew_temp, v)),
+                        &format!(
+                            "{:.0}",
+                            crate::weather::weather_setup::dew_point_c(dew_temp, v)
+                        ),
                     )
             },
         ));

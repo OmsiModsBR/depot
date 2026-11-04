@@ -77,11 +77,11 @@ use crate::humans;
 use crate::lights;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::player::Player;
-use crate::puddles;
 use crate::quit;
 use crate::traffic;
 use crate::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
-use crate::weather_setup::{
+use crate::weather::puddles;
+use crate::weather::weather_setup::{
     apply_weather, debug_sound_every, precip_of, road_wetness, street_condition, weather_lighting,
 };
 use glam::{DVec3, Vec3};
@@ -2610,7 +2610,7 @@ impl ApplicationHandler for App {
                         // every bus one may ride in keeps the weather out: the own, another
                         // player's, a timetable bus - each part of it: an articulated bus's
                         // rear section is a coupled part with its own [boundingbox] (#777)
-                        let boxed = crate::rain::vehicle_boxes;
+                        let boxed = crate::weather::rain::vehicle_boxes;
                         let mut buses: Vec<(glam::DVec3, f64, [f32; 6])> = self
                             .player
                             .as_ref()
@@ -2648,13 +2648,15 @@ impl ApplicationHandler for App {
                                 .map(|h| {
                                     (
                                         h.riding(),
-                                        crate::condensation::open_doors(
+                                        crate::weather::condensation::open_doors(
                                             &h.cabin_doors(crate::humans::BusId::Player),
                                         ),
                                     )
                                 })
                                 .unwrap_or((0, 0));
-                            let ci = crate::condensation::inputs_for(&p.vehicle, wt, riders, doors);
+                            let ci = crate::weather::condensation::inputs_for(
+                                &p.vehicle, wt, riders, doors,
+                            );
                             self.cabin_air.step(if self.paused { 0.0 } else { dt }, &ci);
                         }
                         *self.profile.entry("lights.rain").or_default() +=
