@@ -707,7 +707,7 @@ impl App {
         if !t.initial {
             return;
         }
-        crate::traffic_link::traffic_inputs(
+        crate::gameplay::traffic_link::traffic_inputs(
             t,
             self.camera.as_ref(),
             aspect,
