@@ -3,7 +3,7 @@
 //! Maps - optional: in the game the ALT menu adds and changes vehicles as always. The catalog
 //! is read by the launcher core on a thread of its own, so the window never waits for the disk.
 
-use crate::kit::{self, card, clipped, dot, right, shorten, subheading, text, Status};
+use crate::kit::{self, card, clipped, right, shorten, subheading, text, Status};
 use crate::look::*;
 use crate::shell::BODY_TOP;
 use omsi_launcher_lib::VehicleInfo;
@@ -619,26 +619,17 @@ impl VehiclesView {
                     picked = Some(i);
                 }
                 if ui.rect_visible(row) {
+                    // (the name alone: whether it is original content, a mod or needs a
+                    // pack is on the dot of the details card)
                     clipped(
                         ui,
                         &model_label(v),
                         row.x + 16.0,
-                        row.y + 22.0,
+                        row.center().y,
                         row.w - 40.0,
-                        15.0,
+                        13.5,
                         Weight::Bold,
                         FG,
-                    );
-                    let (status, label) = vehicle_status(v);
-                    dot(ui, row.x + 21.0, row.y + 44.0, status);
-                    text(
-                        ui,
-                        label,
-                        row.x + 34.0,
-                        row.y + 44.0,
-                        12.0,
-                        Weight::Regular,
-                        status.color(),
                     );
                     ui.icon(
                         "o-chevron",
@@ -742,23 +733,25 @@ impl VehiclesView {
         } else {
             (Status::Found, "Files found")
         };
-        let bw = ui.width(worst.1, 12.0 * TEXT_SCALE, Weight::Medium) + 20.0;
-        let badge = Rect::new(r.right() - 17.0 - bw, r.y + 58.0, bw, 24.0);
-        ui.p().rounded(badge, 4.0, worst.0.color().alpha(0.12));
-        ui.p()
-            .rounded_border(badge, 4.0, 1.0, worst.0.color().alpha(0.5));
-        ui.text_in(
-            worst.1,
-            badge,
-            12.0 * TEXT_SCALE,
-            Weight::Medium,
-            worst.0.color(),
-            Align::Center,
-        );
-        let tip: Vec<String> = files
-            .iter()
-            .map(|(label, _, note)| format!("{label}: {note}"))
-            .collect();
+        // (a small dot in the status's colour at the right, so the model's name has the room;
+        // the words and every file are under the mouse)
+        let badge = Rect::new(r.right() - 17.0 - 20.0, r.y + 60.0, 20.0, 20.0);
+        let dot = glam::Vec2::new(badge.x + badge.w / 2.0, badge.y + badge.h / 2.0);
+        ui.p().circle(dot, 7.0, worst.0.color().alpha(0.25));
+        ui.p().circle(dot, 4.5, worst.0.color());
+        // (the library rows no longer say whether it is original content or a mod: the dot
+        // does, first line of its tooltip)
+        let tip: Vec<String> = [
+            omsi_ui::tr(vehicle_status(v).1).into_owned(),
+            omsi_ui::tr(worst.1).into_owned(),
+        ]
+        .into_iter()
+        .chain(
+            files
+                .iter()
+                .map(|(label, _, note)| format!("{label}: {note}")),
+        )
+        .collect();
         ui.tooltip(badge, &tip.join("\n"));
         // (the model in bold, the maker under it; the folder and the file are under the mouse)
         let name = model_label(v);
@@ -1104,7 +1097,7 @@ fn file_status(v: &VehicleInfo) -> Vec<(&'static str, Status, String)> {
 /// A detail row's height.
 const ROW: f32 = 29.0;
 /// A library row's and a manufacturer heading's height.
-const ROW_H: f32 = 62.0;
+const ROW_H: f32 = 44.0;
 const GROUP_H: f32 = 36.0;
 /// A paint tile's size, and the picture in it (the shape of the small pictures the host makes).
 const TILE_W: f32 = 148.0;

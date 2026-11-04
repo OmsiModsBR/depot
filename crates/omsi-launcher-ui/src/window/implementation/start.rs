@@ -328,25 +328,25 @@ pub fn card(f: &mut Frame, sv: &mut StartView, r: Rect) {
             foot -= 10.0;
         }
         if let (Some(name), "new") = (bus, session) {
-            foot -= 26.0;
-            f.ui.icon("o-bus", Vec2::new(x + 8.0, foot + 9.0), 15.0, TEXT_DIM);
+            // (two lines: the phrase, and the model's name under it - a long name no longer
+            // pushes the phrase out of the row)
+            foot -= 44.0;
+            f.ui.icon("o-bus", Vec2::new(x + 8.0, foot + 18.0), 15.0, TEXT_DIM);
             let clear_w = 44.0;
             let room = w - 22.0 - clear_w - 8.0;
-            let line = crate::kit::fit_text(
-                f.ui,
-                &omsi_ui::tr("Bus preselected in Vehicles: %{name}").replace("%{name}", &name),
-                12.5,
-                room,
-            );
-            f.ui.text_in(
-                &line,
-                Rect::new(x + 22.0, foot, room, 18.0),
-                12.5,
-                Weight::Regular,
-                TEXT_SOFT,
-                Align::Left,
-            );
-            let clear = Rect::new(x + w - clear_w, foot - 4.0, clear_w, 26.0);
+            let phrase = omsi_ui::tr("Preselected bus:");
+            for (row, text) in [&*phrase, &*name].into_iter().enumerate() {
+                let line = crate::kit::fit_text(f.ui, text, 12.5, room);
+                f.ui.text_in(
+                    &line,
+                    Rect::new(x + 22.0, foot + row as f32 * 18.0, room, 18.0),
+                    12.5,
+                    Weight::Regular,
+                    TEXT_SOFT,
+                    Align::Left,
+                );
+            }
+            let clear = Rect::new(x + w - clear_w, foot + 5.0, clear_w, 26.0);
             let (h, _, clicked) = f.ui.interact_key(id_of("start-clear-bus"), clear);
             f.ui.text_in(
                 "Clear",
