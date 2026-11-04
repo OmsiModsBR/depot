@@ -141,18 +141,20 @@ impl PhysicsSpec {
 }
 
 /// The static load on each wheel of each axle (N): the weight shared so that the axle loads
-/// balance the centre of gravity (a least-squares split when there are more than two axles).
-/// A wheel carries no less than nothing - an OMSI strut only pushes -, however far the centre
-/// of gravity lies from its axle.
+/// balance about the model's origin, as OMSI 2's struts turn the body (see
+/// `RigidBody::wheel_contacts`) - `[cog]` does not move it - (a least-squares split when there
+/// are more than two axles). A wheel carries no less than nothing - an OMSI strut only
+/// pushes -, however far the origin lies from its axle.
 pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    rest_loads(def, mass_kg(def), 0.0)
+    rest_loads(def, mass_kg(def), 0.0, 0.0)
 }
 
 /// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them:
 /// with its mass ([`kinematic_mass_kg`]), each wheel taking at least a share of an even split
 /// (`MIN_LOAD_SHARE`).
 pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE)
+    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
+    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, cog_y)
 }
 
 /// How far each axle's spring sits down under the vehicle's weight and how far its tyre
@@ -174,8 +176,8 @@ pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)
         .collect()
 }
 
-fn rest_loads(def: &Vehicle, mass: f32, least_share: f32) -> Vec<f32> {
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
+fn rest_loads(def: &Vehicle, mass: f32, least_share: f32, centre: f32) -> Vec<f32> {
+    let cog_y = centre;
     let g = GRAVITY;
     let n = (def.axles.len() * 2).max(1) as f32;
     let sy: f32 = def.axles.iter().map(|a| 2.0 * a.long).sum();
