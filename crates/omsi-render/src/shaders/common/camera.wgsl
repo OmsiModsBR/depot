@@ -35,6 +35,8 @@ struct Camera {
     // Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     // the air has carried the gusts since the start (m, modulo PATTERN_PERIOD)
     tree_wind: vec4<f32>,
+    // The classic sky's sun and moon pictures: xyz towards the moon, w 1 to draw them
+    moon: vec4<f32>,
 };
 
 struct PointLight {

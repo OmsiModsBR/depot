@@ -205,6 +205,9 @@ pub struct FramePlan {
     pub clouds: [f32; 4],
     /// Whether the glow around the sun is wanted (the `sun_glow` setting).
     pub sun_glow: bool,
+    /// xyz towards the moon (world), w 1: where the classic sky draws the moon's picture
+    /// ([`crate::Scene::sky_bodies`]).
+    pub moon: [f32; 4],
     /// Map lamps one spot of the ground takes into its light (0 = all).
     pub lamp_cap: u32,
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
@@ -256,6 +259,7 @@ pub(crate) fn plan_of(
             f.lighting.cloud_height,
         ],
         sun_glow: f.lighting.sun_glow,
+        moon: cu.moon,
         lamp_cap: f.lighting.lamp_cap,
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
@@ -278,6 +282,12 @@ impl crate::scene::Scene {
     /// the game has set them.
     pub fn sky_textures(&self) -> Option<[TextureId; 3]> {
         self.sky_textures
+    }
+
+    /// The sun's and the moon's pictures the classic sky draws (`Texture\sonne.bmp`,
+    /// `Texture\mond.bmp`), once the game has set them.
+    pub fn sky_bodies(&self) -> (Option<TextureId>, Option<TextureId>) {
+        (self.sky_sun, self.sky_moon)
     }
 
     /// The picture of the weather's cloud type for a renderer that draws the clouds itself

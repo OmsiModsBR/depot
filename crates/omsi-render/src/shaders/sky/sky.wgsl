@@ -50,6 +50,57 @@ fn cloud_fbm(p: vec2<f32>) -> f32 {
 @group(1) @binding(3) var s_sky: sampler;
 @group(1) @binding(4) var t_clouds: texture_2d<f32>;
 @group(1) @binding(5) var s_repeat: sampler;
+// (6..8: the enhanced sky's cloud noise)
+@group(1) @binding(9) var t_sun: texture_2d<f32>;
+@group(1) @binding(10) var t_moon: texture_2d<f32>;
+
+// The sun's picture (`Texture\sonne.bmp`) is a square whose half side is this tangent of the
+// angle from its middle, and the moon (`Texture\mond.bmp`) a ball of this tangent of its
+// angular radius: the sizes of the stock `helper\sonne.x` square and `helper\mond.x` ball,
+// set 3 units from the eye.
+const SUN_HALF: f32 = 0.02677;
+const MOON_RADIUS: f32 = 0.01563;
+
+// The sun and the moon towards d: the sun's picture where the sun stands, the moon's on a
+// ball whose side towards the sun is lit (its phase), added to the sky behind them. Neither
+// shows below the horizon. A picture that is not there is black and adds nothing.
+fn sky_bodies(d: vec3<f32>) -> vec3<f32> {
+    var col = vec3<f32>(0.0);
+    if (camera.moon.w < 0.5 || d.z < -0.005) {
+        return col;
+    }
+    let up = vec3<f32>(0.0, 0.0, 1.0);
+    let sd = normalize(camera.sun_dir.xyz);
+    let ks = dot(d, sd);
+    if (ks > 0.99) {
+        // the picture's square across the sun's direction, its top towards the zenith
+        let right = normalize(cross(sd, up) + vec3<f32>(1e-5, 0.0, 0.0));
+        let top = cross(right, sd);
+        let q = vec2<f32>(dot(d, right), dot(d, top)) / (ks * SUN_HALF);
+        if (max(abs(q.x), abs(q.y)) < 1.0) {
+            let uv = vec2<f32>(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y);
+            col = col + textureSampleLevel(t_sun, s_sky, uv, 0.0).rgb;
+        }
+    }
+    let md = normalize(camera.moon.xyz);
+    let km = dot(d, md);
+    if (km > 0.999) {
+        let right = normalize(cross(md, up) + vec3<f32>(1e-5, 0.0, 0.0));
+        let top = cross(right, md);
+        let q = vec2<f32>(dot(d, right), dot(d, top)) / (km * MOON_RADIUS);
+        let q2 = dot(q, q);
+        if (q2 < 1.0) {
+            // the ball's face towards the eye, lit by the sun
+            let n = right * q.x + top * q.y - md * sqrt(1.0 - q2);
+            let lit = max(dot(n, sd), 0.0);
+            let uv = vec2<f32>(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y);
+            // (by day it is paler against the blue)
+            let gain = mix(0.45, 1.0, camera.sky.w);
+            col = col + textureSampleLevel(t_moon, s_sky, uv, 0.0).rgb * lit * gain;
+        }
+    }
+    return col;
+}
 
 
 // The ground point under the sky at distance `t` along the view ray `d`, in the clouds' own
@@ -111,6 +162,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let uv = vec2<f32>(u, v);
     let c = textureSample(t_day, s_sky, uv).rgb * camera.sky.y + textureSample(t_twilight, s_sky, uv).rgb * camera.sky.z * 0.8 + textureSample(t_night, s_sky, uv).rgb * camera.sky.w * 0.6;
     var col = c;
+    let bodies = sky_bodies(d);
+    // how much the clouds hide of what is behind them (the sun and the moon)
+    var hidden = 0.0;
     if (camera.clouds.x > 0.001 && d.z > 0.01) {
         // a flat layer 1500 m up drawn from the cloud field (weather_setup::cloud_field)
         let t = 1500.0 / d.z;
@@ -133,7 +187,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // the deck greys over
         cloud_col = cloud_col * (1.0 - 0.3 * closed) * mix(1.0, 0.85 + 0.3 * c.x, closed);
         col = mix(col, cloud_col, cover);
+        hidden = cover;
     }
+    col = col + bodies * (1.0 - hidden);
     // fog swallows the horizon, and a thick fog (a few hundred metres of sight) the whole
     // sky: the blue does not show through ground fog
     let horizon = clamp(1.0 - elev / 0.12, 0.0, 1.0) * clamp(camera.fog.w * 1500.0, 0.0, 1.0);

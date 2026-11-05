@@ -266,6 +266,11 @@ impl Inner {
                 no_cloud_layer: !self.effects.cloud_picture,
                 sun_glow: plan.sun_glow,
                 no_stars: !self.effects.stars,
+                bodies: {
+                    let (sun, moon) = scene.sky_bodies();
+                    [sun, moon]
+                },
+                moon_dir: plan.moon,
             },
         };
         let material = |id: usize| {

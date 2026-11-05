@@ -169,6 +169,24 @@ impl Renderer {
         scene.sky_cloud_picture = picture;
     }
 
+    /// The sun's and the moon's pictures for the classic sky (`Texture\sonne.bmp` and
+    /// `Texture\mond.bmp`): the sun is drawn as its picture where it stands, the moon as its
+    /// picture on a ball lit by the sun, so that its phase is the sun's doing. `None` leaves
+    /// that one out. The enhanced sky draws its own and takes no notice of them.
+    pub fn set_sky_bodies(
+        &self,
+        scene: &mut Scene,
+        sun: Option<TextureId>,
+        moon: Option<TextureId>,
+    ) {
+        scene.sky_sun = sun;
+        scene.sky_moon = moon;
+        if let Some(textures) = scene.sky_textures {
+            let clouds = scene.sky_clouds;
+            self.set_sky_textures_clouds(scene, textures, clouds);
+        }
+    }
+
     /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
     pub fn set_sky_textures_clouds(
         &self,
@@ -178,6 +196,11 @@ impl Renderer {
     ) {
         let views: Vec<&wgpu::TextureView> =
             textures.iter().map(|t| &scene.textures[*t].view).collect();
+        // (a body without a picture is drawn from black, which adds nothing to the sky)
+        let body = |t: Option<TextureId>| match t {
+            Some(t) => &scene.textures[t].view,
+            None => &self.assets.black_texture.view,
+        };
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sky"),
             layout: &self.layouts.sky_layout,
@@ -221,9 +244,18 @@ impl Renderer {
                     binding: 8,
                     resource: wgpu::BindingResource::Sampler(&self.sky.cloud_sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: wgpu::BindingResource::TextureView(body(scene.sky_sun)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: wgpu::BindingResource::TextureView(body(scene.sky_moon)),
+                },
             ],
         });
         scene.sky_bind_group = Some(bg);
         scene.sky_textures = Some(textures);
+        scene.sky_clouds = clouds;
     }
 }
