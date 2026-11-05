@@ -161,7 +161,7 @@ pub(in crate::hud) enum LinesHit {
     Sheet,
     /// A day group (a weekday: 0, 5, 6) and a departure (its time and trip).
     Day(usize),
-    Dep(crate::line_times::DepKey),
+    Dep(crate::gameplay::line_times::DepKey),
     /// Back from a departure's stops to the departures.
     Back,
     /// Tick every line of the tab on show, or clear them when all are ticked.
@@ -200,7 +200,7 @@ pub(in crate::hud) struct LinesView {
     /// departure picked (s of the day); `jump` takes the list to the next departure.
     pub(in crate::hud) sheet: bool,
     pub(in crate::hud) day: Option<usize>,
-    pub(in crate::hud) dep: Option<crate::line_times::DepKey>,
+    pub(in crate::hud) dep: Option<crate::gameplay::line_times::DepKey>,
     pub(in crate::hud) jump: bool,
 }
 

@@ -3,8 +3,8 @@
 //! virtual bus companies keep them. It is written to the content folder's `Journeys` every
 //! time the bus reaches or leaves a stop, so it is there however the session ends.
 
-use crate::career::{EARLY_DEPARTURE, LATE_ARRIVAL};
-use crate::schedule::{PlannedTrip, PlayerDuty};
+use crate::gameplay::career::{EARLY_DEPARTURE, LATE_ARRIVAL};
+use crate::gameplay::schedule::{PlannedTrip, PlayerDuty};
 use omsi_ui::ingame::{ReportRow, StopState};
 use std::path::PathBuf;
 
@@ -407,7 +407,7 @@ pub(crate) fn note(
 
 /// The log's first line: the driver, the map, the bus and the game's date.
 pub(crate) fn head(
-    career: &crate::career::Career,
+    career: &crate::gameplay::career::Career,
     map: &str,
     bus: &omsi_sim::VehicleInstance,
     clock: &omsi_sim::SimClock,

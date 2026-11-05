@@ -2,7 +2,7 @@
 //! junctions and lights, the parked cars and the population around the player. Their
 //! procedures are in `implementation/traffic.rs`.
 
-use crate::bus_service::BusService;
+use crate::gameplay::bus_service::BusService;
 use crate::world::scene::VehicleRender;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
@@ -55,11 +55,11 @@ pub struct WayMaker {
 pub struct BusSetup {
     /// The trip's lanes, as far as the loaded tiles have them.
     pub route: Vec<usize>,
-    pub stops: Vec<crate::bus_service::Stop>,
+    pub stops: Vec<crate::gameplay::bus_service::Stop>,
     /// Fleet number and registration (`number`, `ident` string variables).
     pub number: Option<(String, String)>,
     pub hof: Option<Arc<omsi_vehicle::Hof>>,
-    pub timetable: crate::bus_service::AiTimetable,
+    pub timetable: crate::gameplay::bus_service::AiTimetable,
 }
 
 pub struct AiCar {

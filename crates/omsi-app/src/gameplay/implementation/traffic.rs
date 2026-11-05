@@ -6,7 +6,7 @@
 /// while waiting (see `Traffic::junction`).
 const LONG_WAIT_CLAIM: f32 = 45.0;
 const GRIDLOCK_WAIT: f32 = 45.0;
-use crate::bus_service::{BusService, Phase};
+use crate::gameplay::bus_service::{BusService, Phase};
 pub(crate) use crate::gameplay::domain::traffic::*;
 use crate::world::scene::{VehicleRender, World};
 use anyhow::Result;
@@ -3223,7 +3223,7 @@ impl Traffic {
         number: Option<(String, String)>,
         hof: Option<Arc<omsi_vehicle::Hof>>,
         scheme: Option<Option<usize>>,
-        timetable: crate::bus_service::AiTimetable,
+        timetable: crate::gameplay::bus_service::AiTimetable,
     ) -> Option<usize> {
         let &lane = route.first()?;
         let kind = self.net.lanes.get(lane)?.kind;
@@ -3245,7 +3245,7 @@ impl Traffic {
             route,
             stops: stops
                 .into_iter()
-                .map(crate::bus_service::Stop::from_tuple)
+                .map(crate::gameplay::bus_service::Stop::from_tuple)
                 .collect(),
             number,
             hof,
@@ -6488,7 +6488,7 @@ impl Traffic {
                                 .front()
                                 .is_some_and(|s| waiting.contains(&s.id))
                     });
-                    let ctx = crate::bus_service::Ctx {
+                    let ctx = crate::gameplay::bus_service::Ctx {
                         wanted,
                         net: &self.net,
                         way: &way,
@@ -7499,7 +7499,7 @@ impl Traffic {
         car.gone = false;
         let stops = stops
             .into_iter()
-            .map(crate::bus_service::Stop::from_tuple)
+            .map(crate::gameplay::bus_service::Stop::from_tuple)
             .collect();
         match car.bus.as_mut() {
             Some(b) => b.restart(stops, layover),

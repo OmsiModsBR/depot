@@ -1,19 +1,19 @@
 //! The window's game at work: `App`'s per-frame and loading procedures, the streamed map's
 //! start, the missing content's notice, the cockpit camera's glide and the stand-in picture.
 
-use crate::career;
 use crate::core::cli::{parse_time, Args};
 use crate::core::domain::app::{wrap_deg, App};
 use crate::core::memory::texture_budget;
 use crate::core::startup::{fatal_message, window_renderer};
+use crate::gameplay::career;
 use crate::gameplay::humans;
+use crate::gameplay::money;
+use crate::gameplay::schedule;
 use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
-use crate::money;
 use crate::output::Backend;
-use crate::schedule;
 use crate::settings;
 use crate::situation::{start_clock, ticket_key_name};
 use crate::spawn::spawn_player;
@@ -650,7 +650,7 @@ impl App {
                             }
                             if let Some(d) = self.duty.as_ref() {
                                 let mut fonts = w.fonts.lock();
-                                if let Err(e) = crate::schedule_paper::update_vehicle(
+                                if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
                                     &mut p.vehicle,
                                     d,
                                     &mut fonts,

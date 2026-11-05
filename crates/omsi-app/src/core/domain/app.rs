@@ -1,16 +1,16 @@
 //! The window's game: `App` and the state it carries from frame to frame, with the cockpit
 //! camera's glide and the mirrors a bus has frozen.
 
-use crate::career;
 use crate::core::cli::Args;
+use crate::gameplay::career;
 use crate::gameplay::humans;
+use crate::gameplay::schedule;
 use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
 use crate::player::Player;
 use crate::radio;
-use crate::schedule;
 use crate::settings;
 use crate::weather::ambience;
 use crate::weather::puddles;
@@ -351,7 +351,7 @@ pub(crate) struct App {
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: career::Career,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
-    pub(crate) journey: Option<crate::journey::Journey>,
+    pub(crate) journey: Option<crate::gameplay::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.
     pub(crate) wetness: f32,
     /// How far the cloud cover has drifted with the wind (fractions of its tiling), summed

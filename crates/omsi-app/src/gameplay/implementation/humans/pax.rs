@@ -262,10 +262,10 @@ impl DutyTrip {
     /// Duty trip `trip`, its stops named as `names` (`Schedule::stop_names`) has them: by the
     /// object's id where it does not know the object, as the stops' targets are.
     pub fn of(
-        trip: &crate::schedule::PlannedTrip,
+        trip: &crate::gameplay::schedule::PlannedTrip,
         names: Option<&HashMap<i64, String>>,
     ) -> DutyTrip {
-        let name = |s: &crate::schedule::PlannedStop| match names {
+        let name = |s: &crate::gameplay::schedule::PlannedStop| match names {
             Some(n) => n
                 .get(&s.object_id)
                 .cloned()

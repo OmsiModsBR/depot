@@ -11,18 +11,15 @@
 
 mod about;
 use omsi_launcher_ui::api_limits;
-mod career;
 mod describe;
 mod driver;
 mod env_file;
 mod gameplay;
 mod hud;
-mod journey;
 mod launcher;
 mod lights;
 mod mapview;
 mod menu;
-mod money;
 mod output;
 mod radio;
 mod rail_drive;
@@ -34,19 +31,14 @@ mod ui;
 mod weather;
 mod world;
 
-mod line_times;
 mod quit;
 mod real_time;
-mod schedule;
-mod schedule_paper;
 mod settings;
 mod showroom;
 
 mod app_events;
-mod bus_service;
 mod core;
 mod diagnostics;
-mod duty_start;
 mod frame_stats;
 mod ground_gap;
 mod input;

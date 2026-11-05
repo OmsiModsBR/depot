@@ -540,7 +540,7 @@ impl Navigator {
     /// The direction (in the sheet) of the route chosen for line `i`: route 1, route 2.
     fn sheet_dir(
         &self,
-        sheet: &crate::line_times::Sheet,
+        sheet: &crate::gameplay::line_times::Sheet,
         i: usize,
         sf: &crate::world::map_surface::MapSurface,
     ) -> usize {
@@ -562,14 +562,14 @@ impl Navigator {
         &mut self,
         ui: &mut Painter,
         sf: &crate::world::map_surface::MapSurface,
-        timetable: &crate::line_times::LineTimes,
+        timetable: &crate::gameplay::line_times::LineTimes,
         i: usize,
         area: Rect,
         s: f32,
         lt: &LinesText,
         hits: &mut Vec<(Rect, LinesHit)>,
     ) -> Rect {
-        use crate::line_times::clock;
+        use crate::gameplay::line_times::clock;
         let sheet = timetable
             .line(&sf.lines()[i].number)
             .expect("the caller checked");
@@ -722,7 +722,7 @@ impl Navigator {
         } else {
             // the departures by the hour; the next one after the game's clock is lit
             let per = (((pw - 2.0 * pad - 44.0 * s) / (43.0 * s)).floor() as usize).max(1);
-            let mut lines: Vec<(bool, i64, Vec<&crate::line_times::Dep>)> = Vec::new();
+            let mut lines: Vec<(bool, i64, Vec<&crate::gameplay::line_times::Dep>)> = Vec::new();
             for d in &deps {
                 let h = (d.t / 3600.0) as i64;
                 match lines.last_mut() {
@@ -841,7 +841,7 @@ impl Navigator {
             if c.x < 0.0 || c.y < 0.0 || c.x > view.0 || c.y > view.1 {
                 continue;
             }
-            let t = crate::line_times::clock(stops[k].at);
+            let t = crate::gameplay::line_times::clock(stops[k].at);
             let r = Rect::new(
                 c.x + 8.0 * s,
                 c.y - 26.0 * s,

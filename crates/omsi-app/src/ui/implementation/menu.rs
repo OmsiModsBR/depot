@@ -168,7 +168,7 @@ impl App {
             &items,
             self.menu_kbd.then(|| self.game_menu.unwrap_or(0)),
             &|k| self.menu_item_off(k),
-            crate::schedule::hhmm(self.clock.time),
+            crate::gameplay::schedule::hhmm(self.clock.time),
             self.paused,
         )
     }
