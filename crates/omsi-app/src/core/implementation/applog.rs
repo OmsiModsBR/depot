@@ -13,6 +13,36 @@ pub(crate) struct LogState {
     t: f32,
     frames: u32,
     worst_dt: f32,
+    /// OMSI_PROFILE: the stage times (`App::profile`) at the start of the window that
+    /// [`App::log_profile_window`] reports on, its length so far (s) and its frames.
+    prof_last: std::collections::BTreeMap<&'static str, f64>,
+    prof_t: f32,
+    prof_frames: u32,
+}
+
+/// How often (s) OMSI_PROFILE writes the stages' cost over the time since the last report.
+const PROFILE_WINDOW_S: f32 = 30.0;
+
+/// The stages that took at least this long (ms a frame) in a window are listed.
+const PROFILE_WINDOW_MIN_MS: f64 = 0.05;
+
+/// The stages of a profile window, the most costly first: (name, ms a frame) from the
+/// stage totals (s) at its start and at its end over `frames` frames. A stage that was not
+/// there at the start counts from zero; one that cost less than
+/// [`PROFILE_WINDOW_MIN_MS`] is left out.
+pub fn profile_window(
+    before: &std::collections::BTreeMap<&'static str, f64>,
+    now: &std::collections::BTreeMap<&'static str, f64>,
+    frames: u32,
+) -> Vec<(&'static str, f64)> {
+    let n = frames.max(1) as f64;
+    let mut out: Vec<(&'static str, f64)> = now
+        .iter()
+        .map(|(k, v)| (*k, (v - before.get(k).copied().unwrap_or(0.0)) / n * 1000.0))
+        .filter(|(_, ms)| *ms >= PROFILE_WINDOW_MIN_MS)
+        .collect();
+    out.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(b.0)));
+    out
 }
 
 /// The machine, the program and its settings, once at the start.
@@ -80,6 +110,44 @@ fn os_version() -> String {
 }
 
 impl App {
+    /// OMSI_PROFILE: every [`PROFILE_WINDOW_S`] seconds, what each stage cost a frame since
+    /// the last report, with the traffic on the map then. The totals of the whole session
+    /// are written only with `--exit-after`, and a session started from the launcher has
+    /// no way to pass it; an average over the whole session also hides a cost that grows
+    /// as the session goes on (with the number of cars, for one).
+    pub(crate) fn log_profile_window(&mut self, dt: f32) {
+        if !omsi_cfg::flags::PROFILE.is_set() {
+            return;
+        }
+        let s = &mut self.log_state;
+        s.prof_t += dt;
+        s.prof_frames += 1;
+        if s.prof_t < PROFILE_WINDOW_S {
+            return;
+        }
+        let stages = profile_window(&s.prof_last, &self.profile, s.prof_frames);
+        let (secs, frames) = (s.prof_t, s.prof_frames);
+        s.prof_last = self.profile.clone();
+        s.prof_t = 0.0;
+        s.prof_frames = 0;
+        let (cars, dormant) = self
+            .traffic
+            .as_ref()
+            .map(|t| (t.cars.len(), t.dormant.len()))
+            .unwrap_or((0, 0));
+        let people = self.humans.as_ref().map(|h| h.people.len()).unwrap_or(0);
+        let list: Vec<String> = stages
+            .iter()
+            .map(|(k, ms)| format!("{k} {ms:.2}"))
+            .collect();
+        log::info!(
+            "profile window: {:.1} fps over {secs:.0} s, {:.1} ms a frame; {cars} AI vehicles (+{dormant} out of range), {people} people; ms a frame: {}",
+            frames as f32 / secs.max(1e-3),
+            secs / frames.max(1) as f32 * 1000.0,
+            list.join(", ")
+        );
+    }
+
     /// Once a frame: what changed on the screen, and every minute where things stand.
     pub(crate) fn log_frame(&mut self, dt: f32) {
         let msg = self.service_msg.as_ref().map(|m| m.0.clone());
