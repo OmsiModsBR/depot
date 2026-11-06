@@ -362,7 +362,9 @@ fn window_and_offscreen_differ_in_the_rail_given_to_signal_aspects() {
     // (compared without whitespace, so that rustfmt's line breaks do not matter)
     let squash = |s: &str| s.split_whitespace().collect::<String>();
     let offscreen = squash(&std::fs::read_to_string(src.join("offscreen.rs")).unwrap());
-    let window = squash(&std::fs::read_to_string(src.join("app_events.rs")).unwrap());
+    let window = squash(
+        &std::fs::read_to_string(src.join("frame/implementation/app_events.rs")).unwrap(),
+    );
     let calls = |s: &str| s.matches(".signal_aspects(").count();
     assert_eq!(calls(&offscreen), 1);
     assert!(
