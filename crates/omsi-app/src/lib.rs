@@ -13,6 +13,7 @@ mod about;
 use omsi_launcher_ui::api_limits;
 mod describe;
 mod env_file;
+mod frame;
 mod gameplay;
 mod hud;
 mod launcher;
@@ -29,15 +30,12 @@ mod ui;
 mod weather;
 mod world;
 
-mod quit;
 mod real_time;
 mod settings;
 mod showroom;
 
-mod app_events;
 mod core;
 mod diagnostics;
-mod frame_stats;
 mod ground_gap;
 mod input;
 mod lan_off;
@@ -159,7 +157,7 @@ pub fn run() -> Result<()> {
     let event_loop = EventLoop::new()?;
     // SIGTERM (the launcher's Stop) and Ctrl+C end the session the way Escape does
     let proxy = event_loop.create_proxy();
-    quit::install(move |_| {
+    frame::quit::install(move |_| {
         let _ = proxy.send_event(());
     });
     let mut app = app;

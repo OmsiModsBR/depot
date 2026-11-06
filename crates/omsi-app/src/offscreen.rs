@@ -5,6 +5,7 @@ use crate::core::memory::texture_budget;
 use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::frame::quit;
 use crate::gameplay::career;
 use crate::gameplay::humans;
 use crate::gameplay::money;
@@ -20,7 +21,6 @@ use crate::lights;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
-use crate::quit;
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
@@ -2865,7 +2865,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 let g = nav.global_version + (1 << 40);
                 nav.set_route(&key, lanes, true, g);
             }
-            let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
+            let (outside_temp, inside_temp) = crate::frame::app_events::vehicle_temperatures(p);
             let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
             let frame = nav::NavFrame {
                 traffic: traffic.as_ref(),

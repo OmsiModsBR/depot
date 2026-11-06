@@ -65,7 +65,7 @@ pub mod api_limits {
     pub use crate::api_limits::*;
 }
 pub mod app_events {
-    pub use crate::app_events::*;
+    pub use crate::frame::app_events::*;
 }
 pub mod bus_service {
     pub use crate::gameplay::bus_service::*;
@@ -150,7 +150,7 @@ pub mod evdev_ff {
     pub use crate::input::evdev_ff::*;
 }
 pub mod frame_stats {
-    pub use crate::frame_stats::*;
+    pub use crate::frame::frame_stats::*;
 }
 pub mod game_controller_menu {
     pub use crate::input::game_controller_menu::*;
@@ -290,11 +290,11 @@ pub mod puddles {
     pub use crate::weather::puddles::*;
 }
 pub mod quit {
-    pub use crate::quit::*;
+    pub use crate::frame::quit::*;
 
     #[cfg(unix)]
     pub mod sys {
-        pub use crate::quit::sys::*;
+        pub use crate::frame::quit::sys::*;
     }
 }
 pub mod radio {

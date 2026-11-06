@@ -4,7 +4,7 @@
 //! percent of the frames averaged (the mean of their times, turned back into frames per
 //! second). It is only read for the information bar and the frame-rate chip.
 
-use std::collections::VecDeque;
+use crate::frame::domain::frame_stats::*;
 
 /// How far back the frames count.
 const WINDOW_SECS: f32 = 10.0;
@@ -13,12 +13,6 @@ const MIN_FRAMES: usize = 50;
 /// A frame longer than this (a load, a pause, a drag of the window) says nothing about the
 /// game's speed and is not counted.
 const MAX_FRAME_SECS: f32 = 1.0;
-
-#[derive(Default)]
-pub struct FrameStats {
-    times: VecDeque<f32>,
-    total: f32,
-}
 
 impl FrameStats {
     /// Note a frame that took `dt` seconds.

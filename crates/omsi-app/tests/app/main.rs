@@ -2,13 +2,12 @@
 //! comes through `openomsi_game::testing` (the `test-support` feature).
 
 mod about;
-mod app_events;
 mod core;
 mod crate_root;
 mod describe;
 mod diagnostics;
 mod env_file;
-mod frame_stats;
+mod frame;
 mod gameplay;
 mod hud;
 mod input;
@@ -17,7 +16,6 @@ mod lights;
 mod mapview;
 mod output;
 #[cfg(unix)]
-mod quit;
 mod radio;
 mod screenshot_name;
 mod services;

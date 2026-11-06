@@ -74,7 +74,7 @@ pub(crate) struct App {
     pub(crate) ui: Option<hud::Ui>,
     pub(crate) fps: f32,
     /// The frames of the last seconds, for the "1 % low" beside the frame rate.
-    pub(crate) frame_stats: crate::frame_stats::FrameStats,
+    pub(crate) frame_stats: crate::frame::frame_stats::FrameStats,
     /// The 1 % low as of the last full second (none before enough frames).
     pub(crate) fps_low: Option<f32>,
     pub(crate) rain: rain::Rain,
