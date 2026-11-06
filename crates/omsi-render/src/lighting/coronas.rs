@@ -52,14 +52,17 @@ pub const SUN_GLARE_DISTANCE: f64 = 10.0;
 /// own: 2.5 times the size, growing with the brightness.
 pub const SUN_GLARE_SIZE: f32 = 15.0;
 pub const SUN_GLARE_BRIGHTNESS: f32 = 1.5;
+/// A lamp's glow by day: the share of its brightness the classic pictures draw with no
+/// darkness about (`((1 - ambient)^2 + 0.8) 0.6` at full daylight).
+const SUN_GLARE_DAY_GLOW: f32 = 0.48;
 
 impl super::Lighting {
     /// How strongly the sun's glare shows (0 none .. 1): the daylight and the sun's own
     /// strength (none at night or under an overcast cover), faded out as the sun goes below
     /// the horizon, thinned by the cloud cover and gone in a thick fog. 0 with the `sun_glow`
-    /// setting off and in Enhanced graphics, whose high-range picture has its own glare.
+    /// setting off.
     pub fn sun_glare_strength(&self) -> f32 {
-        if !self.sun_glow || self.enhanced {
+        if !self.sun_glow {
             return 0.0;
         }
         let dir = self.sun_dir.normalize_or_zero();
@@ -85,6 +88,9 @@ impl super::Lighting {
     /// strength's share of [`SUN_GLARE_SIZE`] and [`SUN_GLARE_BRIGHTNESS`]. Drawn at the sky's
     /// depth: what stands in front of the sun covers it, glass lets it through. Nothing when
     /// the strength is (near) 0.
+    ///
+    /// Enhanced graphics draw one sprite instead, as wide as the star: a glow and four rays
+    /// worked out in the shader (`Corona::procedural`), in the high-range picture.
     pub fn sun_glare(&self, eye: DVec3, glow: u16, star: u16) -> Vec<super::Corona> {
         let k = self.sun_glare_strength();
         let dir = self.sun_dir.normalize_or_zero();
@@ -108,6 +114,14 @@ impl super::Lighting {
             sky: true,
             ..Default::default()
         };
+        if self.enhanced {
+            return vec![super::Corona {
+                // (the star's drawn width: 2.5 times the size, grown by its brightness)
+                size: size * 1.25 * SUN_GLARE_BRIGHTNESS * k * SUN_GLARE_DAY_GLOW,
+                procedural: true,
+                ..lamp
+            }];
+        }
         vec![
             lamp,
             super::Corona {

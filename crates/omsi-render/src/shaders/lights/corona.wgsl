@@ -172,8 +172,9 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     let streak = in.dir.w < -1.5 && in.dir.w > -2.5;
     let flake = in.dir.w <= -2.5;
     let directed = length(in.dir.xyz) > 0.5 && !streak;
-    // the sun's glare (kind -1, `Lighting::sun_glare`): a lamp laid out a few metres towards
-    // the sun and drawn at the sky's depth; its strength already holds the fog's share
+    // the sun's glare (kind -1, `Lighting::sun_glare`; -3 its procedural sprite in Enhanced):
+    // a lamp laid out a few metres towards the sun and drawn at the sky's depth; its strength
+    // already holds the fog's share
     let sky = in.extra.w < -0.5;
     var brightness = in.color.a;
     if (directed) {
@@ -239,7 +240,7 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     }
     out.uv = c * 0.5 + 0.5;
     out.color = vec4<f32>(in.color.rgb, brightness);
-    out.kind = select(0.0, 1.0, streak);
+    out.kind = select(select(0.0, in.extra.w, sky), 1.0, streak);
     out.wpos = vec4<f32>(in.pos, select(select(0.0, 2.0, flake), 1.0, streak));
     out.star = 0.0;
     out.beam = 0.0;
@@ -283,6 +284,16 @@ fn corona_shape(in: CoronaOut) -> vec3<f32> {
     return t;
 }
 
+// The sun's glare in Enhanced graphics (kind -3): a bright core, a wide soft halo and four
+// thin rays, worked out here rather than read from a picture, nothing at the sprite's edge.
+fn sun_glare_shape(uv: vec2<f32>) -> vec3<f32> {
+    let d = (uv - vec2<f32>(0.5)) * 2.0;
+    let r = length(d);
+    let halo = 0.8 * exp(-r * r * 14.0) + 0.35 * exp(-r * 3.5);
+    let rays = (exp(-abs(d.x) * 40.0) + exp(-abs(d.y) * 40.0)) * (1.0 - r) * 0.6;
+    return vec3<f32>((halo + rays) * clamp(1.0 - r, 0.0, 1.0));
+}
+
 @fragment
 fn fs_main(in: CoronaOut) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color.rgb * corona_shape(in) * in.color.a, 1.0);
@@ -297,6 +308,9 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         let to_eye = normalize(camera.cam_pos.xyz - in.wpos.xyz);
         let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);
         return vec4<f32>(in.color.rgb * corona_shape(in) * in.color.a * l * enh.exposure.x, 1.0);
+    }
+    if (in.kind < -2.5) {
+        return vec4<f32>(in.color.rgb * sun_glare_shape(in.uv) * in.color.a * enh.exposure.w, 1.0);
     }
     // (a fog cone is lit fog, not glare: it keeps the scene's level too)
     let scale = select(enh.exposure.w, enh.exposure.y, in.kind > 0.5);

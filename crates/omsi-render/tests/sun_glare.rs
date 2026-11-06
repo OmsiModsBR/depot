@@ -81,7 +81,7 @@ fn the_glare_fades_with_the_horizon_the_night_the_clouds_and_the_fog() {
 }
 
 #[test]
-fn the_setting_off_and_enhanced_draw_none() {
+fn the_setting_off_draws_none_and_enhanced_one_procedural_sprite() {
     let off = Lighting {
         sun_glow: false,
         ..day(40.0)
@@ -91,7 +91,16 @@ fn the_setting_off_and_enhanced_draw_none() {
         enhanced: true,
         ..day(40.0)
     };
-    assert!(enhanced.sun_glare(DVec3::ZERO, 0, 0).is_empty());
+    let e = enhanced.sun_glare(DVec3::ZERO, 0, 0);
+    assert_eq!(e.len(), 1);
+    assert!(e[0].sky && e[0].procedural && e[0].flags & 8 == 0);
+    // as wide as the classic star is drawn: 2.5 times the size, grown by its brightness by day
+    let star = &vanilla_star();
+    assert!(
+        (e[0].size - star.size * star.brightness * 0.48).abs() < 1e-4,
+        "{}",
+        e[0].size
+    );
     let vanilla = Lighting {
         classic: true,
         ..day(40.0)
@@ -99,10 +108,23 @@ fn the_setting_off_and_enhanced_draw_none() {
     assert_eq!(vanilla.sun_glare(DVec3::ZERO, 0, 0).len(), 2);
 }
 
+fn vanilla_star() -> omsi_render::Corona {
+    let l = Lighting {
+        classic: true,
+        ..day(40.0)
+    };
+    l.sun_glare(DVec3::ZERO, 0, 0)[1]
+}
+
 /// Looking at the sun (20 degrees up in the north) over a dark sky, in Vanilla: the
 /// brightness (mean of r, g, b) of the picture's middle and of a point `off` pixels to its
 /// right, with the glare as asked and, when `wall`, a wall 50 m ahead hiding the sky.
 fn looking_at_the_sun(glare: bool, wall: bool, off: u32) -> (u32, u32) {
+    looking_at_the_sun_in(false, glare, wall, off)
+}
+
+/// [`looking_at_the_sun`], in Vanilla or (`enhanced`) in Enhanced graphics.
+fn looking_at_the_sun_in(enhanced: bool, glare: bool, wall: bool, off: u32) -> (u32, u32) {
     use glam::{Mat4, Vec2};
     use omsi_geometry::MeshData;
     use omsi_render::{AlphaMode, Camera, RenderOptions, Renderer};
@@ -166,7 +188,8 @@ fn looking_at_the_sun(glare: bool, wall: bool, off: u32) -> (u32, u32) {
     let lighting = Lighting {
         shadows: false,
         sky_weights: [0.0, 0.0, 1.0],
-        classic: true,
+        classic: !enhanced,
+        enhanced,
         ..day(20.0)
     };
     let rgba = renderer
@@ -190,6 +213,21 @@ fn looking_at_the_sun_the_glare_floods_the_picture_and_a_wall_hides_it() {
     // wide: still bright a third of the picture away from the sun
     assert!(aside > bare + 60, "aside {aside} bare {bare}");
     assert!(behind_wall < 10, "behind the wall {behind_wall}");
+}
+
+#[test]
+#[ignore = "needs a graphics adapter"]
+fn in_enhanced_the_procedural_glare_brightens_round_the_sun() {
+    // (the Enhanced sky is near white right by the sun: looked at some 23 degrees aside)
+    let (_, without) = looking_at_the_sun_in(true, false, false, 24);
+    let (_, with) = looking_at_the_sun_in(true, true, false, 24);
+    let (_, wall) = looking_at_the_sun_in(true, false, true, 24);
+    let (_, wall_glare) = looking_at_the_sun_in(true, true, true, 24);
+    println!(
+        "enhanced sun glare 24 px aside: sky {without} -> {with}, wall {wall} -> {wall_glare}"
+    );
+    assert!(with > without + 10, "sky {without} -> {with}");
+    assert!(wall_glare <= wall + 1, "wall {wall} -> {wall_glare}");
 }
 
 /// What the glare costs: frames of an empty scene (only the sky) at 1280x720 looking at the

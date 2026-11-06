@@ -165,6 +165,9 @@ pub struct Corona {
     /// Drawn at the sky's depth (the sun's glare, [`Lighting::sun_glare`]): whatever the scene
     /// holds in front of the sky covers it, and nothing else does.
     pub sky: bool,
+    /// With `sky`: a glow and four rays worked out in the shader rather than read from its
+    /// picture (the sun's glare in Enhanced graphics).
+    pub procedural: bool,
 }
 
 impl Default for Corona {
@@ -186,6 +189,7 @@ impl Default for Corona {
             beam_width: 0.0,
             halo: false,
             sky: false,
+            procedural: false,
         }
     }
 }

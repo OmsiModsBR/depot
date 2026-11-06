@@ -95,6 +95,8 @@ impl Renderer {
                             1.0
                         } else if c.halo {
                             2.0
+                        } else if c.sky && c.procedural {
+                            -3.0
                         } else if c.sky {
                             -1.0
                         } else {
