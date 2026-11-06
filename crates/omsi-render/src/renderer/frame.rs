@@ -358,7 +358,8 @@ impl Renderer {
         );
         self.prepare_coronas(
             scene,
-            lighting.night,
+            lighting,
+            camera.position,
             lighting
                 .inside
                 .as_ref()

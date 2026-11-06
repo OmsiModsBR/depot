@@ -187,6 +187,15 @@ impl Renderer {
         }
     }
 
+    /// The pictures of the sun's glare ([`crate::Lighting::sun_glare`]): the corona pictures
+    /// of its glow (`Texture\licht.bmp`, a light's own when it names none) and of its star
+    /// (`Texture\light_effect1.bmp`), as put up with `set_corona_texture` (0 the standard
+    /// glow). `None` draws no glare. It is drawn in the classic pictures (Vanilla, Vanilla+,
+    /// the Direct3D 9 device's) with the `sun_glow` setting on.
+    pub fn set_sun_glare(&self, scene: &mut Scene, pictures: Option<[u16; 2]>) {
+        scene.sun_glare = pictures;
+    }
+
     /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
     pub fn set_sky_textures_clouds(
         &self,

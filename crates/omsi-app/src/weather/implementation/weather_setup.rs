@@ -194,6 +194,14 @@ pub(crate) fn setup_sky(
         }
     }
     renderer.set_sky_bodies(scene, bodies[0], bodies[1]);
+    // the sun's glare: a lamp's glow (Texture\licht.bmp) and star (Texture\light_effect1.bmp)
+    renderer.set_sun_glare(
+        scene,
+        Some([
+            crate::lights::glow_texture_id(),
+            crate::lights::star_texture_id(),
+        ]),
+    );
     renderer.set_sky_textures_clouds(scene, [ids[0], ids[1], ids[2]], clouds);
 }
 

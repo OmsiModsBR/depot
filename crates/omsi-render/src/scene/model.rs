@@ -192,6 +192,9 @@ pub struct Scene {
     /// by `Renderer::set_sky_bodies`; the classic sky draws them.
     pub(crate) sky_sun: Option<TextureId>,
     pub(crate) sky_moon: Option<TextureId>,
+    /// The sun's glare's pictures, corona pictures (the glow's and the star's), as set by
+    /// `Renderer::set_sun_glare`; `None`: no glare.
+    pub(crate) sun_glare: Option<[u16; 2]>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the

@@ -162,6 +162,9 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
+    /// Drawn at the sky's depth (the sun's glare, [`Lighting::sun_glare`]): whatever the scene
+    /// holds in front of the sky covers it, and nothing else does.
+    pub sky: bool,
 }
 
 impl Default for Corona {
@@ -182,6 +185,7 @@ impl Default for Corona {
             beam: false,
             beam_width: 0.0,
             halo: false,
+            sky: false,
         }
     }
 }

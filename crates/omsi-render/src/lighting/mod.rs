@@ -15,6 +15,7 @@ pub use model::{
 #[cfg(test)]
 pub(crate) use coronas::smoke_ground_fade;
 pub(crate) use coronas::smoke_sprite;
+pub use coronas::{SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE};
 #[cfg(test)]
 pub(crate) use exposure::half_to_f32;
 pub(crate) use exposure::{meter_tuning, tone_contrast, ExposureLog};

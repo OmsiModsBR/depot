@@ -172,6 +172,9 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     let streak = in.dir.w < -1.5 && in.dir.w > -2.5;
     let flake = in.dir.w <= -2.5;
     let directed = length(in.dir.xyz) > 0.5 && !streak;
+    // the sun's glare (kind -1, `Lighting::sun_glare`): a lamp laid out a few metres towards
+    // the sun and drawn at the sky's depth; its strength already holds the fog's share
+    let sky = in.extra.w < -0.5;
     var brightness = in.color.a;
     if (directed) {
         // a directional light is seen inside its outer cone, in full inside the inner one,
@@ -185,7 +188,7 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     // distance), the same law the scene's own fog follows (`shader.wgsl`). Left out, the
     // street lamps and signals shone at full strength to the end of the view in a fog that
     // had hidden their poles 50 m away, a fan of dots at the horizon (#1212).
-    if (!streak) {
+    if (!streak && !sky) {
         brightness = brightness * exp(-dist * max(camera.fog.w, 0.0));
     }
     // a star grows with the light's strength; every sprite's strength stops at 1
@@ -229,6 +232,11 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
     let pull = select(min(size * 0.5, 0.5), in.extra.y, in.extra.y >= 0.0);
     let wp = in.pos + (right * c.x * stretch.x + upv * c.y * stretch.y) * size + select(view_dir * min(pull, dist * 0.9), vec3<f32>(0.0), streak);
     out.clip = camera.view_proj * vec4<f32>(wp, 1.0);
+    if (sky) {
+        // at the far plane (0 with reversed depth), where the sky is: what the scene holds
+        // in front of the sky covers it
+        out.clip.z = out.clip.w * 0.000001;
+    }
     out.uv = c * 0.5 + 0.5;
     out.color = vec4<f32>(in.color.rgb, brightness);
     out.kind = select(0.0, 1.0, streak);

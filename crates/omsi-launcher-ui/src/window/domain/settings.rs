@@ -2209,8 +2209,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         | "led_mips" => !classic,
         "ssao" | "shadows" => !classic && !traced,
         "reflections" => !traced,
-        // (only "DirectX9 (D3D9Ex)" draws it; the other APIs have no sun glow to switch)
-        "sun_glow" => fixed,
+        // (Vanilla, Vanilla+ and "DirectX9 (D3D9Ex)" draw the sun's glare; Enhanced its own)
+        "sun_glow" => fixed || !graphics.starts_with("enhanced"),
         "fov" => !triple,
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)

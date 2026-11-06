@@ -565,12 +565,9 @@ pub struct SceneSky {
     pub params: [f32; 4],
     /// The weather's clouds over the dome.
     pub clouds: SceneClouds,
-    /// The glow around the sun, drawn over the scene (the "Sun Glow" option).
-    pub sun_glow: bool,
     /// Leaves the night's stars out (the Stars option off; the default draws them).
     pub no_stars: bool,
-    /// Leaves the cloud layer out of the sky's picture (the Cloud picture option off). The
-    /// clouds' cover still counts for the sun's glow; the light is the frame's own.
+    /// Leaves the cloud layer out of the sky's picture (the Cloud picture option off).
     pub no_cloud_layer: bool,
     /// The sun's and the moon's pictures (`Texture\sonne.bmp`, `Texture\mond.bmp`) as scene
     /// texture ids: the sun's is drawn where the sun stands, the moon's on a ball lit by the

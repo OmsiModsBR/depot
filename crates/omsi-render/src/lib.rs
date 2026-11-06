@@ -24,6 +24,7 @@ pub use api::{
     SurfaceState, TexAddressing, TextureId, TripleScreen, Vertex, ADAPTER_TEXTURE_MB,
     ADAPTER_VRAM_MB, AUTO_SCALE_PIXELS, DEPTH_FORMAT, LAMP_CODE_STRIDE, LM_ATLAS_TILES, LM_TILE_PX,
     MAX_LAMPS_PER_MESH, MSAA, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR, SHADOW_SIZE,
+    SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE,
 };
 
 // The crate-wide names the tests (`tests.rs`, `tests_units.rs`) see through `use super::*`.
