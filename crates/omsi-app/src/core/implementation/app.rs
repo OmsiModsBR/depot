@@ -5,18 +5,15 @@ use crate::core::cli::{parse_time, Args};
 use crate::core::domain::app::{wrap_deg, App};
 use crate::core::memory::texture_budget;
 use crate::core::startup::{fatal_message, window_renderer};
+use crate::frame::session;
 use crate::gameplay::career;
-use crate::gameplay::humans;
-use crate::gameplay::money;
-use crate::gameplay::schedule;
 use crate::gameplay::spawn::spawn_player;
-use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
 use crate::output::Backend;
 use crate::settings;
-use crate::situation::{start_clock, ticket_key_name};
+use crate::situation::start_clock;
 use crate::weather::ambience;
 use crate::weather::weather_setup::{initial_wetness, load_weather, setup_sky};
 use crate::world::scene::World;
@@ -531,23 +528,8 @@ impl App {
                 }
                 // (and a player who joins another's game sees the host's people)
                 if self.args.passengers || self.args.lan_join.is_some() {
-                    let mut h = humans::Humans::new(&self.args.root);
-                    h.exact_fare = self.settings.exact_fare;
-                    h.boarding = self.settings.boarding.clone();
-                    h.voices = match self.settings.pax_voices.as_str() {
-                        "off" => 2,
-                        "tickets" => 1,
-                        _ => 0,
-                    };
-                    if let Some(p) = self.player.as_mut() {
-                        h.set_cabin(&mut p.vehicle);
-                        h.ticket_key = ticket_key_name(&self.args.root, &p.bindings);
-                        h.tickets = p.vehicle.host.tickets.clone();
-                        if !w.global.money_system.trim().is_empty() {
-                            h.money =
-                                Some(money::Money::new(&self.args.root, &w.global.money_system));
-                        }
-                    }
+                    let mut h =
+                        session::new_humans(&self.args, &self.settings, &w, self.player.as_mut());
                     if let Some(p) = self.player.as_ref() {
                         // the passengers a saved situation carried (#613)
                         if !self.args.situation_riders.is_empty() {
@@ -571,72 +553,36 @@ impl App {
                     }
                     self.humans = Some(h);
                 }
-                // (a player who joins draws the host's traffic in it, whatever their own count
-                // says: the host's cars had nowhere to go without it)
-                let populated = self.args.traffic > 0
-                    || self.args.schedule
-                    || crate::gameplay::rail_drive::args_rail(&self.args)
-                    || self.args.lan_join.is_some();
-                // Without traffic it still runs the light programs and switches the lamps:
-                // they stood frozen with red, yellow and green all lit (#727).
                 {
-                    match traffic::Traffic::new(&self.args.root, &w, self.args.traffic) {
+                    match session::new_traffic(&self.args, &w, &renderer, &mut scene) {
                         Ok(mut t) => {
-                            t.lights_only = !populated;
-                            t.no_timetable_buses = self.args.no_timetable_buses;
-                            if self.args.traffic > 0 {
-                                t.precache_random(&w, &renderer, &mut scene);
-                            }
                             t.day_time = parse_time(&self.args.time);
                             self.traffic = Some(t);
                         }
                         Err(e) => log::error!("traffic: {e:#}"),
                     }
                     if self.args.schedule {
-                        let mut sch =
-                            schedule::Schedule::new(&self.args.root, &w, &start_clock(&self.args));
-                        sch.precache(
+                        let mut sch = session::new_schedule(
+                            &self.args,
                             &w,
                             &renderer,
                             &mut scene,
                             self.traffic.as_mut(),
-                            parse_time(&self.args.time),
                         );
                         if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
-                            self.duty = match sch.player_duty(
-                                &w,
-                                line,
-                                self.args.tour.as_deref().unwrap_or(""),
-                                parse_time(&self.args.time),
-                                self.args.trip.as_deref(),
-                                self.args.whole_tour,
-                            ) {
-                                Ok(mut d) => {
-                                    if let Some(k) = self.args.duty_trip {
-                                        d.start_at(k, self.args.duty_first_stop);
+                            self.duty =
+                                match session::player_duty(&mut sch, &self.args, &w, line, p) {
+                                    Ok(d) => Some(d),
+                                    Err(e) => {
+                                        log::warn!("no player duty: {e}");
+                                        self.service_msg = Some((
+                                            omsi_ui::tr("No duty: %{error}")
+                                                .replace("%{error}", &e.to_string()),
+                                            20.0,
+                                        ));
+                                        None
                                     }
-                                    if self.args.is_resuming() {
-                                        d.resume(
-                                            &mut p.vehicle,
-                                            parse_time(&self.args.time),
-                                            self.args.situation_next_stop,
-                                        );
-                                        // the IBIS keeps its saved trip; with --autostart
-                                        // the duty's next trips are typed into it again
-                                        p.duty_typed = self.args.autostart;
-                                    }
-                                    Some(d)
-                                }
-                                Err(e) => {
-                                    log::warn!("no player duty: {e}");
-                                    self.service_msg = Some((
-                                        omsi_ui::tr("No duty: %{error}")
-                                            .replace("%{error}", &e.to_string()),
-                                        20.0,
-                                    ));
-                                    None
-                                }
-                            };
+                                };
                             // --autostart in the window puts the duty on the IBIS as well
                             // (it only ever did offscreen: the duty did not exist yet when
                             // the start-up began, and the displays stayed dark)
@@ -649,14 +595,7 @@ impl App {
                                 p.set_duty_destination(trip, stop);
                             }
                             if let Some(d) = self.duty.as_ref() {
-                                let mut fonts = w.fonts.lock();
-                                if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
-                                    &mut p.vehicle,
-                                    d,
-                                    &mut fonts,
-                                ) {
-                                    log::warn!("driver timetable paper: {e:#}");
-                                }
+                                session::timetable_paper(p, d, &w);
                             }
                         }
                         self.schedule = Some(sch);

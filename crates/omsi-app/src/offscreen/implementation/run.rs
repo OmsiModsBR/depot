@@ -6,9 +6,9 @@ use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::frame::quit;
+use crate::frame::session;
 use crate::gameplay::career;
 use crate::gameplay::humans;
-use crate::gameplay::money;
 use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
 use crate::gameplay::spawn::spawn_player;
@@ -23,7 +23,7 @@ use crate::output::{
 };
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
-use crate::situation::{build_situation, start_clock, ticket_key_name};
+use crate::situation::{build_situation, start_clock};
 use crate::weather::puddles;
 use crate::weather::rain;
 use crate::weather::weather_setup::{
@@ -68,42 +68,25 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     // the map's own route arrows, with OMSI 2's route arrows
     world.show_help_arrows(&renderer, &mut scene, settings.nav_arrows);
     let lan_seed: Option<u64> = None;
-    // (a player who joins another's game draws the host's traffic in it, whatever their own
-    // count says: without it the host's cars had nowhere to go - "passengers, but no
-    // traffic" on a server)
-    // (and without traffic it still runs the light programs and switches the lamps)
     let mut traffic = {
-        let mut t = traffic::Traffic::new(&args.root, &world, args.traffic)?;
-        t.lights_only = !(args.traffic > 0
-            || args.schedule
-            || crate::gameplay::rail_drive::args_rail(args)
-            || args.lan_join.is_some());
-        t.no_timetable_buses = args.no_timetable_buses;
+        let mut t = session::new_traffic(args, &world, &renderer, &mut scene)?;
         if let Some(seed) = lan_seed {
             t.set_lan_seed(seed);
-        }
-        if args.traffic > 0 {
-            t.precache_random(&world, &renderer, &mut scene);
         }
         Some(t)
     };
     let mut schedule = if args.schedule {
-        Some(schedule::Schedule::new(
-            &args.root,
+        Some(session::new_schedule(
+            args,
             &world,
-            &start_clock(args),
+            &renderer,
+            &mut scene,
+            traffic.as_mut(),
         ))
     } else {
         None
     };
     if let Some(s) = schedule.as_mut() {
-        s.precache(
-            &world,
-            &renderer,
-            &mut scene,
-            traffic.as_mut(),
-            parse_time(&args.time),
-        );
         if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::flags::CHECK_TRIPS.is_set()) {
             s.check_routes(&world, t);
         }
@@ -125,35 +108,12 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     // why the duty asked for cannot be driven (the picture's HUD says it too)
     let mut duty_error: Option<String> = None;
     if let (Some(sch), Some(line), Some(p)) = (schedule.as_mut(), &args.line, player.as_mut()) {
-        match sch.player_duty(
-            &world,
-            line,
-            args.tour.as_deref().unwrap_or(""),
-            parse_time(&args.time),
-            args.trip.as_deref(),
-            args.whole_tour,
-        ) {
+        match session::player_duty(sch, args, &world, line, p) {
             Ok(mut d) => {
-                if let Some(k) = args.duty_trip {
-                    d.start_at(k, args.duty_first_stop);
-                }
-                if args.is_resuming() {
-                    d.resume(
-                        &mut p.vehicle,
-                        parse_time(&args.time),
-                        args.situation_next_stop,
-                    );
-                    // (as in the window: see `App`)
-                    p.duty_typed = args.autostart;
-                } else {
+                if !args.is_resuming() {
                     d.update(&mut p.vehicle, parse_time(&args.time));
                 }
-                let mut fonts = world.fonts.lock();
-                if let Err(e) =
-                    crate::gameplay::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
-                {
-                    log::warn!("driver timetable paper: {e:#}");
-                }
+                session::timetable_paper(p, &d, &world);
                 log::info!(
                     "duty: line {} tour {} trip {} next stop {} ({}) delay {:.0} s, stops {:?}",
                     d.line,
@@ -199,24 +159,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         .map(|d| career::Career::load(&args.root, d))
         .unwrap_or_default();
     let mut humans_off = if args.passengers || args.lan_join.is_some() {
-        let mut h = humans::Humans::new(&args.root);
+        let mut h = session::new_humans(args, &settings, &world, player.as_mut());
         if let Some(seed) = lan_seed {
             h.set_lan_seed(seed);
-        }
-        h.exact_fare = settings.exact_fare;
-        h.boarding = settings.boarding.clone();
-        h.voices = match settings.pax_voices.as_str() {
-            "off" => 2,
-            "tickets" => 1,
-            _ => 0,
-        };
-        if let Some(p) = player.as_mut() {
-            h.set_cabin(&mut p.vehicle);
-            h.ticket_key = ticket_key_name(&args.root, &p.bindings);
-            h.tickets = p.vehicle.host.tickets.clone();
-            if !world.global.money_system.trim().is_empty() {
-                h.money = Some(money::Money::new(&args.root, &world.global.money_system));
-            }
         }
         // (with the passengers setting, as in the window)
         h.people_curve = world

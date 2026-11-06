@@ -12,3 +12,4 @@ pub(crate) mod frame_stats {
 }
 
 pub(crate) use super::super::implementation::quit;
+pub(crate) use super::super::implementation::session;
