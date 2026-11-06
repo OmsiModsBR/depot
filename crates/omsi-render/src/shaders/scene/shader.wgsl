@@ -1691,8 +1691,9 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         }
     }
     if (material.extra.x > 0.5 && material.params.x > 1.5 && material.params.z > 0.5) {
-        // TEMP diag: tile uv and the mask
-        return vec4<f32>(fract(buv * 4.0), sample_transmap(buv).a, 1.0);
+        // TEMP diag: each layer a flat colour of its own, where its mask says
+        let z = material.extra.z;
+        return vec4<f32>(fract(z / 7.0), fract(z / 11.0), fract(z / 13.0), tex.a);
     }
     let mode = material.params.x;
     // Mip-filtered alpha is the fraction of the pixel covered by leaves or fence wires.

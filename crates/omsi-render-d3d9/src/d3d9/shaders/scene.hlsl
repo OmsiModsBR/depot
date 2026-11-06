@@ -390,8 +390,8 @@ float4 ps_main(VsOut i) : COLOR0 {
         }
     }
     if (terrain && m_params.x > 1.5 && m_params.z > 0.5) {
-        // TEMP diag: tile uv and the mask
-        return float4(frac(buv * 4.0), tm.a, 1.0);
+        // TEMP diag: each layer a flat colour of its own, where its mask says
+        return float4(frac(m_extra.z / 7.0), frac(m_extra.z / 11.0), frac(m_extra.z / 13.0), tex.a);
     }
     float mode = m_params.x;
     if (draw_flags.y > 0.5 && mode > 0.5 && mode < 1.5) {
