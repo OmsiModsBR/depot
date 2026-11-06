@@ -66,6 +66,7 @@ impl Inner {
     }
 
     fn asset(&mut self, event: MirrorEvent<'_>) {
+        super::dbgdump::dbg_asset(&event);
         let done = match event {
             MirrorEvent::Mesh {
                 id,
@@ -149,6 +150,9 @@ impl Inner {
     }
 
     fn frame(&mut self, plan: &FramePlan, scene: &Scene) {
+        if plan.target.is_none() {
+            super::dbgdump::dbg_frame(plan, scene);
+        }
         // (a render texture's picture - a mirror's - is drawn on its own, whatever frame is
         // open: it is no window picture, and has no overlays)
         let target = plan.target;
@@ -591,3 +595,4 @@ impl D3d9Output {
         })
     }
 }
+

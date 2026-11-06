@@ -142,6 +142,7 @@ impl Renderer {
                 id,
                 texture: MirrorTexture::Data(data),
             });
+        dbg_put(id, scene.textures[id].gen);
         } else if self.mirroring() {
             log::warn!(
                 "asset mirror: texture {id} was prepared before the mirror was set; not mirrored"
@@ -172,6 +173,7 @@ impl Renderer {
                 mipmaps,
             },
         });
+        dbg_put(id, scene.textures[id].gen);
         id
     }
 
@@ -200,6 +202,7 @@ impl Renderer {
                 mipmaps: false,
             },
         });
+        dbg_put(id, scene.textures[id].gen);
         id
     }
 
@@ -262,6 +265,7 @@ impl Renderer {
             id,
             texture: MirrorTexture::Data(data),
         });
+        dbg_put(id, scene.textures[id].gen);
         id
     }
 
@@ -305,6 +309,7 @@ impl Renderer {
                 mipmaps: false,
             },
         });
+        dbg_put(id, scene.textures[id].gen);
         let t = &gt.texture;
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -351,6 +356,7 @@ impl Renderer {
                     mipmaps: true,
                 },
             });
+        dbg_put(id, scene.textures[id].gen);
             return true;
         }
         self.update_texture(scene, id, img);
@@ -376,6 +382,7 @@ impl Renderer {
             id,
             texture: MirrorTexture::Data(data),
         });
+        dbg_put(id, scene.textures[id].gen);
     }
 
     /// Mip levels and size of a texture: (width, height, levels).
@@ -918,6 +925,7 @@ impl Renderer {
                 gen: next_gen(),
             };
             self.mirror(MirrorEvent::FreeTexture(id));
+            dbg_take(id);
         }
     }
 
@@ -974,6 +982,7 @@ impl Renderer {
         let t = scene.textures.pop().unwrap();
         scene.textures[into] = t;
         self.mirror(MirrorEvent::MoveTexture { from: new, into });
+        dbg_shift(new, into);
         into
     }
 
@@ -991,3 +1000,53 @@ impl Renderer {
         into
     }
 }
+
+impl Renderer {
+    /// TEMP audit: materials whose textures' slots changed under them.
+    pub fn audit_material_slots(&self, scene: &Scene) -> Vec<String> {
+        let mut out = Vec::new();
+        let freed_look = scene.looks.get(&0).copied();
+        for (mi, m) in scene.materials.iter().enumerate() {
+            if Some(m.look) == freed_look {
+                continue;
+            }
+            let key = scene
+                .bind_groups
+                .iter()
+                .find(|(_, (bg, _))| *bg == m.bind_group)
+                .map(|(k, _)| k.clone());
+            let ids = [
+                m.texture,
+                m.transmap.map(|t| t.0),
+                m.nightmap,
+                m.lightmap,
+                m.envmap.map(|e| e.0),
+                m.env_mask,
+                m.bump.map(|b| b.0),
+            ];
+            for (k, id) in ids.iter().enumerate() {
+                let Some(id) = id else { continue };
+                let now = scene.textures.get(*id).map(|t| (t.gen, t.bytes, t.size));
+                let then = key.as_ref().map(|key| key.textures[k]);
+                let mirrored = DBG.lock().unwrap().get(*id).copied().flatten();
+                let bad_gen = then.is_some_and(|t| now.is_some_and(|n| n.0 != t.1))
+                    || now.is_some_and(|n| n.1 > 0 && mirrored != Some(n.0));
+                let freed = now.is_some_and(|n| n.1 == 0);
+                if bad_gen || freed || now.is_none() {
+                    out.push(format!(
+                        "material {mi} map {k} texture {id}: now {now:?} bound {then:?} mirrored {:?} terrain {}", DBG.lock().unwrap().get(*id).copied().flatten(),
+                        m.uniform.extra[0]
+                    ));
+                }
+            }
+        }
+        out
+    }
+}
+
+pub static DBG: std::sync::Mutex<Vec<Option<u64>>> = std::sync::Mutex::new(Vec::new());
+fn dbg_put(id: usize, g: u64) { let mut t = DBG.lock().unwrap(); if t.len() <= id { t.resize(id + 1, None); } t[id] = Some(g); }
+fn dbg_take(id: usize) -> Option<u64> { DBG.lock().unwrap().get_mut(id).and_then(Option::take) }
+fn dbg_shift(from: usize, into: usize) { match dbg_take(from) { Some(g) => dbg_put(into, g), None => { dbg_take(into); } } }
+#[allow(non_snake_case)]
+pub fn DBG_LEN() -> usize { DBG.lock().unwrap().iter().filter(|x| x.is_some()).count() }

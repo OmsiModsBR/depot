@@ -426,9 +426,18 @@ pub(crate) fn window_renderer(
     window: &std::sync::Arc<winit::window::Window>,
     options: omsi_render::RenderOptions,
 ) -> Result<Renderer> {
-    for_window(instance, window, |adapter, surface| {
+    let mut r = for_window(instance, window, |adapter, surface| {
         pollster::block_on(Renderer::new_on(adapter, Some(surface), None, options))
-    })
+    })?;
+    if std::env::var_os("OMSI_D3D9_DUMP").is_some() {
+        r.set_asset_mirror(Some(Box::new(|e| crate::output::implementation::dbgdump::dbg_asset(&e))));
+        r.set_plan_sink(Some(Box::new(|p, s| {
+            if p.target.is_none() {
+                crate::output::implementation::dbgdump::dbg_frame(p, s)
+            }
+        })));
+    }
+    Ok(r)
 }
 
 /// What `open` makes for a window (the game's renderer, or the launcher's plain device for

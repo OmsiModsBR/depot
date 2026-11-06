@@ -2,6 +2,7 @@
 
 pub(crate) mod backend;
 pub(crate) mod camera;
+pub(crate) mod dbgdump;
 #[cfg(windows)]
 pub(crate) mod d3d9;
 pub(crate) mod mirror_hud;

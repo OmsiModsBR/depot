@@ -8660,6 +8660,17 @@ impl World {
         scene: &mut Scene,
         deadline: Option<std::time::Instant>,
     ) -> usize {
+        {
+            static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+            let mut l = LAST.lock().unwrap();
+            if std::env::var_os("OMSI_AUDIT_SLOTS").is_some() && l.is_none_or(|t| t.elapsed().as_secs() >= 3) {
+                *l = Some(std::time::Instant::now());
+                for x in renderer.audit_material_slots(scene) {
+                    log::warn!("AUDIT {x}");
+                }
+                log::warn!("AUDIT tick: {} materials, {} textures, dbg {}", scene.materials.len(), scene.textures.len(), omsi_render::DBG_LEN());
+            }
+        }
         let (wanted, restores) = {
             let mut gpu = self.gpu.lock();
             let mut w = std::mem::take(&mut gpu.wants_upgrade);
@@ -9075,6 +9086,12 @@ impl World {
 
     /// Wait for the textures being compressed and swap them all in (offscreen pictures).
     pub fn finish_texture_upgrades(&self, renderer: &Renderer, scene: &mut Scene) {
+        if std::env::var_os("OMSI_AUDIT_SLOTS").is_some() {
+            for l in renderer.audit_material_slots(scene) {
+                log::warn!("AUDIT {l}");
+            }
+            log::warn!("AUDIT done: {} materials, {} textures, dbg {}", scene.materials.len(), scene.textures.len(), omsi_render::DBG_LEN());
+        }
         loop {
             self.apply_texture_upgrades(renderer, scene, None);
             if self.upgrades_pending.lock().is_empty() && self.gpu.lock().wants_upgrade.is_empty() {

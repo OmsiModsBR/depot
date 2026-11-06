@@ -14,6 +14,7 @@ mod sky;
 mod targets;
 // The public API, item by item: what the game (`omsi-app`) and the tests may use. Everything
 // public comes through `api`; see ARCHITECTURE.md.
+pub use api::assets::DBG_LEN;
 pub use api::{
     atmosphere, catch, catching, clouds, fit_texture, gl_backend, note_adapter, panel_width,
     poll_gpu, prepare_mesh, prepare_meshes, prepare_texture, wait_gpu, winit_window, AlphaMode,
