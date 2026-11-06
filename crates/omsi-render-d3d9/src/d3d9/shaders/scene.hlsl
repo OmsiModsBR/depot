@@ -453,6 +453,11 @@ float4 ps_main(VsOut i) : COLOR0 {
         float3 lin = saturate(srgb_decode(base) * scale + spec) + srgb_decode(nm.rgb) * night;
         encoded = srgb_encode(lin);
     }
+    if (terrain && m_params.x > 1.5 && m_params.z > 0.5) {
+        // TEMP diag: the full shading without the sphere map
+        float fd = saturate(1.0 - exp(-distance(i.world, cam_pos.xyz) * fog.w));
+        return float4(lerp(encoded, fog.xyz, fd), tex.a * m_color.a * i.params.x);
+    }
     if (m_params2.y > 0.0) {
         // [matl_envmap]: mixed in as stored, by the mask's alpha (or the diffuse alpha where
         // a transmap is declared) times the light, else by the factor times the ambient
