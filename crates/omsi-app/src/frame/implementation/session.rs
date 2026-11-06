@@ -117,3 +117,33 @@ pub(crate) fn new_humans(
     }
     h
 }
+
+/// The traffic's step of a frame, the same in the window and the offscreen run: the
+/// player's priority and indicator for the AI, the AI's tick against the player's outline,
+/// then the points and the signals the cars asked for.
+///
+/// `player_rail` is the track the player drives on (`(lane, along)`). The window passes it,
+/// so a signal clears for a player's train; the offscreen run passes `None`, so there the
+/// same signal stays at stop for a scripted player's train and only AI trains clear it.
+/// The difference is kept on purpose until it is changed deliberately (see the test
+/// `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`).
+pub(crate) fn traffic_step(
+    t: &mut Traffic,
+    world: &World,
+    player: Option<&Player>,
+    dt: f32,
+    player_rail: Option<(usize, bool)>,
+) {
+    t.player_priority = player
+        .and_then(|p| p.vehicle.var("TrafficPriority"))
+        .is_some_and(|v| v > 0.5);
+    t.player_blinker = player
+        .map(|p| crate::gameplay::traffic_link::indicator(&p.vehicle))
+        .unwrap_or(0);
+    t.tick(
+        dt,
+        player.map(crate::gameplay::traffic_link::player_outline),
+    );
+    world.set_switches(&t.switch_requests());
+    world.set_signals(&t.signal_aspects(&world.signal_routes, player_rail));
+}

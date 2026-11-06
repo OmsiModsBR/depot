@@ -352,28 +352,42 @@ fn offscreen_picture_is_stable_and_shows_the_box() {
 
 /// The window hands the rail the player drives on to `Traffic::signal_aspects`, so a train
 /// signal clears for a player's train; the offscreen run hands it `None`, so the same signal
-/// stays at stop there for a scripted player's train (only AI trains clear it). The two
-/// are kept apart on purpose until the offscreen run is changed deliberately: this test
-/// reads both call sites and fails when either changes, so whoever unifies them also
-/// updates this note and the golden.
+/// stays at stop there for a scripted player's train (only AI trains clear it). Both reach
+/// it through the one traffic step they share (`frame/implementation/session.rs`), and only
+/// the rail they give that step differs. The two are kept apart on purpose until the
+/// offscreen run is changed deliberately: this test reads the shared step and both call
+/// sites and fails when any of them changes, so whoever unifies them also updates this note
+/// and the golden.
 #[test]
 fn window_and_offscreen_differ_in_the_rail_given_to_signal_aspects() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     // (compared without whitespace, so that rustfmt's line breaks do not matter)
     let squash = |s: &str| s.split_whitespace().collect::<String>();
-    let offscreen =
-        squash(&std::fs::read_to_string(src.join("offscreen/implementation/run.rs")).unwrap());
-    let window =
-        squash(&std::fs::read_to_string(src.join("frame/implementation/app_events.rs")).unwrap());
-    let calls = |s: &str| s.matches(".signal_aspects(").count();
-    assert_eq!(calls(&offscreen), 1);
+    let read = |p: &str| squash(&std::fs::read_to_string(src.join(p)).unwrap());
+    let session = read("frame/implementation/session.rs");
+    let offscreen = read("offscreen/implementation/run.rs");
+    let window = read("frame/implementation/app_events.rs");
+    let calls = |s: &str, what: &str| s.matches(what).count();
+    // the one call of `signal_aspects`, in the shared step, with the rail it is given
+    assert_eq!(calls(&session, ".signal_aspects("), 1);
     assert!(
-        offscreen.contains(&squash("signal_aspects(&world.signal_routes, None)")),
+        session.contains(&squash("signal_aspects(&world.signal_routes, player_rail)")),
+        "the shared traffic step no longer passes the rail it is given"
+    );
+    assert_eq!(calls(&offscreen, ".signal_aspects("), 0);
+    assert_eq!(calls(&window, ".signal_aspects("), 0);
+    assert_eq!(calls(&offscreen, "session::traffic_step("), 1);
+    assert!(
+        offscreen.contains(&squash(
+            "session::traffic_step(t, &world, player.as_ref(), dt, None)"
+        )),
         "offscreen no longer passes no rail"
     );
-    assert_eq!(calls(&window), 1);
+    assert_eq!(calls(&window, "session::traffic_step("), 1);
     assert!(
-        window.contains(&squash("signal_aspects(&w.signal_routes, rail)")),
+        window.contains(&squash(
+            "session::traffic_step(t, w, self.player.as_ref(), dt, rail)"
+        )),
         "the window no longer passes the player's rail"
     );
     assert!(

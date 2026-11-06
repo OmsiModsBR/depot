@@ -73,10 +73,11 @@ use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::frame::domain::app_events::*;
 use crate::frame::quit;
+use crate::frame::session;
 use crate::gameplay::humans;
 use crate::gameplay::player::Player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::lights;
@@ -769,26 +770,12 @@ impl ApplicationHandler for App {
                     t.others
                         .extend(own_outlines(self.player.as_ref(), &self.placed));
                     if !self.paused {
-                        t.player_priority = self
+                        let rail = self
                             .player
                             .as_ref()
-                            .and_then(|p| p.vehicle.var("TrafficPriority"))
-                            .is_some_and(|v| v > 0.5);
-                        t.player_blinker = self
-                            .player
-                            .as_ref()
-                            .map(|p| crate::gameplay::traffic_link::indicator(&p.vehicle))
-                            .unwrap_or(0);
-                        t.tick(dt, self.player.as_ref().map(|p| player_outline(p)));
-                        if let Some(w) = self.world.as_ref() {
-                            w.set_switches(&t.switch_requests());
-                            let rail = self
-                                .player
-                                .as_ref()
-                                .and_then(|p| p.rail.as_ref())
-                                .map(|r| (r.lane, r.along));
-                            w.set_signals(&t.signal_aspects(&w.signal_routes, rail));
-                        }
+                            .and_then(|p| p.rail.as_ref())
+                            .map(|r| (r.lane, r.along));
+                        session::traffic_step(t, w, self.player.as_ref(), dt, rail);
                     }
                     *self.profile.entry("traffic.tick").or_default() +=
                         __t2.elapsed().as_secs_f64();
