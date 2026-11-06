@@ -516,37 +516,18 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         if let Some(player) = player.as_mut() {
             player.tick_startup(dt);
             if let Some(d) = duty.as_mut() {
-                if let Some(stop) = player.html_next_stop.take() {
-                    if d.skip_to(stop) {
-                        let (trip, k) = d.trip_for_ibis();
-                        player.ibis_to_stop(trip, k);
-                    }
-                }
-                let due = (d.trip_index, d.next_stop);
-                let served = d.update(&mut player.vehicle, parse_time(&args.time) + t_s as f64);
-                if let Some((arrival, departure)) = served {
-                    career.stop_served(arrival, departure);
-                }
-                crate::gameplay::journey::note(&mut journey, d, due, served, &args.root, || {
-                    crate::gameplay::journey::head(
-                        &career,
-                        &world.global.name,
-                        &player.vehicle,
-                        &player.vehicle.host.clock,
-                    )
-                });
-                if d.take_trip_change() && player.duty_typed {
-                    let (trip, stop) = d.trip_for_ibis();
-                    player.set_duty_destination(trip, stop);
-                }
-                let mut fonts = world.fonts.lock();
-                if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
-                    &mut player.vehicle,
+                session::duty_skip_asked(d, player);
+                session::duty_update(
                     d,
-                    &mut fonts,
-                ) {
-                    log::warn!("driver timetable paper: {e:#}");
-                }
+                    player,
+                    parse_time(&args.time) + t_s as f64,
+                    &mut career,
+                    &mut journey,
+                    &args.root,
+                    &world,
+                    None,
+                );
+                session::duty_after(d, player, &world);
             }
             career.tick(
                 dt,
