@@ -389,10 +389,6 @@ float4 ps_main(VsOut i) : COLOR0 {
             tex.a = smoothstep(0.32, 0.68, tex.a);
         }
     }
-    if (terrain && m_params.x > 1.5 && m_params.z > 0.5) {
-        // TEMP diag: the layer's picture unlit, where its mask says
-        return float4(tex.rgb, tex.a);
-    }
     float mode = m_params.x;
     if (draw_flags.y > 0.5 && mode > 0.5 && mode < 1.5) {
         clip(tex.a - draw_flags.x);

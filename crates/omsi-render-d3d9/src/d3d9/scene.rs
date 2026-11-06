@@ -1416,7 +1416,7 @@ impl D3d9Device {
             for stage in 0..SAMPLERS {
                 // (the picture maps - the diffuse, transparency, night and detail textures -
                 // take the anisotropic filtering option; the sphere, mask and bump maps do not)
-                let min = if self.anisotropy > 1 && stage < 4 {
+                let min = if self.anisotropy > 1 && stage < 4 && stage != 1 {
                     D3DTEXF_ANISOTROPIC
                 } else {
                     D3DTEXF_LINEAR
