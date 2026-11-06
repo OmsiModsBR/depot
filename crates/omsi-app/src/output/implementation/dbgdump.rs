@@ -5,6 +5,8 @@ use omsi_render::{FramePlan, MirrorEvent, MirrorTexture, Scene};
 // ---- TEMP debug dump (OMSI_D3D9_DUMP=<dir>) ----
 type DbgTex = (u32, u32, u8, u64, Option<Vec<u8>>);
 static DBG_TEX: Mutex<Vec<Option<DbgTex>>> = Mutex::new(Vec::new());
+type DbgMesh = (usize, u64, u64, Vec<[f32; 8]>);
+static DBG_MESH: Mutex<Vec<Option<DbgMesh>>> = Mutex::new(Vec::new());
 static DBG_FRAMES: AtomicUsize = AtomicUsize::new(0);
 
 fn dbg_on() -> Option<std::path::PathBuf> {
@@ -21,6 +23,53 @@ fn dbg_hash(b: &[u8]) -> u64 {
 pub(crate) fn dbg_asset(event: &MirrorEvent<'_>) {
     if dbg_on().is_none() {
         return;
+    }
+    {
+        let mut ms = DBG_MESH.lock().unwrap();
+        let mput = |t: &mut Vec<Option<DbgMesh>>, id: usize, v: Option<DbgMesh>| {
+            if t.len() <= id {
+                t.resize(id + 1, None);
+            }
+            t[id] = v;
+        };
+        let sample = |v: &[f32]| -> Vec<[f32; 8]> {
+            let n = v.len() / 8;
+            [0usize, 1, 60, 61, n / 2, n.saturating_sub(1)]
+                .iter()
+                .filter(|&&i| i < n)
+                .map(|&i| {
+                    let mut a = [0f32; 8];
+                    a.copy_from_slice(&v[i * 8..i * 8 + 8]);
+                    a
+                })
+                .collect()
+        };
+        match event {
+            MirrorEvent::Mesh { id, vertices, indices } => {
+                let f: &[f32] = bytemuck::cast_slice(vertices);
+                let v = (
+                    f.len() / 8,
+                    dbg_hash(bytemuck::cast_slice(f)),
+                    dbg_hash(bytemuck::cast_slice(indices)),
+                    sample(f),
+                );
+                mput(&mut ms, *id, Some(v));
+            }
+            MirrorEvent::MeshVertices { id, vertices } => {
+                let f: &[f32] = bytemuck::cast_slice(vertices);
+                if let Some(Some(m)) = ms.get_mut(*id) {
+                    m.1 = dbg_hash(bytemuck::cast_slice(f));
+                    m.3 = sample(f);
+                }
+                log::warn!("DUMP mesh-vertices event for {id}");
+            }
+            MirrorEvent::FreeMesh(id) => mput(&mut ms, *id, None),
+            MirrorEvent::MoveMesh { from, into } => {
+                let v = ms.get_mut(*from).and_then(Option::take);
+                mput(&mut ms, *into, v);
+            }
+            _ => {}
+        }
     }
     let mut t = DBG_TEX.lock().unwrap();
     let put = |t: &mut Vec<Option<DbgTex>>, id: usize, v: Option<DbgTex>| {
@@ -96,7 +145,7 @@ pub(crate) fn dbg_frame(plan: &FramePlan, scene: &Scene) {
             .filter_map(|i| plan.list.get(i as usize))
             .map(|&e| {
                 let e = e as usize;
-                let mo = models.get(e).map(|m| m[3]).unwrap_or_default();
+                let mo = models.get(e).copied().unwrap_or_default();
                 let p = params.get(e * 2..e * 2 + 2).map(|p| format!("{:?}", p)).unwrap_or_default();
                 format!("e{e} t{:?} p{p}", mo)
             })
@@ -107,6 +156,9 @@ pub(crate) fn dbg_frame(plan: &FramePlan, scene: &Scene) {
             b.kind, b.surface, b.mesh, b.first, b.count, b.material,
             tex(m.texture), tex(m.transmap.map(|x| x.0)), tex(m.lightmap), u[1], u[2], ents
         );
+        let ms = DBG_MESH.lock().unwrap();
+        log::warn!("DUMP batch {bi} mesh {} = {:?}", b.mesh, ms.get(b.mesh));
+        drop(ms);
         for (k, id) in [("tex", m.texture), ("trans", m.transmap.map(|x| x.0))] {
             if let Some(id) = id {
                 if let Some(Some(v)) = t.get(id) {
