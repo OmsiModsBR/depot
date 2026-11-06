@@ -2,8 +2,8 @@
 
 use crate::core::app::App;
 use crate::core::startup::shift_held_now;
+use crate::gameplay::player::{digit_of, fallback_action};
 use crate::input::keys;
-use crate::player::{digit_of, fallback_action};
 use crate::situation::apply_situation;
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};

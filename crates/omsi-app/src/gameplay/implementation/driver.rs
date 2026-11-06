@@ -38,9 +38,10 @@
 //! the gear lever the lone hand pushes the wheel round as far as it can and then takes it again
 //! further back (palming it), rather than letting the rim slide through it.
 
+use crate::gameplay::domain::driver::*;
 use glam::{Mat4, Vec3};
 use omsi_geometry::util::wrap_deg_f32;
-use omsi_render::{AlphaMode, MeshId, Renderer, Scene};
+use omsi_render::{AlphaMode, Renderer, Scene};
 use omsi_sim::people::{
     curl_hands, grip_centres, hand_slot, skin_from, Activity, HumanType, Pose, PoseInput,
 };
@@ -134,64 +135,6 @@ const LEVER_REACH: f32 = 1.1;
 const GEAR_VARS: &[&str] = &["Gear", "Gearbox_Gear", "Gear_Selected", "Gang", "Antrieb"];
 const CLUTCH_VARS: &[&str] = &["Clutch", "Clutch_Pedal", "Kupplung"];
 
-/// The gear lever of a manual bus, as found in its model (`find_shifter`).
-struct Shifter {
-    /// The lever mesh (index into the vehicle's meshes).
-    mesh: usize,
-    /// Variables watched for gear changes: the lever's own and any gear variable the
-    /// vehicle has.
-    vars: Vec<String>,
-    /// The clutch pedal's variable, if the vehicle has one.
-    clutch: Option<String>,
-    /// Where the hand holds the knob, and the lever's axis (foot to knob), at rest, model
-    /// frame.
-    grab: Vec3,
-    axis: Vec3,
-    /// The hand that works it (0 left, 1 right): the one on the lever's side of the seat.
-    hand: usize,
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum ShiftPhase {
-    /// The hand is on the rim.
-    Away,
-    /// On its way to the knob.
-    Reach,
-    /// On the knob.
-    Hold,
-    /// On its way back to the rim.
-    Back,
-}
-
-struct ShiftState {
-    phase: ShiftPhase,
-    /// 0 hand on the rim .. 1 hand on the knob (linear, eased where it is used).
-    w: f32,
-    /// How long (s) the hand takes over the way to the knob this time.
-    reach: f32,
-    /// The bus has stood still long enough (hysteresis on its speed).
-    stopped: bool,
-    still_for: f32,
-    /// Time (s) the stopped bus's hand stays off the lever after the wheel was turned too
-    /// far for one hand.
-    cool: f32,
-    last_pos: Option<glam::DVec3>,
-    last_knob: Option<Vec3>,
-    last_vars: Vec<f32>,
-    last_clutch: f32,
-    was_active: bool,
-    /// Time (s) since the lever or the clutch last moved.
-    idle: f32,
-    /// A shift is under way and the hand has not started for the lever yet.
-    pending: bool,
-    waiting: f32,
-    /// Progress (0..1) of the driver's own push on the knob; 1 when there is none.
-    stroke: f32,
-    /// Where the knob was when the shift began and how far it has moved since.
-    event_from: Vec3,
-    event_travel: f32,
-}
-
 impl Default for ShiftState {
     fn default() -> Self {
         ShiftState {
@@ -216,122 +159,10 @@ impl Default for ShiftState {
     }
 }
 
-struct Wheel {
-    /// The steering wheel mesh (index into the vehicle's meshes).
-    mesh: usize,
-    /// Its `[newanim]` variable and factor: the wheel's angle in degrees is their product.
-    var: String,
-    factor: f32,
-    /// The turning axis, pointing at the driver.
-    axis: Vec3,
-    /// Centre, axis (towards the driver) and the rim's up and right in the wheel's plane,
-    /// at rest, in the model frame; the rim radius the hands hold.
-    centre: Vec3,
-    up: Vec3,
-    right: Vec3,
-    radius: f32,
-    /// The rim's own thickness (its tube's radius, m).
-    tube: f32,
-}
-
-pub struct DriverFigure {
-    ty: Arc<HumanType>,
-    /// The figure's meshes with the fingers closed round the rim (`curl_hands`).
-    curled: Vec<(Vec<Vec3>, Vec<Vec3>)>,
-    /// Wrist to knuckles (m).
-    knuckles: f32,
-    /// Where the closed fingers hold their bar, rest frame (see `grip_centres`), and how far
-    /// the wrists' targets are moved (person frame) so that the bar they hold is the rim:
-    /// the hand does not always turn as far as the grip asks (its bend at the wrist is
-    /// limited), and the fingers closed round the air beside the rim.
-    grip_rest: [Option<Vec3>; 2],
-    grip_fix: [Vec3; 2],
-    /// The radius the fingers are closed round (the rim's tube and the fingers' half
-    /// thickness) that `curled` and `grip_rest` are made for.
-    grip_radius: f32,
-    pose: Pose,
-    meshes: Vec<(MeshId, usize)>,
-    skins: Vec<(Vec<Vec3>, Vec<Vec3>)>,
-    /// Hip point, floor point in front of the seat, heading (model frame).
-    hip: Vec3,
-    floor: Vec3,
-    heading: f32,
-    /// The seat's four `[interiorlight]`s (see `PassPos::illumination`): the lamps that
-    /// light the figure, as OMSI lights a seated person.
-    lamps: [i32; 4],
-    wheel: Option<Wheel>,
-    /// The sign that turns the wheel variable's angle into the angle seen from the seat
-    /// (found by comparing it with the mesh as turned; 0 until then).
-    sign: f32,
-    /// Extra forward lean that brings the hands to the rim (degrees, see SLIDE_MAX), and
-    /// what it is with the hands at their places.
-    lean: f32,
-    base_lean: f32,
-    /// Whether hands/arms should remain visible in cab (first-person) view behind settings.
-    pub show_hands_in_cab: bool,
-    shown: bool,
-    /// Posed at least once (the first pose is settled, not eased in from standing).
-    settled: bool,
-    /// How far the seat is slid forward so that the hands reach the rim (m): a figure of
-    /// the stock size on the LiAZ's `[drivpos]` sat 0.7 m behind its wheel with its arms
-    /// stretched out in the air.
-    slide: f32,
-    /// Where each hand holds the rim, or is on its way to (see `steer_hands`).
-    hands: [Hand; 2],
-    hands_placed: bool,
-    /// The wheel's angle seen from the seat (degrees, clockwise) now and a frame ago, and
-    /// how long it has been held still (s).
-    theta: f32,
-    last_theta: f32,
-    still: f32,
-    /// How fast the wheel turns (degrees/s, smoothed).
-    rate: f32,
-    /// The elbows as last posed (model frame): the forearms the hands continue.
-    elbows: Option<[Vec3; 2]>,
-    /// How each hand lies now (wrist to knuckles, palm; model frame), eased.
-    frames: [Option<(Vec3, Vec3)>; 2],
-    /// How far each fist is rolled round the rim (degrees), eased.
-    rolls: [Option<f32>; 2],
-    /// Per mesh and vertex, the hand it belongs to (0 left, 1 right, -1 none), and a
-    /// scratch copy of a mesh with a hand opening.
-    hand_of: Vec<Vec<i8>>,
-    /// Per mesh and vertex, the arm (upper arm and forearm) it belongs to (0 left, 1 right,
-    /// -1 none): the arms stay in the cab view along with the hands.
-    arm_of: Vec<Vec<i8>>,
-    blend: (Vec<Vec3>, Vec<Vec3>),
-    /// The gear lever, when the bus's model has one near the seat, and what the hand
-    /// working it is doing.
-    shifter: Option<Shifter>,
-    shift: ShiftState,
-}
-
 /// The upper-arm and forearm bone slots of each side (0 left, 1 right) in `Posed::bones`,
 /// numbered as in `omsi_sim::people` (thighs 0-1, shins 2-3, upper arms 4-5, forearms 6-7).
 const UPPER_ARM_SLOT: [usize; 2] = [4, 5];
 const FORE_ARM_SLOT: [usize; 2] = [6, 7];
-
-/// A hand on the rim: the point it holds, as an angle on the wheel (the angle seen from the
-/// seat less the wheel's), or its way to a new hold.
-#[derive(Clone, Copy, Default)]
-struct Hand {
-    on_rim: f32,
-    mv: Option<Regrip>,
-}
-
-/// A hand let go of the rim and moving to hold it again: from and to angles seen from the
-/// seat (degrees), progress 0..1 and duration (s).
-#[derive(Clone, Copy)]
-struct Regrip {
-    from: f32,
-    to: f32,
-    t: f32,
-    dur: f32,
-    /// How fast the hand moves along the rim as it lets go and as it takes hold (degrees
-    /// over the whole move): it leaves the rim moving with it and meets it the same way,
-    /// not stopping dead in one frame.
-    v0: f32,
-    v1: f32,
-}
 
 impl Regrip {
     fn new(from: f32, to: f32, dur: f32, rate: f32) -> Regrip {
@@ -378,14 +209,6 @@ impl Hand {
 fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
-}
-
-/// Where the hands go this frame (model frame): the wrists, how each hand lies (wrist to
-/// knuckles, the way the palm faces) and the points of the rim they hold.
-struct Targets {
-    grips: [Vec3; 2],
-    frames: [(Vec3, Vec3); 2],
-    tubes: [Vec3; 2],
 }
 
 impl DriverFigure {

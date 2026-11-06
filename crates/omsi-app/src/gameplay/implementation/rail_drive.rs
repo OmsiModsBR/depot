@@ -8,25 +8,12 @@
 //! A vehicle is rail-bound when its file says so: `[rail_body_osc]`, a `[contact_shoe]` or
 //! `[boogies]`.
 
-use crate::player::Player;
+use crate::gameplay::domain::rail_drive::*;
+use crate::gameplay::player::Player;
 use crate::world::scene::World;
 use glam::DVec3;
 use omsi_geometry::util::wrap_deg;
 use omsi_sim::traffic::{LaneKind, Network};
-
-/// Where on the track the vehicle is.
-#[derive(Debug, Clone)]
-pub(crate) struct RailDrive {
-    pub lane: usize,
-    pub s: f32,
-    /// The vehicle faces the lane's direction (else it drives it backwards).
-    pub along: bool,
-    /// The track the vehicle has come along: (distance travelled, the origin's position),
-    /// oldest first - where its coupled parts are placed (see `VehicleInstance::retrail`).
-    trail: std::collections::VecDeque<(f64, DVec3)>,
-    /// Distance travelled along the track (forward positive).
-    u: f64,
-}
 
 /// How much trail is kept behind the vehicle (m): a long train's length.
 const TRAIL: f64 = 400.0;

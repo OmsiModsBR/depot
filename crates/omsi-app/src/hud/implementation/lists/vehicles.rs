@@ -4,7 +4,7 @@ use crate::core::app::App;
 
 /// A vehicle file of the menu's list (`Vehicles/...`) as its definition.
 pub(in crate::hud) fn bus_def(app: &App, bus: &str) -> Option<omsi_vehicle::Vehicle> {
-    let path = crate::spawn::player_bus_path(&app.args.root, bus).ok()?;
+    let path = crate::gameplay::spawn::player_bus_path(&app.args.root, bus).ok()?;
     omsi_vehicle::Vehicle::load(&path).ok()
 }
 
@@ -160,7 +160,7 @@ pub(crate) fn place_numbers(app: &App, bus: &str) -> Vec<String> {
 /// A vehicle's description as its author wrote it: its description file in the game's
 /// language (`<bus>_ENG.dsc`), else the `[description]` of the vehicle file.
 pub(crate) fn place_description(app: &App, bus: &str) -> String {
-    let Ok(path) = crate::spawn::player_bus_path(&app.args.root, bus) else {
+    let Ok(path) = crate::gameplay::spawn::player_bus_path(&app.args.root, bus) else {
         return String::new();
     };
     let lang = crate::describe::language_code(&app.settings.language);

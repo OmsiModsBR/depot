@@ -12,7 +12,6 @@
 mod about;
 use omsi_launcher_ui::api_limits;
 mod describe;
-mod driver;
 mod env_file;
 mod gameplay;
 mod hud;
@@ -22,7 +21,6 @@ mod mapview;
 mod menu;
 mod output;
 mod radio;
-mod rail_drive;
 mod screenshot_name;
 #[cfg(steam)]
 mod steam;
@@ -45,17 +43,13 @@ mod input;
 mod lan_off;
 mod launcher_link;
 mod offscreen;
-mod on_foot;
-mod player;
 mod plugins_off;
 mod route_arrows;
 use lan_off::{admin, lan};
 
 mod services;
 mod situation;
-mod spawn;
 mod state_trace;
-mod teleport;
 mod tutorial;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).

@@ -5,6 +5,8 @@ mod humans;
 mod journey;
 mod line_times;
 mod money;
+mod on_foot;
+mod player;
 mod schedule;
 mod schedule_paper;
 mod traffic;

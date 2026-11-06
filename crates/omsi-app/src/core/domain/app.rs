@@ -4,12 +4,12 @@
 use crate::core::cli::Args;
 use crate::gameplay::career;
 use crate::gameplay::humans;
+use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
 use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
-use crate::player::Player;
 use crate::radio;
 use crate::settings;
 use crate::weather::ambience;
@@ -149,7 +149,7 @@ pub(crate) struct App {
     /// (looked for only while a script runs).
     pub(crate) hover_part: Option<String>,
     /// What the last look under the cursor took, for the profiler's `player.hover.*` stages.
-    pub(crate) hover_split: crate::player::HoverSplit,
+    pub(crate) hover_split: crate::gameplay::player::HoverSplit,
     /// A `[mouseevent]` mesh is under the cursor (named in `hover` or not): the hand cursor.
     pub(crate) hover_hand: bool,
     /// The idle head sway waiting where it is while the cursor is on a control
@@ -253,7 +253,7 @@ pub(crate) struct App {
     /// people stand on (`view_set_ego`, F11).
     pub(crate) ego: bool,
     /// The player out of the seat, walking about (`on_foot`).
-    pub(crate) on_foot: Option<crate::on_foot::OnFoot>,
+    pub(crate) on_foot: Option<crate::gameplay::on_foot::OnFoot>,
     /// The camera is in the own bus's cab this frame (see RedrawRequested).
     pub(crate) in_cab: bool,
     /// Where the bus last stood on the ground (and facing where): it is put back there when

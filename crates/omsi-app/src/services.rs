@@ -1,8 +1,8 @@
 //! Runs without a window: exporting a bus (`--export-glb`) and the service commands.
 
 use crate::core::cli::Args;
+use crate::gameplay::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
 use crate::situation::start_clock;
-use crate::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
 use crate::world::export;
 use crate::world::scene::World;
 use anyhow::{anyhow, Result};

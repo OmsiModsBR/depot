@@ -1,7 +1,7 @@
 //! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
 
 use crate::core::cli::{parse_triggers, Args};
-use crate::player::Player;
+use crate::gameplay::player::Player;
 use crate::situation::{find_hof, start_clock};
 use crate::world::scene::{self, World};
 use anyhow::{Context, Result};
@@ -26,7 +26,7 @@ pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
     };
     // (a rail vehicle couples at both ends by nature: a locomotive or a tram is driven as
     // it is)
-    if (fronts.is_empty() && !def.is_rear_section()) || crate::rail_drive::is_rail(&def) {
+    if (fronts.is_empty() && !def.is_rear_section()) || crate::gameplay::rail_drive::is_rail(&def) {
         return Ok(path);
     }
     match fronts.first() {
@@ -264,7 +264,7 @@ pub(crate) fn spawn_player(
         vt.program.blocks.len(),
         vt.program.var_names.len()
     );
-    let doors = crate::player::door_keys(&vt);
+    let doors = crate::gameplay::player::door_keys(&vt);
     if !doors.is_empty() {
         let keys: Vec<String> = doors
             .iter()
@@ -483,7 +483,7 @@ pub(crate) fn spawn_player(
     vehicle.collision = objects.then(|| world.collision.lock().clone());
     vehicle.wheel_walls = objects;
     // a rail vehicle rides the track (its position comes from the rails, not the tyres)
-    let rail_bound = crate::rail_drive::is_rail(&vt.def);
+    let rail_bound = crate::gameplay::rail_drive::is_rail(&vt.def);
     if rail_bound {
         log::info!("rail: {} is bound to the rails", vt.def.path.display());
     }
@@ -777,7 +777,7 @@ pub(crate) fn spawn_player(
             log::info!("${v} = {:?}", p.vehicle.str_var(v));
         }
     }
-    p.driver = crate::driver::DriverFigure::new(world, renderer, scene, &p.vehicle, 0);
+    p.driver = crate::gameplay::driver::DriverFigure::new(world, renderer, scene, &p.vehicle, 0);
     p.sync_transforms(
         renderer,
         scene,

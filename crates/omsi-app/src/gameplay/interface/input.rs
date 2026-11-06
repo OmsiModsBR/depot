@@ -38,3 +38,29 @@ pub(crate) mod traffic {
     pub use crate::gameplay::domain::traffic::*;
     pub use crate::gameplay::implementation::traffic::*;
 }
+
+pub(crate) mod player {
+    pub use crate::gameplay::domain::player::*;
+    pub use crate::gameplay::implementation::player::*;
+}
+
+pub(crate) mod driver {
+    pub use crate::gameplay::domain::driver::*;
+    pub use crate::gameplay::implementation::driver::*;
+}
+
+pub(crate) mod on_foot {
+    pub use crate::gameplay::domain::on_foot::*;
+    // the walking paces are only named from outside by the tests (`testing.rs`)
+    #[cfg(feature = "test-support")]
+    pub use crate::gameplay::implementation::on_foot::*;
+}
+
+pub(crate) mod rail_drive {
+    pub(crate) use crate::gameplay::domain::rail_drive::*;
+    pub(crate) use crate::gameplay::implementation::rail_drive::*;
+}
+
+pub(crate) use super::super::implementation::spawn;
+
+pub(crate) use super::super::implementation::teleport;

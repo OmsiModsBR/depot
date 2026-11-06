@@ -16,7 +16,7 @@ pub(in crate::hud) static SETTINGS_CACHE: std::sync::Mutex<Option<serde_json::Va
 /// stay as they are). The write is delayed a moment and joined with the ones that follow.
 /// The key the seat of the player's bus is kept under (`settings::bus_seats`): its `.bus`
 /// file, relative to the installation where it lies in it.
-pub(crate) fn seat_key(p: &crate::player::Player) -> String {
+pub(crate) fn seat_key(p: &crate::gameplay::player::Player) -> String {
     // (from its `Vehicles` folder on, so that a copy of the installation finds it)
     let path = p.vehicle.ty.def.path.to_string_lossy().replace('\\', "/");
     match path.to_ascii_lowercase().rfind("/vehicles/") {

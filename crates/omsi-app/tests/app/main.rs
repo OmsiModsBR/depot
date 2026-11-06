@@ -15,9 +15,7 @@ mod input;
 mod launcher;
 mod lights;
 mod mapview;
-mod on_foot;
 mod output;
-mod player;
 #[cfg(unix)]
 mod quit;
 mod radio;

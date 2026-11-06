@@ -8,7 +8,9 @@ use crate::diagnostics::{log_physics, standing_reasons};
 use crate::gameplay::career;
 use crate::gameplay::humans;
 use crate::gameplay::money;
+use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
+use crate::gameplay::spawn::spawn_player;
 use crate::gameplay::traffic;
 use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
@@ -18,12 +20,10 @@ use crate::lights;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
-use crate::player::Player;
 use crate::quit;
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
-use crate::spawn::spawn_player;
 use crate::weather::puddles;
 use crate::weather::rain;
 use crate::weather::weather_setup::{
@@ -76,7 +76,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         let mut t = traffic::Traffic::new(&args.root, &world, args.traffic)?;
         t.lights_only = !(args.traffic > 0
             || args.schedule
-            || crate::rail_drive::args_rail(args)
+            || crate::gameplay::rail_drive::args_rail(args)
             || args.lan_join.is_some());
         t.no_timetable_buses = args.no_timetable_buses;
         if let Some(seed) = lan_seed {
@@ -630,7 +630,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         player.clutch_for_gate(name);
                         // (the game's door actions, `door_<n>` / `doors_all`, as a button
                         // pressed and let go)
-                        if crate::player::door_action(name).is_some() {
+                        if crate::gameplay::player::door_action(name).is_some() {
                             player.action(name, true);
                             player.action(name, false);
                         } else {
@@ -812,7 +812,12 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         );
                     }
                 }
-                crate::rail_drive::frame(player, traffic.as_ref().map(|t| &t.net), &world, dt);
+                crate::gameplay::rail_drive::frame(
+                    player,
+                    traffic.as_ref().map(|t| &t.net),
+                    &world,
+                    dt,
+                );
                 // (the autopilot's log: where the bus is against the ground under it, twice a
                 // second, and at once when the ground is not under it any more)
                 if omsi_cfg::flags::AUTOPILOT.is_set() {
@@ -1139,7 +1144,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                     if args.cam.is_none() && args.view != "free" && args.follow.is_none() {
                         // the head turned as --look says, like the final image
-                        let look = crate::player::driver_head_look(
+                        let look = crate::gameplay::player::driver_head_look(
                             look_of(args),
                             &args.view,
                             settings.seat_pitch_deg,
@@ -1606,7 +1611,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     })
                     .unwrap_or((1600, 900));
                 // the same camera the picture is taken with, head turn and all
-                let look = crate::player::driver_head_look(
+                let look = crate::gameplay::player::driver_head_look(
                     look_of(&args),
                     &args.view,
                     settings.seat_pitch_deg,
@@ -1882,7 +1887,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             }
         }
         if args.cam.is_none() && args.view != "free" && args.follow.is_none() {
-            let look = crate::player::driver_head_look(
+            let look = crate::gameplay::player::driver_head_look(
                 look_of(args),
                 &args.view,
                 settings.seat_pitch_deg,
@@ -1996,7 +2001,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             };
             let q = ep.quat;
             let qyaw = (2.0 * q[1].atan2(q[3])).to_degrees();
-            let rec = crate::spawn::recorded_entry_pos(ep, pos);
+            let rec = crate::gameplay::spawn::recorded_entry_pos(ep, pos);
             log::info!("entry {:3} \"{}\": object heading {:.1}, record quaternion yaw {:.1} (q {:?}), object at ({:.1}, {:.1}, {:.1}), recorded at {:?}", ep.index, ep.name, rot[0], qyaw, q, pos.x, pos.y, pos.z, rec.map(|r| (r.x, r.y, r.z)));
             let road = world.ground_height(pos.x, pos.y);
             let walk = world.walk_height(pos.x, pos.y);

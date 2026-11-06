@@ -2,8 +2,8 @@
 
 use crate::core::app::App;
 use crate::gameplay::humans;
+use crate::gameplay::player::Player;
 use crate::gameplay::traffic;
-use crate::player::Player;
 use crate::world::scene::World;
 use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};

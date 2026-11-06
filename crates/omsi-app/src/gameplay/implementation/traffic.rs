@@ -506,7 +506,8 @@ fn rail_behind(
     if u >= newest {
         return state.way_point(net, -d as f32);
     }
-    crate::rail_drive::point_at(trail, u).unwrap_or_else(|| state.way_point(net, -d as f32))
+    crate::gameplay::rail_drive::point_at(trail, u)
+        .unwrap_or_else(|| state.way_point(net, -d as f32))
 }
 
 /// A body for a vehicle that has just been put on the way `state` describes, with the
@@ -1450,7 +1451,8 @@ impl Traffic {
         let mut out = Vec::new();
         let (mut lead, mut lead_rev) = (ty.clone(), rev);
         for _ in 0..8 {
-            let Some((path, r)) = crate::spawn::next_coupled(&lead.def, lead_rev, toward_back)
+            let Some((path, r)) =
+                crate::gameplay::spawn::next_coupled(&lead.def, lead_rev, toward_back)
             else {
                 break;
             };
@@ -7732,9 +7734,9 @@ impl Traffic {
                             None
                         }
                     }
-                    None => {
-                        crate::driver::DriverFigure::new(world, renderer, scene, &c.vehicle, c.id)
-                    }
+                    None => crate::gameplay::driver::DriverFigure::new(
+                        world, renderer, scene, &c.vehicle, c.id,
+                    ),
                 };
                 match figure {
                     Some(f) => {
