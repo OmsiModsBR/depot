@@ -4,7 +4,7 @@
 //!
 //! `depot --offscreen` with `OMSI_STATE_TRACE` writes, for every frame, where the bus is and
 //! how fast it goes, every AI car, the lights, the rail signals and the player's duty (see
-//! `src/state_trace.rs`). `scripts/offscreen-trace-diff.sh` runs this test on two commits
+//! `src/offscreen/implementation/state_trace.rs`). `scripts/offscreen-trace-diff.sh` runs this test on two commits
 //! and compares the traces: a change that only moves code leaves them identical, to the bit.
 //! The root has no timetable, so the duty line reads `-`; a run on real content with
 //! `--schedule --line` records it.

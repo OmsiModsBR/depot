@@ -43,7 +43,7 @@ carries the LLVM version. The job becomes blocking after three passing runs in a
 `crates/omsi-app/tests/offscreen_state_trace.rs` runs `depot --offscreen` on a synthetic street the test writes
 itself (two lanes, a crossing whose two lights run a program, six AI cars, a 12 m bus rolling north) with
 `OMSI_STATE_TRACE=<file>`, which writes for every frame where the bus is and how fast it goes, every AI car, the
-lights, the rail signals and the player's duty (`crates/omsi-app/src/state_trace.rs`). The test runs only when
+lights, the rail signals and the player's duty (`crates/omsi-app/src/offscreen/implementation/state_trace.rs`). The test runs only when
 `OMSI_STATE_TRACE_DIR` is set (the run renders, so it needs a graphics adapter; a software one is enough), runs the
 street twice, fails when the two runs differ and writes the trace to `<dir>/synthetic.trace`. The street has no
 timetable yet, so the duty line reads `-`.

@@ -36,7 +36,6 @@ mod showroom;
 
 mod core;
 mod diagnostics;
-mod ground_gap;
 mod input;
 mod lan_off;
 mod launcher_link;
@@ -47,7 +46,6 @@ use lan_off::{admin, lan};
 
 mod services;
 mod situation;
-mod state_trace;
 mod tutorial;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).

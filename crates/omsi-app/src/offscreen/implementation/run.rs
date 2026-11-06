@@ -418,9 +418,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         }
     }
     let run_clock = start_clock(args);
-    let mut ground_gap = crate::ground_gap::GroundGap::from_env();
+    let mut ground_gap = crate::offscreen::implementation::ground_gap::GroundGap::from_env();
     if let Some(t) = traffic.as_ref() {
-        crate::ground_gap::check_lanes(&world, t);
+        crate::offscreen::implementation::ground_gap::check_lanes(&world, t);
     }
     // the tyres' spray (see `puddles`): the roads as wet as the picture draws them, the air
     // moving with the weather's wind ([wind] direction (deg) speed (m/s))
@@ -433,7 +433,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     ) * weather.wind.1
         * puddles::GROUND_WIND;
     // OMSI_STATE_TRACE=<file>: the state of every frame, for comparing two commits
-    let mut state_trace = crate::state_trace::StateTrace::from_env();
+    let mut state_trace = crate::offscreen::implementation::state_trace::StateTrace::from_env();
     for i in 0..total_frames {
         let t_s = i as f32 * dt;
         if let Some(st) = state_trace.as_mut() {
