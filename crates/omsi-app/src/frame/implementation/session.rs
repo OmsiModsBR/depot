@@ -4,7 +4,9 @@
 //! the offscreen run's checks and log lines) stays with it.
 
 use crate::core::cli::{parse_time, Args};
+use crate::gameplay::career::Career;
 use crate::gameplay::humans::Humans;
+use crate::gameplay::journey::Journey;
 use crate::gameplay::money::Money;
 use crate::gameplay::player::Player;
 use crate::gameplay::schedule::{PlayerDuty, Schedule};
@@ -146,4 +148,54 @@ pub(crate) fn traffic_step(
     );
     world.set_switches(&t.switch_requests());
     world.set_signals(&t.signal_aspects(&world.signal_routes, player_rail));
+}
+
+/// The duty's step of a frame, part 1: a stop the timetable window asked for
+/// (`html_next_stop`) becomes the next one, and the IBIS is set to it.
+pub(crate) fn duty_skip_asked(d: &mut PlayerDuty, p: &mut Player) {
+    if let Some(stop) = p.html_next_stop.take() {
+        if d.skip_to(stop) {
+            let (trip, k) = d.trip_for_ibis();
+            p.ibis_to_stop(trip, k);
+        }
+    }
+}
+
+/// The duty's step of a frame, part 2: the duty follows the bus at `now`, a stop served
+/// counts in the career, and the journey's log notes it. The journey's heading takes the
+/// time from `clock`, or from the bus's own clock when it is `None` (the offscreen run).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn duty_update(
+    d: &mut PlayerDuty,
+    p: &mut Player,
+    now: f64,
+    career: &mut Career,
+    journey: &mut Option<Journey>,
+    root: &std::path::Path,
+    world: &World,
+    clock: Option<&omsi_sim::SimClock>,
+) {
+    let due = (d.trip_index, d.next_stop);
+    let served = d.update(&mut p.vehicle, now);
+    if let Some((arrival, departure)) = served {
+        career.stop_served(arrival, departure);
+    }
+    crate::gameplay::journey::note(journey, d, due, served, root, || {
+        crate::gameplay::journey::head(
+            career,
+            &world.global.name,
+            &p.vehicle,
+            clock.unwrap_or(&p.vehicle.host.clock),
+        )
+    });
+}
+
+/// The duty's step of a frame, part 3: a new trip is typed into the IBIS when the duty
+/// was typed there, and the driver's timetable paper follows the duty.
+pub(crate) fn duty_after(d: &mut PlayerDuty, p: &mut Player, world: &World) {
+    if d.take_trip_change() && p.duty_typed {
+        let (trip, stop) = d.trip_for_ibis();
+        p.set_duty_destination(trip, stop);
+    }
+    timetable_paper(p, d, world);
 }

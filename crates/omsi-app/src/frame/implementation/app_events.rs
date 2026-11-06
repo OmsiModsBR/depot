@@ -1970,12 +1970,7 @@ impl ApplicationHandler for App {
                     self.world.as_ref(),
                     self.paused,
                 ) {
-                    if let Some(stop) = p.html_next_stop.take() {
-                        if d.skip_to(stop) {
-                            let (trip, k) = d.trip_for_ibis();
-                            p.ibis_to_stop(trip, k);
-                        }
-                    }
+                    session::duty_skip_asked(d, p);
                     d.learn_loaded(&w.object_positions.lock());
                     // (a stop marked in the timetable window is skipped once it is the next)
                     while let Some(name) = d.skip_marked_next() {
@@ -1986,25 +1981,15 @@ impl ApplicationHandler for App {
                         let (trip, k) = d.trip_for_ibis();
                         p.ibis_to_stop(trip, k);
                     }
-                    let due = (d.trip_index, d.next_stop);
-                    let served = d.update(&mut p.vehicle, self.clock.time);
-                    if let Some((arrival, departure)) = served {
-                        self.career.stop_served(arrival, departure);
-                    }
-                    crate::gameplay::journey::note(
-                        &mut self.journey,
+                    session::duty_update(
                         d,
-                        due,
-                        served,
+                        p,
+                        self.clock.time,
+                        &mut self.career,
+                        &mut self.journey,
                         &self.args.root,
-                        || {
-                            crate::gameplay::journey::head(
-                                &self.career,
-                                &w.global.name,
-                                &p.vehicle,
-                                &self.clock,
-                            )
-                        },
+                        w,
+                        Some(&self.clock),
                     );
                     // (the trip at its last stop: its report once the doors open there, even
                     // if the duty has moved on to the next trip by then)
@@ -2022,18 +2007,7 @@ impl ApplicationHandler for App {
                     let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36
                         && crate::gameplay::schedule::PlayerDuty::doors_open(&p.vehicle);
                     finished = Some((candidate, p.vehicle.position, doors));
-                    if d.take_trip_change() && p.duty_typed {
-                        let (trip, stop) = d.trip_for_ibis();
-                        p.set_duty_destination(trip, stop);
-                    }
-                    let mut fonts = w.fonts.lock();
-                    if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
-                        &mut p.vehicle,
-                        d,
-                        &mut fonts,
-                    ) {
-                        log::warn!("driver timetable paper: {e:#}");
-                    }
+                    session::duty_after(d, p, w);
                 }
                 if let Some((candidate, bus, doors)) = finished {
                     self.trip_watch(candidate, bus, doors);
