@@ -13,7 +13,7 @@ use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
 use crate::gameplay::spawn::spawn_player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::input::actions::dump_display_textures;
@@ -508,17 +508,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             let others = Vec::new();
             t.others = others;
             t.others.extend(own_outlines(player.as_ref(), &[]));
-            t.player_priority = player
-                .as_ref()
-                .and_then(|p| p.vehicle.var("TrafficPriority"))
-                .is_some_and(|v| v > 0.5);
-            t.player_blinker = player
-                .as_ref()
-                .map(|p| crate::gameplay::traffic_link::indicator(&p.vehicle))
-                .unwrap_or(0);
-            t.tick(dt, player.as_ref().map(|p| player_outline(p)));
-            world.set_switches(&t.switch_requests());
-            world.set_signals(&t.signal_aspects(&world.signal_routes, None));
+            session::traffic_step(t, &world, player.as_ref(), dt, None);
             if let Some(p) = player.as_mut() {
                 p.vehicle.dynamic_boxes = t.boxes(p.vehicle.position, 80.0);
             }
