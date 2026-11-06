@@ -6,7 +6,8 @@
 // A sprite is one instance of a unit quad: its record is five vectors (position and size;
 // colour and brightness; direction and the outer cone's cosine; the up axis and the rotating
 // mode; the inner cone's cosine, the z offset, the parameter bits and the kind). The kind is
-// 0 for a glow, 1 for the cone in fog, 2 for the halo. (Smoke has its own pass, not here.)
+// 0 for a glow, 1 for the cone in fog, 2 for the halo, -1 for the sun's glare (a glow at the
+// sky's depth). (Smoke has its own pass, not here.)
 //
 // The picture is added over the scene with `src + dst * (1 - src)`, which the device sets up.
 
@@ -120,6 +121,9 @@ VsOut vs_main(VsIn i) {
         // a glow (or a raindrop's streak: a cone of -2, a snowflake's: -3)
         bool streak = i.dir.w < -1.5 && i.dir.w > -2.5;
         bool directed = length(i.dir.xyz) > 0.5 && !streak;
+        // the sun's glare (kind -1): a lamp laid out a few metres towards the sun and drawn
+        // at the sky's depth; its strength already holds the fog's share
+        bool sky = i.extra.w < -0.5;
         float brightness = i.color.a;
         if (directed) {
             // seen inside its outer cone, in full inside the inner one, linearly between
@@ -129,7 +133,7 @@ VsOut vs_main(VsIn i) {
             brightness = brightness * clamp((outer - ang) / max(outer - inner, 0.0001), 0.0, 1.0);
         }
         // the light that reaches the eye through the fog: exp(-density x distance)
-        if (!streak) {
+        if (!streak && !sky) {
             brightness = brightness * exp(-dist * max(fog.w, 0.0));
         }
         // a star grows with the light's strength (parameter bit 8); every sprite's strength
@@ -183,6 +187,10 @@ VsOut vs_main(VsIn i) {
         }
         float3 wp = pos + (right * c.x * stretch.x + up_axis * c.y * stretch.y) * radius + pulled;
         o.clip = mul(view_proj, float4(wp, 1.0));
+        if (sky) {
+            // at the far plane (0 with reversed depth), where the sky is
+            o.clip.z = o.clip.w * 0.000001;
+        }
         o.uv = c * 0.5 + 0.5;
         o.color = float4(i.color.rgb, brightness);
         // (not `<= 0.001`: a NaN brightness is not smaller)

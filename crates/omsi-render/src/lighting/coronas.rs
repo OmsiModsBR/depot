@@ -42,3 +42,94 @@ pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
         extra: [-2.0, 0.0, 0.0, 3.0],
     })
 }
+
+/// How far from the eye the sun's glare is laid out (m), towards the sun: its sizes below
+/// are in metres at this distance.
+pub const SUN_GLARE_DISTANCE: f64 = 10.0;
+/// The glare's lamp at full strength: its size (the glow's diameter, m at
+/// [`SUN_GLARE_DISTANCE`]) and its brightness, the numbers a `[light_enh_2]` would give it.
+/// The star (`Texture\light_effect1.bmp`) is drawn as a lamp with effect bit 1 draws its
+/// own: 2.5 times the size, growing with the brightness.
+pub const SUN_GLARE_SIZE: f32 = 15.0;
+pub const SUN_GLARE_BRIGHTNESS: f32 = 1.5;
+/// A lamp's glow by day: the share of its brightness the classic pictures draw with no
+/// darkness about (`((1 - ambient)^2 + 0.8) 0.6` at full daylight).
+const SUN_GLARE_DAY_GLOW: f32 = 0.48;
+
+impl super::Lighting {
+    /// How strongly the sun's glare shows (0 none .. 1): the daylight and the sun's own
+    /// strength (none at night or under an overcast cover), faded out as the sun goes below
+    /// the horizon, thinned by the cloud cover and gone in a thick fog. 0 with the `sun_glow`
+    /// setting off.
+    pub fn sun_glare_strength(&self) -> f32 {
+        if !self.sun_glow {
+            return 0.0;
+        }
+        let dir = self.sun_dir.normalize_or_zero();
+        let day = 1.0 - self.night.clamp(0.0, 1.0);
+        let sun = self.sun_intensity.clamp(0.0, 1.0);
+        let horizon = ((dir.z + 0.03) / 0.08).clamp(0.0, 1.0);
+        // (a closed deck, the Overcast types, hides the sun whatever strength the light carries)
+        let cover = self.cloud_density.clamp(0.0, 1.0);
+        let closed = ((cover - 0.8) / 0.2).clamp(0.0, 1.0);
+        let clouds = (1.0 - 0.6 * cover) * (1.0 - closed * closed * (3.0 - 2.0 * closed));
+        let fog = 1.0 - (self.fog_density * 150.0 - 0.15).clamp(0.0, 1.0);
+        let k = day * sun * horizon * clouds * fog;
+        if k.is_finite() {
+            k
+        } else {
+            0.0
+        }
+    }
+
+    /// The sun's glare, seen from `eye`: a lamp [`SUN_GLARE_DISTANCE`] away towards the sun,
+    /// its glow (`glow`, the picture of a light with none of its own) and its star (`star`)
+    /// both turned to the viewer, in the sun's colour, their size and brightness the
+    /// strength's share of [`SUN_GLARE_SIZE`] and [`SUN_GLARE_BRIGHTNESS`]. Drawn at the sky's
+    /// depth: what stands in front of the sun covers it, glass lets it through. Nothing when
+    /// the strength is (near) 0.
+    ///
+    /// Enhanced graphics draw one sprite instead, as wide as the star: a glow and four rays
+    /// worked out in the shader (`Corona::procedural`), in the high-range picture.
+    pub fn sun_glare(&self, eye: DVec3, glow: u16, star: u16) -> Vec<super::Corona> {
+        let k = self.sun_glare_strength();
+        let dir = self.sun_dir.normalize_or_zero();
+        if !(k > 0.002) || dir == glam::Vec3::ZERO {
+            return Vec::new();
+        }
+        let size = SUN_GLARE_SIZE * k;
+        let lamp = super::Corona {
+            position: eye + dir.as_dvec3() * SUN_GLARE_DISTANCE,
+            size: size * 0.5,
+            color: self
+                .sun_color
+                .clamp(glam::Vec3::ZERO, glam::Vec3::ONE)
+                .to_array(),
+            brightness: SUN_GLARE_BRIGHTNESS * k,
+            direction: glam::Vec3::ZERO,
+            cone_cos: -1.0,
+            rotating: 2,
+            z_offset: 0.0,
+            texture: glow,
+            sky: true,
+            ..Default::default()
+        };
+        if self.enhanced {
+            return vec![super::Corona {
+                // (the star's drawn width: 2.5 times the size, grown by its brightness)
+                size: size * 1.25 * SUN_GLARE_BRIGHTNESS * k * SUN_GLARE_DAY_GLOW,
+                procedural: true,
+                ..lamp
+            }];
+        }
+        vec![
+            lamp,
+            super::Corona {
+                size: size * 1.25,
+                flags: 8,
+                texture: star,
+                ..lamp
+            },
+        ]
+    }
+}

@@ -358,7 +358,8 @@ impl Renderer {
         );
         self.prepare_coronas(
             scene,
-            lighting.night,
+            lighting,
+            camera.position,
             lighting
                 .inside
                 .as_ref()
@@ -499,8 +500,8 @@ impl Renderer {
                 .normalize()
                 .extend(lighting.sun_intensity)
                 .to_array(),
-            ambient: lighting
-                .ambient
+            // (Vanilla+: the moonlight added; nothing in Vanilla and Enhanced)
+            ambient: (lighting.ambient + lighting.moonlight())
                 .extend(lighting.snow.clamp(0.0, 1.0))
                 .to_array(),
             fog: lighting.fog_color.extend(lighting.fog_density).to_array(),
