@@ -153,6 +153,14 @@ impl Inner {
         if plan.target.is_none() {
             super::dbgdump::dbg_frame(plan, scene);
         }
+        if let Some(t) = plan.target {
+            static SEEN: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
+            let mut seen = SEEN.lock().unwrap();
+            if !seen.contains(&t) {
+                seen.push(t);
+                log::warn!("DUMP plan target {t} ({}x{})", plan.width, plan.height);
+            }
+        }
         // (a render texture's picture - a mirror's - is drawn on its own, whatever frame is
         // open: it is no window picture, and has no overlays)
         let target = plan.target;
