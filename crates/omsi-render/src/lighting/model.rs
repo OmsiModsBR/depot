@@ -313,7 +313,30 @@ pub struct Lighting {
     pub air: Option<[f32; 3]>,
 }
 
+/// The full moon's light high in a clear night sky as Vanilla+ adds it to the ambient light
+/// (linear, the units of envir.cfg's light C): bluish, as the eye sees by moonlight.
+pub const MOONLIGHT: Vec3 = Vec3::new(0.050, 0.060, 0.080);
+
 impl Lighting {
+    /// Vanilla+ only: the moon's light added to the night's ambient light, a cool grey that
+    /// grows with the moon's height and, much faster, with its phase (a half moon gives
+    /// about a tenth of a full one's light), fades out with the daylight and is mostly
+    /// held back by the clouds. A full moon high in a clear sky adds [`MOONLIGHT`], about
+    /// as much again as a dark night's ambient floor; a new moon or a moon below the
+    /// horizon adds nothing. Vanilla (as OMSI 2: its nights are no brighter under a
+    /// full moon) and Enhanced (its own moonlight) get none.
+    pub fn moonlight(&self) -> Vec3 {
+        if self.classic || self.enhanced {
+            return Vec3::ZERO;
+        }
+        let height = self.moon_dir.normalize_or_zero().z;
+        let up = ((height + 0.02) / 0.4).clamp(0.0, 1.0);
+        let phase = self.moon_illum.clamp(0.0, 1.0).powf(3.5);
+        let night = self.night.clamp(0.0, 1.0);
+        let clear = 1.0 - 0.8 * self.cloud_density.clamp(0.0, 1.0);
+        MOONLIGHT * (up * phase * night * clear)
+    }
+
     /// Whether the sun shadow map is drawn with this light (not once the sun is about a
     /// degree below the horizon - Omsi.exe's cutoff, sun z -0.02 in sub_754c80 - nor with
     /// the sun dim, nor with OMSI_NO_SHADOWS).
