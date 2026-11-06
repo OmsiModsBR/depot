@@ -1690,6 +1690,10 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
             tex.a = smoothstep(0.32, 0.68, tex.a);
         }
     }
+    if (material.extra.x > 0.5 && material.params.x > 1.5 && material.params.z > 0.5) {
+        // TEMP diag: tile uv and the mask
+        return vec4<f32>(fract(buv * 4.0), sample_transmap(buv).a, 1.0);
+    }
     let mode = material.params.x;
     // Mip-filtered alpha is the fraction of the pixel covered by leaves or fence wires.
     // Tighten the transition around the cutout edge before MSAA turns it into sample
