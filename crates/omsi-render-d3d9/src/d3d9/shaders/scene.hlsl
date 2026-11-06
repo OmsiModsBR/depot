@@ -453,7 +453,10 @@ float4 ps_main(VsOut i) : COLOR0 {
         float3 lin = saturate(srgb_decode(base) * scale + spec) + srgb_decode(nm.rgb) * night;
         encoded = srgb_encode(lin);
     }
-    if (m_params2.y > 0.0) {
+    // (a terrain has no sphere map; the test is spelled out for it because without it the
+    // NVIDIA Direct3D 9 driver misdrew the painted ground layers, their masks landing in the
+    // wrong places, though the compiled shader reads the same)
+    if (!terrain && m_params2.y > 0.0) {
         // [matl_envmap]: mixed in as stored, by the mask's alpha (or the diffuse alpha where
         // a transmap is declared) times the light, else by the factor times the ambient
         // light and that light; the light is the mean of the lamps' and the sun's, at most 1
