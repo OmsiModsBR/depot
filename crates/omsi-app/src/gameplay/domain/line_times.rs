@@ -3,7 +3,7 @@
 //! tours (`TTData/*.ttl`) say when each trip leaves and `schedule::TripTimes` says when it is at
 //! each station, the same figures the AI buses of the game run by.
 
-use crate::schedule::{trip_stations, TripTimes};
+use crate::gameplay::schedule::{trip_stations, TripTimes};
 use omsi_timetable::TimetableData;
 use std::collections::HashMap;
 use std::path::Path;
@@ -91,7 +91,7 @@ pub fn period_bit(calendar: &omsi_map::Calendar, date: i32) -> i32 {
     if date <= 0 {
         (1 << 8) | (1 << 9)
     } else {
-        crate::schedule::school_period_bit(calendar, date)
+        crate::gameplay::schedule::school_period_bit(calendar, date)
     }
 }
 

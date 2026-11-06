@@ -1999,14 +1999,14 @@ impl ApplicationHandler for App {
                     if let Some((arrival, departure)) = served {
                         self.career.stop_served(arrival, departure);
                     }
-                    crate::journey::note(
+                    crate::gameplay::journey::note(
                         &mut self.journey,
                         d,
                         due,
                         served,
                         &self.args.root,
                         || {
-                            crate::journey::head(
+                            crate::gameplay::journey::head(
                                 &self.career,
                                 &w.global.name,
                                 &p.vehicle,
@@ -2028,16 +2028,18 @@ impl ApplicationHandler for App {
                         )
                     });
                     let doors = p.vehicle.motion().velocity_kmh().abs() < 0.36
-                        && crate::schedule::PlayerDuty::doors_open(&p.vehicle);
+                        && crate::gameplay::schedule::PlayerDuty::doors_open(&p.vehicle);
                     finished = Some((candidate, p.vehicle.position, doors));
                     if d.take_trip_change() && p.duty_typed {
                         let (trip, stop) = d.trip_for_ibis();
                         p.set_duty_destination(trip, stop);
                     }
                     let mut fonts = w.fonts.lock();
-                    if let Err(e) =
-                        crate::schedule_paper::update_vehicle(&mut p.vehicle, d, &mut fonts)
-                    {
+                    if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
+                        &mut p.vehicle,
+                        d,
+                        &mut fonts,
+                    ) {
                         log::warn!("driver timetable paper: {e:#}");
                     }
                 }
@@ -2902,7 +2904,7 @@ impl ApplicationHandler for App {
                                 )
                                 .replace("%{terminus}", next.terminus.strip_prefix(&format!("{} ", next.line)).unwrap_or(&next.terminus))
                                 .replace("%{stop}", next.stops.first().map(|s| s.name.trim()).unwrap_or("?"))
-                                .replace("%{time}", &crate::schedule::hhmm(next.departure)),
+                                .replace("%{time}", &crate::gameplay::schedule::hhmm(next.departure)),
                             None => "End of the duty: the tour's last trip is done".into(),
                         });
                     }
@@ -4426,7 +4428,7 @@ impl App {
 /// OMSI's timetable window: the current trip's stops with their times, the ones served
 /// greyed, the next one marked.
 fn timetable_rows(
-    duty: Option<&crate::schedule::PlayerDuty>,
+    duty: Option<&crate::gameplay::schedule::PlayerDuty>,
     delay: Option<f64>,
 ) -> Option<(String, Vec<(String, String, u8)>)> {
     let d = duty?;
@@ -4563,7 +4565,7 @@ impl InfoMode {
 pub struct InfoData<'a> {
     pub clock: &'a omsi_sim::SimClock,
     pub player: Option<&'a Player>,
-    pub duty: Option<&'a crate::schedule::PlayerDuty>,
+    pub duty: Option<&'a crate::gameplay::schedule::PlayerDuty>,
     /// How many are aboard (none: the passengers are switched off for this drive).
     pub passengers: Option<usize>,
     /// How many the bus has places for.

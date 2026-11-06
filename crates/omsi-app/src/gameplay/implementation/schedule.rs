@@ -1,6 +1,7 @@
 //! Scheduled AI buses: the map's timetable lines (`TTData`) put buses on their tracks at the
 //! tour departure times; they follow the track lanes and stop at the trip's stations.
 
+use crate::gameplay::domain::schedule::*;
 use crate::gameplay::traffic::Traffic;
 use crate::world::scene::World;
 use hashbrown::{HashMap, HashSet};
@@ -10,72 +11,6 @@ use omsi_sim::VehicleType;
 use omsi_timetable::TimetableData;
 use std::path::Path;
 use std::sync::Arc;
-
-struct Departure {
-    /// Seconds since midnight.
-    time: f64,
-    trip: usize,
-    /// The trip's profile the tour runs it with (`[addtrip]`).
-    profile: usize,
-    line: String,
-    ai_group: String,
-    tour: String,
-    /// The timetable line's `[priority]` (1 the most important line).
-    priority: i32,
-    /// The tour's validity mask (bits 0-6 Monday..Sunday, 7 public holiday, 8 school
-    /// holidays, 9 school days): every tour's departures are kept, and which run is decided
-    /// by the day (`Schedule::runs`), so a session carries on past midnight.
-    mask: i32,
-    spawned: bool,
-}
-
-/// One step of a trip's route: a lane in map terms (None when the tile index is not in the
-/// map's list) and the leg between two stations it belongs to (0 for a track).
-#[derive(Debug, Clone, Copy)]
-pub struct Step {
-    pub key: Option<LaneKey>,
-    pub leg: usize,
-    /// The path's length as the timetable file has it (m).
-    pub length: f64,
-}
-
-/// A route step as the loaded network has it.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Slot {
-    /// The lane it runs on.
-    Lane(usize),
-    /// Its tile is part of the map, but has not brought its lanes yet.
-    Waiting,
-    /// Not in the map (a tile or path that does not exist): passed over, as a whole-map load
-    /// passes it over.
-    Absent,
-}
-
-/// What became of a departure that was due.
-enum Placed {
-    Spawned,
-    /// The part of the route the bus is on now is not loaded: try again later.
-    Wait,
-    /// Nothing to do any more (the trip is over, or has no route or no vehicle).
-    Drop,
-    /// A car stands where the bus would appear: try again at the next call.
-    Busy,
-}
-
-/// A scheduled bus whose route stops short of a tile that has not brought its lanes yet: the
-/// route is carried on as the tiles come.
-struct RunningTrip {
-    car: u64,
-    steps: Vec<Step>,
-    /// The first step its route does not have yet.
-    next: usize,
-    /// The trip's stations with their departure times, and which of them the bus stops at
-    /// already or has passed.
-    stations: Vec<(i64, f64)>,
-    served: Vec<bool>,
-    /// Authored track entry of each type-1 station, retained while tiles stream in.
-    station_steps: Vec<Option<usize>>,
-}
 
 pub use omsi_timetable::TripTimes;
 
@@ -145,13 +80,6 @@ pub fn trip_station_steps(
         .collect()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum StopRoute {
-    Nearest,
-    Track(usize),
-    Outside,
-}
-
 /// Map the authored entry into a streamed section after absent paths and inserted
 /// connectors. A station beyond this section waits for its own path to load.
 pub fn station_route(
@@ -201,18 +129,6 @@ fn fleet_ahead() -> f64 {
 /// A vehicle set nobody has drawn for this long, and that no departure of the next
 /// minutes wants, leaves the GPU.
 const FLEET_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
-
-/// The vehicle a departure is driven with. A tour keeps its bus all day, as in OMSI: the
-/// choice comes from the tour, not from the order the departures happen to spawn in, so the
-/// timetable knows which vehicles its next minutes need before they are due.
-struct Choice {
-    ty: Arc<VehicleType>,
-    number: Option<(String, String)>,
-    hof: Option<Arc<omsi_vehicle::Hof>>,
-    scheme: Option<usize>,
-    /// A `.zug` train: its cars, the first one being `ty`.
-    train: Option<Vec<(Arc<VehicleType>, bool)>>,
-}
 
 /// The bus stands next to the kerb: the pole's offset less half a bus width and a gap; only
 /// where the pole is clearly off the lane (a bay).
@@ -312,7 +228,7 @@ fn place_stops(
         route,
         base,
         stops,
-        crate::bus_service::stop_shift(ty, rail),
+        crate::gameplay::bus_service::stop_shift(ty, rail),
     );
 }
 
@@ -343,129 +259,6 @@ pub fn project_stop(
             Some((ri, s, lat))
         }
     }
-}
-
-pub struct Schedule {
-    pub data: TimetableData,
-    /// The options' `[AIPriorityScheduled]`: the least important line (1 to 4) that runs;
-    /// the player's own tour runs whatever its line's priority.
-    max_priority: i32,
-    departures: Vec<Departure>,
-    /// Depot vehicles per AI group: (type, its fleet from the ailists, depot file).
-    depots: HashMap<
-        String,
-        Vec<(
-            Arc<VehicleType>,
-            Vec<omsi_map::DepotEntry>,
-            Option<Arc<omsi_vehicle::Hof>>,
-        )>,
-    >,
-    tile_coords: Vec<(i32, i32)>,
-    next_number: usize,
-    /// Trains per AI group: list of (car type, reversed), first car leads.
-    trains: HashMap<String, Vec<Vec<(Arc<VehicleType>, bool)>>>,
-    /// Plain `[aigroup_2]` vehicle pools, loaded the first time a trip asks for one
-    /// (the Tegel approaches are flown by the group's own aircraft, not by depot buses).
-    pools: HashMap<String, Vec<Arc<VehicleType>>>,
-    /// Per vehicle folder: the depot file a bus of a plain `[aigroup_2]` runs with
-    /// (see [`pool_depot`]), looked up the first time such a bus is chosen.
-    pool_hofs: HashMap<std::path::PathBuf, Option<Arc<omsi_vehicle::Hof>>>,
-    /// Departures that are due but not on the road yet. Putting twenty minutes of a Berlin
-    /// timetable on the map at once costs several seconds in one frame, so they are spawned
-    /// a few at a time.
-    pending: std::collections::VecDeque<usize>,
-    /// Per departure: the previous departure of the same tour (its bus is the same one).
-    tour_prev: Vec<Option<usize>>,
-    /// Due departures whose bus would be on a part of its route that is not loaded: tried
-    /// again when tiles bring lanes and as time moves the bus on.
-    waiting: Vec<usize>,
-    /// Buses on the road whose route is still to be carried on.
-    running: Vec<RunningTrip>,
-    /// `Traffic::lanes_generation` when the waiting departures and the running routes were
-    /// last looked at, and the time of day of the last retry.
-    seen_generation: u64,
-    last_retry: f64,
-    /// The departure each timetable bus on the road runs (by car id): a bus the traffic took
-    /// off with its unloaded tile goes back to `waiting` and returns with the tiles, at the
-    /// place its timetable puts it then.
-    car_departure: HashMap<u64, usize>,
-    /// Waiting departures whose vehicle is timed to reach loaded lanes at this time of day:
-    /// they are tried again then, so that a plane coming in over tiles nobody loads appears
-    /// where its path enters the loaded ones, not up to half a minute later in mid-air.
-    retry_at: HashMap<usize, f64>,
-    /// Vehicle sets being read ahead on the workers, with the type to upload them with, and
-    /// those read and waiting for their upload.
-    fleet_reading: HashMap<crate::world::scene::VehicleKey, Arc<VehicleType>>,
-    fleet_ready: Arc<parking_lot::Mutex<Vec<crate::world::scene::VehicleKey>>>,
-    /// Time of day of the last look at the next departures' vehicles.
-    fleet_check: f64,
-    /// Per trip and profile: when its bus is at its stations.
-    times: Vec<Vec<TripTimes>>,
-    /// Per bus stop (map object id): the trips that call there, as (trip, station index).
-    visits: HashMap<i64, Vec<(usize, usize)>>,
-    /// Per trip: today's departures that run it.
-    trip_departures: Vec<Vec<usize>>,
-    /// When the departure boards were last made (time of day).
-    boards_made: f64,
-    /// The tour the player drives (line, tour): the timetable does not run it as well.
-    player_tour: Option<(String, String)>,
-    /// With a single trip picked: the departure (s of the day) of that trip; the rest of
-    /// the tour stays the AI's.
-    player_departure: Option<f64>,
-    /// A player tour was just taken over: its buses already on the road go at the next tick.
-    purge_player_tour: bool,
-    /// LAN play (host): the tours the other players drive (line, tour; lower case), left to
-    /// them like our own.
-    lan_tours: HashSet<(String, String)>,
-    /// Time of today's timetable at the last tick (s).
-    last_tod: f64,
-    /// The lines the date's chrono folders take off the timetable, with the folder that does
-    /// it: why a duty on such a line cannot be driven.
-    deactivated: Vec<(String, std::path::PathBuf)>,
-    /// Stations some trip stops at on its way or ends at (not only starts from).
-    served: std::collections::HashSet<i64>,
-    /// Per first station: whether another trip's bus stops there or within a bus length
-    /// or two of it (maps often put one stop object per line at the same kerb), once its
-    /// position is known.
-    shared_stand: HashMap<i64, bool>,
-    /// Departures queued while the map loads: their buses may appear in view.
-    startup: std::collections::HashSet<usize>,
-    /// Layover departures whose stand was taken: they come at their departure time.
-    later_layover: std::collections::HashSet<usize>,
-    /// Per departure: the next departure of the same tour (its bus takes it on).
-    tour_next: Vec<Option<usize>>,
-    /// Departures due while their tour's bus is still on its previous trip: that bus takes
-    /// them on when it gets there, as in OMSI a tour keeps its bus from trip to trip.
-    awaiting: std::collections::HashSet<usize>,
-    /// The clock was set (`restart`): the next tick puts the buses out as a start does.
-    restarted: bool,
-    /// The map's holidays, for the day's tours.
-    calendar: omsi_map::Calendar,
-    /// The date (yyyymmdd) the departures are for, and the mask bits it selects (day,
-    /// school); `set_day` moves them on at midnight.
-    day: i32,
-    day_bits: (i32, i32),
-    /// The weekday bit of the next day (night tours run on into it).
-    next_day_bit: i32,
-    /// Where today's midnight lies on the traffic's clock (`Traffic::day_time` counts on past
-    /// 24:00): a departure leaves at `day_base + time` (`dep_time`), and the date moves on
-    /// when the clock passes the next midnight.
-    day_base: f64,
-    /// Departures put out as the previous service day's (a night tour's trips at 24:00 or
-    /// later, once the clock has passed midnight): where that day's midnight lay on the
-    /// traffic's clock. `dep_time` uses it instead of `day_base` while the departure stays
-    /// spawned.
-    carried_base: HashMap<usize, f64>,
-    /// The current date (its time of day is not used).
-    date_clock: omsi_sim::SimClock,
-    /// The map's `car_use/*.ocu`: which vehicles serve which line's tours.
-    car_use: Vec<omsi_timetable::CarUse>,
-    /// Per tour (`tour_key_of`): the depot vehicle (index in its group) and fleet number
-    /// it runs with today - from `car_use`, else drawn the first time the tour is due. A
-    /// number is given to one tour only (`used_numbers`), as in OMSI:
-    /// hashing each tour to a number put the same fleet number on two buses at once.
-    tour_vehicle: HashMap<u64, (usize, usize)>,
-    used_numbers: HashSet<(String, String)>,
 }
 
 /// A tour's bus waits at the end of a trip for the next one of its tour when that leaves
@@ -2448,8 +2241,11 @@ impl Schedule {
                 let car = &mut traffic.cars[ci];
                 car.state.route.extend(lanes);
                 if let Some(b) = car.bus.as_mut() {
-                    b.stops
-                        .extend(stops.into_iter().map(crate::bus_service::Stop::from_tuple));
+                    b.stops.extend(
+                        stops
+                            .into_iter()
+                            .map(crate::gameplay::bus_service::Stop::from_tuple),
+                    );
                 }
                 // (it may have stood waiting at the end of what it had)
                 car.state.planned_next = None;
@@ -2467,13 +2263,13 @@ impl Schedule {
         self.running = keep;
     }
 
-    fn ai_timetable(&self, i: usize) -> crate::bus_service::AiTimetable {
+    fn ai_timetable(&self, i: usize) -> crate::gameplay::bus_service::AiTimetable {
         let trip = &self.data.trips[self.departures[i].trip];
         let ids = trip_stations(trip);
         let names = self.trip_stop_names(self.departures[i].trip);
         let times = &self.times_of(i).stations;
         let departure = self.dep_time(i);
-        crate::bus_service::AiTimetable {
+        crate::gameplay::bus_service::AiTimetable {
             line: self.display_line(i),
             terminus: trip.terminus.clone(),
             stops: ids
@@ -3441,14 +3237,6 @@ pub fn set_player_destination_at(
     })
 }
 
-/// A destination picked by hand for a hand-cranked roller blind: its row of the depot file
-/// and the route number for the number rollers (`SetLineTo`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct BlindPick {
-    pub row: usize,
-    pub line: String,
-}
-
 /// Turn a hand-cranked roller blind to the destination picked for it (`pick`, taken once
 /// done), as OMSI's line and destination dialog sets the driven bus
 /// (Tform_setline.Button1Click: TRoadVehicleInst.virtual_10, the AI's way - `SetLineTo`,
@@ -3705,18 +3493,6 @@ pub fn line_number_digits(line: &str) -> String {
             .take_while(|c| c.is_ascii_digit())
             .collect(),
     }
-}
-
-/// The key presses a driver makes on the IBIS for a trip.
-#[derive(Debug, Clone, PartialEq)]
-pub struct IbisCodes {
-    /// Complete depot line code: numeric line × 100 plus the letter suffix
-    /// (the IBIS reads the last two digits as a suffix; 0 = none).
-    pub line: Option<u32>,
-    /// Route entry (the last two digits of the depot file's route code).
-    pub route: Option<u32>,
-    /// Destination entry, when there is no route to type.
-    pub terminus: Option<u32>,
 }
 
 /// A timetable's terminus is a stop name, while a HOF often uses a shorter
@@ -4119,31 +3895,6 @@ fn set_destination_at(
     );
 }
 
-/// One stop of a planned trip with its scheduled times (seconds since midnight).
-#[derive(Debug, Clone)]
-pub struct PlannedStop {
-    pub object_id: i64,
-    pub name: String,
-    pub arr: f64,
-    pub dep: f64,
-    pub position: Option<glam::DVec3>,
-    /// Which way the trip runs through the stop ([`StopDir`]): a circular route, or one
-    /// that turns back, calls at the same place twice and the two stops of it stand a few
-    /// metres apart. Only the direction says which of them a bus has reached (#254).
-    pub dir: StopDir,
-    /// The bus stops here (a depot run passes its stations).
-    pub stops: bool,
-}
-
-/// Which way a trip runs through one of its stops: the direction it arrives on and the one
-/// it leaves on, as unit vectors of the ground plane (x east, y north). None where a
-/// neighbour's place is unknown or too near to tell a direction - any heading will do then.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct StopDir {
-    pub inbound: Option<glam::DVec2>,
-    pub outbound: Option<glam::DVec2>,
-}
-
 impl StopDir {
     fn takes(self, fwd: glam::DVec2) -> bool {
         if self.inbound.is_none() && self.outbound.is_none() {
@@ -4169,17 +3920,6 @@ const DIR_REACH: f64 = 20.0;
 /// How far off the way a trip runs through a stop a bus may head and still be taken as
 /// running that way: the cosine of the angle, 60 degrees either side.
 const DIR_COS: f64 = 0.5;
-
-#[derive(Debug, Clone)]
-pub struct PlannedTrip {
-    pub name: String,
-    pub line: String,
-    pub terminus: String,
-    pub departure: f64,
-    /// Arrival at the last station.
-    pub end: f64,
-    pub stops: Vec<PlannedStop>,
-}
 
 impl PlannedTrip {
     /// Give every stop the way the trip runs through it: in from the stop before, out to
@@ -4271,69 +4011,6 @@ fn sync_script_busstop(bus: &mut omsi_sim::VehicleInstance, tt: usize, name: &st
             bus.set_var("ibox_TTBusstopIndexLAST", tt as f32);
         }
     }
-}
-
-/// The player's tour: its trips with planned stop times, and the progress along them.
-pub struct PlayerDuty {
-    pub line: String,
-    pub tour: String,
-    pub trips: Vec<PlannedTrip>,
-    pub trip_index: usize,
-    /// Where `trips` begins in the tour: a picked trip is a duty of its own, and a saved
-    /// situation counts the trip under way from the tour's first.
-    pub first_trip: usize,
-    /// Next stop to serve on the current trip.
-    pub next_stop: usize,
-    /// True while the bus stands at the next stop.
-    pub at_stop: bool,
-    /// How late the bus arrived at the stop it stands at (s after its arrival time).
-    pub arrived_late: Option<f64>,
-    /// The bus has reached the last stop of the current trip.
-    pub done: bool,
-    /// The last stop where this trip actually stopped with a passenger door open.
-    pub served_terminus: Option<glam::DVec3>,
-    /// How late (s, negative = early) the bus left the last stop it served on this trip;
-    /// None while it has not left one.
-    pub left_late: Option<f64>,
-    /// A page moved the duty back to an earlier stop: `catch_up` must not jump forward
-    /// again to a later stop the bus still stands at, until the bus reaches a stop again.
-    pub held_back: bool,
-    /// A page or the menu moved the duty to another stop since the bus last left one: the
-    /// stop before `next_stop` is not the one the bus came from, so the delay on the way is
-    /// not worked out between the two.
-    pub jumped: bool,
-    /// The first update looks where the bus stands.
-    pub placed: bool,
-    /// The current trip changed since the last `take_trip_change`.
-    pub trip_changed: bool,
-    /// Stops the bus passed without stopping since the last `take_skipped` (see `catch_up`).
-    pub skipped: Option<(usize, usize, usize)>,
-    /// The player picked the current trip: the duty does not move on past it before it is
-    /// driven (or given up), however late the bus is for it.
-    pub picked: bool,
-    /// Time of day of the first update (placing waits a little for the places of stops
-    /// beyond the loaded tiles, see `learn_places`).
-    pub first_update: Option<f64>,
-    /// The way the bus faces (degrees clockwise from north), from the last update: it says
-    /// which of two stops a few metres apart the bus is at (see `StopDir`).
-    pub heading: f64,
-    /// Where the bus was at the last update: how far along the way to the next stop it is,
-    /// for the delay on the way (`delay`).
-    pub position: Option<glam::DVec3>,
-    /// The stops the driver skipped, and the ones marked to skip when they come.
-    pub skips: Skips,
-}
-
-/// The stops the driver skips on purpose (the Alt bar's timetable window, the game menu's
-/// "Skip the next stop", Ctrl+Shift+H): a deliberate improvement, as the original has no way
-/// to say a stop was left out for a reason. A skipped stop counts with no mark in the
-/// evaluation: neither missed nor late.
-#[derive(Clone, Debug, Default)]
-pub struct Skips {
-    /// Given up: (the trip's place in the duty, the stop's place in the trip).
-    done: Vec<(usize, usize)>,
-    /// To be given up when the duty is due at them.
-    marked: Vec<(usize, usize)>,
 }
 
 impl Schedule {
@@ -5145,16 +4822,6 @@ fn terminus_text(hof: Option<&omsi_vehicle::Hof>, terminus: &str) -> String {
     .and_then(|t| t.strings.first())
     .map(|s| s.trim().to_string())
     .unwrap_or_else(|| name.to_uppercase())
-}
-
-/// Where a timetable bus on the road is in its trip, for the departure boards.
-struct OnRoad {
-    /// Timetable departure time of its next stop (None: it has served its last).
-    next: Option<f64>,
-    /// Standing at that stop.
-    dwelling: bool,
-    /// How late it left its last stop (s).
-    late: f64,
 }
 
 /// GetTTTerminusIndex as OMSI answers it: the first depot terminus whose name is the

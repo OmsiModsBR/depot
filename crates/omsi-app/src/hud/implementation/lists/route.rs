@@ -86,9 +86,11 @@ pub(crate) fn set_route_by_hand(app: &mut App, line: &str) {
         if numeric_ibis_line(line) {
             let hof = p.vehicle.host.hof.clone();
             if let Some(hof) = hof.as_deref() {
-                if let Some(ti) =
-                    crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())
-                {
+                if let Some(ti) = crate::gameplay::schedule::shown_destination(
+                    &p.vehicle,
+                    hof,
+                    p.blind_pick.as_ref(),
+                ) {
                     p.set_destination_by_hand(hof, line, ti);
                 }
             }
@@ -137,7 +139,7 @@ pub(in crate::hud) fn ibis_line_number(v: &omsi_sim::VehicleInstance) -> Option<
 /// IBIS and the matrix. Not `SetLineTo` on any other bus: no script of its own writes it,
 /// only an earlier pick, so a line typed on the IBIS since went back to that pick's.
 pub fn destination_line(v: &omsi_sim::VehicleInstance) -> String {
-    let blind = crate::schedule::has_roller_blind(v).then(|| v.str_var("SetLineTo"));
+    let blind = crate::gameplay::schedule::has_roller_blind(v).then(|| v.str_var("SetLineTo"));
     [Some(v.str_var("Matrix_Nr")), blind]
         .into_iter()
         .flatten()

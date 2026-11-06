@@ -112,7 +112,7 @@ fn words(lang: &str) -> Words {
 /// and the current trip (a key that changes with it, and its name).
 #[allow(clippy::type_complexity)]
 pub fn duty_parts(
-    duty: Option<&crate::schedule::PlayerDuty>,
+    duty: Option<&crate::gameplay::schedule::PlayerDuty>,
 ) -> (
     Option<String>,
     Option<String>,

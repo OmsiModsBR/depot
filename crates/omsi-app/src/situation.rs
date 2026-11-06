@@ -744,7 +744,7 @@ pub(crate) fn build_situation(
     player: Option<&Player>,
     placed: &[Player],
     camera: &Camera,
-    duty: Option<&crate::schedule::PlayerDuty>,
+    duty: Option<&crate::gameplay::schedule::PlayerDuty>,
     name: &str,
 ) -> omsi_content::situation::Situation {
     use omsi_content::situation::{Situation, SituationVehicle};

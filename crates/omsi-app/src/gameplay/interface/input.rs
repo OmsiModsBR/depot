@@ -1,6 +1,13 @@
 //! What the rest of the game reaches of the game play, by subject.
 
+pub(crate) use super::super::domain::line_times;
 pub(crate) use super::super::domain::traffic_density;
+pub(crate) use super::super::implementation::bus_service;
+pub(crate) use super::super::implementation::career;
+pub(crate) use super::super::implementation::duty_start;
+pub(crate) use super::super::implementation::journey;
+pub(crate) use super::super::implementation::money;
+pub(crate) use super::super::implementation::schedule_paper;
 pub(crate) use super::super::implementation::traffic_link;
 
 /// The people on foot: their types (`domain/humans.rs`) and their procedures
@@ -16,6 +23,13 @@ pub(crate) mod humans {
         #[cfg(feature = "test-support")]
         pub use crate::gameplay::implementation::humans::pax::*;
     }
+}
+
+/// The scheduled AI buses: their types (`domain/schedule.rs`) and their procedures
+/// (`implementation/schedule.rs`).
+pub(crate) mod schedule {
+    pub use crate::gameplay::domain::schedule::*;
+    pub use crate::gameplay::implementation::schedule::*;
 }
 
 /// The traffic: its types (`domain/traffic.rs`) and its procedures

@@ -325,7 +325,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
 /// A tour of line `line` as the line's preview shows it: "Tour 3  ›  Terminus" (where the
 /// trip it has from the game's time `now` on goes) and the time that trip leaves.
 pub(crate) fn tour_preview(
-    sch: &crate::schedule::Schedule,
+    sch: &crate::gameplay::schedule::Schedule,
     line: &str,
     t: &omsi_timetable::Tour,
     now: f64,
@@ -374,7 +374,7 @@ pub(crate) fn menu_extras(
     kind: Option<&ListKind>,
     list: Option<&[(String, String)]>,
     sel: Option<usize>,
-    schedule: Option<&crate::schedule::Schedule>,
+    schedule: Option<&crate::gameplay::schedule::Schedule>,
     now: f64,
 ) -> (
     crate::hud::MenuKind,

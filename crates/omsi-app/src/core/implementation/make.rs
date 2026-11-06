@@ -10,7 +10,7 @@ use super::startup::{
     self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLASSIC, CLOUDS, ENHANCED,
     ENHANCED_PLUS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
-use crate::duty_start::place_on_duty;
+use crate::gameplay::duty_start::place_on_duty;
 use crate::input::input_script::parse_input_script;
 use crate::input::touch;
 use crate::offscreen::run_offscreen;

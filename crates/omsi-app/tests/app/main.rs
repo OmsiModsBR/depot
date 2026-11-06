@@ -3,7 +3,6 @@
 
 mod about;
 mod app_events;
-mod bus_service;
 mod core;
 mod crate_root;
 mod describe;
@@ -13,20 +12,15 @@ mod frame_stats;
 mod gameplay;
 mod hud;
 mod input;
-mod journey;
 mod launcher;
 mod lights;
-mod line_times;
 mod mapview;
-mod money;
 mod on_foot;
 mod output;
 mod player;
 #[cfg(unix)]
 mod quit;
 mod radio;
-mod schedule;
-mod schedule_paper;
 mod screenshot_name;
 mod services;
 mod settings;

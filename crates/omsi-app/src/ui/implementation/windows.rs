@@ -173,7 +173,7 @@ impl App {
                 .collect();
         let shown = self.player.as_ref().and_then(|p| {
             let hof = p.vehicle.host.hof.as_deref()?;
-            crate::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())
+            crate::gameplay::schedule::shown_destination(&p.vehicle, hof, p.blind_pick.as_ref())
         });
         let selected = shown.and_then(|ti| destinations.iter().position(|d| d.2 == ti));
         DestForm {

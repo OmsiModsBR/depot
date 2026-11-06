@@ -1,25 +1,25 @@
 //! The offscreen run: a scripted session rendered to pictures (`--offscreen`).
 
-use crate::career;
 use crate::core::cli::{parse_time, parse_triggers, Args};
 use crate::core::memory::texture_budget;
 use crate::core::startup::graphics_instance;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
+use crate::gameplay::career;
 use crate::gameplay::humans;
+use crate::gameplay::money;
+use crate::gameplay::schedule;
 use crate::gameplay::traffic;
 use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::input::actions::dump_display_textures;
 use crate::lights;
-use crate::money;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
 use crate::player::Player;
 use crate::quit;
-use crate::schedule;
 use crate::services::{at_petrol_station, run_services};
 use crate::settings;
 use crate::situation::{build_situation, start_clock, ticket_key_name};
@@ -150,7 +150,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 }
                 let mut fonts = world.fonts.lock();
                 if let Err(e) =
-                    crate::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
+                    crate::gameplay::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
                 {
                     log::warn!("driver timetable paper: {e:#}");
                 }
@@ -592,8 +592,8 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 if let Some((arrival, departure)) = served {
                     career.stop_served(arrival, departure);
                 }
-                crate::journey::note(&mut journey, d, due, served, &args.root, || {
-                    crate::journey::head(
+                crate::gameplay::journey::note(&mut journey, d, due, served, &args.root, || {
+                    crate::gameplay::journey::head(
                         &career,
                         &world.global.name,
                         &player.vehicle,
@@ -605,9 +605,11 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     player.set_duty_destination(trip, stop);
                 }
                 let mut fonts = world.fonts.lock();
-                if let Err(e) =
-                    crate::schedule_paper::update_vehicle(&mut player.vehicle, d, &mut fonts)
-                {
+                if let Err(e) = crate::gameplay::schedule_paper::update_vehicle(
+                    &mut player.vehicle,
+                    d,
+                    &mut fonts,
+                ) {
                     log::warn!("driver timetable paper: {e:#}");
                 }
             }

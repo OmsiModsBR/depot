@@ -2897,7 +2897,7 @@ impl Humans {
         (entry, exit)
     }
 
-    pub fn set_player_next_stop(&mut self, stop: Option<&crate::schedule::PlannedStop>) {
+    pub fn set_player_next_stop(&mut self, stop: Option<&crate::gameplay::schedule::PlannedStop>) {
         // (called once a frame: worked out again only when the duty moves on to another stop)
         if let (Some(s), Some(cur)) = (stop, self.player_next_stop.as_ref()) {
             if cur.id == s.object_id {
@@ -3337,7 +3337,7 @@ impl Humans {
 
     /// The player's duty this frame; None in free drive, where the bus takes whom its terminus
     /// shown takes, as a timetable bus. (Set after `stop_names`: the trip's stops are named by it.)
-    pub fn set_duty(&mut self, duty: Option<&crate::schedule::PlayerDuty>) {
+    pub fn set_duty(&mut self, duty: Option<&crate::gameplay::schedule::PlayerDuty>) {
         let Some(d) = duty else {
             self.duty = None;
             return;
@@ -4876,7 +4876,7 @@ impl Humans {
                 .as_ref()
                 .is_none_or(|b| b.made_for != (bus.ty.def.path.clone(), pack.clone()));
             if fresh && !bus.ty.def.attachments.is_empty() {
-                self.ticket_blocks = Some(crate::money::TicketBlocks::new(
+                self.ticket_blocks = Some(crate::gameplay::money::TicketBlocks::new(
                     world, renderer, scene, bus, &pack,
                 ));
             }

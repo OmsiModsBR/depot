@@ -420,12 +420,12 @@ pub struct Humans {
     /// Payment on the desk: (paid, ticket value), and the change still owed after the ticket.
     pub paid: Option<(f32, f32)>,
     pub change_due: Option<f32>,
-    pub money: Option<crate::money::Money>,
+    pub money: Option<crate::gameplay::money::Money>,
     /// The people inside the player's bus's box last frame (`run_over`): knocked down once
     /// when they come into it, not again every frame they are in it.
     pub(crate) under_bus: hashbrown::HashSet<u32>,
     /// The tear-off ticket blocks of the player's bus (`money::TicketBlocks`).
-    pub ticket_blocks: Option<crate::money::TicketBlocks>,
+    pub ticket_blocks: Option<crate::gameplay::money::TicketBlocks>,
     /// A rider pressed the stop button for the next stop (the app fires the vehicle trigger `int_haltewunsch`).
     pub stop_request: bool,
     /// Buses the player asked to empty (`force_disembark`).

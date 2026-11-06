@@ -363,7 +363,7 @@ pub struct MapSurface {
     rail_kinds: Vec<(String, u8)>,
     /// The map, for its timetable (read when the lines panel first asks).
     map_dir: std::path::PathBuf,
-    times: std::sync::OnceLock<crate::line_times::TimesCache>,
+    times: std::sync::OnceLock<crate::gameplay::line_times::TimesCache>,
 }
 
 /// A path a package file names, as a `/`-separated path under the package folder; None when it could point
@@ -838,19 +838,22 @@ impl MapSurface {
         &self,
         chrono: &[std::path::PathBuf],
         date: i32,
-    ) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
+    ) -> Option<std::sync::Arc<crate::gameplay::line_times::LineTimes>> {
         self.times
             .get_or_init(|| {
                 let (dir, chrono) = (self.map_dir.clone(), chrono.to_vec());
-                crate::line_times::TimesCache::new(move |date| {
-                    crate::line_times::LineTimes::load(&dir, &chrono, date)
+                crate::gameplay::line_times::TimesCache::new(move |date| {
+                    crate::gameplay::line_times::LineTimes::load(&dir, &chrono, date)
                 })
             })
             .get(date)
     }
 
     /// The timetable if it has been read already; asking never starts a read.
-    pub fn times_read(&self, date: i32) -> Option<std::sync::Arc<crate::line_times::LineTimes>> {
+    pub fn times_read(
+        &self,
+        date: i32,
+    ) -> Option<std::sync::Arc<crate::gameplay::line_times::LineTimes>> {
         self.times.get().and_then(|c| c.peek(date))
     }
 

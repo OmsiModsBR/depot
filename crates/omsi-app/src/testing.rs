@@ -68,7 +68,7 @@ pub mod app_events {
     pub use crate::app_events::*;
 }
 pub mod bus_service {
-    pub use crate::bus_service::*;
+    pub use crate::gameplay::bus_service::*;
 }
 pub mod condensation {
     pub use crate::weather::condensation::*;
@@ -215,7 +215,7 @@ pub mod input {
     }
 }
 pub mod journey {
-    pub use crate::journey::*;
+    pub use crate::gameplay::journey::*;
 }
 pub mod keys {
     pub use crate::input::keys::*;
@@ -243,7 +243,7 @@ pub mod lights {
     pub use crate::lights::*;
 }
 pub mod line_times {
-    pub use crate::line_times::*;
+    pub use crate::gameplay::line_times::*;
 }
 #[cfg(target_os = "macos")]
 pub mod mac_game_controller {
@@ -253,7 +253,7 @@ pub mod map_surface {
     pub use crate::world::map_surface::*;
 }
 pub mod money {
-    pub use crate::money::*;
+    pub use crate::gameplay::money::*;
 }
 pub mod on_foot {
     pub use crate::on_foot::*;
@@ -311,10 +311,10 @@ pub mod scene {
     }
 }
 pub mod schedule {
-    pub use crate::schedule::*;
+    pub use crate::gameplay::schedule::*;
 }
 pub mod schedule_paper {
-    pub use crate::schedule_paper::*;
+    pub use crate::gameplay::schedule_paper::*;
 }
 pub mod screenshot_name {
     pub use crate::screenshot_name::*;

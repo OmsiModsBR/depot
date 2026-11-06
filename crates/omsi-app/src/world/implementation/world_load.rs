@@ -64,7 +64,7 @@ pub(crate) fn season_folder_on(
 pub(crate) fn open_world(args: &Args) -> Result<(World, Camera, DVec3)> {
     let map_cfg = omsi_cfg::resolve_path(&args.root, &args.map);
     let date = start_clock(args).date_code();
-    let world = match crate::duty_start::take_preopened(&map_cfg, date) {
+    let world = match crate::gameplay::duty_start::take_preopened(&map_cfg, date) {
         Some(w) => w,
         None => World::open(&args.root, &map_cfg, date)?,
     };

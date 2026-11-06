@@ -42,7 +42,7 @@ pub(crate) fn tour_start(tour: &omsi_timetable::Tour) -> Option<f64> {
 /// Whether a tour is listed now: it runs on this day and is current at `now` (seconds of the
 /// day) - under way, or leaving within half an hour; one that has finished is not.
 pub(in crate::hud) fn tour_listed(
-    sch: &crate::schedule::Schedule,
+    sch: &crate::gameplay::schedule::Schedule,
     line: &str,
     tour: &omsi_timetable::Tour,
     now: f64,
@@ -64,7 +64,7 @@ pub(in crate::hud) fn tour_listed(
 
 /// The line number a line's trips carry (`.ttp` line), else the name of the line's file.
 pub(in crate::hud) fn line_sign(
-    schedule: Option<&crate::schedule::Schedule>,
+    schedule: Option<&crate::gameplay::schedule::Schedule>,
     line: &omsi_timetable::Line,
 ) -> String {
     let sign = schedule.and_then(|sch| {
@@ -102,7 +102,7 @@ pub(in crate::hud) fn sorted_tours(line: &omsi_timetable::Line) -> Vec<&omsi_tim
 /// The name of trip number `k` of a tour, counted as `Schedule::tour_stops` does (trips the
 /// timetable does not know are left out).
 pub(in crate::hud) fn tour_trip_name(
-    sch: &crate::schedule::Schedule,
+    sch: &crate::gameplay::schedule::Schedule,
     tour: &omsi_timetable::Tour,
     k: usize,
 ) -> Option<String> {
@@ -152,7 +152,7 @@ pub(crate) fn switch_driver(app: &mut App, name: &str) {
         }
     }
     let rel = format!("Drivers/{name}.odr");
-    let mut next = crate::career::Career::load(&app.args.root, &rel);
+    let mut next = crate::gameplay::career::Career::load(&app.args.root, &rel);
     // (the distance and the clock of the run go on; the counters start with the new file)
     next.seconds = app.career.seconds;
     app.career = next;
@@ -229,7 +229,9 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
         p.set_duty_destination(trip, stop);
         if let Some(w) = app.world.as_ref() {
             let mut fonts = w.fonts.lock();
-            if let Err(e) = crate::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts) {
+            if let Err(e) =
+                crate::gameplay::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
+            {
                 log::warn!("driver timetable paper: {e:#}");
             }
         }
@@ -254,7 +256,7 @@ pub(in crate::hud) fn start_duty(app: &mut App, line: &str, tour: &str) {
                 p.set_duty_destination(trip, stop);
                 let mut fonts = w.fonts.lock();
                 if let Err(e) =
-                    crate::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
+                    crate::gameplay::schedule_paper::update_vehicle(&mut p.vehicle, &d, &mut fonts)
                 {
                     log::warn!("driver timetable paper: {e:#}");
                 }

@@ -4,7 +4,7 @@
 //! bitmap named by that string; openOMSI makes it from the player's current duty and keeps
 //! it in its own cache so the original installation remains read-only.
 
-use crate::schedule::PlayerDuty;
+use crate::gameplay::schedule::PlayerDuty;
 use ab_glyph::{Font as _, FontVec, PxScale, ScaleFont};
 use anyhow::{anyhow, Context, Result};
 use omsi_content::font::{Font, FontAtlas, FontChar, TextAlign};
@@ -223,7 +223,7 @@ fn tt_labels() -> &'static (String, String) {
 pub fn paper_content(
     duty_line: &str,
     duty_tour: &str,
-    trips: &[crate::schedule::PlannedTrip],
+    trips: &[crate::gameplay::schedule::PlannedTrip],
     trip_index: usize,
     (arr_label, dep_label): (&str, &str),
 ) -> (String, Vec<PaperRow>) {
