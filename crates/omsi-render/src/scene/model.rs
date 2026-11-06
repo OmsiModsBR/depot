@@ -186,6 +186,12 @@ pub struct Scene {
     pub(crate) sky_textures: Option<[TextureId; 3]>,
     /// The picture of the weather's cloud type, as set by `Renderer::set_sky_cloud_picture`.
     pub(crate) sky_cloud_picture: Option<TextureId>,
+    /// The tiling cloud texture the sky's bind group was made with (kept to make it again).
+    pub(crate) sky_clouds: Option<TextureId>,
+    /// The sun's and the moon's pictures (`Texture\sonne.bmp`, `Texture\mond.bmp`), as set
+    /// by `Renderer::set_sky_bodies`; the classic sky draws them.
+    pub(crate) sky_sun: Option<TextureId>,
+    pub(crate) sky_moon: Option<TextureId>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the

@@ -1758,6 +1758,7 @@ fn dark_sky(
         sun_glow: false,
         no_stars: false,
         no_cloud_layer: false,
+        ..Default::default()
     }
 }
 
@@ -2053,6 +2054,64 @@ fn something_in_front_of_the_sun_hides_its_glow() {
     let px = dev.end_frame().unwrap();
     // (the quad covers the whole picture and stands nearer than the sun)
     assert!(all(&px, [10, 220, 30, 255], 1), "{:?}", &px[..4]);
+}
+
+/// A dark sky with the sun's and the moon's pictures (white, scene textures 6 and 7) as asked.
+fn bodies_sky(dev: &mut D3d9Device, sun: bool, moon: bool) -> crate::scene::SceneSky {
+    rgba(dev, 6, [255, 255, 255, 255]);
+    rgba(dev, 7, [255, 255, 255, 255]);
+    crate::scene::SceneSky {
+        bodies: [sun.then_some(6), moon.then_some(7)],
+        ..dark_sky(dev, [0.0, 1.0, 0.0, 0.0], Default::default())
+    }
+}
+
+/// Towards the middle of pixel (3, 1) of the view north.
+const PIXEL_3_1: [f32; 3] = [-0.0125, 1.0, 0.025];
+
+#[test]
+fn the_suns_picture_is_drawn_where_the_sun_stands() {
+    let Some(mut dev) = device() else { return };
+    let [x, y, z] = PIXEL_3_1;
+    let sun = [x, y, z, 1.0];
+    let without = bodies_sky(&mut dev, false, false);
+    let px = draw_sky_with(&mut dev, without, LOOK_NORTH, sunny(sun), (W, H));
+    assert!(all(&px, [0, 0, 0, 255], 0), "{:?}", &px[..4]);
+    let with = bodies_sky(&mut dev, true, false);
+    let px = draw_sky_with(&mut dev, with, LOOK_NORTH, sunny(sun), (W, H));
+    assert!(peak(&px, 3, 1) > 200, "sun {}", peak(&px, 3, 1));
+    // far from it the sky stays as it was
+    assert!(peak(&px, 0, 3) < 4, "far {}", peak(&px, 0, 3));
+}
+
+/// [`LOOK_NORTH`] four times narrower: the moon spans a few pixels.
+const LOOK_NORTH_NARROW: [[f32; 4]; 4] = [
+    [40., 0., 0., 0.],
+    [0., 0., 0., 1.],
+    [0., 40., 0., 0.],
+    [0., 0., 0., 0.],
+];
+
+#[test]
+fn the_moon_shows_the_phase_the_sun_gives_it() {
+    let Some(mut dev) = device() else { return };
+    // towards the middle of pixel (3, 1) of the narrow view
+    let [x, y, z] = [-0.003125f32, 1.0, 0.00625];
+    let n = (x * x + y * y + z * z).sqrt();
+    let m = [x / n, y / n, z / n, 0.0];
+    let back = [-m[0], -m[1], -m[2], 0.0];
+    let sky = |dev: &mut D3d9Device| crate::scene::SceneSky {
+        moon_dir: m,
+        ..bodies_sky(dev, false, true)
+    };
+    // full: the sun behind the eye
+    let full = sky(&mut dev);
+    let px = draw_sky_with(&mut dev, full, LOOK_NORTH_NARROW, sunny(back), (W, H));
+    assert!(peak(&px, 3, 1) > 100, "full {}", peak(&px, 3, 1));
+    // new: the sun behind the moon, the face towards the eye dark
+    let new = sky(&mut dev);
+    let px = draw_sky_with(&mut dev, new, LOOK_NORTH_NARROW, sunny(m), (W, H));
+    assert!(peak(&px, 3, 1) < 4, "new {}", peak(&px, 3, 1));
 }
 
 #[test]

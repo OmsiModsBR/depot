@@ -46,6 +46,9 @@ impl Layouts {
                     count: None,
                 },
                 sampler_entry(8),
+                // the sun's and the moon's pictures (the classic sky)
+                texture_entry(9),
+                texture_entry(10),
             ],
         });
         Self {

@@ -286,7 +286,7 @@ impl D3d9Device {
         let (Some(p), Some(ids)) = (&self.scene.sky.pipeline, frame.sky.textures) else {
             return Ok(());
         };
-        let mut pictures = Vec::with_capacity(4);
+        let mut pictures = Vec::with_capacity(6);
         for id in ids {
             match self.scene_texture(id) {
                 Some(t) => pictures.push(t),
@@ -308,6 +308,18 @@ impl D3d9Device {
                 pictures.push(pictures[0]);
             }
         }
+        // the sun's and the moon's pictures (stages 4 and 5); one that is not there is left out
+        // and the day's picture holds its stage
+        let mut bodies = [0.0f32; 2];
+        for (k, id) in frame.sky.bodies.iter().enumerate() {
+            match id.and_then(|id| self.scene_texture(id)) {
+                Some(t) => {
+                    bodies[k] = 1.0;
+                    pictures.push(t);
+                }
+                None => pictures.push(pictures[0]),
+            }
+        }
         let d = &self.device;
         let light = &frame.light;
         let ps = [
@@ -318,7 +330,13 @@ impl D3d9Device {
             light.ambient,
             light.sky_color,
             clouds,
-            [if frame.sky.no_stars { 0.0 } else { 1.0 }, 0.0, 0.0, 0.0],
+            [
+                if frame.sky.no_stars { 0.0 } else { 1.0 },
+                bodies[0],
+                bodies[1],
+                0.0,
+            ],
+            frame.sky.moon_dir,
         ];
         let vs = [light.cam_pos, pixel_offset];
         // SAFETY: plain calls on a live device; the constant arrays outlive the calls; the
@@ -353,7 +371,15 @@ impl D3d9Device {
                             D3DTEXF_NONE.0 as u32
                         },
                     ),
-                    (D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP.0 as u32),
+                    // (the sun's and the moon's pictures stop at their edges)
+                    (
+                        D3DSAMP_ADDRESSU,
+                        if stage >= 4 {
+                            D3DTADDRESS_CLAMP.0 as u32
+                        } else {
+                            D3DTADDRESS_WRAP.0 as u32
+                        },
+                    ),
                     (
                         D3DSAMP_ADDRESSV,
                         if stage == 3 {
@@ -382,6 +408,14 @@ impl D3d9Device {
             d.SetIndices(&p.indices).map_err(map_err)?;
             d.DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, p.vertex_count, 0, p.triangles)
                 .map_err(map_err)?;
+            // the scene's maps on stages 4 and 5 repeat (the device's own default), as they
+            // did before the sun and the moon were drawn from them
+            for stage in 4..6 {
+                for state in [D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV] {
+                    d.SetSamplerState(stage, state, D3DTADDRESS_WRAP.0 as u32)
+                        .map_err(map_err)?;
+                }
+            }
         }
         Ok(())
     }

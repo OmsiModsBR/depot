@@ -58,6 +58,9 @@ pub(crate) struct CameraUniform {
     /// Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     /// the air has carried the gusts since the start (m, modulo the shaders' PATTERN_PERIOD).
     pub(crate) tree_wind: [f32; 4],
+    /// The classic sky's sun and moon pictures (`sky.wgsl`): xyz towards the moon (world),
+    /// w 1 to draw them.
+    pub(crate) moon: [f32; 4],
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -572,6 +572,12 @@ pub struct SceneSky {
     /// Leaves the cloud layer out of the sky's picture (the Cloud picture option off). The
     /// clouds' cover still counts for the sun's glow; the light is the frame's own.
     pub no_cloud_layer: bool,
+    /// The sun's and the moon's pictures (`Texture\sonne.bmp`, `Texture\mond.bmp`) as scene
+    /// texture ids: the sun's is drawn where the sun stands, the moon's on a ball lit by the
+    /// sun (its phase). One that is not there is left out.
+    pub bodies: [Option<usize>; 2],
+    /// xyz towards the moon (world).
+    pub moon_dir: [f32; 4],
 }
 
 /// The weather's clouds: one layer of the weather's cloud type, drawn over the sky dome.

@@ -180,6 +180,20 @@ pub(crate) fn setup_sky(
         t.elapsed().as_secs_f64() * 1000.0
     );
     let clouds = Some(renderer.add_texture(scene, &field, true));
+    // the sun's and the moon's pictures, which the classic sky draws where they stand (a
+    // root without them has no sun or moon drawn there)
+    let mut bodies = [None, None];
+    for (slot, name) in bodies
+        .iter_mut()
+        .zip(["Texture\\sonne.bmp", "Texture\\mond.bmp"])
+    {
+        let p = omsi_cfg::resolve_path(&args.root, name);
+        match omsi_texture::decode_file(&p) {
+            Ok(img) => *slot = Some(renderer.add_texture(scene, &img, false)),
+            Err(e) => log::warn!("sky texture {}: {e}", p.display()),
+        }
+    }
+    renderer.set_sky_bodies(scene, bodies[0], bodies[1]);
     renderer.set_sky_textures_clouds(scene, [ids[0], ids[1], ids[2]], clouds);
 }
 

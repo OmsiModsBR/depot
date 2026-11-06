@@ -625,6 +625,16 @@ impl Renderer {
                 };
                 [wind.x, wind.y, drift.x as f32, drift.y as f32]
             },
+            // (w 0 when the game has set neither picture: the sky skips them altogether)
+            moon: lighting
+                .moon_dir
+                .normalize_or_zero()
+                .extend(if scene.sky_sun.is_some() || scene.sky_moon.is_some() {
+                    1.0
+                } else {
+                    0.0
+                })
+                .to_array(),
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));

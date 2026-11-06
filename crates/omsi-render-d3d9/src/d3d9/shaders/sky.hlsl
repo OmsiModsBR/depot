@@ -39,6 +39,8 @@ sampler2D t_day : register(s0);
 sampler2D t_twilight : register(s1);
 sampler2D t_night : register(s2);
 sampler2D t_clouds : register(s3); // white, the clouds in its alpha
+sampler2D t_sun : register(s4);    // Texture\sonne.bmp
+sampler2D t_moon : register(s5);   // Texture\mond.bmp
 
 // x the sun's azimuth (radians, clockwise from north), yzw the weights of the day, twilight
 // and night pictures
@@ -54,8 +56,16 @@ float4 sky_color : register(c205);
 // x the cloud cover (0: no clouds), yz the drift with the wind in tiles, w the layer's base
 // height in metres
 float4 clouds : register(c206);
-// x 1 draws the stars, 0 leaves them out
+// x 1 draws the stars, 0 leaves them out; y 1 draws the sun's picture, z the moon's
 float4 options : register(c207);
+// xyz towards the moon
+float4 moon_dir : register(c208);
+
+// The sun's picture is a square whose half side is this tangent of the angle from its middle,
+// and the moon a ball of this tangent of its angular radius: the sizes of the stock
+// helper\sonne.x square and helper\mond.x ball, set 3 units from the eye.
+static const float SUN_HALF = 0.02677;
+static const float MOON_RADIUS = 0.01563;
 
 // One tile of the cloud picture, in metres: the wind's drift (`clouds.yz`) is counted in them.
 static const float CLOUD_TILE = 2500.0;
@@ -104,6 +114,41 @@ float stars(float3 d, float pixel) {
     return present * k * k * (0.35 + 0.65 * brightness * brightness);
 }
 
+// The sun and the moon towards d (linear light): the sun's picture where the sun stands, the
+// moon's on a ball whose side towards the sun is lit (its phase). Neither shows below the
+// horizon.
+float3 sky_bodies(float3 d) {
+    float3 col = 0.0;
+    float3 up = float3(0.0, 0.0, 1.0);
+    float3 sd = normalize(sun_dir.xyz);
+    float ks = dot(d, sd);
+    [branch] if (options.y > 0.5 && ks > 0.99 && d.z > -0.005) {
+        float3 right = normalize(cross(sd, up) + float3(1e-5, 0.0, 0.0));
+        float3 top = cross(right, sd);
+        float2 q = float2(dot(d, right), dot(d, top)) / (ks * SUN_HALF);
+        if (max(abs(q.x), abs(q.y)) < 1.0) {
+            float4 uv = float4(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y, 0.0, 0.0);
+            col += srgb_decode(tex2Dlod(t_sun, uv).rgb);
+        }
+    }
+    float3 md = normalize(moon_dir.xyz);
+    float km = dot(d, md);
+    [branch] if (options.z > 0.5 && km > 0.999 && d.z > -0.005) {
+        float3 right = normalize(cross(md, up) + float3(1e-5, 0.0, 0.0));
+        float3 top = cross(right, md);
+        float2 q = float2(dot(d, right), dot(d, top)) / (km * MOON_RADIUS);
+        float q2 = dot(q, q);
+        if (q2 < 1.0) {
+            float3 n = right * q.x + top * q.y - md * sqrt(1.0 - q2);
+            float lit = max(dot(n, sd), 0.0);
+            float4 uv = float4(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y, 0.0, 0.0);
+            float gain = lerp(0.45, 1.0, sky.w);
+            col += srgb_decode(tex2Dlod(t_moon, uv).rgb) * lit * gain;
+        }
+    }
+    return col;
+}
+
 float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     float3 d = normalize(dir);
     float az = atan2(d.x, d.y);
@@ -134,6 +179,9 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     // (the gradients out here: a sample inside a branch has no derivatives of its own)
     float2 ground_dx = ddx(ground);
     float2 ground_dy = ddy(ground);
+    // the sun and the moon, behind the clouds
+    float3 bodies = sky_bodies(d);
+    float hidden = 0.0;
     [branch] if (clouds.x > 0.001) {
         float shape = tex2Dgrad(t_clouds, ground, ground_dx, ground_dy).a;
         float closed = smoothstep(0.8, 1.0, clouds.x);
@@ -144,7 +192,9 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
         float3 lit = sun_color.rgb * 1.1 * sun_up + ambient.rgb * lerp(0.5, 1.5, sun_up) + sky_color.rgb * 0.3;
         float3 cloud_col = max(min(lit, 0.97), sky_c * 1.12) * (1.0 - 0.3 * closed);
         c = lerp(c, cloud_col, cover);
+        hidden = cover;
     }
+    c += bodies * (1.0 - hidden);
     // fog swallows the horizon, and a thick fog (a few hundred metres of sight) the whole sky
     float horizon = saturate(1.0 - elev / 0.12) * saturate(fog.w * 1500.0);
     float whole = saturate(fog.w * 150.0 - 0.15) * clamp(1.0 - elev / 1.2, 0.35, 1.0);
