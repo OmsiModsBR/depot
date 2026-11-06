@@ -188,7 +188,7 @@ pub(crate) fn clear_ai_traffic(app: &mut App) {
         return;
     }
     if let (Some(t), Some(w), Some(r), Some(scene)) = (
-        app.traffic.as_mut(),
+        app.session.traffic.as_mut(),
         app.world.as_ref(),
         app.renderer.as_ref(),
         app.scene.as_mut(),

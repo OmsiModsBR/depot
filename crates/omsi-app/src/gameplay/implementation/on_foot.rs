@@ -240,7 +240,7 @@ impl App {
         for q in &self.placed {
             add(&q.vehicle);
         }
-        if let Some(t) = self.traffic.as_ref() {
+        if let Some(t) = self.session.traffic.as_ref() {
             for c in &t.cars {
                 add(&c.vehicle);
             }

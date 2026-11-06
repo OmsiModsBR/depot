@@ -73,7 +73,7 @@ pub(in crate::hud) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32
     let s = &app.settings;
     Some(match verb {
         "speed" => s.time_speed as f32,
-        "traffic" => app.traffic.as_ref()?.target as f32,
+        "traffic" => app.session.traffic.as_ref()?.target as f32,
         "pax" => s.pax_density,
         "volume" => s.volume,
         "led_glow" => s.led_glow as f32,
@@ -157,7 +157,7 @@ pub(in crate::hud) fn option_set(
             Some(("time_speed", app.settings.time_speed.to_string()))
         }
         "traffic" => {
-            if let Some(t) = app.traffic.as_mut() {
+            if let Some(t) = app.session.traffic.as_mut() {
                 t.target = v.round() as usize;
                 app.args.traffic = t.target;
             }

@@ -139,7 +139,7 @@ impl App {
                 }
             }
             "controls" => ToolWindow::Controls,
-            "tour" if self.duty.is_some() => ToolWindow::Running,
+            "tour" if self.session.duty.is_some() => ToolWindow::Running,
             "tour" => ToolWindow::Tour(TourForm {
                 lines: rows_of(self, &ListKind::Lines, "line"),
                 ..Default::default()
@@ -232,7 +232,8 @@ impl App {
                 )
                 .replacen(
                     "{}",
-                    self.duty
+                    self.session
+                        .duty
                         .as_ref()
                         .map(|d| d.line.trim())
                         .unwrap_or_default(),
@@ -258,7 +259,7 @@ impl App {
                     aw::Entry {
                         label: "Timetable evaluation".into(),
                         checked: None,
-                        disabled: self.duty.is_none().then(|| NO_TOUR.to_string()),
+                        disabled: self.session.duty.is_none().then(|| NO_TOUR.to_string()),
                     },
                     aw::Entry {
                         label: "Driver profile".into(),
@@ -295,7 +296,7 @@ impl App {
     /// The driver's personnel file as it is saved (what the launcher's Profile page adds up
     /// from the same file), for the driver profile window.
     fn profile_view(&self) -> aw::Profile {
-        let c = &self.career;
+        let c = &self.session.career;
         let mut rows: Vec<(String, String)> = Vec::new();
         let name = c
             .driver
@@ -372,7 +373,7 @@ impl App {
     /// The timetable running: the current trip's stops with how each went, the one due now,
     /// and a button to skip each still to come.
     fn running(&self) -> aw::Running {
-        let Some(d) = self.duty.as_ref() else {
+        let Some(d) = self.session.duty.as_ref() else {
             return aw::Running::default();
         };
         let trip = d.trip();
@@ -443,7 +444,7 @@ impl App {
     /// The timetable evaluation of trip `trip` of the duty: its stops with their planned and
     /// actual times as the journey log has them so far (the end-of-trip report's rows).
     fn evaluation(&self, trip: usize) -> aw::Evaluation {
-        let Some(d) = self.duty.as_ref() else {
+        let Some(d) = self.session.duty.as_ref() else {
             return aw::Evaluation::default();
         };
         let last = d.trip_index.min(d.trips.len().saturating_sub(1));
@@ -598,7 +599,7 @@ impl App {
     pub(crate) fn tool_events(&mut self) {
         // (the timetable evaluation, the running timetable and its "Cancel the timetable?"
         // are the running tour's: they close with the tour, however it ended)
-        if self.duty.is_none()
+        if self.session.duty.is_none()
             && matches!(
                 self.new_ui.tool.window,
                 Some(ToolWindow::Evaluation { .. } | ToolWindow::Running | ToolWindow::EndTour)
@@ -693,6 +694,7 @@ impl App {
             ToolWindow::Running => match e {
                 Event::Row(_, i) => {
                     if let Some(k) = self
+                        .session
                         .duty
                         .as_ref()
                         .and_then(|d| running_stops(d).get(i).copied())
@@ -746,7 +748,7 @@ impl App {
             }
             ToolWindow::Evaluation { trip } => {
                 if let Event::Step(_, by) = e {
-                    let last = self.duty.as_ref().map_or(0, |d| d.trip_index);
+                    let last = self.session.duty.as_ref().map_or(0, |d| d.trip_index);
                     *trip = (*trip as i64 + by as i64).clamp(0, last as i64) as usize;
                 }
             }
@@ -754,7 +756,7 @@ impl App {
             ToolWindow::Profile => {}
             ToolWindow::DriverMenu => {
                 if e == Event::Check(0) {
-                    if let Some(d) = self.duty.as_ref() {
+                    if let Some(d) = self.session.duty.as_ref() {
                         let trip = d.trip_index;
                         self.new_ui.tool.open(ToolWindow::Evaluation { trip });
                     }
@@ -763,6 +765,7 @@ impl App {
                 } else if e == Event::Check(2) {
                     let names = lists::driver_names(self);
                     let now = self
+                        .session
                         .career
                         .path
                         .as_ref()
@@ -808,7 +811,7 @@ impl App {
                 f.tour = Some(i);
                 if let Some((line, tour)) = f.chosen() {
                     let now = self.clock.time;
-                    let sch = self.schedule.as_ref();
+                    let sch = self.session.schedule.as_ref();
                     f.trips = sch.map_or(0, |s| s.tour_trip_count(&line, &tour));
                     f.trip = sch.map_or(0, |s| s.tour_trip_now(&line, &tour, now));
                     f.trip = f.trip.min(f.trips.saturating_sub(1));
@@ -841,7 +844,7 @@ impl App {
     /// the time each leaves next and where it goes (as the line's preview shows them, matched
     /// by the tour's number).
     fn tours_of(&self, line: &str) -> Vec<(String, String, String)> {
-        let sch = self.schedule.as_ref();
+        let sch = self.session.schedule.as_ref();
         let found = sch.and_then(|s| s.data.lines.iter().find(|l| l.name == line));
         rows_of(self, &ListKind::Tours(line.to_string(), None), "tour")
             .into_iter()
@@ -863,6 +866,7 @@ impl App {
             return;
         };
         f.stops = self
+            .session
             .schedule
             .as_ref()
             .map(|s| s.tour_trip_stops(&line, &tour, f.trip))
@@ -949,7 +953,7 @@ impl App {
         self.clock.year = to.year;
         self.clock.day_of_year = to.day_of_year;
         self.clock.time = to.time;
-        if let Some(t) = self.traffic.as_mut() {
+        if let Some(t) = self.session.traffic.as_mut() {
             t.day_time += gap;
         }
         if let Some(p) = self.player.as_mut() {

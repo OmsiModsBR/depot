@@ -600,10 +600,10 @@ impl crate::core::app::App {
         }
         // ending the route is offered only while there is one, skipping a stop while its
         // trip still has one to come
-        if self.duty.is_none() {
+        if self.session.duty.is_none() {
             v.retain(|x| x.0 != "endduty");
         }
-        if !self.duty.as_ref().is_some_and(|d| d.stop_to_skip()) {
+        if !self.session.duty.as_ref().is_some_and(|d| d.stop_to_skip()) {
             v.retain(|x| x.0 != "skipstop");
         }
         if self.navigator.is_none() {

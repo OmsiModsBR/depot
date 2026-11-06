@@ -556,7 +556,7 @@ impl App {
                         if ctrl
                             && shift_now
                             && !alt
-                            && self.duty.is_some()
+                            && self.session.duty.is_some()
                             && !self.chord_bound(code, shift_now, ctrl, alt) =>
                     {
                         self.skip_next_stop();
@@ -685,7 +685,7 @@ impl App {
                         if let Some(p) = self.player.as_mut() {
                             let msg = p.start_up();
                             self.service_msg = Some((msg, 6.0));
-                            if let Some(d) = self.duty.as_ref() {
+                            if let Some(d) = self.session.duty.as_ref() {
                                 let (trip, stop) = d.trip_for_ibis();
                                 p.set_duty_destination(trip, stop);
                             }
@@ -745,9 +745,9 @@ impl App {
                     }
                     KeyCode::F9 => {
                         // write the run into the driver's personnel file
-                        let line = self.career.summary();
-                        if self.career.path.is_some() {
-                            if let Err(e) = self.career.save() {
+                        let line = self.session.career.summary();
+                        if self.session.career.path.is_some() {
+                            if let Err(e) = self.session.career.save() {
                                 log::warn!("writing the personnel file: {e}");
                             }
                         } else {

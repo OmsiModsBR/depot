@@ -628,7 +628,7 @@ pub(in crate::hud) fn world_pages(app: &App) -> Vec<Page> {
                     &format!("clock_set {secs}"),
                 ));
             }
-            if let (Some(_), Some(p)) = (app.duty.as_ref(), app.player.as_ref()) {
+            if let (Some(_), Some(p)) = (app.session.duty.as_ref(), app.player.as_ref()) {
                 let d = p.vehicle.host.tt_delay as f64;
                 if d.abs() >= 1.0 {
                     let text = format!(
@@ -873,7 +873,7 @@ pub(in crate::hud) fn world_pages(app: &App) -> Vec<Page> {
         "How many vehicles drive around the map.",
         &|v| format!("{} vehicles", v as i64),
     ));
-    if !client && app.traffic.is_some() {
+    if !client && app.session.traffic.is_some() {
         people.push(button(
             "Clear AI traffic",
             "Clear",

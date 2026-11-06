@@ -643,7 +643,7 @@ impl ApplicationHandler for App {
                     .zip(self.surface.as_ref())
                     .and_then(|(c, s)| self.sight_extent(c, (s.config.width, s.config.height)));
                 if let (Some(t), Some(w), Some(r), Some(scene)) = (
-                    self.traffic.as_mut(),
+                    self.session.traffic.as_mut(),
                     self.world.as_ref(),
                     self.renderer.as_ref(),
                     self.scene.as_mut(),
@@ -679,6 +679,7 @@ impl ApplicationHandler for App {
                     if self.populate_t <= 0.0 && !self.paused {
                         // come back quickly while there is a backlog of departures to put out
                         self.populate_t = if self
+                            .session
                             .schedule
                             .as_ref()
                             .map(|s| s.pending() > 0)
@@ -729,7 +730,7 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map(|p| traffic::vehicle_bodies(&p.vehicle))
                             .unwrap_or_default();
-                        if let Some(s) = self.schedule.as_mut() {
+                        if let Some(s) = self.session.schedule.as_mut() {
                             let window = if self.first_populate {
                                 20.0 * 60.0
                             } else {
@@ -1242,7 +1243,7 @@ impl ApplicationHandler for App {
                         if let Some(w) = self.world.as_ref() {
                             crate::gameplay::rail_drive::frame(
                                 p,
-                                self.traffic.as_ref().map(|t| &t.net),
+                                self.session.traffic.as_ref().map(|t| &t.net),
                                 w,
                                 dt,
                             );
@@ -1284,7 +1285,7 @@ impl ApplicationHandler for App {
                     }
                     if !self.placed.is_empty() {
                         // (the traffic writes the list afresh every frame; without it, this does)
-                        if self.traffic.is_none() {
+                        if self.session.traffic.is_none() {
                             p.vehicle.dynamic_boxes.clear();
                         }
                         p.vehicle.dynamic_boxes.extend(placed_boxes);
@@ -1836,21 +1837,24 @@ impl ApplicationHandler for App {
                         .or(self.camera.as_ref().map(|c| c.position))
                         .unwrap_or(DVec3::ZERO);
                     // (the trips due at the stops soon: once a game minute, #1415)
-                    if let (Some(s), Some(t)) = (self.schedule.as_ref(), self.traffic.as_ref()) {
+                    if let (Some(s), Some(t)) = (
+                        self.session.schedule.as_ref(),
+                        self.session.traffic.as_ref(),
+                    ) {
                         if (t.day_time - h.due_at).abs() >= 60.0 {
                             h.due_dests = Some(s.due_destinations(t.day_time));
                             h.due_at = t.day_time;
                         }
                     }
                     if h.stop_targets.is_none() {
-                        h.stop_targets = self.schedule.as_ref().map(|s| s.stop_targets());
-                        h.stop_names = self.schedule.as_ref().map(|s| s.stop_names());
+                        h.stop_targets = self.session.schedule.as_ref().map(|s| s.stop_targets());
+                        h.stop_names = self.session.schedule.as_ref().map(|s| s.stop_names());
                         if let Some(t) = &h.stop_targets {
                             log::info!("people: {} bus stops with timetable targets", t.len());
                         }
                     }
                     // (whom the player's bus takes on: by the duty, or in free drive by its terminus)
-                    h.set_duty(self.duty.as_ref());
+                    h.set_duty(self.session.duty.as_ref());
                     // (the riders leave a bus the driver has walked away from)
                     h.driver_away = self.on_foot.as_ref().is_some_and(|f| {
                         let own = Some(crate::gameplay::humans::BusId::Player);
@@ -1858,6 +1862,7 @@ impl ApplicationHandler for App {
                     });
                     session::people_clock(h, w, &self.settings, &self.clock, self.envir.as_ref());
                     h.delay = self
+                        .session
                         .duty
                         .as_ref()
                         .map(|d| d.delay(self.clock.time))
@@ -1879,7 +1884,8 @@ impl ApplicationHandler for App {
                     // (and the vehicles the player placed and left, with their riders)
                     h.set_placed_buses(self.placed.iter().map(|q| (q.uid, &q.vehicle)));
                     h.set_player_next_stop(
-                        self.duty
+                        self.session
+                            .duty
                             .as_ref()
                             .and_then(|d| d.trip().stops.get(d.next_stop)),
                     );
@@ -1887,7 +1893,7 @@ impl ApplicationHandler for App {
                         if self.paused { 0.0 } else { dt },
                         w,
                         self.player.as_ref().map(|p| &p.vehicle),
-                        self.traffic.as_ref(),
+                        self.session.traffic.as_ref(),
                         r,
                         scene,
                     );
@@ -1895,8 +1901,8 @@ impl ApplicationHandler for App {
                     if let Some(p) = self.player.as_mut() {
                         p.vehicle.set_payload(&h.player_payload());
                     }
-                    session::people_stamped(h, self.player.as_mut(), self.traffic.as_mut());
-                    if let Some(t) = self.traffic.as_mut() {
+                    session::people_stamped(h, self.player.as_mut(), self.session.traffic.as_mut());
+                    if let Some(t) = self.session.traffic.as_mut() {
                         session::people_to_traffic(h, t);
                     }
                     if let Some(m) = h.take_message() {
@@ -1933,7 +1939,7 @@ impl ApplicationHandler for App {
                 }
                 let mut finished = None;
                 if let (Some(d), Some(p), Some(w), false) = (
-                    self.duty.as_mut(),
+                    self.session.duty.as_mut(),
                     self.player.as_mut(),
                     self.world.as_ref(),
                     self.paused,
@@ -1953,7 +1959,7 @@ impl ApplicationHandler for App {
                         d,
                         p,
                         self.clock.time,
-                        &mut self.career,
+                        &mut self.session.career,
                         &mut self.journey,
                         &self.args.root,
                         w,
@@ -1984,14 +1990,19 @@ impl ApplicationHandler for App {
                     let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
                     // the engine's own variables of the bus (see `update_engine_vars`)
                     p.vehicle.host.humans_count = riders as f32;
-                    p.vehicle.host.schedule_active = if self.duty.is_some() { 1.0 } else { 0.0 };
+                    p.vehicle.host.schedule_active = if self.session.duty.is_some() {
+                        1.0
+                    } else {
+                        0.0
+                    };
                     let crash = std::mem::take(&mut p.vehicle.last_crash);
                     // (a frame after the session was written must not start another one)
                     if !self.exiting && !self.paused {
-                        self.career.tick(dt, &p.vehicle, riders);
+                        self.session.career.tick(dt, &p.vehicle, riders);
                     }
                     if crash > 0.0 {
-                        self.career
+                        self.session
+                            .career
                             .crashed(crash, p.vehicle.motion().velocity_kmh() / 3.6);
                         self.service_msg = Some((
                             omsi_ui::tr("Crash: %{energy} kJ")
@@ -2055,13 +2066,13 @@ impl ApplicationHandler for App {
                     });
                 }
                 if let (Some(h), Some(p)) = (self.humans.as_mut(), self.player.as_ref()) {
-                    self.career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
-                    self.career.boarded = h.boarded as i32;
-                    self.career.served = h.served as i32;
-                    self.career.stepped_in = h.stepped_in as i32;
-                    self.career.content = h.content as i32;
-                    self.career.ticket_requests = h.ticket_requests as i32;
-                    self.career.ticket_points = h.ticket_points as i32;
+                    self.session.career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
+                    self.session.career.boarded = h.boarded as i32;
+                    self.session.career.served = h.served as i32;
+                    self.session.career.stepped_in = h.stepped_in as i32;
+                    self.session.career.content = h.content as i32;
+                    self.session.career.ticket_requests = h.ticket_requests as i32;
+                    self.session.career.ticket_points = h.ticket_points as i32;
                     // the options' [no_collision_pedastrians]: nobody is knocked down
                     let hurt = if self.settings.collision_pedestrians {
                         h.run_over(&p.vehicle)
@@ -2069,7 +2080,7 @@ impl ApplicationHandler for App {
                         0
                     };
                     if hurt > 0 {
-                        self.career.crashes[1] += hurt as i32;
+                        self.session.career.crashes[1] += hurt as i32;
                         self.service_msg = Some(("Pedestrian knocked down!".into(), 6.0));
                     }
                 }
@@ -2432,7 +2443,7 @@ impl ApplicationHandler for App {
                     self.clock.advance(dt * speed as f32);
                     // (the real-time sync: the device's date and time, whatever the speed was)
                     self.sync_real_time();
-                    if let Some(t) = self.traffic.as_mut() {
+                    if let Some(t) = self.session.traffic.as_mut() {
                         t.time_scale = speed;
                     }
                     self.tick_weather(dt * speed as f32);
@@ -2502,7 +2513,7 @@ impl ApplicationHandler for App {
                     if let Some(p) = self.player.as_ref() {
                         vehicles.push(&p.vehicle);
                     }
-                    if let Some(t) = self.traffic.as_ref() {
+                    if let Some(t) = self.session.traffic.as_ref() {
                         vehicles.extend(t.cars.iter().map(|c| &c.vehicle));
                     }
                     let __tc = Instant::now();
@@ -2553,7 +2564,7 @@ impl ApplicationHandler for App {
                             .as_ref()
                             .map(|p| boxed(&p.vehicle))
                             .unwrap_or_default();
-                        if let Some(t) = self.traffic.as_ref() {
+                        if let Some(t) = self.session.traffic.as_ref() {
                             buses.extend(
                                 t.cars
                                     .iter()
@@ -2610,7 +2621,7 @@ impl ApplicationHandler for App {
                             if let Some(p) = self.player.as_ref() {
                                 vehicles.push((0, &p.vehicle));
                             }
-                            if let Some(t) = self.traffic.as_ref() {
+                            if let Some(t) = self.session.traffic.as_ref() {
                                 vehicles.extend(
                                     t.cars.iter().map(|c| (c.id.wrapping_add(1), &c.vehicle)),
                                 );
@@ -2692,7 +2703,7 @@ impl ApplicationHandler for App {
                     self.scene.as_mut(),
                     self.camera.as_ref(),
                 ) {
-                    let traffic = self.traffic.as_ref();
+                    let traffic = self.session.traffic.as_ref();
                     let phase = |c: usize, li: usize| {
                         traffic
                             .map(|t| t.light_vars(c, li))
@@ -2702,11 +2713,11 @@ impl ApplicationHandler for App {
                     if let Some(p) = self.player.as_mut() {
                         w.sync_html_departures(&mut p.vehicle.host);
                     }
-                    match self.schedule.as_mut() {
+                    match self.session.schedule.as_mut() {
                         Some(s) => s.update_boards(
                             w,
                             traffic,
-                            self.duty.as_ref(),
+                            self.session.duty.as_ref(),
                             self.player
                                 .as_ref()
                                 .and_then(|p| p.vehicle.host.hof.as_deref()),
@@ -2829,7 +2840,7 @@ impl ApplicationHandler for App {
                     if self.editor.is_some() {
                         lines.push("Object editor: click picks · drag moves · wheel turns (Shift lifts) · Del · C copy · V variant · Backspace undo · Ctrl+S save · Esc".into());
                     }
-                    if let Some(d) = self.duty.as_ref().filter(|d| d.trip_done()) {
+                    if let Some(d) = self.session.duty.as_ref().filter(|d| d.trip_done()) {
                         lines.push(match d.trips.get(d.trip_index + 1) {
                             Some(next) => omsi_ui::tr("End of the trip. Next: %{trip} to %{terminus}, from %{stop} at %{time} (it starts by itself a minute before)")
                                 .replace(
@@ -2913,17 +2924,19 @@ impl ApplicationHandler for App {
                             nav.start_map(w.clone());
                         }
                         // stops beyond the loaded tiles: their places from the navigator's map
-                        if let (Some(places), Some(d)) = (nav.places(), self.duty.as_mut()) {
-                            if !self.duty_places {
-                                self.duty_places = true;
+                        if let (Some(places), Some(d)) = (nav.places(), self.session.duty.as_mut())
+                        {
+                            if !self.session.duty_places {
+                                self.session.duty_places = true;
                                 d.learn_places(places);
                             }
                         }
-                        let (line, terminus, stops, trip) = nav::duty_parts(self.duty.as_ref());
+                        let (line, terminus, stops, trip) =
+                            nav::duty_parts(self.session.duty.as_ref());
                         match (
                             trip,
-                            self.schedule.as_ref(),
-                            self.traffic.as_ref(),
+                            self.session.schedule.as_ref(),
+                            self.session.traffic.as_ref(),
                             self.world.as_ref(),
                         ) {
                             (Some((key, name)), Some(sch), _, _) if nav.map_net().is_some() => {
@@ -2967,9 +2980,9 @@ impl ApplicationHandler for App {
                             (at, heading, None)
                         };
                         let car_line =
-                            |id: u64| self.schedule.as_ref().and_then(|s| s.car_line(id));
+                            |id: u64| self.session.schedule.as_ref().and_then(|s| s.car_line(id));
                         let frame = nav::NavFrame {
-                            traffic: self.traffic.as_ref(),
+                            traffic: self.session.traffic.as_ref(),
                             players: Vec::new(),
                             bus: at,
                             heading,
@@ -2980,7 +2993,11 @@ impl ApplicationHandler for App {
                             line,
                             terminus,
                             stops,
-                            delay: self.duty.as_ref().map(|_| p.vehicle.host.tt_delay as f64),
+                            delay: self
+                                .session
+                                .duty
+                                .as_ref()
+                                .map(|_| p.vehicle.host.tt_delay as f64),
                             passengers: self.humans.as_ref().map(|h| h.riding()),
                             stop_requested: nav::stop_requested(&p.vehicle),
                             time: self.clock.time,
@@ -3020,7 +3037,7 @@ impl ApplicationHandler for App {
                         if nav.arrows {
                             if let Some(w) = self.world.as_ref() {
                                 let spots = nav.arrow_spots(
-                                    self.traffic.as_ref().map(|t| &t.net),
+                                    self.session.traffic.as_ref().map(|t| &t.net),
                                     350.0,
                                     &|id| w.object_positions.lock().get(&id).map(|p| (p.0, p.1[0])),
                                 );
@@ -3093,7 +3110,7 @@ impl ApplicationHandler for App {
                             self.list_kind.as_ref(),
                             self.admin_list.as_deref(),
                             chooser_sel,
-                            self.schedule.as_ref(),
+                            self.session.schedule.as_ref(),
                             self.clock.time,
                         );
                         let mut frame = hud::Frame {
@@ -3153,7 +3170,7 @@ impl ApplicationHandler for App {
                             timetable: (self.timetable && !map_open)
                                 .then(|| {
                                     timetable_rows(
-                                        self.duty.as_ref(),
+                                        self.session.duty.as_ref(),
                                         self.player
                                             .as_ref()
                                             .map(|p| p.vehicle.host.tt_delay as f64),
@@ -3166,14 +3183,14 @@ impl ApplicationHandler for App {
                                     &InfoData {
                                         clock: &self.clock,
                                         player,
-                                        duty: self.duty.as_ref(),
+                                        duty: self.session.duty.as_ref(),
                                         passengers: self.humans.as_ref().map(|h| h.riding()),
                                         capacity: self
                                             .humans
                                             .as_ref()
                                             .zip(player)
                                             .and_then(|(h, p)| h.capacity(&p.vehicle)),
-                                        metres: self.career.metres,
+                                        metres: self.session.career.metres,
                                         limit: speed_limit,
                                         items: self.settings.info_items,
                                         labels: self.settings.info_bar_labels,
@@ -3999,11 +4016,11 @@ impl App {
             return None;
         }
         let p = self.player.as_ref()?;
-        let net = self
-            .navigator
+        let net = self.navigator.as_ref().and_then(|n| n.map_net()).or(self
+            .session
+            .traffic
             .as_ref()
-            .and_then(|n| n.map_net())
-            .or(self.traffic.as_ref().map(|t| &t.net))?;
+            .map(|t| &t.net))?;
         street_limit(net, p.vehicle.position, p.vehicle.heading)
     }
 

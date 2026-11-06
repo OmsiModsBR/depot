@@ -411,7 +411,7 @@ impl App {
         self.clock.year = real.year;
         self.clock.day_of_year = real.day_of_year;
         self.clock.time = real.time;
-        if let Some(tr) = self.traffic.as_mut() {
+        if let Some(tr) = self.session.traffic.as_mut() {
             tr.day_time += gap;
         }
         if let Some(p) = self.player.as_mut() {
@@ -443,7 +443,7 @@ impl App {
                 self.clock.day_of_year % omsi_sim::clock::days_in_year(self.clock.year) + 1;
         }
         self.clock.time = t;
-        if let Some(tr) = self.traffic.as_mut() {
+        if let Some(tr) = self.session.traffic.as_mut() {
             tr.day_time += secs;
         }
         if let Some(p) = self.player.as_mut() {
@@ -472,9 +472,9 @@ impl App {
             return;
         }
         if let (Some(s), Some(w), Some(t), Some(r), Some(scene)) = (
-            self.schedule.as_mut(),
+            self.session.schedule.as_mut(),
             self.world.as_ref(),
-            self.traffic.as_mut(),
+            self.session.traffic.as_mut(),
             self.renderer.as_ref(),
             self.scene.as_mut(),
         ) {
