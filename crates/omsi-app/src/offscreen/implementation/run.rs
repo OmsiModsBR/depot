@@ -877,12 +877,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             // (stop_target = enter_mean * density; without this it stays at the startup
             // value and the new formula returns 0 for the whole session when the map has
             // a low hourly density at the start time)
-            h.people_curve = world
-                .global
-                .passenger_density((run_clock.time / 3600.0) as f32);
-            h.density = h.people_curve * settings.pax_density;
-            h.time_of_day = run_clock.time;
-            h.daylight = omsi_sim::Daylight::compute(&run_clock, envir.as_ref()).light_a;
+            session::people_clock(h, &world, &settings, &run_clock, envir.as_ref());
             // populate stops near every LAN player every 2 seconds, as app_events.rs
             // does every 2 s near the local player.  At startup `center` is ZERO (no
             // player bus on a headless server), so stops on the actual map – which can
@@ -933,33 +928,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 &renderer,
                 &mut scene,
             );
-            // validators used: the bus's `ev_Stamper` sound
-            for bus in h.take_stamped() {
-                match bus {
-                    None => {
-                        if let Some(p) = player.as_mut() {
-                            p.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                        }
-                    }
-                    Some(id) => {
-                        if let Some(c) = traffic
-                            .as_mut()
-                            .and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
-                        {
-                            c.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                        }
-                    }
-                }
-            }
+            session::people_stamped(h, player.as_mut(), traffic.as_mut());
             if let Some(t) = traffic.as_mut() {
-                let (alighting, waiting) = h.stop_wishes();
-                t.set_stop_wishes(alighting, waiting);
-                for (id, stop, secs) in h.take_holds() {
-                    t.hold_boarding(id, stop, secs);
-                }
-                for (id, doors) in h.take_ai_requests() {
-                    t.set_pax_requests(id, &doors);
-                }
+                session::people_to_traffic(h, t);
             }
             if let Some(p) = player.as_mut() {
                 if took {

@@ -1856,14 +1856,7 @@ impl ApplicationHandler for App {
                         let own = Some(crate::gameplay::humans::BusId::Player);
                         f.seat.map(|s| s.0) != own && f.inside.map(|i| i.0) != own
                     });
-                    h.people_curve = w
-                        .global
-                        .passenger_density((self.clock.time / 3600.0) as f32);
-                    // (OMSI's `AIPassFactor`, the passengers setting in per cent)
-                    h.density = h.people_curve * self.settings.pax_density;
-                    h.time_of_day = self.clock.time;
-                    h.daylight =
-                        omsi_sim::Daylight::compute(&self.clock, self.envir.as_ref()).light_a;
+                    session::people_clock(h, w, &self.settings, &self.clock, self.envir.as_ref());
                     h.delay = self
                         .duty
                         .as_ref()
@@ -1902,34 +1895,9 @@ impl ApplicationHandler for App {
                     if let Some(p) = self.player.as_mut() {
                         p.vehicle.set_payload(&h.player_payload());
                     }
-                    // validators used: the bus's `ev_Stamper` sound
-                    for bus in h.take_stamped() {
-                        match bus {
-                            None => {
-                                if let Some(p) = self.player.as_mut() {
-                                    p.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                                }
-                            }
-                            Some(id) => {
-                                if let Some(c) = self
-                                    .traffic
-                                    .as_mut()
-                                    .and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
-                                {
-                                    c.vehicle.host.fired_triggers.push("ev_Stamper".into());
-                                }
-                            }
-                        }
-                    }
+                    session::people_stamped(h, self.player.as_mut(), self.traffic.as_mut());
                     if let Some(t) = self.traffic.as_mut() {
-                        let (alighting, waiting) = h.stop_wishes();
-                        t.set_stop_wishes(alighting, waiting);
-                        for (id, stop, secs) in h.take_holds() {
-                            t.hold_boarding(id, stop, secs);
-                        }
-                        for (id, doors) in h.take_ai_requests() {
-                            t.set_pax_requests(id, &doors);
-                        }
+                        session::people_to_traffic(h, t);
                     }
                     if let Some(m) = h.take_message() {
                         self.service_msg = Some((m, 6.0));

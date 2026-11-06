@@ -199,3 +199,60 @@ pub(crate) fn duty_after(d: &mut PlayerDuty, p: &mut Player, world: &World) {
     }
     timetable_paper(p, d, world);
 }
+
+/// The people's step of a frame, the clock part: how many people the map has at this hour
+/// (`people_curve`, times the settings' passengers density), the time of day and the
+/// daylight they see.
+pub(crate) fn people_clock(
+    h: &mut Humans,
+    world: &World,
+    settings: &Settings,
+    clock: &omsi_sim::SimClock,
+    envir: Option<&omsi_content::Envir>,
+) {
+    h.people_curve = world.global.passenger_density((clock.time / 3600.0) as f32);
+    // (OMSI's `AIPassFactor`, the passengers setting in per cent)
+    h.density = h.people_curve * settings.pax_density;
+    h.time_of_day = clock.time;
+    h.daylight = omsi_sim::Daylight::compute(clock, envir).light_a;
+}
+
+/// The people's step of a frame, after their tick: the validators used play the bus's
+/// `ev_Stamper` sound, on the player's bus or on the AI bus they were used in.
+pub(crate) fn people_stamped(
+    h: &mut Humans,
+    mut player: Option<&mut Player>,
+    mut traffic: Option<&mut Traffic>,
+) {
+    for bus in h.take_stamped() {
+        match bus {
+            None => {
+                if let Some(p) = player.as_deref_mut() {
+                    p.vehicle.host.fired_triggers.push("ev_Stamper".into());
+                }
+            }
+            Some(id) => {
+                if let Some(c) = traffic
+                    .as_deref_mut()
+                    .and_then(|t| t.cars.iter_mut().find(|c| c.id == id))
+                {
+                    c.vehicle.host.fired_triggers.push("ev_Stamper".into());
+                }
+            }
+        }
+    }
+}
+
+/// The people's step of a frame, what the traffic takes from them: who wants to get off
+/// and who waits at which stop, the AI buses held at a stop while people board, and the
+/// doors the passengers ask an AI bus to open.
+pub(crate) fn people_to_traffic(h: &mut Humans, t: &mut Traffic) {
+    let (alighting, waiting) = h.stop_wishes();
+    t.set_stop_wishes(alighting, waiting);
+    for (id, stop, secs) in h.take_holds() {
+        t.hold_boarding(id, stop, secs);
+    }
+    for (id, doors) in h.take_ai_requests() {
+        t.set_pax_requests(id, &doors);
+    }
+}
