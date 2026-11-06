@@ -741,6 +741,12 @@ fn result(f: &mut Frame, view: &mut CheckView, r: Rect, kind: usize) {
     f.ui.scroll_area("integrity-rows", list_r, &mut |ui, v| {
         let mut y = v.y;
         for row in &rows {
+            // Only the rows in view are drawn: every unique line drawn is rasterized into
+            // the text atlas, and thousands of findings would overflow it in a frame.
+            if y + ROW < list_r.y || y > list_r.bottom() {
+                y += ROW;
+                continue;
+            }
             let cell = Rect::new(v.x, y, v.w, ROW);
             match row {
                 Row::Head(s, n) => {
