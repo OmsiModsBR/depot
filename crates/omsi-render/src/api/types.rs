@@ -11,6 +11,7 @@ pub use crate::gpu::{
 };
 pub use crate::lighting::{
     Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
+    SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE,
 };
 pub use crate::output::{winit_window, SurfaceState};
 pub use crate::passes::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};

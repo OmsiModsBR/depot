@@ -242,8 +242,7 @@ pub struct Settings {
     /// Windy trees: the trees' foliage bends and sways in the weather's wind and its gusts
     /// (above the trunk only; with no wind nothing moves).
     pub windy_trees: bool,
-    /// The glow around the sun under "DirectX9 (D3D9Ex)" (OMSI 2's "Sun Glow"; the other
-    /// graphics APIs draw none).
+    /// The glare round the sun (OMSI 2's "Sun Glow"), in every graphics mode.
     pub sun_glow: bool,
     /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
     /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling

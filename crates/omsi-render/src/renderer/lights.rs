@@ -2,8 +2,8 @@
 
 use crate::gpu::GpuArray;
 use crate::lighting::{
-    drawn_by, gpu_light, smoke_sprite, Corona, GpuCorona, GpuPointLight, LampShadow, LAMP_SHADOWS,
-    LAMP_SHADOW_REACH, LIGHT_CELL, LIGHT_CELL_CAP, LIGHT_GRID_SIDE,
+    drawn_by, gpu_light, smoke_sprite, Corona, GpuCorona, GpuPointLight, LampShadow, Lighting,
+    LAMP_SHADOWS, LAMP_SHADOW_REACH, LIGHT_CELL, LIGHT_CELL_CAP, LIGHT_GRID_SIDE,
 };
 use crate::renderer::Renderer;
 use crate::scene::{point_in_vehicle_box, Scene};
@@ -16,10 +16,17 @@ impl Renderer {
     pub(crate) fn prepare_coronas(
         &self,
         scene: &mut Scene,
-        night: f32,
+        lighting: &Lighting,
+        eye: DVec3,
         cab: Option<&(DVec3, f64, [f32; 6])>,
     ) {
+        let night = lighting.night;
         let ro = scene.render_origin;
+        // the sun's glare: two more sprites, drawn with the world's (not the cab's)
+        let glare: Vec<Corona> = scene
+            .sun_glare
+            .map(|[glow, star]| lighting.sun_glare(eye, glow, star))
+            .unwrap_or_default();
         // (its lamps sit on the skin of its box: half a metre round it is the vehicle's)
         let cab = cab.map(|&(o, h, mut bb)| {
             for v in &mut bb[..3] {
@@ -36,6 +43,7 @@ impl Renderer {
             .iter()
             .filter(|c| c.brightness > 0.001)
             .map(|c| (late(c), c))
+            .chain(glare.iter().map(|c| (false, c)))
             .collect();
         order.sort_by_key(|(l, c)| (*l, c.texture));
         let mut runs: Vec<(u16, u32, u32, bool)> = Vec::new();
@@ -87,6 +95,10 @@ impl Renderer {
                             1.0
                         } else if c.halo {
                             2.0
+                        } else if c.sky && c.procedural {
+                            -3.0
+                        } else if c.sky {
+                            -1.0
                         } else {
                             0.0
                         },

@@ -258,13 +258,12 @@ impl Inner {
                 textures: scene.sky_textures(),
                 params: plan.sky,
                 // (no cloud picture: the sky is drawn without the layer; the clouds' cover
-                // still dims the light and thins the sun's glow, as the plan has it)
+                // still dims the light, as the plan has it)
                 clouds: SceneClouds {
                     texture: scene.sky_cloud_picture(),
                     params: plan.clouds,
                 },
                 no_cloud_layer: !self.effects.cloud_picture,
-                sun_glow: plan.sun_glow,
                 no_stars: !self.effects.stars,
                 bodies: {
                     let (sun, moon) = scene.sky_bodies();
