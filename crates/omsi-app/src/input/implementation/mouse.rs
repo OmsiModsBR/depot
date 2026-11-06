@@ -685,7 +685,7 @@ impl App {
             if self
                 .player
                 .as_ref()
-                .is_some_and(|p| crate::rail_drive::is_rail(&p.vehicle.ty.def))
+                .is_some_and(|p| crate::gameplay::rail_drive::is_rail(&p.vehicle.ty.def))
             {
                 self.service_msg =
                     Some(("A rail vehicle cannot be moved off its track".into(), 3.0));
@@ -963,7 +963,7 @@ impl App {
             self.center_cursor = true;
         }
         if !on {
-            crate::player::keep_wheel(self.player.as_mut());
+            crate::gameplay::player::keep_wheel(self.player.as_mut());
             // the brake the mouse held stays on, as the brake key leaves it (OMSI has one
             // brake for both): the bus rolled off when the mouse let go of it (#517, #760)
             if let Some(p) = self.player.as_mut() {

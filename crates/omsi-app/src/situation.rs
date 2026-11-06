@@ -1,7 +1,7 @@
 //! Where a session starts from: the clock, the depot (`.hof`), a saved situation and writing one.
 
 use crate::core::cli::{parse_time, Args};
-use crate::player::Player;
+use crate::gameplay::player::Player;
 use crate::world::scene::{self, World};
 use anyhow::{anyhow, Result};
 use omsi_render::Camera;

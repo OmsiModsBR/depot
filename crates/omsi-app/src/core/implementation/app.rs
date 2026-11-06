@@ -9,6 +9,7 @@ use crate::gameplay::career;
 use crate::gameplay::humans;
 use crate::gameplay::money;
 use crate::gameplay::schedule;
+use crate::gameplay::spawn::spawn_player;
 use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
@@ -16,7 +17,6 @@ use crate::menu;
 use crate::output::Backend;
 use crate::settings;
 use crate::situation::{start_clock, ticket_key_name};
-use crate::spawn::spawn_player;
 use crate::weather::ambience;
 use crate::weather::weather_setup::{initial_wetness, load_weather, setup_sky};
 use crate::world::scene::World;
@@ -575,7 +575,7 @@ impl App {
                 // says: the host's cars had nowhere to go without it)
                 let populated = self.args.traffic > 0
                     || self.args.schedule
-                    || crate::rail_drive::args_rail(&self.args)
+                    || crate::gameplay::rail_drive::args_rail(&self.args)
                     || self.args.lan_join.is_some();
                 // Without traffic it still runs the light programs and switches the lamps:
                 // they stood frozen with red, yellow and green all lit (#727).

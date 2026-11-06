@@ -355,7 +355,7 @@ impl Showroom {
                 // section's springs untouched and holding it up through the joint
                 vehicle.springs_full = true;
                 load_coupled_parts(&root, &mut vehicle);
-                if !crate::rail_drive::is_rail(&vt.def) {
+                if !crate::gameplay::rail_drive::is_rail(&vt.def) {
                     vehicle.enable_rigid_body();
                 }
                 // Settled before it is shown: placed at rest on loaded springs, the bus still

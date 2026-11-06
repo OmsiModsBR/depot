@@ -10568,7 +10568,7 @@ fn sync_interior_lamps(
                 distinct.push(set.clone());
             }
         }
-        if let Some(cabin) = crate::driver::cabin_of(&ty.def) {
+        if let Some(cabin) = crate::gameplay::driver::cabin_of(&ty.def) {
             for seat in cabin.driver_positions.iter().chain(&cabin.pass_positions) {
                 let set = lamp_set(&seat.illumination, n);
                 if !set.is_empty() && !distinct.contains(&set) {

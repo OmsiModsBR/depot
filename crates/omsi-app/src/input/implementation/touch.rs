@@ -377,7 +377,7 @@ impl App {
             if let Some(f) = self
                 .on_foot
                 .as_ref()
-                .filter(|f| f.cam == crate::on_foot::FootCam::First && f.seat.is_none())
+                .filter(|f| f.cam == crate::gameplay::on_foot::FootCam::First && f.seat.is_none())
             {
                 let kr = 26.0 * u;
                 push(
@@ -574,7 +574,9 @@ impl App {
                 true,
             );
             // the doors: one button for each door, front to back, above the gearbox
-            let doors = crate::player::door_keys(&p.vehicle.ty).len().clamp(1, 4);
+            let doors = crate::gameplay::player::door_keys(&p.vehicle.ty)
+                .len()
+                .clamp(1, 4);
             let dr = 23.0 * u;
             let dy = gy - 12.0 * u - dr;
             for k in 0..doors {

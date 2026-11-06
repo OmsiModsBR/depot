@@ -72,13 +72,13 @@ use crate::core::startup::process_cpu_seconds;
 use crate::describe;
 use crate::diagnostics::{log_physics, standing_reasons};
 use crate::gameplay::humans;
+use crate::gameplay::player::Player;
 use crate::gameplay::traffic;
 use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, player_outline, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::lights;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
-use crate::player::Player;
 use crate::quit;
 use crate::weather::puddles;
 use crate::weather::weather_setup::{
@@ -1036,7 +1036,7 @@ impl ApplicationHandler for App {
                     self.mouse_kmh += (raw_kmh - self.mouse_kmh) * k_v;
                     let kmh = self.mouse_kmh;
                     // (the window's edge is the most the mouse steers, as in OMSI)
-                    let target = (crate::player::mouse_steering(self.cursor.0, w, kmh)
+                    let target = (crate::gameplay::player::mouse_steering(self.cursor.0, w, kmh)
                         * self.settings.mouse_sens)
                         .clamp(-1.0, 1.0);
                     // the pedals as OMSI has them: from the middle of the window to its
@@ -1046,11 +1046,15 @@ impl ApplicationHandler for App {
                     let (steer, fade) = &mut self.mouse_steer;
                     // (after the first second the wheel follows the cursor within ~60 ms, or at
                     // once with Smooth mouse steering off, #1092)
-                    let k = crate::player::mouse_follow(*fade, dt, self.settings.mouse_smooth);
+                    let k = crate::gameplay::player::mouse_follow(
+                        *fade,
+                        dt,
+                        self.settings.mouse_smooth,
+                    );
                     *steer = target + (*steer - target) * k;
                     let (mt, mb) = &mut self.mouse_pedals;
-                    *mt = crate::player::mouse_pedal(*mt, pedal_t, k);
-                    *mb = crate::player::mouse_pedal(*mb, pedal_b, k);
+                    *mt = crate::gameplay::player::mouse_pedal(*mt, pedal_t, k);
+                    *mb = crate::gameplay::player::mouse_pedal(*mb, pedal_b, k);
                     *fade = (*fade - dt).max(0.0);
                     analog.steering = Some(*steer);
                     // OMSI_TRACE_STEER=<csv>: the mouse steering frame by frame
@@ -1248,7 +1252,7 @@ impl ApplicationHandler for App {
                             p.move_head_idle(dt, idle, self.settings.head_idle_pace);
                         }
                         if let Some(w) = self.world.as_ref() {
-                            crate::rail_drive::frame(
+                            crate::gameplay::rail_drive::frame(
                                 p,
                                 self.traffic.as_ref().map(|t| &t.net),
                                 w,
@@ -1392,7 +1396,7 @@ impl ApplicationHandler for App {
                             p.steer_look = if vr_on || tracked.is_some() {
                                 0.0
                             } else {
-                                crate::player::steering_view_yaw(
+                                crate::gameplay::player::steering_view_yaw(
                                     p.steer_look,
                                     p.vehicle.controls().steering,
                                     dt,
@@ -1504,7 +1508,7 @@ impl ApplicationHandler for App {
                                 dt,
                                 self.settings.look_smoothing_ms,
                             );
-                            let head_look = crate::player::driver_head_look(
+                            let head_look = crate::gameplay::player::driver_head_look(
                                 look,
                                 &self.view,
                                 self.settings.seat_pitch_deg,
@@ -2067,7 +2071,7 @@ impl ApplicationHandler for App {
                     }
                 }
                 if !self.paused {
-                    crate::teleport::guard_fall(self, dt);
+                    crate::gameplay::teleport::guard_fall(self, dt);
                 }
                 self.placing_frame();
                 // the host sends every edit of the map again now and then (players join)

@@ -21,9 +21,9 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use crate::gameplay::player::Player;
 use crate::gameplay::schedule::PlayerDuty;
 use crate::gameplay::traffic::Traffic;
-use crate::player::Player;
 
 pub(crate) struct StateTrace {
     path: PathBuf,

@@ -3,12 +3,12 @@
 
 use crate::core::app::App;
 use crate::core::cli::Args;
+use crate::gameplay::player::Player;
+use crate::gameplay::spawn::spawn_player;
 use crate::input::part_in_reach;
 use crate::output::ORBIT_DEFAULT;
-use crate::player::Player;
 use crate::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
-use crate::spawn::spawn_player;
 use omsi_geometry::util::wrap_deg;
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
@@ -791,7 +791,7 @@ impl App {
                 self.close_game_menu();
                 if let Some(p) = self.player.as_ref() {
                     let (at, heading) = (p.vehicle.position, p.vehicle.heading);
-                    crate::teleport::teleport(self, at, heading);
+                    crate::gameplay::teleport::teleport(self, at, heading);
                     self.service_msg = Some(("The vehicle stands on its wheels again".into(), 3.0));
                 }
             }
@@ -1500,7 +1500,7 @@ impl App {
         let l = &net.lanes[lane];
         let (pos, heading) = l.at(s);
         let heading = heading as f64;
-        crate::teleport::teleport(self, pos, heading);
+        crate::gameplay::teleport::teleport(self, pos, heading);
         self.service_msg = Some(("The bus stands where the map was clicked".into(), 3.0));
     }
 

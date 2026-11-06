@@ -2,5 +2,5 @@
 //! parts), the player whose cameras and mirrors it draws, and the world those look at.
 
 pub(in crate::output) use crate::core::app::App;
-pub(in crate::output) use crate::player::Player;
+pub(in crate::output) use crate::gameplay::player::Player;
 pub(in crate::output) use crate::world::scene::World;

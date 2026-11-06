@@ -256,7 +256,7 @@ pub mod money {
     pub use crate::gameplay::money::*;
 }
 pub mod on_foot {
-    pub use crate::on_foot::*;
+    pub use crate::gameplay::on_foot::*;
 }
 pub mod output {
     pub mod camera {
@@ -284,7 +284,7 @@ pub mod output {
     }
 }
 pub mod player {
-    pub use crate::player::*;
+    pub use crate::gameplay::player::*;
 }
 pub mod puddles {
     pub use crate::weather::puddles::*;
@@ -435,7 +435,7 @@ pub mod situation {
     pub use crate::situation::*;
 }
 pub mod spawn {
-    pub use crate::spawn::load_coupled_parts;
+    pub use crate::gameplay::spawn::load_coupled_parts;
 }
 pub mod tiles {
     pub use crate::world::tiles::*;

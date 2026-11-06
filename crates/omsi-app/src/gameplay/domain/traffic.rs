@@ -413,9 +413,9 @@ pub struct Traffic {
     pub others: Vec<(u32, PlayerBox)>,
     /// The drivers at the wheel of the timetable buses near the camera, by car id (see
     /// `driver.rs`; made within `DRIVER_NEAR` m of the camera, let go beyond twice that).
-    pub drivers: HashMap<u64, crate::driver::DriverFigure>,
+    pub drivers: HashMap<u64, crate::gameplay::driver::DriverFigure>,
     /// Figures let go by their bus, hidden, for the next one (their GPU meshes stay).
-    pub driver_pool: Vec<crate::driver::DriverFigure>,
+    pub driver_pool: Vec<crate::gameplay::driver::DriverFigure>,
     /// Where the last `tick` spent its time (s, OMSI_PROFILE): who is on which lane and the
     /// light programs, every car's plan, the bodies and scripts on the workers.
     pub tick_split: [f64; 3],
