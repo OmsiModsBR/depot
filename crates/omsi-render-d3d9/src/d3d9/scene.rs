@@ -449,13 +449,17 @@ pub(super) fn make_texture(
 /// slots: one whose pixel shader takes more is refused as unsupported, with what it takes
 /// and what the device allows.
 fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePipeline> {
-    let vs_code = shader::compile(
-        shader::SCENE,
-        "scene.hlsl",
-        "vs_main",
-        shader::Stage::Vertex,
-    )?;
-    let ps_code = shader::compile(shader::SCENE, "scene.hlsl", "ps_main", shader::Stage::Pixel)?;
+    // TEMP diag: the scene shader from a file (OMSI_D3D9_SCENE_HLSL), to try variants
+    let src = std::env::var("OMSI_D3D9_SCENE_HLSL")
+        .ok()
+        .and_then(|p| {
+            std::fs::read_to_string(&p)
+                .ok()
+                .inspect(|_| log::info!("DUMP scene shader from {p}"))
+        })
+        .unwrap_or_else(|| shader::SCENE.to_owned());
+    let vs_code = shader::compile(&src, "scene.hlsl", "vs_main", shader::Stage::Vertex)?;
+    let ps_code = shader::compile(&src, "scene.hlsl", "ps_main", shader::Stage::Pixel)?;
     let slots = crate::caps::instruction_slots(&ps_code);
     log::info!("d3d9 scene: the pixel shader takes about {slots} instruction slots of {ps_slots}");
     let too_many = || {
@@ -759,7 +763,11 @@ impl D3d9Device {
     pub(super) fn put_scene_target(&mut self, id: usize, texture: IDirect3DTexture9) {
         log::warn!(
             "DUMP put_scene_target {id}: replaces {}",
-            if self.scene.textures.get(id).is_some_and(Option::is_some) { "a texture" } else { "nothing" }
+            if self.scene.textures.get(id).is_some_and(Option::is_some) {
+                "a texture"
+            } else {
+                "nothing"
+            }
         );
         put(&mut self.scene.textures, id, texture);
         take(&mut self.scene.copies.textures, id);
