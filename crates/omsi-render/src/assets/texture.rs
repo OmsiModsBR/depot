@@ -123,6 +123,32 @@ pub(crate) fn upload_texture(
     img: &omsi_texture::Image,
     mipmaps: bool,
 ) -> GpuTexture {
+    upload_texture_as(
+        device,
+        queue,
+        img,
+        mipmaps,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+    )
+}
+
+/// A picture that holds numbers, not colours (the star map): its bytes are read as they
+/// are, one level, no sRGB decoding.
+pub(crate) fn upload_data_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    img: &omsi_texture::Image,
+) -> GpuTexture {
+    upload_texture_as(device, queue, img, false, wgpu::TextureFormat::Rgba8Unorm)
+}
+
+fn upload_texture_as(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    img: &omsi_texture::Image,
+    mipmaps: bool,
+    format: wgpu::TextureFormat,
+) -> GpuTexture {
     let mip_count = if mipmaps {
         mip_levels(img.width, img.height)
     } else {
@@ -139,7 +165,7 @@ pub(crate) fn upload_texture(
         mip_level_count: mip_count,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        format,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
@@ -197,12 +223,7 @@ pub(crate) fn upload_texture(
         texture,
         view,
         size: (img.width, img.height),
-        bytes: texture_bytes(
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            img.width,
-            img.height,
-            mip_count,
-        ),
+        bytes: texture_bytes(format, img.width, img.height, mip_count),
         gen: next_gen(),
     }
 }

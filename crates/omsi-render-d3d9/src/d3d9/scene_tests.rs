@@ -1928,45 +1928,149 @@ fn clouds_at_night_are_hardly_lighter_than_the_night_sky() {
     }
 }
 
+/// Cells across a face of the test's star map.
+const STAR_CELLS: u32 = 8;
+
+/// A star map (scene texture 6) of one star of `size` (0..8) and class `code` near the
+/// zenith of the stars' frame (the middle of face +z).
+fn one_star(dev: &mut D3d9Device, size: f32, code: u8) {
+    let n = STAR_CELLS;
+    let (w, h) = (6 * n, 2 * n);
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    let at = ((n / 2 * w + 4 * n + n / 2) * 4) as usize;
+    px[at..at + 4].copy_from_slice(&[0, 0, 1 + (254.0 * size / 8.0).round() as u8, code]);
+    let levels = vec![px];
+    dev.set_scene_texture(
+        6,
+        &SceneTexture {
+            width: w,
+            height: h,
+            format: TexFormat::Rgba8,
+            levels: &levels,
+            make_mips: false,
+        },
+    )
+    .unwrap();
+}
+
+/// `sky` with the test's star map, the stars' frame turned by `frame` (rows), as bright as
+/// `bright`.
+fn starry(
+    sky: crate::scene::SceneSky,
+    frame: [[f32; 3]; 3],
+    bright: f32,
+) -> crate::scene::SceneSky {
+    let row = |r: [f32; 3], w: f32| [r[0], r[1], r[2], w];
+    crate::scene::SceneSky {
+        stars: Some(6),
+        star_frame: [
+            row(frame[0], bright),
+            row(frame[1], STAR_CELLS as f32),
+            row(frame[2], 0.0),
+        ],
+        ..sky
+    }
+}
+
+const UNTURNED: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+fn star_pixels(px: &[u8]) -> Vec<usize> {
+    px.chunks_exact(4)
+        .enumerate()
+        .filter(|(_, p)| p[0] > 20)
+        .map(|(k, _)| k)
+        .collect()
+}
+
 #[test]
-fn the_stars_show_at_night_and_not_by_day() {
+fn a_star_is_a_square_of_its_size_in_its_class_colour() {
     let Some(mut dev) = device() else { return };
     let size = (128, 128);
-    let by = |dev: &mut D3d9Device, params: [f32; 4]| {
-        let sky = dark_sky(dev, params, Default::default());
+    let night = [0.0, 0.0, 0.0, 1.0];
+    // a bright star (as Vega): two pixels a side, in its class's colour (A: 240, 244, 255)
+    one_star(&mut dev, 4.0, 4);
+    let sky = starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0);
+    let px = draw_sky_with(&mut dev, sky, LOOK_UP, light([0.0; 4]), size);
+    let lit = star_pixels(&px);
+    assert_eq!(lit.len(), 4, "{lit:?}");
+    let p = &px[lit[0] * 4..][..4];
+    assert!(
+        p[0].abs_diff(240) <= 3 && p[1].abs_diff(244) <= 3 && p[2] >= 252,
+        "{p:?}"
+    );
+    // at the middle of the view, where the zenith is
+    let (x, y) = (lit[0] % 128, lit[0] / 128);
+    assert!(x.abs_diff(64) <= 2 && y.abs_diff(64) <= 2, "{x} {y}");
+    // a faint one (magnitude 6): one pixel, a quarter as bright (K: 255, 228, 147)
+    one_star(&mut dev, 0.25, 7);
+    let sky = starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0);
+    let px = draw_sky_with(&mut dev, sky, LOOK_UP, light([0.0; 4]), size);
+    let lit: Vec<usize> = px
+        .chunks_exact(4)
+        .enumerate()
+        .filter(|(_, p)| p[0] > 0)
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(lit.len(), 1, "{lit:?}");
+    let p = &px[lit[0] * 4..][..4];
+    assert!(p[0].abs_diff(64) <= 3 && p[1].abs_diff(57) <= 3, "{p:?}");
+}
+
+#[test]
+fn the_stars_fade_with_the_daylight_and_turn_with_the_sky() {
+    let Some(mut dev) = device() else { return };
+    let size = (128, 128);
+    let night = [0.0, 0.0, 0.0, 1.0];
+    one_star(&mut dev, 4.0, 4);
+    let draw = |dev: &mut D3d9Device, frame, bright| {
+        let sky = starry(dark_sky(dev, night, Default::default()), frame, bright);
         draw_sky_with(dev, sky, LOOK_UP, light([0.0; 4]), size)
     };
-    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
-    // by day, and at dusk (the night weight under a third), none
-    assert_eq!(lit(&by(&mut dev, [0.0, 1.0, 0.0, 0.0])), 0);
-    assert_eq!(lit(&by(&mut dev, [0.0, 0.0, 0.8, 0.2])), 0);
-    // at night a sprinkling of points: some, and far from the whole picture
-    let night = by(&mut dev, [0.0, 0.0, 0.0, 1.0]);
-    let n = lit(&night);
-    println!("{n} star pixels of {}", size.0 * size.1);
+    // half as bright: half the colour
+    let px = draw(&mut dev, UNTURNED, 0.5);
+    let lit = star_pixels(&px);
     assert!(
-        (5..size.0 as usize * size.1 as usize / 20).contains(&n),
-        "{n}"
+        px[lit[0] * 4].abs_diff(120) <= 3,
+        "{:?}",
+        &px[lit[0] * 4..][..4]
     );
-    // and they stay put from one frame to the next
-    assert_eq!(night, by(&mut dev, [0.0, 0.0, 0.0, 1.0]));
+    // by day none
+    assert!(star_pixels(&draw(&mut dev, UNTURNED, 0.0)).is_empty());
+    // the sky turned a quarter about the north-south line: the star stands on the west
+    // horizon, out of the view
+    let turned = [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]];
+    assert!(star_pixels(&draw(&mut dev, turned, 1.0)).is_empty());
+    // turned a little: it moves across the view, the same star
+    let a = 0.05f32;
+    let little = [
+        [a.cos(), 0.0, a.sin()],
+        [0.0, 1.0, 0.0],
+        [-a.sin(), 0.0, a.cos()],
+    ];
+    let lit = star_pixels(&draw(&mut dev, little, 1.0));
+    assert_eq!(lit.len(), 4, "{lit:?}");
+    assert!((lit[0] % 128).abs_diff(64) > 20, "{lit:?}");
 }
 
 #[test]
 fn the_stars_are_left_out_when_the_option_says_so() {
     let Some(mut dev) = device() else { return };
     let size = (128, 128);
-    let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
     let night = [0.0, 0.0, 0.0, 1.0];
-    let on = dark_sky(&mut dev, night, Default::default());
+    one_star(&mut dev, 4.0, 4);
+    let on = starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0);
     let with = draw_sky_with(&mut dev, on, LOOK_UP, light([0.0; 4]), size);
-    assert!(lit(&with) > 0);
+    assert!(!star_pixels(&with).is_empty());
     let off = crate::scene::SceneSky {
         no_stars: true,
-        ..dark_sky(&mut dev, night, Default::default())
+        ..starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0)
     };
     let without = draw_sky_with(&mut dev, off, LOOK_UP, light([0.0; 4]), size);
-    assert_eq!(lit(&without), 0);
+    assert!(star_pixels(&without).is_empty());
+    // nor without a star map
+    let none = dark_sky(&mut dev, night, Default::default());
+    let without = draw_sky_with(&mut dev, none, LOOK_UP, light([0.0; 4]), size);
+    assert!(star_pixels(&without).is_empty());
 }
 
 /// The size of the first level of scene texture `id`.
@@ -2112,12 +2216,13 @@ fn a_closed_deck_of_cloud_hides_the_stars() {
             },
         )
     };
+    one_star(&mut dev, 4.0, 4);
     let lit = |px: &[u8]| px.chunks_exact(4).filter(|p| p[2] > 20).count();
     // (the view looks straight up, where the clouds' cover is full)
-    let clear = sky(&mut dev, None);
+    let clear = starry(sky(&mut dev, None), UNTURNED, 1.0);
     let stars = draw_sky_with(&mut dev, clear, LOOK_UP, l, (128, 128));
     assert!(lit(&stars) > 0);
-    let deck = sky(&mut dev, Some(4));
+    let deck = starry(sky(&mut dev, Some(4)), UNTURNED, 1.0);
     let px = draw_sky_with(&mut dev, deck, LOOK_UP, l, (128, 128));
     assert_eq!(lit(&px), 0, "stars show through a closed deck");
 }

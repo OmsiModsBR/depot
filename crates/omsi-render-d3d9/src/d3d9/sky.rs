@@ -215,6 +215,15 @@ impl D3d9Device {
                 None => pictures.push(pictures[0]),
             }
         }
+        // the star map (stage 6); without it, or with the Stars option off, no stars
+        let mut star_frame = frame.sky.star_frame;
+        match frame.sky.stars.and_then(|id| self.scene_texture(id)) {
+            Some(t) if !frame.sky.no_stars => pictures.push(t),
+            _ => {
+                star_frame[1][3] = 0.0;
+                pictures.push(pictures[0]);
+            }
+        }
         let d = &self.device;
         let light = &frame.light;
         let ps = [
@@ -225,13 +234,11 @@ impl D3d9Device {
             light.ambient,
             light.sky_color,
             clouds,
-            [
-                if frame.sky.no_stars { 0.0 } else { 1.0 },
-                bodies[0],
-                bodies[1],
-                0.0,
-            ],
+            [0.0, bodies[0], bodies[1], 0.0],
             frame.sky.moon_dir,
+            star_frame[0],
+            star_frame[1],
+            star_frame[2],
         ];
         let vs = [light.cam_pos, pixel_offset];
         // SAFETY: plain calls on a live device; the constant arrays outlive the calls; the
@@ -254,9 +261,15 @@ impl D3d9Device {
                 d.SetTexture(stage, *texture).map_err(map_err)?;
                 // the pictures are read as stored; round the dome they repeat, from the
                 // zenith to the horizon they stop at the edge
+                // (the star map is read texel by texel)
+                let filter = if stage == 6 {
+                    D3DTEXF_POINT.0 as u32
+                } else {
+                    D3DTEXF_LINEAR.0 as u32
+                };
                 for (state, value) in [
-                    (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
+                    (D3DSAMP_MINFILTER, filter),
+                    (D3DSAMP_MAGFILTER, filter),
                     // (the clouds' picture is laid flat and far away: it takes its mips)
                     (
                         D3DSAMP_MIPFILTER,
@@ -303,9 +316,9 @@ impl D3d9Device {
             d.SetIndices(&p.indices).map_err(map_err)?;
             d.DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, p.vertex_count, 0, p.triangles)
                 .map_err(map_err)?;
-            // the scene's maps on stages 4 and 5 repeat (the device's own default), as they
-            // did before the sun and the moon were drawn from them
-            for stage in 4..6 {
+            // the scene's maps on stages 4 to 6 repeat (the device's own default), as they
+            // did before the sun, the moon and the stars were drawn from them
+            for stage in 4..7 {
                 for state in [D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV] {
                     d.SetSamplerState(stage, state, D3DTADDRESS_WRAP.0 as u32)
                         .map_err(map_err)?;

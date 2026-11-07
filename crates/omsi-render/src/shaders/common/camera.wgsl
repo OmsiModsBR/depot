@@ -37,6 +37,10 @@ struct Camera {
     tree_wind: vec4<f32>,
     // The classic sky's sun and moon pictures: xyz towards the moon, w 1 to draw them
     moon: vec4<f32>,
+    // The starry sky: the rows of the rotation from a world direction into the stars'
+    // frame; w of the first how bright the stars are (0 none), w of the second the star
+    // map's cells across a face (0: no map)
+    stars: array<vec4<f32>, 3>,
 };
 
 struct PointLight {

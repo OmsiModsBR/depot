@@ -43,6 +43,8 @@ impl Renderer {
             sky_clouds: None,
             sky_sun: None,
             sky_moon: None,
+            sky_stars: None,
+            star_cells: 0,
             sun_glare: None,
             overlays: Vec::new(),
             premultiplied: Default::default(),

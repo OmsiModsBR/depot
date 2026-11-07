@@ -636,6 +636,24 @@ impl Renderer {
                     0.0
                 })
                 .to_array(),
+            stars: {
+                let f = lighting.star_frame;
+                let cells = if scene.sky_stars.is_some() {
+                    scene.star_cells as f32
+                } else {
+                    0.0
+                };
+                [
+                    [
+                        f[0][0],
+                        f[0][1],
+                        f[0][2],
+                        lighting.star_brightness.clamp(0.0, 1.0),
+                    ],
+                    [f[1][0], f[1][1], f[1][2], cells],
+                    [f[2][0], f[2][1], f[2][2], 0.0],
+                ]
+            },
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));

@@ -42,6 +42,9 @@ pub struct Daylight {
     /// One number per calendar day: what the enhanced renderer draws the day's own air
     /// from (how clear or hazy it is), so that no two days look quite alike.
     pub day_seed: u32,
+    /// The turn of the starry sky: the rows of the rotation that takes a world direction
+    /// (x east, y north, z up) into the stars' frame, see [`star_frame`].
+    pub star_frame: [[f32; 3]; 3],
 }
 
 /// Days since 2000-01-01 12:00 UTC (J2000) for the map clock at `place`.
@@ -89,6 +92,25 @@ pub fn moon_position(clock: &SimClock, place: &SunPlace) -> (f64, f64, f64) {
     let elong = (lat.cos() * (lon - sun_lon).cos()).clamp(-1.0, 1.0).acos();
     let illum = (1.0 - elong.cos()) * 0.5;
     (alt.to_degrees(), az.to_degrees().rem_euclid(360.0), illum)
+}
+
+/// The rotation (as rows) from a world direction at `place` (x east, y north, z up) into
+/// the equatorial frame of the stars (x towards the vernal equinox, z towards the celestial
+/// north pole) for the map clock: the sky turns once a sidereal day about the celestial
+/// pole, which stands above the north horizon at the map's latitude.
+pub fn star_frame(clock: &SimClock, place: &SunPlace) -> [[f32; 3]; 3] {
+    let d = days_j2000(clock, place);
+    // the local sidereal time: the right ascension that crosses the meridian now
+    let lst = (280.460_618_37 + 360.985_647_366_29 * d + place.longitude).to_radians();
+    let phi = place.latitude.to_radians();
+    let (st, ct) = lst.sin_cos();
+    let (sp, cp) = phi.sin_cos();
+    [
+        [-st, -sp * ct, cp * ct],
+        [ct, -sp * st, cp * st],
+        [0.0, cp, sp],
+    ]
+    .map(|r| r.map(|x| x as f32))
 }
 
 /// Where the map lies and how its clocks run, from its `timezone.txt` (OMSI
@@ -283,11 +305,19 @@ impl Daylight {
             day_of_year: clock.day_of_year as f32,
             latitude: here.latitude as f32,
             day_seed,
+            star_frame: star_frame(clock, &here),
         }
     }
 }
 
 impl Daylight {
+    /// How bright the stars are drawn (0 .. 1): `(1 - min(1.5 * a, 1))^2` of the mean of
+    /// light A - none once the day's light is two thirds up, full in a night without it.
+    pub fn star_brightness(&self) -> f32 {
+        let k = 1.0 - (1.5 * self.light_a).min(1.0);
+        k * k
+    }
+
     /// The `Envir_Brightness` vehicle variable as OMSI sets it for every road vehicle:
     /// the mean of the light the tile's light map throws on the vehicle (its
     /// colour at the vehicle's place while the lamps are on) plus the mean of
