@@ -141,6 +141,22 @@ attributed.
 Rationale: short single-topic pull requests are reviewable, revertible and coexist with several
 contributors working in parallel.
 
+### X. Lean, Clean Code
+
+- Unused and unreachable code MUST be removed, not kept behind a feature or `cfg` for later (YAGNI):
+  what is needed again comes back from the Git history or is written anew.
+- Code follows Clean Code practices and the SOLID principles: each module, type and function has
+  one responsibility, names say what things are, and dependencies point at abstractions only where
+  there are real alternatives (Principle V).
+- No unnecessary complexity: no speculative generality, configuration or layers for cases that do
+  not exist yet.
+- No duplicated code: shared logic lives in one place and is reused; a second copy is extracted
+  before a third appears.
+- A refactor that leaves code larger, more coupled or more duplicated than before is not done.
+
+Rationale: a small codebase is easier to read, review and change; code kept "just in case" costs
+every reader and every refactor and is rarely reused as it was.
+
 ## Project Constraints
 
 - **Platform**: Windows x64 is the only supported platform; CI builds and tests on it.
@@ -150,9 +166,6 @@ contributors working in parallel.
 - **Dependencies**: `Cargo.lock` stays pinned; dependency upgrades are separate work.
 - **Files**: no file of 1 MB or more, nothing generated or downloaded (builds, caches, converted
   textures, example maps); pictures only for the documentation, under `docs/images/`.
-- **Unused code**: code that became unreachable is NOT deleted by default; it leaves the build
-  (feature or `cfg`) and stays in the tree to be readapted. Deleting it needs an explicit decision
-  by the maintainer.
 - **Releases**: made by hand by the maintainers, numbered `MAJOR.MINOR.PATCH`
   (`docs/VERSIONING.md`). CI may build and test, but MUST NOT publish releases, tags, websites or
   packages.
