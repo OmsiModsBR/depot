@@ -346,7 +346,7 @@ impl App {
         push(&mut b, Btn::Panel, rb(x, y, r), "tune", "", t.panel, true);
         x -= step;
         push(&mut b, Btn::Map, rb(x, y, r), "map", "", false, true);
-        if self.duty.is_some() {
+        if self.session.duty.is_some() {
             x -= step;
             push(
                 &mut b,

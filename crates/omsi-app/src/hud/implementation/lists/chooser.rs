@@ -86,7 +86,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             return out;
         }
         ListKind::Lines => {
-            if let Some(sch) = app.schedule.as_ref() {
+            if let Some(sch) = app.session.schedule.as_ref() {
                 let mut lines: Vec<&omsi_timetable::Line> = sch
                     .data
                     .lines
@@ -121,12 +121,14 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         }
         ListKind::Tours(line, _) => {
             if let Some(l) = app
+                .session
                 .schedule
                 .as_ref()
                 .and_then(|s| s.data.lines.iter().find(|l| l.name == *line))
             {
                 for t in sorted_tours(l).into_iter().filter(|t| {
-                    app.schedule
+                    app.session
+                        .schedule
                         .as_ref()
                         .is_some_and(|s| tour_listed(s, line, t, app.clock.time))
                 }) {
@@ -141,6 +143,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
         ListKind::Drivers => {
             for name in driver_names(app) {
                 let mark = if app
+                    .session
                     .career
                     .path
                     .as_ref()
@@ -786,7 +789,8 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     .filter(|p| p.0 == tour)
                     .map(|p| p.2)
                     .unwrap_or_else(|| {
-                        app.schedule
+                        app.session
+                            .schedule
                             .as_ref()
                             .map(|s| s.tour_trip_now(line, tour, app.clock.time))
                             .unwrap_or(0)

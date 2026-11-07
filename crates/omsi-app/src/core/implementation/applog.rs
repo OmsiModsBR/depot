@@ -131,6 +131,7 @@ impl App {
         s.prof_t = 0.0;
         s.prof_frames = 0;
         let (cars, dormant) = self
+            .session
             .traffic
             .as_ref()
             .map(|t| (t.cars.len(), t.dormant.len()))
@@ -191,7 +192,12 @@ impl App {
                 c.position.x, c.position.y, c.position.z
             )
         });
-        let traffic = self.traffic.as_ref().map(|t| t.cars.len()).unwrap_or(0);
+        let traffic = self
+            .session
+            .traffic
+            .as_ref()
+            .map(|t| t.cars.len())
+            .unwrap_or(0);
         let time = self.clock.time;
         let gpu = match (self.renderer.as_ref(), self.scene.as_ref()) {
             (Some(r), Some(sc)) => format!(

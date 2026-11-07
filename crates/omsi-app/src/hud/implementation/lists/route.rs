@@ -29,7 +29,7 @@ pub(in crate::hud) fn route_numbers(app: &App) -> Vec<String> {
             }
         }
     }
-    if let Some(sch) = app.schedule.as_ref() {
+    if let Some(sch) = app.session.schedule.as_ref() {
         for l in &sch.data.lines {
             let n = l.name.trim().to_string();
             if !n.is_empty() && !out.contains(&n) {

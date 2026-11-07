@@ -133,19 +133,19 @@ impl App {
             let mut none = None;
             crate::core::app::report_missing_content(&w, &mut none);
         }
-        if self.player.is_none() || self.career.seconds <= 0.0 {
+        if self.player.is_none() || self.session.career.seconds <= 0.0 {
             return;
         }
         // the situation to continue next time (OMSI writes it when a map is left; once, as
         // the rest: `career.seconds` is zero after the first time)
         self.save_last_situation();
-        if self.career.path.is_some() {
-            if let Err(e) = self.career.save() {
+        if self.session.career.path.is_some() {
+            if let Err(e) = self.session.career.save() {
                 log::warn!("writing the personnel file: {e}");
             }
         }
         let bus = self.args.bus.clone().unwrap_or_default();
-        if let Err(e) = self.career.write_session(
+        if let Err(e) = self.session.career.write_session(
             &self.args.map,
             &bus,
             self.args.line.as_deref(),
@@ -153,7 +153,7 @@ impl App {
         ) {
             log::warn!("writing the session summary: {e}");
         }
-        self.career.seconds = 0.0;
+        self.session.career.seconds = 0.0;
     }
 
     /// Shift+N: the navigator, the navigator with the schedule, off. True in VR (where the
@@ -682,7 +682,9 @@ impl App {
     /// menu's "Skip the next stop", Ctrl+Shift+H): the IBIS moves on with it, as it does
     /// when a bus page sets the next stop.
     pub(crate) fn skip_next_stop(&mut self) {
-        let Some(d) = self.duty.as_mut() else { return };
+        let Some(d) = self.session.duty.as_mut() else {
+            return;
+        };
         let Some(name) = d.skip_next() else {
             self.service_msg = Some(("The trip is over: no stop to skip".into(), 3.0));
             return;
@@ -699,7 +701,9 @@ impl App {
     /// current trip: the stop due now is skipped at once, one still to come is marked to be
     /// skipped as soon as it is the next stop, or unmarked (see `PlayerDuty::toggle_skip`).
     pub(crate) fn skip_stop_at(&mut self, k: usize) {
-        let Some(d) = self.duty.as_mut() else { return };
+        let Some(d) = self.session.duty.as_mut() else {
+            return;
+        };
         let Some((name, now)) = d.toggle_skip(k) else {
             return;
         };
@@ -1486,7 +1490,7 @@ impl App {
         // flown there (#235). (the height of the point does not matter: the nearest by the
         // ground plan)
         let nets = [
-            self.traffic.as_ref().map(|t| &t.net),
+            self.session.traffic.as_ref().map(|t| &t.net),
             self.navigator.as_ref().and_then(|n| n.map_net()),
         ];
         let Some((net, (lane, s, _))) = nets.into_iter().flatten().find_map(|net| {
@@ -1580,7 +1584,7 @@ impl App {
             self.player.as_ref(),
             &self.placed,
             cam,
-            self.duty.as_ref(),
+            self.session.duty.as_ref(),
             "Last situation",
         );
         match sit.save(&out) {
@@ -1697,7 +1701,7 @@ impl App {
             self.player.as_ref(),
             &self.placed,
             cam,
-            self.duty.as_ref(),
+            self.session.duty.as_ref(),
             "Quicksave",
         );
         match save_or_fallback(
@@ -1764,7 +1768,7 @@ impl App {
             }
         });
         let t = self.clock.time;
-        let what = match (bus, self.duty.as_ref()) {
+        let what = match (bus, self.session.duty.as_ref()) {
             (Some(b), Some(d)) => format!("{b}, line {} / {}", d.line.trim(), d.tour.trim()),
             (Some(b), None) => b,
             (None, _) => "on foot".to_string(),
@@ -1782,7 +1786,7 @@ impl App {
             self.player.as_ref(),
             &self.placed,
             cam,
-            self.duty.as_ref(),
+            self.session.duty.as_ref(),
             &name,
         );
         match save_or_fallback(&sit, &out, rel_dir.join(format!("Slot {n}.osn")).as_path()) {

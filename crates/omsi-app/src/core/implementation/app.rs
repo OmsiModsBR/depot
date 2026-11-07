@@ -524,7 +524,7 @@ impl App {
                     };
                 }
                 if let Some(d) = self.args.driver.as_deref() {
-                    self.career = career::Career::load(&self.args.root, d);
+                    self.session.career = career::Career::load(&self.args.root, d);
                 }
                 // (and a player who joins another's game sees the host's people)
                 if self.args.passengers || self.args.lan_join.is_some() {
@@ -557,7 +557,7 @@ impl App {
                     match session::new_traffic(&self.args, &w, &renderer, &mut scene) {
                         Ok(mut t) => {
                             t.day_time = parse_time(&self.args.time);
-                            self.traffic = Some(t);
+                            self.session.traffic = Some(t);
                         }
                         Err(e) => log::error!("traffic: {e:#}"),
                     }
@@ -567,10 +567,10 @@ impl App {
                             &w,
                             &renderer,
                             &mut scene,
-                            self.traffic.as_mut(),
+                            self.session.traffic.as_mut(),
                         );
                         if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
-                            self.duty =
+                            self.session.duty =
                                 match session::player_duty(&mut sch, &self.args, &w, line, p) {
                                     Ok(d) => Some(d),
                                     Err(e) => {
@@ -588,20 +588,20 @@ impl App {
                             // the start-up began, and the displays stayed dark)
                             if let (true, Some(d)) = (
                                 self.args.autostart && !self.args.is_resuming(),
-                                self.duty.as_mut(),
+                                self.session.duty.as_mut(),
                             ) {
                                 d.update(&mut p.vehicle, parse_time(&self.args.time));
                                 let (trip, stop) = d.trip_for_ibis();
                                 p.set_duty_destination(trip, stop);
                             }
-                            if let Some(d) = self.duty.as_ref() {
+                            if let Some(d) = self.session.duty.as_ref() {
                                 session::timetable_paper(p, d, &w);
                             }
                         }
-                        self.schedule = Some(sch);
+                        self.session.schedule = Some(sch);
                     }
                 }
-                if self.traffic.is_none() {
+                if self.session.traffic.is_none() {
                     if let Some(n) = self.navigator.as_mut() {
                         n.add_lanes(std::mem::take(&mut *w.lanes.lock()));
                     }
@@ -640,7 +640,7 @@ impl App {
             .or(self.camera.as_ref().map(|c| c.position))
             .unwrap_or(DVec3::ZERO);
         let view = self.camera.as_ref().map(|c| c.forward().as_dvec3());
-        let Some(t) = self.traffic.as_mut() else {
+        let Some(t) = self.session.traffic.as_mut() else {
             return;
         };
         if !t.initial {
@@ -846,7 +846,7 @@ impl App {
                 .then(|| w.collision.lock().clone());
             p.vehicle.wheel_walls = self.settings.collision_objects;
         }
-        match self.traffic.as_mut() {
+        match self.session.traffic.as_mut() {
             Some(t) => {
                 t.add_tiles(w);
             }

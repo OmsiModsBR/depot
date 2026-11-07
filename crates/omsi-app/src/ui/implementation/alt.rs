@@ -121,8 +121,8 @@ impl App {
             placing: self.placing.is_some(),
             lan_client: self.is_lan_client(),
             server: crate::input::on_server(&self.args),
-            timetable: self.schedule.is_some(),
-            on_tour: self.duty.is_some(),
+            timetable: self.session.schedule.is_some(),
+            on_tour: self.session.duty.is_some(),
             entry_points: self
                 .world
                 .as_ref()

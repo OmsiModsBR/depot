@@ -10,7 +10,7 @@ use crate::hud::domain::lists::ListKind;
 /// the duty" dropped the duty alone, and the bus's own displays went on with the old trip -
 /// a paper sign with its line in the window, the IBIS's stop list (#1317).
 pub(crate) fn end_duty(app: &mut App) {
-    app.duty = None;
+    app.session.duty = None;
     app.duty_changed();
     if let Some(p) = app.player.as_mut() {
         clear_timetable(&mut p.vehicle);
@@ -146,16 +146,16 @@ pub(crate) fn driver_names(app: &App) -> Vec<String> {
 /// Go on with another driver: this run so far into the old personnel file, the rest into
 /// the new one.
 pub(crate) fn switch_driver(app: &mut App, name: &str) {
-    if app.career.path.is_some() {
-        if let Err(e) = app.career.save() {
+    if app.session.career.path.is_some() {
+        if let Err(e) = app.session.career.save() {
             log::warn!("writing the personnel file: {e}");
         }
     }
     let rel = format!("Drivers/{name}.odr");
     let mut next = crate::gameplay::career::Career::load(&app.args.root, &rel);
     // (the distance and the clock of the run go on; the counters start with the new file)
-    next.seconds = app.career.seconds;
-    app.career = next;
+    next.seconds = app.session.career.seconds;
+    app.session.career = next;
     app.args.driver = Some(rel);
     app.service_msg = Some((
         omsi_ui::tr("Driver: %{name}").replace("%{name}", &name),
@@ -173,7 +173,8 @@ pub(crate) fn tour_at(app: &App, k: usize) -> Option<(String, String)> {
 
 /// The time (seconds of the day) tour `tour` of line `line` starts.
 pub(crate) fn tour_start_of(app: &App, line: &str, tour: &str) -> f64 {
-    app.schedule
+    app.session
+        .schedule
         .as_ref()
         .and_then(|s| s.data.lines.iter().find(|l| l.name == line))
         .and_then(|l| l.tours.iter().find(|t| t.number == tour))
@@ -185,7 +186,7 @@ pub(crate) fn tour_start_of(app: &App, line: &str, tour: &str) -> f64 {
 /// from, the trip chosen and how many trips the tour has.
 pub(crate) fn tour_choice(app: &App, k: usize) -> Option<(usize, usize, usize, usize)> {
     let (line, tour) = tour_at(app, k)?;
-    let sch = app.schedule.as_ref()?;
+    let sch = app.session.schedule.as_ref()?;
     let trips = sch.tour_trip_count(&line, &tour);
     let (stop, trip) = match app.list_kind.as_ref() {
         Some(ListKind::Tours(_, Some(p))) if p.0 == tour => (p.1, p.2),
@@ -201,14 +202,14 @@ pub(crate) fn tour_choice(app: &App, k: usize) -> Option<(usize, usize, usize, u
 pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, chosen: usize) {
     let now = app.clock.time;
     let at = tour_start_of(app, line, tour);
-    let Some((k, j)) = app.schedule.as_ref().and_then(|s| {
+    let Some((k, j)) = app.session.schedule.as_ref().and_then(|s| {
         s.tour_trip_stops(line, tour, trip)
             .get(chosen)
             .map(|x| (x.0, x.1))
     }) else {
         return start_duty(app, line, tour);
     };
-    let (Some(w), Some(sch)) = (app.world.clone(), app.schedule.as_mut()) else {
+    let (Some(w), Some(sch)) = (app.world.clone(), app.session.schedule.as_mut()) else {
         return;
     };
     let mut d = match sch.player_duty(&w, line, tour, at, None, false) {
@@ -239,12 +240,12 @@ pub(crate) fn start_duty_at(app: &mut App, line: &str, tour: &str, trip: usize, 
     app.args.line = Some(line.to_string());
     app.args.tour = Some(tour.to_string());
     app.duty_changed();
-    app.duty = Some(d);
+    app.session.duty = Some(d);
     app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
 }
 
 pub(in crate::hud) fn start_duty(app: &mut App, line: &str, tour: &str) {
-    let (Some(w), Some(sch)) = (app.world.clone(), app.schedule.as_mut()) else {
+    let (Some(w), Some(sch)) = (app.world.clone(), app.session.schedule.as_mut()) else {
         return;
     };
     let now = app.clock.time;
@@ -264,7 +265,7 @@ pub(in crate::hud) fn start_duty(app: &mut App, line: &str, tour: &str) {
             app.args.line = Some(line.to_string());
             app.args.tour = Some(tour.to_string());
             app.duty_changed();
-            app.duty = Some(d);
+            app.session.duty = Some(d);
             app.service_msg = Some((format!("Line {line}, tour {}", tour.trim()), 4.0));
         }
         Err(e) => {

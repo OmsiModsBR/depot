@@ -10,6 +10,7 @@ use super::startup::{
     self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLASSIC, CLOUDS, ENHANCED,
     ENHANCED_PLUS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
+use crate::frame::domain::session::Session;
 use crate::gameplay::duty_start::place_on_duty;
 use crate::input::input_script::parse_input_script;
 use crate::input::touch;
@@ -236,11 +237,8 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         world: None,
         streamer: None,
         starting: None,
-        traffic: None,
-        schedule: None,
+        session: Session::default(),
         humans: None,
-        duty: None,
-        duty_places: false,
         hud: None,
         navigator: None,
         vr_nav_profiles: crate::output::Profiles::load(),
@@ -383,7 +381,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         pumping: None,
         // (a server counts its players by their own games, not itself)
         log_state: Default::default(),
-        career: Default::default(),
         journey: None,
         wetness: 0.0,
         cloud_drift: [0.0; 2],

@@ -2,11 +2,9 @@
 //! camera's glide and the mirrors a bus has frozen.
 
 use crate::core::cli::Args;
-use crate::gameplay::career;
+use crate::frame::domain::session::Session;
 use crate::gameplay::humans;
 use crate::gameplay::player::Player;
-use crate::gameplay::schedule;
-use crate::gameplay::traffic;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
@@ -57,12 +55,9 @@ pub(crate) struct App {
     pub(crate) world_day: Option<(i32, Option<String>)>,
     /// The map is open but the first area is still loading: the view to start with.
     pub(crate) starting: Option<Camera>,
-    pub(crate) traffic: Option<traffic::Traffic>,
-    pub(crate) schedule: Option<schedule::Schedule>,
+    /// The traffic, the timetable, the duty and the career (see `session`).
+    pub(crate) session: Session,
     pub(crate) humans: Option<humans::Humans>,
-    pub(crate) duty: Option<schedule::PlayerDuty>,
-    /// The duty was told the places of the stops beyond the loaded tiles.
-    pub(crate) duty_places: bool,
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
     pub(crate) navigator: Option<nav::Navigator>,
@@ -348,8 +343,6 @@ pub(crate) struct App {
     pub(crate) pumping: Option<(&'static str, f32)>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::core::applog::LogState,
-    /// The driver's personnel file and this session's statistics.
-    pub(crate) career: career::Career,
     /// The duty's stops with their times as driven, kept in a file (`journey`).
     pub(crate) journey: Option<crate::gameplay::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.
