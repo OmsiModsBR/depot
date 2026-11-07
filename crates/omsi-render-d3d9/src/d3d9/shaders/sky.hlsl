@@ -110,24 +110,19 @@ float3 star_frame(float3 d) {
     return float3(dot(stars_x.xyz, d), dot(stars_y.xyz, d), dot(stars_z.xyz, d));
 }
 
-// The face of the cube e falls on (0..5), as omsi_content::stars::face_of finds it.
-float star_face(float3 e) {
+// The face of the cube e falls on (0..5, as omsi_content::stars::face_of finds it) and its
+// axes: fu and fv across it, fn out through its middle. A direction w on the face lies at
+// (fu.w, fv.w) / fn.w on it (-1..1 each), and the place (x, y) points along fn + fu x + fv y.
+float star_face(float3 e, out float3 fu, out float3 fv, out float3 fn) {
     float3 a = abs(e);
-    if (a.x >= a.y && a.x >= a.z) return e.x > 0.0 ? 0.0 : 1.0;
-    if (a.y >= a.z) return e.y > 0.0 ? 2.0 : 3.0;
-    return e.z > 0.0 ? 4.0 : 5.0;
-}
-
-// The axes of face `face`: fu and fv across it, fn out through its middle. A direction w on
-// the face lies at (fu.w, fv.w) / fn.w on it (-1..1 each), and the place (x, y) points along
-// fn + fu x + fv y.
-void star_face_axes(float face, out float3 fu, out float3 fv, out float3 fn) {
-    float s = (fmod(face, 2.0) < 0.5) ? 1.0 : -1.0;
-    bool on_x = face < 1.5;
-    bool on_y = !on_x && face < 3.5;
+    bool on_x = a.x >= a.y && a.x >= a.z;
+    bool on_y = !on_x && a.y >= a.z;
+    float along = on_x ? e.x : (on_y ? e.y : e.z);
+    float s = along > 0.0 ? 1.0 : -1.0;
     fu = on_x ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
     fv = (on_x || on_y) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
     fn = (on_x ? float3(1.0, 0.0, 0.0) : (on_y ? float3(0.0, 1.0, 0.0) : float3(0.0, 0.0, 1.0))) * s;
+    return (on_x ? 0.0 : (on_y ? 2.0 : 4.0)) + (s > 0.0 ? 0.0 : 1.0);
 }
 
 // The place of direction w on the face of axes fu, fv, fn.
@@ -136,42 +131,40 @@ float2 star_face_uv(float3 fu, float3 fv, float3 fn, float3 w) {
 }
 
 // The stars at this pixel (colour as stored, 0..1 a channel): each a square of points of its
-// size (at least 1 pixel, at most 2) in its class's colour, as bright as its size up to 1. d
-// the view ray (world, unit), dx and dy how it changes a pixel across and a pixel down. The
-// pixel reads the cell it looks into and, only where a star next door could reach it, the
-// neighbouring ones on its nearer sides; the second layer only under a full first one.
-float3 stars(float3 d, float3 dx, float3 dy) {
+// size (at least 1 pixel, at most 2) in its class's colour, as bright as its size up to 1. e
+// the view ray in the stars' frame (unit), ex and ey how it changes a pixel across and a
+// pixel down. The pixel reads the cell it looks into and, only where a star next door could
+// reach it, the neighbouring ones on its nearer sides; the second layer only under a full
+// first one.
+float3 stars(float3 e, float3 ex, float3 ey) {
     float3 col = 0.0;
     float n = stars_y.w;
-    float3 e = star_frame(d);
-    float3 ex = star_frame(dx);
-    float3 ey = star_frame(dy);
     float xx = dot(ex, ex);
     float xy = dot(ex, ey);
     float yy = dot(ey, ey);
     float det = max(xx * yy - xy * xy, 1e-30);
-    float face = star_face(e);
     float3 fu;
     float3 fv;
     float3 fn;
-    star_face_axes(face, fu, fv, fn);
+    float face = star_face(e, fu, fv, fn);
     float2 uv = star_face_uv(fu, fv, fn, e);
     float2 g = (uv * 0.5 + 0.5) * n;
     float2 own = floor(g);
     float2 at = g - own;
-    // how many cells a pixel spans on each side, along the face's two axes
-    float2 span = (abs(star_face_uv(fu, fv, fn, e + ex) - uv)
-        + abs(star_face_uv(fu, fv, fn, e + ey) - uv)) * (0.5 * n);
+    // how many cells a pixel spans at most along either of the face's axes: a pixel's step
+    // (radians) at most sqrt(2) x the longer one along an axis, a radian 1 + |uv|^2 of the
+    // face's place there at most (the place's -1..1 n cells)
+    float span = 0.71 * n * (1.0 + dot(uv, uv)) * sqrt(max(xx, yy));
     float2 size = float2(6.0 * n, 2.0 * n);
     // (a star reaches a pixel from a cell next door only when the pixel lies within `span`
     // of that side; `span` is well under half a cell, so one side an axis at most)
     float2 side = at < 0.5 ? -1.0 : 1.0;
-    float2 nearer = min(at, 1.0 - at);
+    float2 near = min(at, 1.0 - at) < span ? 1.0 : 0.0;
+    // (the cells in turn: own, across, up, diagonal)
+    float2 step = 0.0;
     [loop] for (int k = 0; k < 4; k++) {
-        float2 step = float2(fmod(k, 2.0), floor(k / 2.0));
         float2 cell = own + step * side;
-        bool wanted = !((step.x > 0.5 && nearer.x >= span.x) || (step.y > 0.5 && nearer.y >= span.y));
-        [branch] if (wanted && all(cell >= 0.0) && all(cell < n)) {
+        [branch] if (all(step <= near) && all(cell >= 0.0) && all(cell < n)) {
             [loop] for (int layer = 0; layer < 2; layer++) {
                 float2 texel = float2(face * n + cell.x, layer * n + cell.y) + 0.5;
                 float4 t = tex2Dlod(t_stars, float4(texel / size, 0.0, 0.0));
@@ -179,23 +172,21 @@ float3 stars(float3 d, float3 dx, float3 dy) {
                 // (the second layer holds a star only under a full first one)
                 if (code < 0.5) break;
                 float2 place = (cell + (floor(t.rg * 255.0 + 0.5) + 0.5) / 256.0) / n * 2.0 - 1.0;
-                // (towards the star, not of unit length)
+                // where the star stands from the pixel's middle, in pixels (towards the star
+                // w, not of unit length; a cell about the pixel's own is always well in front)
                 float3 w = fn + fu * place.x + fv * place.y;
-                float we = dot(w, e);
-                if (we * rsqrt(dot(w, w)) > 0.999) {
-                    // where the star stands from the pixel's middle, in pixels
-                    float3 delta = w / we - e;
-                    float p = dot(ex, delta);
-                    float q = dot(ey, delta);
-                    float2 off = float2(yy * p - xy * q, xx * q - xy * p) / det;
-                    float s = (code - 1.0) / 254.0 * 8.0;
-                    float half_side = clamp(s, 1.0, 2.0) * 0.5;
-                    if (abs(off.x) < half_side && abs(off.y) < half_side) {
-                        col += star_class_rgb(floor(t.a * 255.0 + 0.5)) * min(s, 1.0);
-                    }
+                float3 delta = w / dot(w, e) - e;
+                float p = dot(ex, delta);
+                float q = dot(ey, delta);
+                float2 off = float2(yy * p - xy * q, xx * q - xy * p) / det;
+                float s = (code - 1.0) / 254.0 * 8.0;
+                float half_side = clamp(s, 1.0, 2.0) * 0.5;
+                if (abs(off.x) < half_side && abs(off.y) < half_side) {
+                    col += star_class_rgb(floor(t.a * 255.0 + 0.5)) * min(s, 1.0);
                 }
             }
         }
+        step = step.x > 0.5 ? float2(0.0, 1.0) : float2(1.0, step.y);
     }
     return min(col, 1.0);
 }
@@ -251,10 +242,11 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
     // the stars, as bright as the night lets them, fading out towards the horizon (with no
     // map, the Stars option off or a sky too light for them the lookup is skipped: the
     // condition is a constant)
-    float3 d_dx = ddx(d);
-    float3 d_dy = ddy(d);
+    float3 e = star_frame(d);
+    float3 e_dx = ddx(e);
+    float3 e_dy = ddy(e);
     [branch] if (stars_y.w > 0.5 && stars_x.w > 0.0 && d.z > 0.0) {
-        c += srgb_decode(stars(d, d_dx, d_dy) * stars_x.w) * saturate(elev * 8.0);
+        c += srgb_decode(stars(e, e_dx, e_dy) * stars_x.w) * saturate(elev * 8.0);
     }
     // the cloud layer, flat at its base height: the ground point under the view ray, in
     // tiles, the wind's drift added; none below the horizon, fading into it above. With no
