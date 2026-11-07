@@ -313,6 +313,11 @@ pub struct Lighting {
     pub latitude: f32,
     /// One number per calendar day, which the enhanced sky draws the day's own air from.
     pub day_seed: u32,
+    /// The turn of the starry sky: the rows of the rotation from a world direction into
+    /// the stars' frame (`omsi_sim::daylight::star_frame`).
+    pub star_frame: [[f32; 3]; 3],
+    /// How bright the stars are drawn (0 by day .. 1 in a dark night).
+    pub star_brightness: f32,
     /// The optical depth of a high ice-cloud veil (0 none .. 2 a thick milky one).
     pub veil: f32,
     /// The air as a weather model knows it: aerosol amount relative to a clear day, its
@@ -418,6 +423,8 @@ impl Default for Lighting {
             day_of_year: 150.0,
             latitude: 52.5,
             day_seed: 0,
+            star_frame: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            star_brightness: 0.0,
             veil: 0.0,
             air: None,
         }

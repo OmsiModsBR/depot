@@ -208,6 +208,10 @@ pub struct FramePlan {
     /// xyz towards the moon (world), w 1: where the classic sky draws the moon's picture
     /// ([`crate::Scene::sky_bodies`]).
     pub moon: [f32; 4],
+    /// The starry sky: the rows of the rotation from a world direction into the stars'
+    /// frame, w of the first how bright the stars are, w of the second the star map's cells
+    /// across a face ([`crate::Scene::sky_stars`]; 0: no map).
+    pub stars: [[f32; 4]; 3],
     /// Map lamps one spot of the ground takes into its light (0 = all).
     pub lamp_cap: u32,
     /// The whole camera uniform this renderer's shaders read, vector by vector, for a
@@ -260,6 +264,7 @@ pub(crate) fn plan_of(
         ],
         sun_glow: f.lighting.sun_glow,
         moon: cu.moon,
+        stars: cu.stars,
         lamp_cap: f.lighting.lamp_cap,
         camera: bytemuck::cast_slice(std::slice::from_ref(cu)).to_vec(),
         list: lists.list.clone(),
@@ -288,6 +293,12 @@ impl crate::scene::Scene {
     /// `Texture\mond.bmp`), once the game has set them.
     pub fn sky_bodies(&self) -> (Option<TextureId>, Option<TextureId>) {
         (self.sky_sun, self.sky_moon)
+    }
+
+    /// The star map the skies draw the stars from (`omsi_content::StarMap`) and its cells
+    /// across a face, once the game has set it.
+    pub fn sky_stars(&self) -> Option<(TextureId, u32)> {
+        self.sky_stars.map(|t| (t, self.star_cells))
     }
 
     /// The picture of the weather's cloud type for a renderer that draws the clouds itself

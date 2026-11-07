@@ -575,6 +575,12 @@ pub struct SceneSky {
     pub bodies: [Option<usize>; 2],
     /// xyz towards the moon (world).
     pub moon_dir: [f32; 4],
+    /// The star map the stars are drawn from (`omsi_content::StarMap`) as a scene texture
+    /// id; None leaves the stars out.
+    pub stars: Option<usize>,
+    /// The rows of the rotation from a world direction into the stars' frame; w of the first
+    /// how bright the stars are (0 none), w of the second the star map's cells across a face.
+    pub star_frame: [[f32; 4]; 3],
 }
 
 /// The weather's clouds: one layer of the weather's cloud type, drawn over the sky dome.

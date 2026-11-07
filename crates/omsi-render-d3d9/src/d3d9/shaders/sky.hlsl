@@ -2,8 +2,8 @@
 // vanilla sky draws it. The dome rides with the camera; u is the azimuth relative to the sun
 // and v the elevation (0 at the zenith, 1 at the horizon) into the three pictures of
 // envir.cfg's [sky_textures] (day, twilight, night), blended by the weights the time of day
-// gives. Over them come the stars (night only, a few points that stay where they are in the
-// world) and the weather's one layer of clouds (the cloud type's own picture, laid flat at
+// gives. Over them come the stars (helper\stars.dat, turning with the hours, as bright as the
+// night lets them) and the weather's one layer of clouds (the cloud type's own picture, laid flat at
 // the weather's base height and moved by the wind). The fog covers the horizon and, in a
 // thick fog, the whole sky, so the far geometry fades into it without a seam.
 //
@@ -41,6 +41,7 @@ sampler2D t_night : register(s2);
 sampler2D t_clouds : register(s3); // white, the clouds in its alpha
 sampler2D t_sun : register(s4);    // Texture\sonne.bmp
 sampler2D t_moon : register(s5);   // Texture\mond.bmp
+sampler2D t_stars : register(s6);  // the star map (omsi_content::StarMap), read texel by texel
 
 // x the sun's azimuth (radians, clockwise from north), yzw the weights of the day, twilight
 // and night pictures
@@ -56,10 +57,16 @@ float4 sky_color : register(c205);
 // x the cloud cover (0: no clouds), yz the drift with the wind in tiles, w the layer's base
 // height in metres
 float4 clouds : register(c206);
-// x 1 draws the stars, 0 leaves them out; y 1 draws the sun's picture, z the moon's
+// (x not used) y 1 draws the sun's picture, z the moon's
 float4 options : register(c207);
 // xyz towards the moon
 float4 moon_dir : register(c208);
+// the rows of the rotation from a world direction into the stars' frame; w of the first how
+// bright the stars are (0 none), w of the second the star map's cells across a face (0: no
+// stars: no map, or the Stars option off)
+float4 stars_x : register(c209);
+float4 stars_y : register(c210);
+float4 stars_z : register(c211);
 
 // The sun's picture is a square whose half side is this tangent of the angle from its middle,
 // and the moon a ball of this tangent of its angular radius: the sizes of the stock
@@ -69,11 +76,6 @@ static const float MOON_RADIUS = 0.01563;
 
 // One tile of the cloud picture, in metres: the wind's drift (`clouds.yz`) is counted in them.
 static const float CLOUD_TILE = 2500.0;
-// Cells across a face of the cube the stars are laid out on (about 0.3 degrees each), and the
-// share of cells that hold one.
-static const float STAR_CELLS = 190.0;
-static const float STAR_SHARE = 0.012;
-
 float3 srgb_encode(float3 c) {
     c = saturate(c);
     float3 hi = 1.055 * exp2(log2(c) * (1.0 / 2.4)) - 0.055;
@@ -86,32 +88,108 @@ float3 srgb_decode(float3 c) {
     return c <= 0.04045 ? c / 12.92 : hi;
 }
 
-float hash(float3 p) {
-    p = frac(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return frac((p.x + p.y) * p.z);
+// The stars: the star map holds the sphere of the stars' own frame cut into the six faces of
+// a cube, each face into cells of up to two stars (two layers of cells, one under the other),
+// a texel a star: its place in the cell (rg), its size (b: 0 none, else 1 + 254 x size / 8;
+// the size is 4 x the square root of its brightness) and its class (a). The same layout and
+// reading as the default renderer's sky (stars.wgsl).
+
+// The colour of a class number (omsi_content::StarClass::rgb, by its code).
+float3 star_class_rgb(float code) {
+    if (code < 1.5) return float3(209.0, 198.0, 255.0) / 255.0;
+    if (code < 2.5) return float3(215.0, 205.0, 255.0) / 255.0;
+    if (code < 3.5) return float3(224.0, 217.0, 255.0) / 255.0;
+    if (code < 4.5) return float3(240.0, 244.0, 255.0) / 255.0;
+    if (code < 5.5) return float3(254.0, 255.0, 225.0) / 255.0;
+    if (code < 6.5) return float3(255.0, 252.0, 185.0) / 255.0;
+    if (code < 7.5) return float3(255.0, 228.0, 147.0) / 255.0;
+    return float3(255.0, 198.0, 147.0) / 255.0;
 }
 
-// The stars' light towards d (0 .. 1): the sphere is cut into the six faces of a cube, each
-// into cells; a share of the cells holds a point of its own brightness, drawn about a pixel
-// wide. They stay where they are in the world (no turning with the hours).
-float stars(float3 d, float pixel) {
-    float3 a = abs(d);
-    float m = max(a.x, max(a.y, a.z));
-    float face = (a.x == m) ? ((d.x > 0.0) ? 0.0 : 1.0) : ((a.y == m) ? ((d.y > 0.0) ? 2.0 : 3.0) : ((d.z > 0.0) ? 4.0 : 5.0));
-    float2 uv = (a.x == m) ? d.yz : ((a.y == m) ? d.xz : d.xy);
-    uv = uv / m * (STAR_CELLS * 0.5);
-    float2 cell = floor(uv);
-    float2 at = uv - cell;
-    float3 id = float3(cell, face);
-    float2 spot = float2(hash(id + 17.0), hash(id + 41.0)) * 0.6 + 0.2;
-    // a pixel in cell units: the angle it spans, scaled by the face's stretch towards its edges
-    float2 face_uv = uv / (STAR_CELLS * 0.5);
-    float size = max(pixel * 0.5 * STAR_CELLS * (1.0 + dot(face_uv, face_uv)), 0.05);
-    float brightness = hash(id + 73.0);
-    float present = (hash(id + 5.0) < STAR_SHARE) ? 1.0 : 0.0;
-    float k = saturate(1.0 - length(at - spot) / size);
-    return present * k * k * (0.35 + 0.65 * brightness * brightness);
+float3 star_frame(float3 d) {
+    return float3(dot(stars_x.xyz, d), dot(stars_y.xyz, d), dot(stars_z.xyz, d));
+}
+
+// The face of the cube e falls on (0..5), as omsi_content::stars::face_of finds it.
+float star_face(float3 e) {
+    float3 a = abs(e);
+    if (a.x >= a.y && a.x >= a.z) return e.x > 0.0 ? 0.0 : 1.0;
+    if (a.y >= a.z) return e.y > 0.0 ? 2.0 : 3.0;
+    return e.z > 0.0 ? 4.0 : 5.0;
+}
+
+// The place of direction v on face `face` (-1..1 each on the face itself).
+float2 star_face_uv(float face, float3 v) {
+    if (face < 1.5) return v.yz / abs(v.x);
+    if (face < 3.5) return v.xz / abs(v.y);
+    return v.xy / abs(v.z);
+}
+
+float3 star_face_dir(float face, float2 uv) {
+    float s = (fmod(face, 2.0) < 0.5) ? 1.0 : -1.0;
+    if (face < 1.5) return normalize(float3(s, uv.x, uv.y));
+    if (face < 3.5) return normalize(float3(uv.x, s, uv.y));
+    return normalize(float3(uv.x, uv.y, s));
+}
+
+// The stars at this pixel (colour as stored, 0..1 a channel): each a square of points of its
+// size (at least 1 pixel, at most 2) in its class's colour, as bright as its size up to 1. d
+// the view ray (world, unit), dx and dy how it changes a pixel across and a pixel down. The
+// pixel reads the cell it looks into and, only where a star next door could reach it, the
+// neighbouring ones on its nearer sides; the second layer only under a full first one.
+float3 stars(float3 d, float3 dx, float3 dy) {
+    float3 col = 0.0;
+    float n = stars_y.w;
+    float3 e = star_frame(d);
+    float3 ex = star_frame(dx);
+    float3 ey = star_frame(dy);
+    float xx = dot(ex, ex);
+    float xy = dot(ex, ey);
+    float yy = dot(ey, ey);
+    float det = max(xx * yy - xy * xy, 1e-30);
+    float face = star_face(e);
+    float2 uv = star_face_uv(face, e);
+    float2 g = (uv * 0.5 + 0.5) * n;
+    float2 own = floor(g);
+    float2 at = g - own;
+    // how many cells a pixel spans on each side, along the face's two axes
+    float2 span = abs(star_face_uv(face, e + ex) - uv) * (0.5 * n)
+        + abs(star_face_uv(face, e + ey) - uv) * (0.5 * n);
+    float2 size = float2(6.0 * n, 2.0 * n);
+    // (a star reaches a pixel from a cell next door only when the pixel lies within `span`
+    // of that side; `span` is well under half a cell, so one side an axis at most)
+    float2 side = at < 0.5 ? -1.0 : 1.0;
+    float2 nearer = min(at, 1.0 - at);
+    [loop] for (int k = 0; k < 4; k++) {
+        float2 step = float2(fmod(k, 2.0), floor(k / 2.0));
+        float2 cell = own + step * side;
+        bool wanted = !((step.x > 0.5 && nearer.x >= span.x) || (step.y > 0.5 && nearer.y >= span.y));
+        [branch] if (wanted && all(cell >= 0.0) && all(cell < n)) {
+            [loop] for (int layer = 0; layer < 2; layer++) {
+                float2 texel = float2(face * n + cell.x, layer * n + cell.y) + 0.5;
+                float4 t = tex2Dlod(t_stars, float4(texel / size, 0.0, 0.0));
+                float code = floor(t.b * 255.0 + 0.5);
+                // (the second layer holds a star only under a full first one)
+                if (code < 0.5) break;
+                float2 place = (cell + (floor(t.rg * 255.0 + 0.5) + 0.5) / 256.0) / n * 2.0 - 1.0;
+                float3 sd = star_face_dir(face, place);
+                float c = dot(sd, e);
+                if (c > 0.999) {
+                    // where the star stands from the pixel's middle, in pixels
+                    float3 delta = sd / c - e;
+                    float p = dot(ex, delta);
+                    float q = dot(ey, delta);
+                    float2 off = float2(yy * p - xy * q, xx * q - xy * p) / det;
+                    float s = (code - 1.0) / 254.0 * 8.0;
+                    float half_side = clamp(s, 1.0, 2.0) * 0.5;
+                    if (abs(off.x) < half_side && abs(off.y) < half_side) {
+                        col += star_class_rgb(floor(t.a * 255.0 + 0.5)) * min(s, 1.0);
+                    }
+                }
+            }
+        }
+    }
+    return min(col, 1.0);
 }
 
 // The sun and the moon towards d (linear light): the sun's picture where the sun stands, the
@@ -162,12 +240,13 @@ float4 ps_main(float3 dir : TEXCOORD0) : COLOR0 {
         + srgb_decode(tex2Dlod(t_night, uv).rgb) * sky.w * 0.6;
     // the sky's own colour, which the clouds are lit from (the stars are behind them)
     float3 sky_c = c;
-    // the stars: only at night (fading in with the dusk), above the horizon
-    float pixel = length(float2(length(ddx(d)), length(ddy(d))));
-    float night = smoothstep(0.35, 1.0, sky.w);
-    // (the Stars option off skips the hash altogether: the condition is a constant)
-    [branch] if (options.x > 0.5) {
-        c += float3(0.85, 0.9, 1.0) * stars(d, pixel) * night * saturate(elev * 8.0);
+    // the stars, as bright as the night lets them, fading out towards the horizon (with no
+    // map, the Stars option off or a sky too light for them the lookup is skipped: the
+    // condition is a constant)
+    float3 d_dx = ddx(d);
+    float3 d_dy = ddy(d);
+    [branch] if (stars_y.w > 0.5 && stars_x.w > 0.0 && d.z > 0.0) {
+        c += srgb_decode(stars(d, d_dx, d_dy) * stars_x.w) * saturate(elev * 8.0);
     }
     // the cloud layer, flat at its base height: the ground point under the view ray, in
     // tiles, the wind's drift added; none below the horizon, fading into it above. With no

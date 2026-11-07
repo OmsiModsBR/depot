@@ -154,6 +154,10 @@ fn vs_main(@location(0) pos: vec3<f32>) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let d = normalize(in.dir);
+    // (how the view ray changes a pixel across and down, for the stars: taken out here,
+    // where every pixel of the quad still runs)
+    let d_dx = dpdx(d);
+    let d_dy = dpdy(d);
     let az = atan2(d.x, d.y);
     let u = fract((az - camera.sky.x) / 6.2831853 + 0.5);
     let elev = asin(clamp(d.z, -1.0, 1.0));
@@ -162,8 +166,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let uv = vec2<f32>(u, v);
     let c = textureSample(t_day, s_sky, uv).rgb * camera.sky.y + textureSample(t_twilight, s_sky, uv).rgb * camera.sky.z * 0.8 + textureSample(t_night, s_sky, uv).rgb * camera.sky.w * 0.6;
     var col = c;
-    let bodies = sky_bodies(d);
-    // how much the clouds hide of what is behind them (the sun and the moon)
+    // the sun, the moon and the stars (these fading out towards the horizon), all behind
+    // the clouds
+    let bodies = sky_bodies(d) + srgb_decode(classic_stars(d, d_dx, d_dy)) * clamp(elev * 8.0, 0.0, 1.0);
+    // how much the clouds hide of what is behind them
     var hidden = 0.0;
     if (camera.clouds.x > 0.001 && d.z > 0.01) {
         // a flat layer 1500 m up drawn from the cloud field (weather_setup::cloud_field)

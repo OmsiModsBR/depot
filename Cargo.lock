@@ -2928,6 +2928,7 @@ dependencies = [
  "log",
  "naga",
  "omsi-cfg",
+ "omsi-content",
  "omsi-geometry",
  "omsi-render",
  "omsi-texture",

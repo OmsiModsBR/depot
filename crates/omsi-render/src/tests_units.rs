@@ -469,6 +469,7 @@ fn camera_wgsl_matches_camera_uniform() {
         lamp_shadow,
         tree_wind,
         moon,
+        stars,
     );
     let src = include_str!("shaders/common/camera.wgsl");
     let module =

@@ -46,6 +46,6 @@ pub(crate) fn mirror_stopped() {
 }
 pub(crate) use texture::RgbaRef;
 pub(crate) use texture::{
-    drop_top_levels, fit_image, fit_size, next_gen, texture_bytes, upload_speed_mb_s,
-    upload_texture,
+    drop_top_levels, fit_image, fit_size, next_gen, texture_bytes, upload_data_texture,
+    upload_speed_mb_s, upload_texture,
 };

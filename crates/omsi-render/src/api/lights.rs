@@ -196,6 +196,19 @@ impl Renderer {
         scene.sun_glare = pictures;
     }
 
+    /// The night sky's stars (`helper\stars.dat` laid out as an `omsi_content::StarMap`:
+    /// `image` its texels, `cells` its cells across a face). Every sky draws them from it,
+    /// turned with the hours ([`crate::Lighting::star_frame`]) and as bright as
+    /// [`crate::Lighting::star_brightness`]; `None` leaves the sky without stars.
+    pub fn set_star_map(&self, scene: &mut Scene, map: Option<(&omsi_texture::Image, u32)>) {
+        scene.sky_stars = map.map(|(image, _)| self.add_data_texture(scene, image));
+        scene.star_cells = map.map_or(0, |(_, cells)| cells);
+        if let Some(textures) = scene.sky_textures {
+            let clouds = scene.sky_clouds;
+            self.set_sky_textures_clouds(scene, textures, clouds);
+        }
+    }
+
     /// Sky gradients plus an optional tiling cloud texture (`Texture\clouds.tga`).
     pub fn set_sky_textures_clouds(
         &self,
@@ -260,6 +273,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 10,
                     resource: wgpu::BindingResource::TextureView(body(scene.sky_moon)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 11,
+                    resource: wgpu::BindingResource::TextureView(body(scene.sky_stars)),
                 },
             ],
         });

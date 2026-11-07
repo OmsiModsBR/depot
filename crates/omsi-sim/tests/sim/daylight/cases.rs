@@ -141,3 +141,61 @@ fn a_warmer_envir_tints_the_sun() {
         Vec3::ONE
     );
 }
+
+/// A star's place in the map's sky: the world direction the star frame turns into its
+/// right ascension and declination (the frame's rows taken back).
+fn star_in_sky(frame: [[f32; 3]; 3], ra: f64, dec: f64) -> (f64, f64) {
+    let (ra, dec) = (ra.to_radians(), dec.to_radians());
+    let e = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
+    let w: Vec<f64> = (0..3)
+        .map(|k| (0..3).map(|r| frame[r][k] as f64 * e[r]).sum())
+        .collect();
+    let alt = w[2].clamp(-1.0, 1.0).asin().to_degrees();
+    let az = w[0].atan2(w[1]).to_degrees().rem_euclid(360.0);
+    (alt, az)
+}
+
+#[test]
+fn the_stars_turn_about_the_pole_once_a_sidereal_day() {
+    let berlin = SunPlace {
+        latitude: 52.5,
+        longitude: 13.4,
+        timezone: 0.0,
+        dst: Vec::new(),
+    };
+    // 1 January 2000, midnight UTC: Sirius stands a little past the meridian, low in the
+    // south
+    let mut c = SimClock {
+        year: 2000,
+        day_of_year: 1,
+        time: 0.0,
+        ..Default::default()
+    };
+    let (alt, az) = star_in_sky(star_frame(&c, &berlin), 101.29, -16.72);
+    assert!((alt - 20.0).abs() < 0.5, "Sirius alt {alt:.2}");
+    assert!((183.0..200.0).contains(&az), "Sirius az {az:.2}");
+    // the pole star stays over the north horizon at the latitude's height, all night
+    for hour in [0.0, 6.0, 12.0, 18.0] {
+        c.time = hour * 3600.0;
+        let (alt, az) = star_in_sky(star_frame(&c, &berlin), 37.95, 89.26);
+        assert!((alt - 52.5).abs() < 1.0, "Polaris alt {alt:.2} at {hour}");
+        assert!(!(5.0..355.0).contains(&az), "Polaris az {az:.2} at {hour}");
+    }
+    // a sidereal day (23 h 56 m 4 s) later the sky is where it was
+    c.time = 0.0;
+    let a = star_in_sky(star_frame(&c, &berlin), 101.29, -16.72);
+    c.time = 86_164.1;
+    let b = star_in_sky(star_frame(&c, &berlin), 101.29, -16.72);
+    assert!(
+        (a.0 - b.0).abs() < 0.05 && (a.1 - b.1).abs() < 0.05,
+        "{a:?} {b:?}"
+    );
+    // the frame is a rotation: its rows are unit and at right angles
+    let f = star_frame(&c, &berlin);
+    for i in 0..3 {
+        for j in 0..3 {
+            let dot: f32 = (0..3).map(|k| f[i][k] * f[j][k]).sum();
+            assert!((dot - if i == j { 1.0 } else { 0.0 }).abs() < 1e-5);
+        }
+    }
+}
