@@ -1478,6 +1478,66 @@ fn a_corona_behind_a_surface_is_hidden_by_it() {
     assert!(c[0] > 150 && c[2] >= 250, "{c:?}");
 }
 
+/// A light's glow is added over the picture on its stored (gamma) values: a flat white
+/// picture at half strength over a mid-grey clear gives half the grey's distance to white,
+/// not the brighter result of blending in linear light.
+#[test]
+fn a_corona_is_blended_on_the_pictures_own_values() {
+    let Some(mut dev) = device() else { return };
+    let white = vec![[255u8, 255, 255, 255].repeat(4)];
+    dev.set_corona_texture(
+        5,
+        &SceneTexture {
+            width: 2,
+            height: 2,
+            format: TexFormat::Rgba8,
+            levels: &white,
+            make_mips: true,
+        },
+    )
+    .unwrap();
+    let (mut sprite, _) = red_glow(0.5, 0);
+    // white, at half strength
+    sprite[4..8].copy_from_slice(&[1.0, 1.0, 1.0, 0.5]);
+    dev.begin_frame(&FrameDesc {
+        width: W,
+        height: H,
+        clear_rgba: [0.5, 0.5, 0.5, 1.0],
+    })
+    .unwrap();
+    let frame = SceneFrame {
+        view_proj: IDENTITY,
+        light: corona_light(),
+        list: &[],
+        models: &[],
+        params: &[],
+        main: &[],
+        cab: &[],
+        surface_bias: -24,
+        lamps: Default::default(),
+        coronas: crate::scene::SceneCoronas {
+            sprites: &[sprite],
+            runs: &[(5, 0, 1, false)],
+        },
+        sky: Default::default(),
+        rain: Default::default(),
+        smoke: Default::default(),
+    };
+    let u = uniform(0.0);
+    dev.draw_scene(&frame, |_| {
+        Some(SceneMaterial {
+            texture: Some(0),
+            uniform: &u,
+            ..Default::default()
+        })
+    })
+    .unwrap();
+    let px = dev.end_frame().unwrap();
+    // 0.5 + 0.5 x (1 - 0.5) = 0.75 of white, 191 (in linear light it was some 204)
+    let c = &px[((H / 2 * W + W / 2) * 4) as usize..][..4];
+    assert!(c[..3].iter().all(|v| v.abs_diff(191) <= 3), "{c:?}");
+}
+
 /// The sun's glare (`Lighting::sun_glare`): a glow of kind -1, drawn at the sky's depth.
 #[test]
 fn the_suns_glare_shows_only_where_the_sky_is() {

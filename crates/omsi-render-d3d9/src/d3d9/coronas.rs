@@ -290,8 +290,9 @@ impl D3d9Device {
     }
 
     /// Draws the frame's coronas of the vehicle the camera is in (`late`) or of the rest of
-    /// the world, over what is drawn: added to it as `src + dst * (1 - src)`, tested against
-    /// the depth but not writing it. Leaves the corona pass's states set; the caller binds the
+    /// the world, over what is drawn: added to it as `src + dst * (1 - src)` on the picture's
+    /// own (gamma) values, with the pictures read as they are stored, not in linear light;
+    /// tested against the depth but not writing it. Leaves the corona pass's states set; the caller binds the
     /// scene's again. The scene's own constants (the view, the camera, the pixel offset) are
     /// those the sprites use.
     pub(super) fn draw_coronas(&self, frame: &SceneFrame, late: bool) -> Result<()> {
@@ -303,7 +304,6 @@ impl D3d9Device {
             return Ok(());
         }
         let d = &self.device;
-        let linear = u32::from(self.scene_caps.linear_ui);
         let light = &frame.light;
         let axes = [light.cam_right, light.cam_up, light.fog];
         // SAFETY: plain calls on a live device; the constant arrays outlive the calls; each
@@ -325,8 +325,9 @@ impl D3d9Device {
                 (D3DRS_DESTBLEND, D3DBLEND_INVSRCCOLOR.0 as u32),
                 // (the picture's alpha is left as the scene made it)
                 (D3DRS_COLORWRITEENABLE, 0x7),
-                // blended in linear light where the device can, as the default renderer does
-                (D3DRS_SRGBWRITEENABLE, linear),
+                // blended on the stored (gamma) values, not in linear light: in linear light
+                // a glow over a lit background (the day's sky, a lit street) came out dimmer
+                (D3DRS_SRGBWRITEENABLE, 0),
             ] {
                 d.SetRenderState(state, value).map_err(map_err)?;
             }
@@ -337,7 +338,7 @@ impl D3d9Device {
                 (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
                 (D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP.0 as u32),
                 (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
-                (D3DSAMP_SRGBTEXTURE, linear),
+                (D3DSAMP_SRGBTEXTURE, 0),
             ];
             let mut before = [0u32; 6];
             for (kept, &(state, _)) in before.iter_mut().zip(&sampler) {
