@@ -40,4 +40,9 @@ Execute os scripts a partir da raiz do repositório. Como não existe `.specify/
 
 ## Regras do projeto
 
-As regras de contribuição (branches, commits, formatação, testes) estão em `CONTRIBUTING.md`. Siga-as em qualquer alteração.
+Ao interagir com o projeto, todo agente precisa respeitar dois documentos, em qualquer alteração:
+
+- a constituição do projeto, em `.ai/.specify/memory/constitution.md`: os princípios que valem para todo o código e toda a documentação. Ela prevalece sobre as outras práticas do projeto;
+- as regras de contribuição (branches, commits, formatação, testes), em `CONTRIBUTING.md`.
+
+Leia os dois antes de começar uma tarefa. Se um pedido contrariar a constituição, aponte o conflito em vez de seguir adiante.
