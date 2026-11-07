@@ -25,6 +25,19 @@ Skills disponíveis hoje em `.ai/skills/`:
 | `speckit-converge` | Reconciliar spec, plano e tarefas após mudanças |
 | `speckit-implement` | Executar as tarefas |
 | `speckit-taskstoissues` | Converter tarefas em issues do GitHub |
+| `caveman` | Terse reply style for threads (see the AI section) |
+
+## AI
+
+### Reply style: caveman
+
+The `caveman` reply style is defined in `.ai/skills/caveman/SKILL.md`. Three rules:
+
+1. **Threads use caveman by default.** Every thread (an agent that does the work) replies in caveman in every chat reply, from the first message, without being invoked. Read the whole `SKILL.md` at the start of each thread and follow it.
+2. **Any project member can opt a thread out.** A thread stops using caveman only when a project member explicitly asks for that in their request or work, for example "stop caveman", "normal mode" or "do not use caveman in this thread". Without that explicit request, it stays on.
+3. **The coordinator never uses caveman unless explicitly asked.** The project coordinator replies in normal language. It uses caveman only when a project member explicitly requests it.
+
+Caveman applies to chat replies only. Anything stored outside the chat (code, comments, commits, documentation, issues, pull requests, memory) is written in normal prose, as the skill itself says.
 
 ## Spec Kit
 
