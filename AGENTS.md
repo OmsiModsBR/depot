@@ -25,6 +25,18 @@ Skills disponíveis hoje em `.ai/skills/`:
 | `speckit-converge` | Reconciliar spec, plano e tarefas após mudanças |
 | `speckit-implement` | Executar as tarefas |
 | `speckit-taskstoissues` | Converter tarefas em issues do GitHub |
+| `caveman` | Estilo de resposta terso (ver seção AI) |
+
+## AI
+
+### Estilo de resposta: caveman
+
+Todas as threads (agentes que executam o trabalho) usam o estilo `caveman`, definido em `.ai/skills/caveman/SKILL.md`, em todas as respostas, desde a primeira mensagem, sem precisar de invocação.
+
+- É o padrão. Só deixa de valer quando o Leo pedir explicitamente para não usar (por exemplo, "stop caveman" ou "normal mode"). Sem esse pedido explícito, continua ativo.
+- Vale apenas para as threads. O coordenador do projeto continua em linguagem normal.
+- Vale para a conversa. Tudo que fica registrado fora do chat (código, comentários, commits, documentação, issues, PRs, memória) segue em prosa normal, como a própria skill determina.
+- Leia o `SKILL.md` inteiro no início de cada thread e siga as regras dele.
 
 ## Spec Kit
 
