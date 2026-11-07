@@ -155,7 +155,7 @@ float3 stars(float3 e, float3 ex, float3 ey) {
     // (radians) at most sqrt(2) x the longer one along an axis, a radian 1 + |uv|^2 of the
     // face's place there at most (the place's -1..1 n cells)
     float span = 0.71 * n * (1.0 + dot(uv, uv)) * sqrt(max(xx, yy));
-    float2 size = float2(6.0 * n, 2.0 * n);
+    float2 to_uv = 1.0 / float2(6.0 * n, 2.0 * n);
     // (a star reaches a pixel from a cell next door only when the pixel lies within `span`
     // of that side; `span` is well under half a cell, so one side an axis at most)
     float2 side = at < 0.5 ? -1.0 : 1.0;
@@ -167,11 +167,13 @@ float3 stars(float3 e, float3 ex, float3 ey) {
         [branch] if (all(step <= near) && all(cell >= 0.0) && all(cell < n)) {
             [loop] for (int layer = 0; layer < 2; layer++) {
                 float2 texel = float2(face * n + cell.x, layer * n + cell.y) + 0.5;
-                float4 t = tex2Dlod(t_stars, float4(texel / size, 0.0, 0.0));
-                float code = floor(t.b * 255.0 + 0.5);
+                float4 t = tex2Dlod(t_stars, float4(texel * to_uv, 0.0, 0.0));
+                // (a point-sampled 8-bit texel: byte / 255 to well under a byte's step, so
+                // the bytes are read without rounding)
+                float code = t.b * 255.0;
                 // (the second layer holds a star only under a full first one)
                 if (code < 0.5) break;
-                float2 place = (cell + (floor(t.rg * 255.0 + 0.5) + 0.5) / 256.0) / n * 2.0 - 1.0;
+                float2 place = (cell + (t.rg * 255.0 + 0.5) / 256.0) / n * 2.0 - 1.0;
                 // where the star stands from the pixel's middle, in pixels (towards the star
                 // w, not of unit length; a cell about the pixel's own is always well in front)
                 float3 w = fn + fu * place.x + fv * place.y;
@@ -182,7 +184,7 @@ float3 stars(float3 e, float3 ex, float3 ey) {
                 float s = (code - 1.0) / 254.0 * 8.0;
                 float half_side = clamp(s, 1.0, 2.0) * 0.5;
                 if (abs(off.x) < half_side && abs(off.y) < half_side) {
-                    col += star_class_rgb(floor(t.a * 255.0 + 0.5)) * min(s, 1.0);
+                    col += star_class_rgb(t.a * 255.0) * min(s, 1.0);
                 }
             }
         }
