@@ -35,6 +35,8 @@ pub struct Atlas {
     /// A frame needed more room than there is: the atlas was cleared in the middle of it
     /// (what that frame had already drawn lost its pictures), so it grows at the next.
     overflowed: bool,
+    /// How far it may grow (`MAX_SIZE`; less in the tests).
+    max_size: u32,
 }
 
 /// The biggest the atlas grows to (texels a side; every graphics chip takes it).
@@ -53,6 +55,7 @@ impl Atlas {
             frame: 0,
             generation: 0,
             overflowed: false,
+            max_size: MAX_SIZE,
         }
     }
 
@@ -63,7 +66,14 @@ impl Atlas {
         // A screen of many pixels a point (a phone at 3x) draws every word and icon three
         // times as big: its frame did not fit, and whatever was drawn before the atlas ran
         // full lost its picture - the icons were missing on such phones. Twice the size then.
-        if self.overflowed && self.size < MAX_SIZE {
+        if self.overflowed && self.size >= self.max_size {
+            // Already as big as it gets: the last frame left out what did not fit (see
+            // `put`); start this one empty, with room for all it draws first.
+            self.overflowed = false;
+            self.clear();
+            return;
+        }
+        if self.overflowed && self.size < self.max_size {
             self.overflowed = false;
             self.size *= 2;
             self.rgba = vec![0; (self.size * self.size * 4) as usize];
@@ -120,6 +130,12 @@ impl Atlas {
             Some(a) => a,
             None => {
                 self.overflowed = true;
+                if self.size >= self.max_size {
+                    // It cannot grow: clearing now would make what this frame has drawn
+                    // show other lines' pictures. Leave this one out instead (nothing is
+                    // drawn for it) and start the next frame empty.
+                    return Sprite::default();
+                }
                 self.clear();
                 match self.alloc(w, h) {
                     Some(a) => a,
@@ -199,6 +215,30 @@ mod tests {
         a.begin_frame();
         assert_eq!(a.size, 128);
         assert_eq!(a.rgba.len(), 128 * 128 * 4);
+    }
+
+    #[test]
+    fn a_full_atlas_at_its_biggest_leaves_the_rest_out_without_clearing() {
+        let mut a = Atlas::new(64);
+        a.max_size = 64;
+        a.begin_frame();
+        let first = a.put(Key::Icon("first".into(), 20), 20, 20, &[255; 400], 0.0);
+        let gen = a.generation;
+        let mut left_out = 0;
+        for i in 0..40 {
+            let s = a.put(Key::Icon(format!("i{i}"), 20), 20, 20, &[255; 400], 0.0);
+            if s == Sprite::default() {
+                left_out += 1;
+            }
+        }
+        assert!(left_out > 0);
+        // what was drawn before still points at its own picture
+        assert_eq!(a.generation, gen);
+        assert_eq!(a.entries[&Key::Icon("first".into(), 20)].0, first);
+        // the next frame starts empty
+        a.begin_frame();
+        assert_eq!(a.size, 64);
+        assert!(a.generation > gen);
     }
 
     #[test]

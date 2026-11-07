@@ -851,15 +851,25 @@ impl Ui {
         if self.fonts.width_as_is(text, px, weight) <= width {
             return text.to_string();
         }
-        let mut cut: Vec<char> = text.chars().collect();
-        while !cut.is_empty() {
-            cut.pop();
-            let t = cut.iter().collect::<String>().trim_end().to_string() + "…";
+        // The longest start of the text that fits with the ellipsis, found by halving: a
+        // list of thousands of long lines measures about a dozen times a line, not once a
+        // character.
+        let chars: Vec<char> = text.chars().collect();
+        let with_ellipsis =
+            |n: usize| chars[..n].iter().collect::<String>().trim_end().to_string() + "…";
+        let (mut lo, mut hi) = (0usize, chars.len());
+        let mut best: Option<String> = None;
+        while lo < hi {
+            let mid = (lo + hi).div_ceil(2);
+            let t = with_ellipsis(mid - 1);
             if self.fonts.width_as_is(&t, px, weight) <= width {
-                return t;
+                best = Some(t);
+                lo = mid;
+            } else {
+                hi = mid - 1;
             }
         }
-        String::new()
+        best.unwrap_or_default()
     }
 
     /// The lines [`Ui::text_lines_as_is`] would draw: `text` as it is, broken at spaces (and
@@ -2639,6 +2649,27 @@ pub fn weekday(y: i32, m: u32, d: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A long line is cut to the longest start that fits with its ellipsis, a short one is
+    /// left as it is.
+    #[test]
+    fn a_long_line_is_cut_to_the_longest_start_that_fits() {
+        let ui = Ui::new();
+        let (px, w) = (12.5, Weight::Regular);
+        let text =
+            "Sceneryobjects/mossilva/outros/objetos julian/casa certo/texture/casgrupo_0.bmp";
+        let whole = ui.fonts.width_as_is(text, px, w);
+        assert_eq!(ui.cut_as_is(text, whole, px, w), text);
+        let width = whole * 0.4;
+        let cut = ui.cut_as_is(text, width, px, w);
+        assert!(cut.ends_with('…') && cut.len() < text.len());
+        assert!(ui.fonts.width_as_is(&cut, px, w) <= width);
+        // one more letter would not fit
+        let n = cut.chars().count() - 1;
+        let longer: String = text.chars().take(n + 1).collect::<String>() + "…";
+        assert!(ui.fonts.width_as_is(&longer, px, w) > width);
+        assert_eq!(ui.cut_as_is(text, 0.5, px, w), "");
+    }
 
     /// The calendar of a control at the window's right edge opens inside the window.
     #[test]
