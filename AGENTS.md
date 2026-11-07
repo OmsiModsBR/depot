@@ -31,12 +31,13 @@ Skills disponíveis hoje em `.ai/skills/`:
 
 ### Reply style: caveman
 
-Every thread (an agent that does the work) replies in the `caveman` style, defined in `.ai/skills/caveman/SKILL.md`. It applies to every reply from the first message, without being invoked.
+The `caveman` reply style is defined in `.ai/skills/caveman/SKILL.md`. Three rules:
 
-- It is the default. It stops applying only when Leo explicitly asks not to use it (for example "stop caveman" or "normal mode"). Without that explicit request, it stays on.
-- It applies to threads only. The project coordinator keeps replying in normal language.
-- It applies to chat replies. Anything stored outside the chat (code, comments, commits, documentation, issues, pull requests, memory) is written in normal prose, as the skill itself says.
-- Read the whole `SKILL.md` at the start of each thread and follow it.
+1. **Threads use caveman by default.** Every thread (an agent that does the work) replies in caveman in every chat reply, from the first message, without being invoked. Read the whole `SKILL.md` at the start of each thread and follow it.
+2. **Any project member can opt a thread out.** A thread stops using caveman only when a project member explicitly asks for that in their request or work, for example "stop caveman", "normal mode" or "do not use caveman in this thread". Without that explicit request, it stays on.
+3. **The coordinator never uses caveman unless explicitly asked.** The project coordinator replies in normal language. It uses caveman only when a project member explicitly requests it.
+
+Caveman applies to chat replies only. Anything stored outside the chat (code, comments, commits, documentation, issues, pull requests, memory) is written in normal prose, as the skill itself says.
 
 ## Spec Kit
 
