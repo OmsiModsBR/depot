@@ -94,16 +94,16 @@ float3 srgb_decode(float3 c) {
 // the size is 4 x the square root of its brightness) and its class (a). The same layout and
 // reading as the default renderer's sky (stars.wgsl).
 
-// The colour of a class number (omsi_content::StarClass::rgb, by its code).
+// The colour of a class number (omsi_content::StarClass::rgb, by its code): the first class's
+// colour plus each step up to the code (a few vector operations rather than a chain of tests:
+// the pixel shader's instruction slots are few).
 float3 star_class_rgb(float code) {
-    if (code < 1.5) return float3(209.0, 198.0, 255.0) / 255.0;
-    if (code < 2.5) return float3(215.0, 205.0, 255.0) / 255.0;
-    if (code < 3.5) return float3(224.0, 217.0, 255.0) / 255.0;
-    if (code < 4.5) return float3(240.0, 244.0, 255.0) / 255.0;
-    if (code < 5.5) return float3(254.0, 255.0, 225.0) / 255.0;
-    if (code < 6.5) return float3(255.0, 252.0, 185.0) / 255.0;
-    if (code < 7.5) return float3(255.0, 228.0, 147.0) / 255.0;
-    return float3(255.0, 198.0, 147.0) / 255.0;
+    float4 lo = step(float4(1.5, 2.5, 3.5, 4.5), code);
+    float3 hi = step(float3(5.5, 6.5, 7.5), code);
+    float3 rgb = float3(209.0, 198.0, 255.0)
+        + mul(lo, float4x3(6.0, 7.0, 0.0, 9.0, 12.0, 0.0, 16.0, 27.0, 0.0, 14.0, 11.0, -30.0))
+        + mul(hi, float3x3(1.0, -3.0, -40.0, 0.0, -24.0, -38.0, 0.0, -30.0, 0.0));
+    return rgb / 255.0;
 }
 
 float3 star_frame(float3 d) {
@@ -118,18 +118,21 @@ float star_face(float3 e) {
     return e.z > 0.0 ? 4.0 : 5.0;
 }
 
-// The place of direction v on face `face` (-1..1 each on the face itself).
-float2 star_face_uv(float face, float3 v) {
-    if (face < 1.5) return v.yz / abs(v.x);
-    if (face < 3.5) return v.xz / abs(v.y);
-    return v.xy / abs(v.z);
+// The axes of face `face`: fu and fv across it, fn out through its middle. A direction w on
+// the face lies at (fu.w, fv.w) / fn.w on it (-1..1 each), and the place (x, y) points along
+// fn + fu x + fv y.
+void star_face_axes(float face, out float3 fu, out float3 fv, out float3 fn) {
+    float s = (fmod(face, 2.0) < 0.5) ? 1.0 : -1.0;
+    bool on_x = face < 1.5;
+    bool on_y = !on_x && face < 3.5;
+    fu = on_x ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+    fv = (on_x || on_y) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
+    fn = (on_x ? float3(1.0, 0.0, 0.0) : (on_y ? float3(0.0, 1.0, 0.0) : float3(0.0, 0.0, 1.0))) * s;
 }
 
-float3 star_face_dir(float face, float2 uv) {
-    float s = (fmod(face, 2.0) < 0.5) ? 1.0 : -1.0;
-    if (face < 1.5) return normalize(float3(s, uv.x, uv.y));
-    if (face < 3.5) return normalize(float3(uv.x, s, uv.y));
-    return normalize(float3(uv.x, uv.y, s));
+// The place of direction w on the face of axes fu, fv, fn.
+float2 star_face_uv(float3 fu, float3 fv, float3 fn, float3 w) {
+    return float2(dot(fu, w), dot(fv, w)) / dot(fn, w);
 }
 
 // The stars at this pixel (colour as stored, 0..1 a channel): each a square of points of its
@@ -148,13 +151,17 @@ float3 stars(float3 d, float3 dx, float3 dy) {
     float yy = dot(ey, ey);
     float det = max(xx * yy - xy * xy, 1e-30);
     float face = star_face(e);
-    float2 uv = star_face_uv(face, e);
+    float3 fu;
+    float3 fv;
+    float3 fn;
+    star_face_axes(face, fu, fv, fn);
+    float2 uv = star_face_uv(fu, fv, fn, e);
     float2 g = (uv * 0.5 + 0.5) * n;
     float2 own = floor(g);
     float2 at = g - own;
     // how many cells a pixel spans on each side, along the face's two axes
-    float2 span = abs(star_face_uv(face, e + ex) - uv) * (0.5 * n)
-        + abs(star_face_uv(face, e + ey) - uv) * (0.5 * n);
+    float2 span = (abs(star_face_uv(fu, fv, fn, e + ex) - uv)
+        + abs(star_face_uv(fu, fv, fn, e + ey) - uv)) * (0.5 * n);
     float2 size = float2(6.0 * n, 2.0 * n);
     // (a star reaches a pixel from a cell next door only when the pixel lies within `span`
     // of that side; `span` is well under half a cell, so one side an axis at most)
@@ -172,11 +179,12 @@ float3 stars(float3 d, float3 dx, float3 dy) {
                 // (the second layer holds a star only under a full first one)
                 if (code < 0.5) break;
                 float2 place = (cell + (floor(t.rg * 255.0 + 0.5) + 0.5) / 256.0) / n * 2.0 - 1.0;
-                float3 sd = star_face_dir(face, place);
-                float c = dot(sd, e);
-                if (c > 0.999) {
+                // (towards the star, not of unit length)
+                float3 w = fn + fu * place.x + fv * place.y;
+                float we = dot(w, e);
+                if (we * rsqrt(dot(w, w)) > 0.999) {
                     // where the star stands from the pixel's middle, in pixels
-                    float3 delta = sd / c - e;
+                    float3 delta = w / we - e;
                     float p = dot(ex, delta);
                     float q = dot(ey, delta);
                     float2 off = float2(yy * p - xy * q, xx * q - xy * p) / det;
