@@ -78,15 +78,20 @@ today). Both arms expose what the traffic and the scripts read today: `position`
 
 | Phase | Fields | Rows of R-A |
 |---|---|---|
-| 8 | rotation point on the path (distance along it), heading, steer angle per axle, `a_lat` | KA-1 |
-| 9 | speed, `a_long`, throttle/brake set by the AI driver, grip | KA-2, KA-3 |
-| 10 | static sag per axle about the origin, ground plane, rear sections' poses, `released: bool` (after a hit: the free rigid body until cleared, decision D3) | KA-4..KA-7 |
+| 8 | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path | KA-1, KA-4 |
+| 9 | speed, `a_long`, regime (near: physical, far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3 |
+| 10 | articulation angle per joint (rear sections), `state: OnRoute \| LooseActive \| LooseAsleep` for the whole vehicle, the crash's strength (for the police) | KA-5..KA-8 |
+
+While loose, a Classic AI vehicle's sections run the player's `RigidBody` (Classic engine) with
+throttle 0, brake 1 and hazard lights on; `OnRoute` again when the crash is cleared or its tile leaves
+the detail radius, asking the planner for a new path.
 
 ## AI static pose
 
-`kinematic_wheel_rest_loads` (today about `cog_y`) becomes a function of the engine: about `0` for
-Classic, about `cog_y` for Depot. Used by `vehicle.rs` (`kinematic_rest_sag`), `vehicle_type.rs` and
-`coupled/trailer.rs`.
+Depot keeps today's static pose (`kinematic_wheel_rest_loads` about `cog_y`, used by `vehicle.rs`,
+`vehicle_type.rs` and `coupled/trailer.rs`). A Classic AI vehicle on its route has no static sag: its
+height and attitude come from the path (KA-4, KA-7); loose, its rigid body shares the weight about the
+origin (K-1).
 
 ## Settings (`omsi-app`, `omsi-launcher-core`)
 

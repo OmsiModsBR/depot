@@ -18,7 +18,7 @@ See the [plan](plan.md) (phases), [research](research.md) (R-V, R-A) and [contra
 
 The result is written in #677 and in `contracts/bus-key.md` before phase 3.
 
-## Q2. Phase 0: the Classic AI observations (R-A, KA-1..KA-7)
+## Q2. Phase 0: the Classic AI observations (R-A, KA-1..KA-8)
 
 For each row of R-A, the check in its "How it is checked" column, on a stock map with the AI density
 low enough to follow one vehicle. Record a short video or a screenshot sequence and fill the row with

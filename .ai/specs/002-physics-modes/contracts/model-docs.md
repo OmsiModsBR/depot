@@ -39,12 +39,14 @@ an equation that changes keeps its id and the document notes the change and its 
 - **K-1 Static load share about the model origin**: the strut force turns the body about the origin,
   so at rest `Σ F_i = m g` and `Σ F_i · y_i = 0`; with springs, `F_i = k_i (z - θ y_i)` gives one
   `(z, θ)` and the sag per axle. Validated: #675 reasoning; in-game check of the Mi5 (Q3) pending.
-- **KA-1 .. KA-7**: the Classic AI rows of [research.md](../research.md) R-A, each written as an
-  equation once its check confirms it (path following, speed from drive and brakes, grip, pose,
-  rear sections, release after a hit, static share about the origin). Until then the row stays in
-  the document as "to validate" with no equation.
-- **KA-6** is validated by the maintainer's in-game observation (2026-11-08): a hit by the player makes
-  the AI vehicle a free rigid body, without a driver, until it is cleared from the scene.
+- **KA-1 .. KA-8**: the Classic AI rows of [research.md](../research.md) R-A: route following by a
+  kinematic bicycle model, the two speed regimes, grip from a fixed surface and the weather, no body
+  dynamics on the route, rear sections as kinematic trailers, release by any active body and return
+  to the route, weight shared only while loose, no AI-AI contacts on the route. Each is written with
+  its equations and marked "to validate" until its check confirms it; a number the model needs is
+  either measured in that check or marked as Depot's own choice.
+- **KA-6** is validated in part by the maintainer's in-game observation (2026-11-08): a hit by the
+  player makes the AI vehicle a free rigid body, without a driver, until it is cleared.
 - **Open items**: the R-V candidates V3 and V4 while unchecked.
 
 ## `depot-model.md`: Project Depot Physics (D-* player, DA-* AI)
