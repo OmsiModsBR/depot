@@ -45,9 +45,9 @@ stop and compare each axle's spring travel and the body's attitude with OMSI 2 f
 
 ### User Story 2 - The player chooses Depot physics in the launcher (Priority: P2)
 
-A player who prefers Depot's deliberate improvements opens the launcher, picks "Project Depot Physics"
-in the "Physics" list, and starts a session. Every vehicle, the player's and the AI's, now uses Depot
-physics. The launcher says in one line that mods tuned for OMSI 2 may stand or handle differently.
+A player who prefers Depot's deliberate improvements opens the launcher's Settings page, picks
+"Project Depot Physics" in the "Physics" list of the "Simulation" section ("Simulação" in
+Portuguese), and starts a session. Every vehicle, the player's and the AI's, now uses Depot physics. The launcher says in one line that mods tuned for OMSI 2 may stand or handle differently.
 
 **Why this priority**: it is the main way into the Depot mode and the reason the mode exists, but it
 only makes sense once the default (Story 1) is safe.
@@ -58,8 +58,8 @@ gravity (front springs sag more than the others).
 
 **Acceptance Scenarios**:
 
-1. **Given** the launcher, **When** the player opens the gameplay settings, **Then** a "Physics" list
-   offers "OMSI Classic" (selected by default) and "Project Depot Physics", with the one-line notice.
+1. **Given** the launcher, **When** the player opens the "Simulation" section of the Settings page,
+   **Then** a "Physics" list offers "OMSI Classic" (selected by default) and "Project Depot Physics", with the one-line notice.
 2. **Given** "Project Depot Physics" saved, **When** a session starts, **Then** the player's vehicle and
    every AI road vehicle use Depot physics.
 3. **Given** "Project Depot Physics", **When** a bus with its centre of gravity ahead of its origin
@@ -173,7 +173,8 @@ directly.
 
 - **FR-001**: The game MUST offer two physics engines: OMSI Classic and Project Depot Physics.
 - **FR-002**: OMSI Classic MUST be the default whenever the player has not chosen otherwise.
-- **FR-003**: The launcher MUST let the player choose the engine in a "Physics" list, saved with the
+- **FR-003**: The launcher MUST let the player choose the engine in a "Physics" list in the
+  "Simulation" section of its Settings page ("Simulação" in Portuguese), saved with the
   other settings, and MUST show a one-line notice that mods tuned for OMSI 2 may stand or handle
   differently in Depot physics.
 - **FR-004**: A vehicle whose `.bus` file contains the `[depot_physics]` line (no value lines) MUST

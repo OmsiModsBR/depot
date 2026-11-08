@@ -16,7 +16,8 @@ Written only as `classic` or `depot`, and only when the player saves.
 
 ## Launcher
 
-- A "Physics" list in the gameplay settings: `OMSI Classic` (default), `Project Depot Physics`.
+- A "Physics" list in the "Simulation" section of the launcher's Settings page ("Simulação" in
+  Portuguese; `SIMULATION` in `omsi-launcher-ui/src/window/domain/settings.rs`): `OMSI Classic` (default), `Project Depot Physics`.
 - One line under it: vehicles with `[depot_physics]` in their file use Depot physics whatever is
   chosen here; mods tuned for OMSI 2 may stand or handle differently in Depot physics.
 - Shown only from phase 11; before that the key is read but not offered.

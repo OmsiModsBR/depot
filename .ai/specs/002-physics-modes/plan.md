@@ -184,7 +184,7 @@ crates/
 │   ├── settings.rs                      # Settings::physics: PhysicsMode
 │   └── gameplay/implementation/traffic.rs  # builds the AI body of the vehicle's engine
 ├── omsi-launcher-core/src/lib.rs        # reads/writes `physics`
-└── omsi-launcher-ui/src/window/domain/settings.rs  # "Physics" list: OMSI Classic, Project Depot Physics
+└── omsi-launcher-ui/src/window/domain/settings.rs  # "Physics" list in the "Simulation" section: OMSI Classic, Project Depot Physics
 scripts/physics-trace-diff.sh            # runs both engines
 CHANGELOG.md
 ```
@@ -213,7 +213,7 @@ which improves the default.
 | 8 | `feat/classic-ai-path` | Classic AI body: the rotation point on the lane, heading from the path, rear axle on the path; speed as the planner hands it (as today) | 6, 0 (Q2) | yes, AI in Classic (`physics-delta`) |
 | 9 | `feat/classic-ai-drive` | Classic AI speed from the vehicle's own drive torque, brakes and grip, the AI driver setting throttle and brake for the target speed (KA-2, KA-3), if Q2 confirms it | 8 | yes, AI in Classic |
 | 10 | `feat/classic-ai-pose` | Classic AI static pose about the origin; body pose on the ground per KA-4; articulated rear sections per KA-5; release to the free rigid body after a hit until cleared (KA-6, decision D3) | 8 | yes, AI in Classic |
-| 11 | `feat/physics-mode-setting` | Launcher "Physics" list (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
+| 11 | `feat/physics-mode-setting` | Launcher "Physics" list in the Settings page's "Simulation" section (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
 
 Phases 7 and 8-10 can run in parallel after 6. A phase that finds today's code disagreeing with the
 model document fixes the code (a `fix/` PR with its failing test) or corrects the document, never
