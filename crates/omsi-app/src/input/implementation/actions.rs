@@ -341,7 +341,7 @@ impl App {
             self.renderer.as_ref(),
             self.scene.as_mut(),
         ) {
-            if let Some(h) = self.humans.as_mut() {
+            if let Some(h) = self.session.humans.as_mut() {
                 h.evict(
                     crate::gameplay::humans::BusId::Ai(crate::gameplay::humans::placed_bus_id(
                         old.uid,
@@ -883,7 +883,7 @@ impl App {
             next.load_sounds(a);
         }
         // the riders stay in the bus left; the people know the new one's cabin
-        if let Some(h) = self.humans.as_mut() {
+        if let Some(h) = self.session.humans.as_mut() {
             h.player_bus_swapped(now.uid, next.uid, &mut next.vehicle);
         }
         next.vehicle.host.auto_clutch = if self.settings.auto_clutch { 1.0 } else { 0.0 };
@@ -1605,6 +1605,7 @@ impl App {
     fn save_situation_extras(&self, osn: &std::path::Path) {
         crate::situation::save_script_textures(osn, &self.situation_vehicles());
         let riders = self
+            .session
             .humans
             .as_ref()
             .filter(|_| self.player.is_some())

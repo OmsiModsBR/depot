@@ -312,7 +312,7 @@ impl App {
                             }
                         }
                     }
-                    let riders = self.humans.as_ref().map(|h| {
+                    let riders = self.session.humans.as_ref().map(|h| {
                         (
                             h.people_in(crate::gameplay::humans::BusId::Player),
                             self.placed

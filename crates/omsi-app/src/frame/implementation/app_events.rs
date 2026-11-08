@@ -671,7 +671,7 @@ impl ApplicationHandler for App {
                         sight,
                         fog,
                         &self.clock,
-                        self.humans.as_ref(),
+                        self.session.humans.as_ref(),
                         self.player.as_ref(),
                         &r.options,
                     );
@@ -1825,7 +1825,7 @@ impl ApplicationHandler for App {
                     .zip(self.surface.as_ref())
                     .and_then(|(c, s)| self.sight_extent(c, (s.config.width, s.config.height)));
                 if let (Some(h), Some(w), Some(r), Some(scene)) = (
-                    self.humans.as_mut(),
+                    self.session.humans.as_mut(),
                     self.world.as_ref(),
                     self.renderer.as_ref(),
                     self.scene.as_mut(),
@@ -1960,7 +1960,7 @@ impl ApplicationHandler for App {
                         p,
                         self.clock.time,
                         &mut self.session.career,
-                        &mut self.journey,
+                        &mut self.session.journey,
                         &self.args.root,
                         w,
                         Some(&self.clock),
@@ -1987,7 +1987,12 @@ impl ApplicationHandler for App {
                     self.trip_watch(candidate, bus, doors);
                 }
                 if let Some(p) = self.player.as_mut() {
-                    let riders = self.humans.as_ref().map(|h| h.riding()).unwrap_or(0);
+                    let riders = self
+                        .session
+                        .humans
+                        .as_ref()
+                        .map(|h| h.riding())
+                        .unwrap_or(0);
                     // the engine's own variables of the bus (see `update_engine_vars`)
                     p.vehicle.host.humans_count = riders as f32;
                     p.vehicle.host.schedule_active = if self.session.duty.is_some() {
@@ -2065,7 +2070,7 @@ impl ApplicationHandler for App {
                         }
                     });
                 }
-                if let (Some(h), Some(p)) = (self.humans.as_mut(), self.player.as_ref()) {
+                if let (Some(h), Some(p)) = (self.session.humans.as_mut(), self.player.as_ref()) {
                     self.session.career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
                     self.session.career.boarded = h.boarded as i32;
                     self.session.career.served = h.served as i32;
@@ -2591,6 +2596,7 @@ impl ApplicationHandler for App {
                         // the player's bus's cabin air and the condensation on its glass
                         if let Some(p) = self.player.as_ref() {
                             let (riders, doors) = self
+                                .session
                                 .humans
                                 .as_ref()
                                 .map(|h| {
@@ -2643,12 +2649,14 @@ impl ApplicationHandler for App {
                         if let (Some(amb), Some(a)) = (self.ambience.as_mut(), self.audio.as_ref())
                         {
                             let steps = self
+                                .session
                                 .humans
                                 .as_mut()
                                 .map(|h| h.take_footfalls())
                                 .unwrap_or_default();
                             // what the passengers say, where they stand
                             for line in self
+                                .session
                                 .humans
                                 .as_mut()
                                 .map(|h| h.take_voice_lines())
@@ -2860,7 +2868,7 @@ impl ApplicationHandler for App {
                         }
                     }
                     self.service_msg = self.service_msg.take().filter(|(_, l)| *l > 0.0);
-                    if let Some(h) = self.humans.as_ref() {
+                    if let Some(h) = self.session.humans.as_ref() {
                         if let Some(hint) = h.hint() {
                             lines.push(hint);
                         } else if let Some((name, value)) = &h.request {
@@ -2998,7 +3006,7 @@ impl ApplicationHandler for App {
                                 .duty
                                 .as_ref()
                                 .map(|_| p.vehicle.host.tt_delay as f64),
-                            passengers: self.humans.as_ref().map(|h| h.riding()),
+                            passengers: self.session.humans.as_ref().map(|h| h.riding()),
                             stop_requested: nav::stop_requested(&p.vehicle),
                             time: self.clock.time,
                             weekday: self.clock.weekday(),
@@ -3184,8 +3192,13 @@ impl ApplicationHandler for App {
                                         clock: &self.clock,
                                         player,
                                         duty: self.session.duty.as_ref(),
-                                        passengers: self.humans.as_ref().map(|h| h.riding()),
+                                        passengers: self
+                                            .session
+                                            .humans
+                                            .as_ref()
+                                            .map(|h| h.riding()),
                                         capacity: self
+                                            .session
                                             .humans
                                             .as_ref()
                                             .zip(player)
@@ -3855,7 +3868,7 @@ impl ApplicationHandler for App {
                                 for (k, v) in &self.profile {
                                     log::info!("profile {k:10}: {:.1} ms/frame", v / n * 1000.0);
                                 }
-                                if let Some(h) = self.humans.as_ref() {
+                                if let Some(h) = self.session.humans.as_ref() {
                                     log::info!(
                                         "profile people: {} ({})",
                                         h.people.len(),

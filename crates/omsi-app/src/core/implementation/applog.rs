@@ -136,7 +136,12 @@ impl App {
             .as_ref()
             .map(|t| (t.cars.len(), t.dormant.len()))
             .unwrap_or((0, 0));
-        let people = self.humans.as_ref().map(|h| h.people.len()).unwrap_or(0);
+        let people = self
+            .session
+            .humans
+            .as_ref()
+            .map(|h| h.people.len())
+            .unwrap_or(0);
         let list: Vec<String> = stages
             .iter()
             .map(|(k, ms)| format!("{k} {ms:.2}"))

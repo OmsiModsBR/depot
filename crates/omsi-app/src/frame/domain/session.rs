@@ -3,6 +3,8 @@
 //! and the offscreen run both step it (see `frame/implementation/session.rs`).
 
 use crate::gameplay::career::Career;
+use crate::gameplay::humans::Humans;
+use crate::gameplay::journey::Journey;
 use crate::gameplay::schedule::{PlayerDuty, Schedule};
 use crate::gameplay::traffic::Traffic;
 
@@ -15,4 +17,8 @@ pub(crate) struct Session {
     pub(crate) duty_places: bool,
     /// The driver's personnel file and this session's statistics.
     pub(crate) career: Career,
+    /// The people on foot and the passengers (see `gameplay::humans`).
+    pub(crate) humans: Option<Humans>,
+    /// The duty's stops with their times as driven, kept in a file (`journey`).
+    pub(crate) journey: Option<Journey>,
 }
