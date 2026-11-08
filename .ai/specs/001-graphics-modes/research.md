@@ -153,3 +153,33 @@ not slower (Principle VII); if it is, the difference becomes a `fix/dx9-*` first
 **Decision**: unchanged (`NullBackend`, no GPU). A DirectX9 golden on a Windows runner depends on
 the runner's basic adapter opening Direct3D 9Ex with Shader Model 3.0, which was not checked; this
 plan does not need it.
+
+## R-6. Refactor of the code that stays
+
+The initial analysis of the modes (2026-11-07) listed seven points. How each is handled:
+
+| Point | Finding (at `a132fb0`) | Where it lands |
+|---|---|---|
+| R1. A type for the mode | the mode as a `String`, a redundant `bool`, three global `AtomicBool`s, bools in `Lighting`/`RenderOptions`, a bit in `camera.sky_color.w`; `graphics_mode` copied in two crates; six ways in | phase 3 ([data-model.md](data-model.md)) |
+| R2. Bools as parameters | `encode_main_pass` takes 22 parameters, 9 of them bools; `encode_main_pass`, `encode_enhanced_post` and `encode_glass` together take 28. `FrameFeatures` already exists but the passes get its fields one by one, and the decisions behind it sit inside `begin_frame` | phase 8 |
+| R3. Long functions | `begin_frame` 507 lines, `Renderer::build` 504, `encode_main_pass` 478, `open_on` 432, `visibility` 324, `encode_frame` 295, `draw_scene_inner` (DirectX9) 271, `add_material_inner` 247; `effects/rt.rs` `prepare` 285 and `new` 268 go with phase 1 | phases 10, 11, 12 (the rest noted for later) |
+| R4. Enhanced pipelines built in every mode | `leave_out_enhanced` true only on Android/OpenGL | phase 7, after phase 10 |
+| R5. Environment flags in the renderer | `omsi-render` reads 62 different `omsi_cfg::flags`, several on every frame; `omsi-render-d3d9` reads none; `OMSI_FAKE_GPU_ERROR` hooks in 22 places across 6 files | phase 9 (the mode flags already go in phases 1 and 3) |
+| R6. Vanilla x DirectX9 parity without a test | `scene.hlsl` is a hand port of the `classic` branch; fixes were made twice by hand (#686, #691, #697) | phase 6 removes the second copy; phase 12 tests the plan translation |
+| R7. Organisation and documents | tests in `src/` (3 large files, 30 files with `#[cfg(test)]` in the two crates); `omsi-render-d3d9/README.md` and the `d3d9.rs` header out of date | phases 13, 14 |
+
+Also removed on the way, by Principle X: the never-taken `camera.flags.z` branch of `shader.wgsl`
+(kept only for a Metal compiler quirk; Windows is the only supported platform) in phase 6, and the
+second copy of the material classification rule in phase 1.
+
+**Decision**: refactor after the removals, one concern per pull request, in the order 8 → 9 →
+10 → 7 → 11 → 12; 13 and 14 whenever convenient.
+
+**Rationale**: refactoring code that phase 1 or 6 deletes is wasted work; phase 8 first because the
+pure `FrameFeatures::decide` makes the later splits checkable by unit tests; phase 10 before 7
+because leaving a shading path out is a one-line choice once each pass builds its own pipelines.
+
+**Alternatives considered**: one large "render cleanup" pull request: rejected (Principle IX, and a
+large diff makes a pixel change hard to find). A shared backend trait for wgpu and DirectX9:
+rejected, as in `docs/MACRO_REFACTOR_DRAFT.md` (only two implementations, and the plan hand-off
+already works).

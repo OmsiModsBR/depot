@@ -76,3 +76,19 @@ Compare the `profile window:` lines (frame, GPU, stages) and the loading time. P
   `fs_snow_enhanced` lines.
 - Renderer start-up time before/after on lavapipe (about 37 s today in any mode) and on a graphics
   card with the driver's shader cache cleared.
+
+## Q8. Refactor phases (8-14)
+
+Each refactor pull request shows that nothing a player sees changed:
+
+- `cargo test --workspace` and `cargo build --release`; the physics and offscreen traces of CI come
+  out identical (no `physics-delta` / `offscreen-delta` label);
+- `offscreen_golden` and `omsi-render`'s GPU tests (lavapipe) pass without changing a golden;
+- the mode measurement of [research.md](research.md#baseline-measurements) before and after, within
+  noise; for phases 8 and 11, also a `profile window:` comparison on the same scene;
+- phase 8: unit tests of `FrameFeatures::decide` for each view (window, mirror, headset eye, triple
+  panel) and each path, without a GPU;
+- phase 12: the contract test runs the same `FramePlan` through the translation on `NullBackend` and
+  checks the batches, coronas, sky and lights it records;
+- phase 13: the number of `#[cfg(test)]` modules in `src/` of the crate drops to zero, and the test
+  count of `cargo test -p <crate>` stays the same.

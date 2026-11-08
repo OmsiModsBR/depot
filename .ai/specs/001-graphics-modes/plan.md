@@ -13,6 +13,9 @@
 > - Enhanced: the mode where the advanced graphics work goes. Compare it with Enhanced+ to find the
 >   differences, especially in how transparent surfaces are handled. Ray tracing and path tracing
 >   are not to be considered.
+>
+> Follow-up (2026-11-08): include in the plan a refactor of the code that addresses the points the
+> initial analysis of the graphics modes raised.
 
 **Execution notes**: `.ai/.specify/extensions.yml` does not exist, so no hooks ran. The feature
 directory was created by hand (`setup-plan.ps1` was not run).
@@ -45,6 +48,16 @@ Technical approach:
    bit in `camera.sky_color.w`, `Lighting::classic`, the `CLASSIC` global and what depends on it.
 5. **Build only the chosen mode's pipelines** (Enhanced's only in Enhanced): changing the mode
    already needs a restart.
+6. **Refactor the rendering code that stays** ([research.md](research.md), R-6), after the
+   removals so that only live code is refactored, with no pixel and no performance change:
+   - the frame's decisions in one pure, tested function, and the passes taking them as one value
+     instead of loose bools;
+   - environment flags out of the frame path;
+   - `Renderer::build`, `begin_frame`, `encode_main_pass` and the DirectX9 `draw_scene_inner` split
+     by pass;
+   - a contract test of the `FramePlan` → DirectX9 translation;
+   - tests out of `src/`;
+   - the stale documents fixed.
 
 ## Technical Context
 
@@ -73,6 +86,10 @@ opening the renderer should get faster in Vanilla+ (fewer pipelines)
 that brings the glass behaviour to Enhanced (a visible change, with before/after); players with
 `graphics=vanilla` or `enhanced_plus` saved must not end up in a mode that does not exist
 
+**Refactor rule**: a refactor phase changes no pixel, no physics or state trace and no frame
+time beyond measurement noise (Principle VII gives refactors no exception), and leaves the code
+smaller or less coupled than before (Principle X)
+
 **Scale/Scope**: `omsi-render` 28.5k lines, `omsi-render-d3d9` 11.4k; about 55 files touched by
 the Enhanced+ removal (counted by `grep` on `19290ac`), about 12 by the wgpu Vanilla removal
 
@@ -88,10 +105,11 @@ the Enhanced+ removal (counted by `grep` on `19290ac`), about 12 by the wgpu Van
 | IV. Invalid content never crashes | ✓ | Old or unknown `graphics` values fall back to a valid mode with a log line |
 | V. Domains as packages | ✓ | `GraphicsMode` is a domain object (`omsi-cfg`); choosing the backend stays in the app's `output` implementation |
 | VI. Tests outside `src/` | ✓ | New tests go to `tests/`; `omsi-render/src/tests.rs`, `src/tests_units.rs` and `omsi-render-d3d9/src/d3d9/scene_tests.rs` move out when each crate is touched |
+| VII. No performance regression (refactors) | ✓ with a condition | Each refactor phase carries a before/after of the mode measurement in [research.md](research.md#baseline-measurements) and, where it touches the frame, a `profile window:` comparison on the same scene |
 | VII. No performance regression | **condition** | Players on wgpu Vanilla move to DirectX9, which has **not been measured** against it yet: phase 5 goes in only with before/after measurements on the same scene (quickstart Q4) |
 | VIII. Provenance and public text | ✓ | Differences describe only what is seen |
 | IX. Small, traceable changes | ✓ | Seven pull requests, one topic each |
-| X. Lean, clean code | ✓ | Mostly removal (YAGNI) and de-duplication (`graphics_mode` in two crates; the "a body cut by its transmap is a cut-out" rule in `lists.rs` and `rt.rs`) |
+| X. Lean, clean code | ✓ | Mostly removal (YAGNI) and de-duplication (`graphics_mode` in two crates; the "a body cut by its transmap is a cut-out" rule in `lists.rs` and `rt.rs`). The refactor phases (8-14) target the long functions, the bool parameter lists and the environment flags read in the frame |
 
 Result: **pass**, with two conditions that become tasks: validate the differences in the game (II)
 and measure DirectX9 before it replaces wgpu Vanilla (VII). Re-checked after design: unchanged.
@@ -127,12 +145,21 @@ crates/
 │   ├── lighting/model.rs            # Lighting { path } in place of classic/enhanced
 │   ├── renderer/{open,build,frame,lists,prepare,reflections,effects,encode,passes}.rs
 │   ├── gpu/{formats,errors,context}.rs  # no RT_GBUF/RT_BUFFERS, no ray-query request
-│   └── passes/{main,post,shadow}.rs # glass transmitting sunlight in the shadow map (phase 2)
-├── omsi-render-d3d9/                # becomes the Vanilla mode; README updated
+│   ├── passes/{main,post,shadow}.rs # glass transmitting sunlight in the shadow map (phase 2); passes take &FrameFeatures (phase 8)
+│   ├── renderer/frame.rs            # FrameFeatures::decide, a pure function (phase 8); begin_frame split (phase 11)
+│   ├── renderer/options.rs          # behaviour flags become RenderOptions fields; DebugOptions (phase 9)
+│   ├── gpu/fault.rs (new)           # the OMSI_FAKE_GPU_ERROR hooks in one place (phase 9)
+│   ├── renderer/build.rs            # each pass builds its own pipelines (phase 10)
+│   ├── tests.rs, tests_units.rs     # MOVED to tests/ (phase 13)
+│   └── ARCHITECTURE.md              # drift fixed (phase 14)
+├── omsi-render-d3d9/                # becomes the Vanilla mode; README updated (phase 14)
+│   ├── src/d3d9/scene.rs            # draw_scene_inner split by pass (phase 12)
+│   └── src/d3d9/scene_tests.rs      # MOVED to tests/ (phase 13)
 ├── omsi-app/src/
 │   ├── settings.rs                  # GraphicsMode; migration; no classic()/ray_tracing()
 │   ├── core/implementation/{startup,make}.rs  # no ENHANCED, ENHANCED_PLUS, CLASSIC
 │   ├── output/implementation/backend.rs       # Backend::of from the mode
+│   ├── output/implementation/d3d9.rs          # FramePlan → SceneFrame translation, contract-tested (phase 12)
 │   ├── weather/implementation/{weather_setup,puddles}.rs
 │   └── hud/implementation/lists/{select,pages}.rs
 ├── omsi-launcher-core/src/lib.rs    # uses GraphicsMode
@@ -157,7 +184,26 @@ Ordered so that each pull request is small, revertible and does not wait on an o
 | 4 | `fix/dx9-*` (one per item) | The differences phase 0 decides to bring to DirectX9 | 0 | yes, in DirectX9 |
 | 5 | `feat/vanilla-is-dx9` | Vanilla chooses the D3D9 backend; `graphics_api` for Vanilla+/Enhanced only; Vanilla with VR or triple screen per decision D3 | 0, 3, 4 | yes, for wgpu Vanilla users |
 | 6 | `feat/remove-wgpu-vanilla` | Remove the `classic` branch of the shaders, `Lighting::classic`, the `sky_color.w` bit, the dead `flags.z` branch, the classic case of the spray and the puddles | 5 | no (the mode can no longer be reached) |
-| 7 | `feat/mode-pipelines` | Build only the chosen mode's pipelines (end of "a computer always builds Enhanced") | 3, 6 | no; faster renderer start-up |
+| 7 | `feat/mode-pipelines` | Build only the chosen mode's pipelines (end of "a computer always builds Enhanced") | 3, 6, 10 | no; faster renderer start-up |
+
+### Refactor track (R-6)
+
+Starts once phase 6 has removed the dead modes, so nothing is refactored only to be deleted. Phases
+13 and 14 do not depend on the modes and can go in at any time. Each phase is one pull request (or
+one per crate, where marked).
+
+| # | Branch | Content | Needs | Pixels change? |
+|---|---|---|---|---|
+| 8 | `feat/render-frame-features` | `FrameFeatures::decide`: the frame's decisions (FXAA, glass, scaled target, Enhanced, puddles, AO, prepass) as one pure function, unit-tested without a GPU. `encode_main_pass` (22 parameters, 9 of them bools), `encode_enhanced_post` and `encode_glass` take `&FrameFeatures` | 6 | no |
+| 9 | `feat/render-options-flags` | Behaviour flags read in the frame (`NO_FXAA`, `NO_AO`, `NO_GLASS_PICTURE`, `NO_PUDDLE_REFLECTIONS`, `NO_SHADOWS`...) become `RenderOptions` fields the app reads once; diagnostic flags become a `DebugOptions` read when the renderer opens; the `OMSI_FAKE_GPU_ERROR` hooks (22 places in 6 files) go into `gpu::fault`; flags nothing reads any more are removed | 3, 6 | no |
+| 10 | `feat/render-build-by-pass` | `Renderer::build` (504 lines) split: each pass builds its own pipelines in its module (the scene, corona, snow and sky pipelines are built inline today, against `ARCHITECTURE.md` rule 5), grouped by shading path so phase 7 can leave a path out | 6 | no |
+| 11 | `feat/render-frame-stages` | `begin_frame` (507 lines) and `encode_main_pass` (478) split into their stages (targets, lights and sprites, camera uniform; sky, world, cab, overlays). Optional: visibility out of `renderer/lists.rs` into `scene::visibility` (an `ARCHITECTURE.md` "not yet in place" item) | 8 | no |
+| 12 | `feat/dx9-frame-contract` | The `FramePlan` → `SceneFrame` translation (`omsi-app` `d3d9.rs`, `frame` 175 lines) becomes a function of its own with a contract test on `NullBackend`: the same plan gives the same batches, coronas, sky and lights; the shared Rust/HLSL constants are checked there too (item C7 of `docs/MACRO_REFACTOR_DRAFT.md`). `draw_scene_inner` (271 lines) split by pass (sky, world, smoke, coronas, glass rain) | 5 | no |
+| 13 | `feat/render-tests-out`, `feat/d3d9-tests-out` | Tests out of `src/` (Principle VI): `omsi-render/src/tests.rs` (2,270 lines), `src/tests_units.rs` (1,308), the in-file test modules (30 files with `#[cfg(test)]` in the two crates), `omsi-render-d3d9/src/d3d9/scene_tests.rs` (2,477), through each crate's `testing` module | — | no |
+| 14 | `docs/render-docs-drift` | `omsi-render-d3d9/README.md` (says smoke and mirrors are not drawn; they are), the `d3d9.rs` header (navigator maps), `ARCHITECTURE.md` (`RenderOptions` said to live in `api`) | — | no |
+
+Not in this plan, noted for later: `open_on` (432 lines), the XR session's `render` (469 lines,
+`omsi-app`), the repeated full-screen-pass, render-target and bind-group set-up in `omsi-render` (no shared helper today).
 
 ## Decisions for the maintainer
 

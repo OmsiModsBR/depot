@@ -65,3 +65,26 @@ left; phase 2 extends it with the glass case:
 | `[matl_noZcheck]`, or instance alpha < 0.01 | casts nothing | casts nothing |
 
 The rule lives in one place (`scene` or `passes::shadow`), with a test in `omsi-render/tests/`.
+
+## FrameFeatures (exists, `omsi-render/src/renderer/frame.rs`; phase 8)
+
+Today a struct of 13 bools filled inside `begin_frame` and passed to the passes field by field.
+After phase 8:
+
+```text
+FrameFeatures::decide(path, &RenderOptions, &FrameInputs) -> FrameFeatures   # pure, no GPU
+FrameInputs  { view: Window | Mirror | XrEye | TriplePanel, lead_view, full_size, picture_size,
+               rain, wetness, snow, has_glass_slot, has_reflective_material }
+```
+
+The passes take `&FrameFeatures` (or the `FrameContext` that holds it) instead of separate bools.
+`rt_frame` leaves with phase 1; `vanilla_fxaa` is renamed `fxaa_without_msaa` with phase 6.
+
+## RenderOptions and DebugOptions (phase 9)
+
+| Kind of flag | Today | After |
+|---|---|---|
+| Behaviour a player may set (`OMSI_NO_FXAA`, `OMSI_NO_AO`, `OMSI_NO_SHADOWS`, `OMSI_NO_PUDDLE_REFLECTIONS`, `OMSI_NO_GLASS_PICTURE`...) | read in the frame | a `RenderOptions` field, set by the app from the settings or the flag once |
+| Diagnostic (`OMSI_DEBUG_*`, `OMSI_GPU_TIMERS`, `OMSI_PROFILE`...) | read where used | `DebugOptions`, read when the renderer opens, held on `Renderer` |
+| Fault injection (`OMSI_FAKE_GPU_ERROR`) | 22 places in 6 files | `gpu::fault::due(Hook)`, one module |
+| Unused | — | removed |
