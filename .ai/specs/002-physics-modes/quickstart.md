@@ -18,7 +18,7 @@ See the [plan](plan.md) (phases), [research](research.md) (R-V, R-A) and [contra
 
 The result is written in #677 and in `contracts/bus-key.md` before phase 3.
 
-## Q2. Phase 0: the Classic AI observations (R-A, KA-1..KA-7)
+## Q2. Phase 0: the Classic AI observations (R-A, KA-1..KA-11)
 
 For each row of R-A, the check in its "How it is checked" column, on a stock map with the AI density
 low enough to follow one vehicle. Record a short video or a screenshot sequence and fill the row with
@@ -81,7 +81,7 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 ## Q10. Phase 11: the setting
 
 - Launcher: the "Physics" list saves `physics=classic|depot` and reads it back.
-- A session with `physics=depot`: every vehicle logs Depot; with `classic`, only vehicles with the key
+- A session with `physics=depot`: every vehicle logs Depot; with `classic`, only the player's vehicle, if it has the key,
   log Depot.
 - `docs/FORMATS.md`, `docs/MODDING.md` and `docs/USER_GUIDE.md` describe the key and the setting;
   `CHANGELOG.md` has the line under **Unreleased**.

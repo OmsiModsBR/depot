@@ -20,7 +20,7 @@ OMSI 2. A candidate moves to Depot only when its check shows that OMSI 2 behaves
 | V5 | Wheels pushed out of wall faces (`WALL_K`, `WALL_C`) | `suspension.rs`, `collide.rs` | Drive a wheel slowly into a wall face | Shared if OMSI 2 also stops the wheel at the face |
 | V6 | The body set back on its wheels past 72.5° of lean | `body.rs` `TIP_OVER` | — | Shared: a safety net against bad ground, not a model rule |
 | V7 | AI road body: `AiBody` (pure pursuit, planner speed, sprung body, `[cog]` sag) | `ai/`, `omsi-app` `traffic.rs` | — (decided by the request) | **Depot AI**; Classic gets a new body (R-A) |
-| V8 | AI may steer beyond the model's lock to keep to a junction's path (#249) | `ai/road.rs` | — | Part of the Depot AI. The Classic AI keeps to its path by construction (KA-1), so the question does not arise |
+| V8 | AI may steer beyond the model's lock to keep to a junction's path (#249) | `ai/road.rs` | — | Part of the Depot AI. The Classic AI keeps its rotation point on its path by construction (KA-1), so the question does not arise |
 
 **Decision** (D2, maintainer, 2026-11-08): V1 and V7 go into the engines now; for now the Depot mode
 overrides nothing else. V2-V6 stay shared. The V3 and V4 checks are kept here for a later decision;
@@ -34,40 +34,70 @@ guess is wrong; Principle II asks for the check first.
 geometry, solver passes), and inventing Classic values would break Principle III's "only OMSI 2's own
 defaults".
 
-## R-A. The Classic AI body: what OMSI 2's AI is expected to do
+## R-A. The Classic AI body: what OMSI 2's AI does
 
 The request asks for a new AI implementation brought in line with OMSI 2's. Today's `AiBody` is a
-Depot design (it was built to fix lane-placement artefacts, see the `ai/mod.rs` header). What OMSI 2's
-AI does is written below as **observable behaviour to validate**, one check each (quickstart Q2); the
-Classic AI implements only what the checks confirm. The existing `ai/road.rs` comment and these
-expectations disagree on KA-4, which is why the check comes before the code.
+Depot design (it was built to fix lane-placement artefacts, see the `ai/mod.rs` header). The rows
+below describe OMSI 2's AI as the Classic model reproduces it. They were reworked on 2026-11-08 from a
+private analysis the maintainer approved; that analysis guides the work but is not cited, and no
+value from it is written here (Principle VIII). Each row stays **to validate** until its check in
+OMSI 2 (quickstart Q2) or the maintainer's in-game observation confirms it; the numbers the Classic AI
+needs are measured in those checks or chosen by Depot and marked as such in the model document.
 
-| # | Expected behaviour (to validate) | How it is checked in OMSI 2 | Phase |
-|---|---|---|---|
-| KA-1 | The leading section stays on its lane path: the point at `[rot_pnt_long]` lies on the path and the vehicle's heading is the path's direction there, so the rear axle tracks the path through bends without running wide | Film an AI bus through a tight junction turn from above; compare the rear wheels' track with the lane | 8 |
-| KA-2 | The AI vehicle's speed comes from its own drive and brakes: the AI driver sets throttle and brake towards the target speed, and the scripts' `M_Wheel` and brake forces accelerate the mass | Halve the engine torque of an AI-only copy of a bus (its scripts' constant file) and time its pull-away from a stop | 9 |
-| KA-3 | One grip value per vehicle (the road surface under it) limits the AI's acceleration and braking | An AI bus pulling away and stopping on a wet and on a dry road | 9 |
-| KA-4 | On its path the AI body has no sprung pitch or roll of its own: it stands on the ground under its wheels with its static sag | Watch an AI bus braking hard and in a bend: does the body pitch/roll? | 10 |
-| KA-5 | The rear sections of an articulated AI vehicle follow the path behind their joint | Film an articulated AI bus through a junction turn | 10 |
-| KA-6 | A hit by the player's vehicle releases the AI vehicle to the free rigid body, without a driver, until it is cleared from the scene | Validated: the maintainer's in-game observation (2026-11-08): the AI vehicle becomes a free rigid body until it is cleared from the scene | 10, decision D3 |
-| KA-7 | The AI vehicle's weight is shared about the model origin, as the player's in Classic | An AI copy of the Mi5 standing at a stop: is it level, as the player's? | 10 |
+An AI road vehicle has three physical states, shared by all its sections: **on its route** (normal),
+**loose and active** (after a crash) and **loose and asleep**.
 
-**Decision**: the Classic AI is a new body in `ai/classic/`, built in three steps (path, drive,
-pose), each from its confirmed rows. The traffic planner, the AI driver's decisions and the rail and
-air followers stay shared.
+| # | Behaviour (Classic model) | How it is checked in OMSI 2 | Status | Phase |
+|---|---|---|---|---|
+| KA-1 | On its route, the point at `[rot_pnt_long]` moves along the lane path, shifted sideways during a lane change. The heading relative to the path is a state of its own, integrated by a kinematic bicycle model whose length runs from that point to the front of the vehicle: in a steady bend the body's axis is **not** on the path's tangent but turned in by `sin ψ_r = L · κ`. Each axle steers to `atan((y_i - [rot_pnt_long]) · κ_v)` with the vehicle's curvature `κ_v` | Film an AI bus from above through a tight junction turn and a lane change; the rotation point stays on the lane while the front swings out | to validate | 8 |
+| KA-2 | Within the detail radius (KA-9) the leading section integrates its speed from the scripts' `M_Wheel` at the first axle's radius of each section, the rolling resistance and every wheel's brake forces, over the mass of all sections with their passengers; the AI driver turns the ratio of speed to target speed into throttle and brake for the scripts. The other sections take the leading section's speed | Halve the engine torque of an AI-only copy of a bus and time its pull-away next to the camera | to validate | 9 |
+| KA-3 | One grip value per vehicle, from a fixed road surface and the weather (wet, snow, ice), not from the surface under its wheels; it bounds the AI's acceleration and braking and its comfortable braking | An AI bus pulling away and stopping on a wet and a dry road, and on a gravel patch | to validate | 9 |
+| KA-4 | On its route the vehicle is **not** a rigid body: no springs, no settling, no dynamic pitch or roll; its height and attitude come from the path's geometry | Watch an AI bus braking hard and in a bend: the body neither pitches nor rolls | to validate | 8 |
+| KA-5 | The rear sections of an articulated AI vehicle follow their joint as **kinematic trailers**: the articulation angle is integrated every frame from the front section's curvature and the joint and rotation-line distances, so a rear section cuts a bend as a real trailer does. Far from the camera the rear sections' poses are not recalculated | Film an articulated AI bus through a junction turn: the rear section cuts inside the lane | to validate | 10 |
+| KA-6 | Contact with **any active body** (the player's vehicle, an AI vehicle already loose, a loose vehicle) on **any section** releases the AI vehicle from its route, unless its type is `[fixed]`; a loose AI vehicle can release another (a chain). Loose, it runs the player's rigid body (K-1 and the C-* rules) without a driver, fully braked with its hazard lights on, and never falls asleep for standing still. It goes back to its route (asking for a new path) when the player clears the crash (police) or by KA-11 | Nudge an AI car at walking pace with the player's bus, then push it into a second AI car | **validated** in part: the maintainer's in-game observation (2026-11-08) that a hit AI vehicle becomes a free rigid body until it is cleared; the rest to validate | 10, decision D3 |
+| KA-6b | Release and return act on the whole vehicle at once. Released, the sections become the player's multibody train (rigid bodies on joints), starting from their poses and articulation angles on the route with no jump; back on the route, every section is put back on it | Release an articulated AI bus in a bend: no section jumps at the moment of the hit | to validate | 10 |
+| KA-7 | On its route there is no weight sharing between axles (no springs, KA-4); the weight is shared only while loose, by the player's rigid body (K-1, about the model origin) | An AI copy of the Mi5 at a stop next to the player's Mi5: its height follows the path, not its springs | to validate | 10 |
+| KA-8 | On their routes, AI vehicles collide neither with each other nor with static scenery (walls, posts, buildings): they only avoid obstacles by the driver's checks. An AI vehicle on its route collides only with active bodies (KA-6). A loose AI vehicle is an ordinary body: it collides with everything and releases any AI vehicle it touches | Two AI cars forced into the same spot (a blocked junction) overlap rather than push; a loose AI car pushed against a wall stops at it | to validate | 10 |
+| KA-9 | **Beyond the detail radius** (the map tiles around the camera that count as near) an AI vehicle's speed equals its driver's target speed, with no force integration, and its rear sections' poses are not updated. A model key `[noDistanceCheck]` makes a vehicle always count as near | Watch an AI bus leave and re-enter the detail radius: far away it keeps its target speed exactly | **decided** by the maintainer (2026-11-08): Classic AI far from the camera behaves as OMSI 2's; details to validate | 9 |
+| KA-10 | While the AI vehicle serves a stop (doors open until the scripts close them), its speed always comes from its drive and brakes (KA-2), even beyond the detail radius | An AI bus at a stop far from the camera on a grade: the scripts' brakes hold it | to validate | 9 |
+| KA-11 | A loose AI vehicle is cleared automatically once its tile is beyond the detail radius; every loose AI vehicle then goes back to its route (KA-6) | Knock an AI car loose, drive away until it is out of the detail radius, come back: it drives on its route again | to validate | 10 |
+
+**Decision**: the Classic AI is a new body in `ai/classic/`, built in three steps: route and pose
+(KA-1, KA-4), speed (KA-2, KA-3, KA-9, KA-10), and rear sections, release and contacts (KA-5 to
+KA-8, KA-6b, KA-11). The traffic
+planner, the AI driver's target-speed decisions and the rail and air followers stay shared. The
+existing `ai/road.rs` comment ("AI cars are bodies on the same wheel physics as the player's bus")
+describes only the loose state.
 
 **Rationale**: the request makes the current AI Depot's; a Classic AI that copied it would leave the
-default mode without an OMSI-faithful AI. Building from observed rows keeps Principle II.
+default mode without an OMSI-faithful AI. The far-from-camera regime (KA-2) and the absence of springs
+and AI-AI contacts on the route (KA-4, KA-8) also make the Classic AI cheaper than `AiBody`, which
+serves SC-007.
 
-**Alternatives considered**: (a) the Classic AI runs the player's full rigid body: the most faithful
-if KA-4 shows sprung motion, but costs about five times `AiBody` per vehicle (study of 2026-10-10:
-rigid step about 10 µs plus 336 ground probes against 1.1 µs and 4 probes); only considered if Q2
-contradicts KA-4. (b) keep `AiBody` in both modes: rejected by the request.
+**Alternatives considered**: (a) the Classic AI on its route runs the player's full rigid body:
+rejected, KA-4 says OMSI 2 does not, and it would cost about five times `AiBody` per vehicle (study of
+2026-10-10). (b) keep `AiBody` in both modes: rejected by the request.
+
+## R-R. The detail radius and contacts of the Classic AI
+
+**Decision**: the detail radius of KA-9 and KA-11 is the tile neighbourhood Depot already loads around
+the camera (the camera's tile and its eight neighbours); a vehicle is near while its tile is in it.
+A configurable count of neighbour tiles is a separate decision, not part of this feature.
+
+**Contacts (phase 10)**: today only the player's body tests obstacles; it meets the AI vehicles'
+boxes, is stopped by them and counts the crash, but the AI vehicle is neither pushed nor released.
+The Classic AI adds: (a) the release of an AI vehicle the player's body touches (KA-6); (b) contacts
+between a loose AI vehicle and AI vehicles on their routes, for the chain; (c) a loose AI vehicle
+against the scenery (KA-8). AI vehicles on their routes keep testing nothing against each other.
+
+**Out of scope**: handing the player's bus to the computer (an OMSI 2 menu feature Depot does not
+have); noted for a separate decision.
 
 ## R-K. The `.bus` key
 
 **Decision** (D1, maintainer, 2026-11-08): `[depot_physics]`, a section with no value lines; its
-presence makes the vehicle use the Depot engine ( [contracts/bus-key.md](contracts/bus-key.md)).
+presence makes the player's vehicle use the Depot engine; AI vehicles ignore it and follow the
+setting (D6, maintainer, 2026-11-08, to keep keyed mods in traffic from adding load) ( [contracts/bus-key.md](contracts/bus-key.md)).
 
 **Rationale**: Depot's own parser already collects keys it does not know into
 `Vehicle::unknown_keywords` (`omsi-vehicle/src/vehicle.rs:484`) and goes on, which is the behaviour
@@ -167,4 +197,4 @@ and the key, like any other setting. The log line of R-N shows which one applied
 refactors): the AI and player steps measured before/after in the existing physics benchmark scenes.
 The Classic AI phases (8-10) measure the AI step per vehicle against `AiBody` (1.1 µs and 4 ground
 probes per vehicle and frame in the 2026-10-10 study) on 40 AI vehicles; Classic must not be slower.
-If KA-4 forces sprung motion, that is a new feature cost and needs the justification of Principle VII.
+The far-from-camera regime of KA-2 is expected to make Classic cheaper than `AiBody`.

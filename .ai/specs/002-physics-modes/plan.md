@@ -1,8 +1,7 @@
 # Implementation Plan: Two physics modes (OMSI Classic and Depot)
 
 **Branch**: one per delivery phase (see "Delivery phases") | **Date**: 2026-11-08 |
-**Spec**: issue #677 and its decision comment (no `spec.md`: the maintainer's request below is the
-specification)
+**Spec**: [spec.md](spec.md) (issue #677, its decision comment and the request below)
 
 **Input**: the maintainer's request (2026-11-08), on top of the decisions already recorded in #677:
 
@@ -59,13 +58,15 @@ Technical approach:
    Classic document, before any behaviour changes, so the later phases have a fixed reference.
 3. **One type for the mode**, `PhysicsMode { Classic, Depot }` in `omsi-cfg`, read from
    `settings.cfg` (`physics=classic|depot`) and resolved **per vehicle** at spawn: the `.bus` key
-   `[depot_physics]` makes that vehicle Depot whatever the setting says
+   `[depot_physics]` makes the player's vehicle Depot whatever the setting says; AI vehicles follow
+   the setting only (maintainer, 2026-11-08: keeps keyed mods in traffic from adding load)
    ([data-model.md](data-model.md), [contracts/](contracts/)).
 4. **Split the code by engine** where the engines differ: `classic/` and `depot/` modules beside the
    shared stages, chosen by an enum held by the body (two real implementations, Principle V).
    Moving today's code there changes no bit of any trace.
 5. **Depot overrides**: weight shared about `[cog]` for the player's body in Depot; the AI's static
-   pose follows the vehicle's engine (origin in Classic, `[cog]` in Depot).
+   pose in Depot stays as today (`[cog]`); a Classic AI vehicle on its route has no springs, so no
+   static sag (KA-4, KA-7).
 6. **Classic AI**: a new AI body that behaves as OMSI 2's AI is observed to behave (R-A), delivered
    in small steps, each with its conformance tests on the five vehicles and the Depot AI's traces
    unchanged.
@@ -173,7 +174,7 @@ crates/
 │   │   ├── classic/ (new)               # the Classic AI body (phases 8-10)
 │   │   └── depot/                       # road.rs and AiBody moved here unchanged (phase 6)
 │   └── vehicle/
-│       ├── vehicle_type.rs, visuals.rs  # AI static pose by engine (rest loads about origin or [cog])
+│       ├── vehicle_type.rs, visuals.rs  # AI static pose: Depot as today; none for a Classic AI on its route
 │       └── coupled/trailer.rs           # rear sections of AI vehicles by engine
 ├── omsi-sim/tests/
 │   ├── support/vehicles.rs              # + the five vehicles of contracts/test-vehicles.md
@@ -185,7 +186,7 @@ crates/
 │   ├── settings.rs                      # Settings::physics: PhysicsMode
 │   └── gameplay/implementation/traffic.rs  # builds the AI body of the vehicle's engine
 ├── omsi-launcher-core/src/lib.rs        # reads/writes `physics`
-└── omsi-launcher-ui/src/window/domain/settings.rs  # "Physics" list: OMSI Classic, Project Depot Physics
+└── omsi-launcher-ui/src/window/domain/settings.rs  # "Physics" list in the "Simulation" section: OMSI Classic, Project Depot Physics
 scripts/physics-trace-diff.sh            # runs both engines
 CHANGELOG.md
 ```
@@ -203,7 +204,7 @@ which improves the default.
 
 | # | Branch | Content | Needs | Behaviour changes? |
 |---|---|---|---|---|
-| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-7 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3) | — | — |
+| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-11 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3) | — | — |
 | 1 | `docs/physics-models` | `docs/physics/` with the common, Classic and Depot models; the Classic AI rows not yet checked marked "to validate" | — | no |
 | 2 | `feat/physics-test-vehicles` | The five synthetic vehicles; conformance tests of today's player physics against C-*/K-* (the Classic engine as it stands) | 1 | no (a mismatch found becomes a `fix/` PR) |
 | 3 | `feat/physics-mode-type` | `PhysicsMode` in `omsi-cfg`; `settings.cfg` key `physics` read by the game and the launcher core (not shown in the UI yet); `[depot_physics]` parsed; mode resolved per vehicle at spawn and held by the vehicle | 0 (Q1), D1 | no |
@@ -211,10 +212,10 @@ which improves the default.
 | 5 | `feat/physics-engine-split` | `implementation/classic/` and `implementation/depot/`; `RigidBody` holds its engine; the load-share stage moved behind it, both engines still doing today's rule | 3 | no |
 | 6 | `feat/ai-engine-split` | `AiBody` and `road.rs` moved to `ai/depot/`; `AiMotion` with only the Depot arm built until phase 8; AI static pose computed by engine (both still today's) | 5 | no |
 | 7 | `feat/depot-cog-load-share` | Depot: the player's weight shared about `[cog]` (struts and `wheel_rest_loads`); conformance D-1 on the five vehicles | 5, 2 | yes, Depot player only (`physics-delta`) |
-| 8 | `feat/classic-ai-path` | Classic AI body: the rotation point on the lane, heading from the path, rear axle on the path; speed as the planner hands it (as today) | 6, 0 (Q2) | yes, AI in Classic (`physics-delta`) |
-| 9 | `feat/classic-ai-drive` | Classic AI speed from the vehicle's own drive torque, brakes and grip, the AI driver setting throttle and brake for the target speed (KA-2, KA-3), if Q2 confirms it | 8 | yes, AI in Classic |
-| 10 | `feat/classic-ai-pose` | Classic AI static pose about the origin; body pose on the ground per KA-4; articulated rear sections per KA-5; release to the free rigid body after a hit until cleared (KA-6, decision D3) | 8 | yes, AI in Classic |
-| 11 | `feat/physics-mode-setting` | Launcher "Physics" list (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
+| 8 | `feat/classic-ai-path` | Classic AI body on its route: the rotation point on the lane, heading by the kinematic bicycle model, axles steered from its curvature (KA-1); height and attitude from the path, no springs (KA-4); speed as the planner hands it (as today) | 6, 0 (Q2) | yes, AI in Classic (`physics-delta`) |
+| 9 | `feat/classic-ai-drive` | Classic AI speed in two regimes: within the detail radius from the vehicle's own drive torque, brakes and grip with the AI driver setting throttle and brake (KA-2), beyond it equal to the target speed with rear sections not updated (KA-9, maintainer's decision), always physical while serving a stop (KA-10); grip from a fixed road surface and the weather (KA-3) | 8 | yes, AI in Classic |
+| 10 | `feat/classic-ai-loose` | Rear sections as kinematic trailers (KA-5); release by any active body on any section (chain, not `[fixed]`), loose on the player's multibody train without a driver from the route poses with no jump, full brake and hazard lights, back to a route when cleared (KA-6, KA-6b, D3) or automatically beyond the detail radius (KA-11); weight shared only while loose (KA-7); no AI-AI or AI-scenery contacts on the route, loose AI against everything (KA-8, research R-R) | 8 | yes, AI in Classic |
+| 11 | `feat/physics-mode-setting` | Launcher "Physics" list in the Settings page's "Simulation" section (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
 
 Phases 7 and 8-10 can run in parallel after 6. A phase that finds today's code disagreeing with the
 model document fixes the code (a `fix/` PR with its failing test) or corrects the document, never
@@ -229,12 +230,17 @@ both silently.
   Every other candidate of [research.md](research.md) R-V stays shared; a later override is a new
   decision with its own phase.
 - **D3** (phase 10): in OMSI 2 an AI vehicle hit by the player becomes a free rigid body until it is
-  cleared from the scene (the maintainer's in-game observation). The Classic AI replicates it (KA-6).
+  cleared (the maintainer's in-game observation). The Classic AI replicates it (KA-6): any active body
+  releases it, it stands fully braked with hazard lights, and it goes back to a route when the crash
+  is cleared or its tile leaves the detail radius.
 - **D4** (phase 3): in an articulated vehicle only the key in the front section's file counts, and it
   applies to every following section; a key found only in a rear section's file is reported in the
   log and has no effect.
 - **D5** (phases 2 and 7): the 23 m articulated 8x2 is one vehicle (front section on two axles, rear
   section on two axles with the fourth steered): five test vehicles in total.
+
+- **D6** (phase 3, 2026-11-08): the key does not override the setting for AI vehicles; it applies
+  to the player's vehicle only, so that keyed mods in traffic add no processing load.
 
 ## Complexity Tracking
 
