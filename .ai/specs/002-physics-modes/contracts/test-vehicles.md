@@ -11,10 +11,11 @@ front section's rear axle for an articulated front section; a rear section's fir
 | V1 | 4x2 solo bus, 12 m | 1 | steered front; driven rear | rear axle (today's `bus()`) |
 | V2 | 6x2 rigid bus, 15 m, steered third axle | 1 | steered front; driven middle; **steered** tag | middle axle |
 | V3 | 6x2 articulated bus, 18 m (pusher) | 2 | front: steered front, middle; rear: driven | front: its rear axle; rear: its axle |
-| V4 | Bi-articulated bus, 27 m (8x2) | 3 | front: steered front, second; middle: one axle; rear: driven | each section per the rules above |
-| V5 | Articulated bus, 23 m, 8x2 (puller) | 2 | front: steered front, driven second; rear: two axles, the **fourth steered** | front: its rear axle; rear: its first axle |
+| V4 | Bi-articulated bus, 27 m (8x2, puller) | 3 | front: steered front, **driven** second; middle: one axle; rear: one axle | each section per the rules above |
+| V5 | Articulated bus, 23 m, 8x2 (pusher) | 2 | front: steered front, second; rear: **driven** first (third axle), **steered** fourth | front: its rear axle; rear: its first axle |
 
-Decision D5 (2026-11-08): V5 is one vehicle; five vehicles in total.
+Decision D5 (2026-11-08): V5 is one vehicle; five vehicles in total. Driven axles as the maintainer
+gave them (2026-11-08): V4 drives the front section's second axle, V5 the rear section's first.
 
 Each vehicle is also given a `[cog]` y off the origin (between 0.3 and 0.8 m forward) so that the
 Classic and Depot static shares differ measurably (K-1 against D-1).
