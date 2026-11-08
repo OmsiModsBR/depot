@@ -45,7 +45,7 @@ Os arquivos do Spec Kit ficam em `.ai/.specify/`, e não em `.specify/` na raiz:
 
 - `.ai/.specify/memory/constitution.md`: constituição do projeto.
 - `.ai/.specify/templates/`: templates de spec, plano, tarefas, checklist e constituição.
-- `.ai/.specify/scripts/powershell/`: scripts auxiliares (`check-prerequisites.ps1`, `setup-plan.ps1`, `setup-tasks.ps1`, `resolve-template.ps1`, `create-new-feature.ps1`).
+- `.ai/.specify/scripts/bash/`: scripts auxiliares em bash (`common.sh`, `check-prerequisites.sh`, `setup-plan.sh`, `setup-tasks.sh`, `resolve-template.sh`, `create-new-feature.sh`). No Windows, rode-os pelo Git Bash ou pelo WSL.
 - `.ai/.specify/init-options.json`, `.ai/.specify/integration.json`: configuração.
 - `.ai/.specify/feature.json`: ponteiro local para a funcionalidade ativa (ignorado pelo git).
 
