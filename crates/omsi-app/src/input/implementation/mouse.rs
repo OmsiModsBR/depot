@@ -745,6 +745,7 @@ impl App {
                 }
                 // a tear-off ticket block: a ticket of its type torn off for the passenger
                 if let Some(n) = self
+                    .session
                     .humans
                     .as_ref()
                     .and_then(|h| h.ticket_blocks.as_ref())

@@ -52,7 +52,7 @@ impl App {
     /// A duty taken or given up: its trips are new ones (their reports open again, and the
     /// journey log starts a file of its own even for the same line and tour).
     pub(crate) fn duty_changed(&mut self) {
-        self.journey = None;
+        self.session.journey = None;
         self.new_ui.report_shown = None;
         self.new_ui.report_watch = None;
     }
@@ -75,7 +75,9 @@ impl App {
         if self.vr_active() {
             return;
         }
-        let Some((title, rows, totals)) = self.journey.as_ref().and_then(|j| j.report(trip)) else {
+        let Some((title, rows, totals)) =
+            self.session.journey.as_ref().and_then(|j| j.report(trip))
+        else {
             return;
         };
         let lan = self.in_lan_session();

@@ -375,7 +375,7 @@ pub(in crate::hud) fn sync_live(app: &mut App) {
         n.arrows = s.nav_arrows;
         n.view_top = s.nav_view == "top";
     }
-    if let Some(h) = app.humans.as_mut() {
+    if let Some(h) = app.session.humans.as_mut() {
         h.exact_fare = s.exact_fare;
         h.boarding = s.boarding.clone();
         h.voices = match s.pax_voices.as_str() {

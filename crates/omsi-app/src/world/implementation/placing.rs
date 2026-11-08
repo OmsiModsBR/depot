@@ -227,7 +227,7 @@ impl App {
                 self.renderer.as_ref(),
                 self.scene.as_mut(),
             ) {
-                if let Some(h) = self.humans.as_mut() {
+                if let Some(h) = self.session.humans.as_mut() {
                     h.evict(
                         crate::gameplay::humans::BusId::Ai(crate::gameplay::humans::placed_bus_id(
                             q.uid,

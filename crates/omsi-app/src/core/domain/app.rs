@@ -3,7 +3,6 @@
 
 use crate::core::cli::Args;
 use crate::frame::domain::session::Session;
-use crate::gameplay::humans;
 use crate::gameplay::player::Player;
 use crate::hud;
 use crate::hud::nav;
@@ -57,7 +56,6 @@ pub(crate) struct App {
     pub(crate) starting: Option<Camera>,
     /// The traffic, the timetable, the duty and the career (see `session`).
     pub(crate) session: Session,
-    pub(crate) humans: Option<humans::Humans>,
     pub(crate) hud: Option<hud::Hud>,
     /// The route navigator (ETS2-style map in a corner).
     pub(crate) navigator: Option<nav::Navigator>,
@@ -343,8 +341,6 @@ pub(crate) struct App {
     pub(crate) pumping: Option<(&'static str, f32)>,
     /// What the log has said (see applog.rs).
     pub(crate) log_state: crate::core::applog::LogState,
-    /// The duty's stops with their times as driven, kept in a file (`journey`).
-    pub(crate) journey: Option<crate::gameplay::journey::Journey>,
     /// How wet the roads are (0..1), built up by rain and dried by the sun.
     pub(crate) wetness: f32,
     /// How far the cloud cover has drifted with the wind (fractions of its tiling), summed

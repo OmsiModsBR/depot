@@ -238,7 +238,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         streamer: None,
         starting: None,
         session: Session::default(),
-        humans: None,
         hud: None,
         navigator: None,
         vr_nav_profiles: crate::output::Profiles::load(),
@@ -381,7 +380,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         pumping: None,
         // (a server counts its players by their own games, not itself)
         log_state: Default::default(),
-        journey: None,
         wetness: 0.0,
         cloud_drift: [0.0; 2],
         menu_edit: None,

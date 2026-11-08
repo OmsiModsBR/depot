@@ -249,7 +249,7 @@ impl App {
                 destinations: d.destinations.iter().map(|x| x.1.clone()).collect(),
                 selected: d.selected,
                 empty: d.empty.clone(),
-                riders: self.humans.as_ref().is_some_and(|h| h.riding() > 0),
+                riders: self.session.humans.as_ref().is_some_and(|h| h.riding() > 0),
             }),
             ToolWindow::Service => View::Menu(self.service_menu()),
             ToolWindow::Evaluation { trip } => View::Evaluation(self.evaluation(*trip)),
@@ -385,7 +385,8 @@ impl App {
                 let t = hm(if k == 0 { s.dep } else { s.arr });
                 let marked = d.skip_marked(k);
                 let served = || {
-                    self.journey
+                    self.session
+                        .journey
                         .as_ref()
                         .is_some_and(|j| j.served((d.trip_index, k)))
                 };
@@ -403,6 +404,7 @@ impl App {
                 let detail = match state {
                     aw::RunStop::Done | aw::RunStop::Passed => {
                         let how = self
+                            .session
                             .journey
                             .as_ref()
                             .and_then(|j| j.how((d.trip_index, k)))
@@ -450,6 +452,7 @@ impl App {
         let last = d.trip_index.min(d.trips.len().saturating_sub(1));
         let trip = trip.min(last);
         let (title, rows, totals) = self
+            .session
             .journey
             .as_ref()
             .and_then(|j| j.report(trip))
@@ -728,7 +731,7 @@ impl App {
                     // under the list: everyone on board gets off (for a map whose run ends
                     // with people still on the bus)
                     Event::Check(0) => {
-                        let left = self.humans.as_mut().map_or(0, |h| {
+                        let left = self.session.humans.as_mut().map_or(0, |h| {
                             h.force_disembark(crate::gameplay::humans::BusId::Player)
                         });
                         if left > 0 {

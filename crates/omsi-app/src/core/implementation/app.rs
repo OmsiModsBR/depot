@@ -551,7 +551,7 @@ impl App {
                             h.seed_riders(self.args.riders, &p.vehicle, &w, &renderer, &mut scene);
                         }
                     }
-                    self.humans = Some(h);
+                    self.session.humans = Some(h);
                 }
                 {
                     match session::new_traffic(&self.args, &w, &renderer, &mut scene) {
@@ -653,7 +653,7 @@ impl App {
             sight,
             fog,
             &self.clock,
-            self.humans.as_ref(),
+            self.session.humans.as_ref(),
             self.player.as_ref(),
             &renderer.options,
         );
