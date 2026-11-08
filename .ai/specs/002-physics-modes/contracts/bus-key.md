@@ -9,8 +9,9 @@ Q1). Public text for `docs/FORMATS.md` and `docs/MODDING.md` is written from thi
 [depot_physics]
 ```
 
-A section with no value lines. Its presence makes the vehicle use the Depot physics engine, whatever
-the player's "Physics" setting says. There is no value that forces OMSI Classic.
+A section with no value lines. Its presence makes the vehicle use the Depot physics engine when the
+player drives it, whatever the player's "Physics" setting says. AI vehicles ignore it and follow the
+setting (decision D6), so keyed mods in traffic add no processing load. There is no value that forces OMSI Classic.
 
 ## Reading rules (Depot)
 
@@ -21,7 +22,7 @@ the player's "Physics" setting says. There is no value that forces OMSI Classic.
 | `[depot_physics]` more than once | Depot; one log line |
 | lines under `[depot_physics]` before the next section | Depot; the lines are ignored with one log line (they are not read as another section) |
 | `[depot_physics]` in a rear section's file only (`[couple_back]` target) | no effect; one log line naming the file. The front section's key applies to every following section (decision D4) |
-| `[depot_physics]` in an AI-only copy (`*_KI.bus` or the file an AI list names) | that copy spawns with Depot physics: the spawned file decides |
+| any vehicle with `[depot_physics]` spawned as AI traffic (including `*_KI.bus` copies) | the key is ignored: the AI vehicle follows the setting (decision D6); no log line per spawn |
 
 Nothing about the key can stop the load (Principle IV).
 

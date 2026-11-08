@@ -67,7 +67,8 @@ contradicts KA-4. (b) keep `AiBody` in both modes: rejected by the request.
 ## R-K. The `.bus` key
 
 **Decision** (D1, maintainer, 2026-11-08): `[depot_physics]`, a section with no value lines; its
-presence makes the vehicle use the Depot engine ( [contracts/bus-key.md](contracts/bus-key.md)).
+presence makes the player's vehicle use the Depot engine; AI vehicles ignore it and follow the
+setting (D6, maintainer, 2026-11-08, to keep keyed mods in traffic from adding load) ( [contracts/bus-key.md](contracts/bus-key.md)).
 
 **Rationale**: Depot's own parser already collects keys it does not know into
 `Vehicle::unknown_keywords` (`omsi-vehicle/src/vehicle.rs:484`) and goes on, which is the behaviour

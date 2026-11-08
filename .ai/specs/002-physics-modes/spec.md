@@ -73,28 +73,34 @@ gravity (front springs sag more than the others).
 ### User Story 3 - A modder ships a bus made for Depot physics (Priority: P2)
 
 A modder tunes a bus for Depot physics (for example, springs sized for the weight shared by the centre
-of gravity) and adds the `[depot_physics]` line to its `.bus` file. Players get the bus as tuned, even
-when their setting is OMSI Classic. The same file still loads in OMSI 2, openOMSI and other forks,
+of gravity) and adds the `[depot_physics]` line to its `.bus` file. Players who drive the bus get it as
+tuned, even when their setting is OMSI Classic. The key applies only to the vehicle the player drives:
+AI copies of the same bus follow the game's setting, so that keyed mods in traffic do not add
+processing load. The same file still loads in OMSI 2, openOMSI and other forks,
 which ignore the line.
 
 **Why this priority**: it lets optimised and ordinary mods share a session without the player having
 to switch modes per bus (#677 decision 4).
 
 **Independent Test**: add `[depot_physics]` to a test bus, keep the setting at OMSI Classic, spawn it
-as the player's vehicle and as an AI vehicle; both run Depot physics while other vehicles stay Classic.
+as the player's vehicle and as an AI vehicle; the player's runs Depot physics, the AI copy and every
+other vehicle stay Classic.
 Load the same file in OMSI 2: it loads and drives as without the line.
 
 **Acceptance Scenarios**:
 
-1. **Given** the setting OMSI Classic and a bus with `[depot_physics]`, **When** it spawns, **Then** it
-   uses Depot physics and the log says why (the key, and the file it is in).
-2. **Given** an articulated bus whose front section's file has the key, **When** it spawns, **Then**
+1. **Given** the setting OMSI Classic and a bus with `[depot_physics]`, **When** the player takes it,
+   **Then** it uses Depot physics and the log says why (the key, and the file it is in).
+2. **Given** an articulated bus whose front section's file has the key, **When** the player takes it,
+   **Then**
    every section of that vehicle uses Depot physics.
 3. **Given** an articulated bus whose key is only in a rear section's file, **When** it spawns, **Then**
    the vehicle follows the setting and the log reports that the key has no effect there.
-4. **Given** a `.bus` file with the key, **When** OMSI 2 loads it, **Then** the vehicle loads, drives
+4. **Given** the setting OMSI Classic and a bus with `[depot_physics]`, **When** it spawns as an AI
+   vehicle, **Then** it uses OMSI Classic like the rest of the traffic.
+5. **Given** a `.bus` file with the key, **When** OMSI 2 loads it, **Then** the vehicle loads, drives
    and stands as without the key, and OMSI 2's log shows nothing new.
-5. **Given** the setting "Project Depot Physics", **When** any vehicle spawns, **Then** it uses Depot
+6. **Given** the setting "Project Depot Physics", **When** any vehicle spawns, **Then** it uses Depot
    physics whether or not it has the key (no file can force OMSI Classic).
 
 ---
@@ -156,7 +162,7 @@ directly.
   physics, the stray lines are ignored and reported once; nothing else in the file is affected.
 - A saved situation is loaded after the player changed the setting: each vehicle takes the engine the
   current setting and its file give; the log names it.
-- A session mixes vehicles of both engines (setting Classic, one bus with the key): each keeps its own
+- A session mixes vehicles of both engines (setting Classic, the player driving a bus with the key): each keeps its own
   engine, and they can still collide with each other.
 - An AI vehicle released after a hit is cleared from the scene: the free body disappears with it; a
   new AI vehicle spawned in its place follows its own engine again.
@@ -177,14 +183,17 @@ directly.
   "Simulation" section of its Settings page ("Simulação" in Portuguese), saved with the
   other settings, and MUST show a one-line notice that mods tuned for OMSI 2 may stand or handle
   differently in Depot physics.
-- **FR-004**: A vehicle whose `.bus` file contains the `[depot_physics]` line (no value lines) MUST
-  use Depot physics whatever the setting says.
+- **FR-004**: The player's vehicle, when its `.bus` file contains the `[depot_physics]` line (no value
+  lines), MUST use Depot physics whatever the setting says.
+- **FR-004a**: AI vehicles MUST follow the game's setting only; the `[depot_physics]` line MUST NOT
+  change an AI vehicle's engine, so that keyed mods in traffic add no processing load.
 - **FR-005**: There MUST be no way for a file or a setting to force OMSI Classic on a vehicle whose
   setting or file selects Depot, and no "automatic" mode.
 - **FR-006**: In an articulated or bi-articulated vehicle, only the key in the front section's file
   MUST count, and it MUST apply to every following section; a key found only in a rear section's
   file MUST have no effect and MUST be reported in the log.
-- **FR-007**: The engine MUST apply equally to the player's vehicle and to AI road vehicles.
+- **FR-007**: The setting MUST apply equally to the player's vehicle and to AI road vehicles; the key
+  applies to the player's vehicle only (FR-004a).
 - **FR-008**: The engine of each vehicle MUST be fixed when the vehicle appears and written to the log
   with the reason (the setting, or the key and its file).
 - **FR-009**: The `[depot_physics]` line MUST NOT change how OMSI 2, openOMSI or another fork the
@@ -235,7 +244,7 @@ directly.
 - **Physics engine**: OMSI Classic or Project Depot Physics; one per vehicle, fixed when it appears.
 - **Physics setting**: the player's saved choice of engine; default OMSI Classic.
 - **Depot physics key**: the `[depot_physics]` line in a vehicle's `.bus` file; forces Depot for that
-  vehicle and all its sections when in the front section's file.
+  vehicle when the player drives it (never for AI vehicles) and all its sections when in the front section's file.
 - **Model document**: the description of one engine's equations, each with an identifier, inputs,
   outputs and validation status.
 - **Test vehicle**: one of the five synthetic buses the conformance tests use.

@@ -81,7 +81,7 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 ## Q10. Phase 11: the setting
 
 - Launcher: the "Physics" list saves `physics=classic|depot` and reads it back.
-- A session with `physics=depot`: every vehicle logs Depot; with `classic`, only vehicles with the key
+- A session with `physics=depot`: every vehicle logs Depot; with `classic`, only the player's vehicle, if it has the key,
   log Depot.
 - `docs/FORMATS.md`, `docs/MODDING.md` and `docs/USER_GUIDE.md` describe the key and the setting;
   `CHANGELOG.md` has the line under **Unreleased**.

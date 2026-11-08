@@ -58,7 +58,8 @@ Technical approach:
    Classic document, before any behaviour changes, so the later phases have a fixed reference.
 3. **One type for the mode**, `PhysicsMode { Classic, Depot }` in `omsi-cfg`, read from
    `settings.cfg` (`physics=classic|depot`) and resolved **per vehicle** at spawn: the `.bus` key
-   `[depot_physics]` makes that vehicle Depot whatever the setting says
+   `[depot_physics]` makes the player's vehicle Depot whatever the setting says; AI vehicles follow
+   the setting only (maintainer, 2026-11-08: keeps keyed mods in traffic from adding load)
    ([data-model.md](data-model.md), [contracts/](contracts/)).
 4. **Split the code by engine** where the engines differ: `classic/` and `depot/` modules beside the
    shared stages, chosen by an enum held by the body (two real implementations, Principle V).
@@ -234,6 +235,9 @@ both silently.
   log and has no effect.
 - **D5** (phases 2 and 7): the 23 m articulated 8x2 is one vehicle (front section on two axles, rear
   section on two axles with the fourth steered): five test vehicles in total.
+
+- **D6** (phase 3, 2026-11-08): the key does not override the setting for AI vehicles; it applies
+  to the player's vehicle only, so that keyed mods in traffic add no processing load.
 
 ## Complexity Tracking
 

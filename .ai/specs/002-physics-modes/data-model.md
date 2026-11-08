@@ -13,8 +13,9 @@ Phase 1 of the [plan](plan.md).
   `omsi_classic` → `Classic`; `depot`, `project_depot` → `Depot`; empty or missing → `Classic`;
   anything else → `Classic` with a warning in the log.
 - `as_str()` returns only the two canonical spellings.
-- `for_vehicle(global: PhysicsMode, depot_key: bool) -> (PhysicsMode, Reason)`: `Depot` with
-  `Reason::BusKey` when the key is present, otherwise `global` with `Reason::Setting`. There is no
+- `for_vehicle(global: PhysicsMode, depot_key: bool, driver: Driver) -> (PhysicsMode, Reason)`:
+  `Depot` with `Reason::BusKey` when the key is present **and** `driver` is the player; otherwise
+  `global` with `Reason::Setting` (an AI vehicle never takes the key, decision D6). There is no
   path from the key to `Classic` (#677: no "force Classic").
 
 ## Vehicle (`omsi-vehicle`, exists)
@@ -30,7 +31,7 @@ once as ignored.
 
 ```text
 global  = settings.physics                       # read at session start
-(mode, reason) = PhysicsMode::for_vehicle(global, spawned_file.depot_physics)
+(mode, reason) = PhysicsMode::for_vehicle(global, spawned_file.depot_physics, driver)  # D6: AI ignores the key
 for each section of the vehicle (front first):   # decision D4: the front section's file decides, for every section
     section.engine = mode
     if section's own file has [depot_physics] and it is not the spawned file:
