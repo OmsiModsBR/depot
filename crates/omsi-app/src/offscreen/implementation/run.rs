@@ -517,6 +517,15 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             player.tick_startup(dt);
             if let Some(d) = duty.as_mut() {
                 session::duty_skip_asked(d, player);
+                // (a stop marked in the timetable window is skipped once it is the next)
+                while let Some(name) = d.skip_marked_next() {
+                    log::info!(
+                        "duty: stop '{name}' skipped as marked, next stop {}",
+                        d.next_stop
+                    );
+                    let (trip, k) = d.trip_for_ibis();
+                    player.ibis_to_stop(trip, k);
+                }
                 session::duty_update(
                     d,
                     player,
