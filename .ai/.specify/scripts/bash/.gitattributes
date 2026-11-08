@@ -1,0 +1,2 @@
+# Keep LF endings so the scripts run under Git Bash/WSL on Windows checkouts.
+*.sh text eol=lf
