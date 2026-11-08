@@ -1,8 +1,7 @@
 # Implementation Plan: Two physics modes (OMSI Classic and Depot)
 
 **Branch**: one per delivery phase (see "Delivery phases") | **Date**: 2026-11-08 |
-**Spec**: issue #677 and its decision comment (no `spec.md`: the maintainer's request below is the
-specification)
+**Spec**: [spec.md](spec.md) (issue #677, its decision comment and the request below)
 
 **Input**: the maintainer's request (2026-11-08), on top of the decisions already recorded in #677:
 
