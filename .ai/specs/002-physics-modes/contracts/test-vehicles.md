@@ -37,11 +37,11 @@ Classic and Depot static shares differ measurably (K-1 against D-1).
 | Check | Classic ids | Depot ids | V1-V5 |
 |---|---|---|---|
 | Rotation point on the path through test bends (90° junction, roundabout, lane change); steady heading `sin ψ_r = L·κ` | KA-1 | DA-1..DA-3 (bounded error, today's behaviour) | all |
-| Pull-away and stop near the camera from the scripts' drive and brakes; target speed far away | KA-2, KA-3 | DA-1 (planner speed) | all |
+| Pull-away and stop near the camera from the scripts' drive and brakes; target speed and frozen rear sections far away; physical at a stop far away | KA-2, KA-3, KA-9, KA-10 | DA-1 (planner speed) | all |
 | Pose at rest and in a bend (from the path, no body motion) | KA-4, KA-7 | DA-4..DA-6 | all |
 | Rear sections: steady articulation angle of a kinematic trailer | KA-5 | today's coupled followers | V3, V4, V5 |
-| Released by an active body, chain release, brake and hazards, back to the route when cleared or out of the radius | KA-6 | today's impulse | V1, V3 |
-| Two AI vehicles on their routes overlap without contact forces | KA-8 | today's behaviour | V1 |
+| Released by an active body on any section, chain release, whole train released without a jump, brake and hazards, back to the route when cleared or out of the radius | KA-6, KA-6b, KA-11 | today's impulse | V1, V3, V4 |
+| Two AI vehicles on their routes overlap without contact forces, and pass through scenery; a loose one stops at a wall | KA-8 | today's behaviour | V1 |
 
 The Depot AI checks start from today's `AiBody` behaviour and the existing `ai_traces.rs`: they make
 the DA-* equations explicit without changing a bit.

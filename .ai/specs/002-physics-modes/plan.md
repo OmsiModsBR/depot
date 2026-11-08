@@ -204,7 +204,7 @@ which improves the default.
 
 | # | Branch | Content | Needs | Behaviour changes? |
 |---|---|---|---|---|
-| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-8 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3) | — | — |
+| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-11 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3) | — | — |
 | 1 | `docs/physics-models` | `docs/physics/` with the common, Classic and Depot models; the Classic AI rows not yet checked marked "to validate" | — | no |
 | 2 | `feat/physics-test-vehicles` | The five synthetic vehicles; conformance tests of today's player physics against C-*/K-* (the Classic engine as it stands) | 1 | no (a mismatch found becomes a `fix/` PR) |
 | 3 | `feat/physics-mode-type` | `PhysicsMode` in `omsi-cfg`; `settings.cfg` key `physics` read by the game and the launcher core (not shown in the UI yet); `[depot_physics]` parsed; mode resolved per vehicle at spawn and held by the vehicle | 0 (Q1), D1 | no |
@@ -213,8 +213,8 @@ which improves the default.
 | 6 | `feat/ai-engine-split` | `AiBody` and `road.rs` moved to `ai/depot/`; `AiMotion` with only the Depot arm built until phase 8; AI static pose computed by engine (both still today's) | 5 | no |
 | 7 | `feat/depot-cog-load-share` | Depot: the player's weight shared about `[cog]` (struts and `wheel_rest_loads`); conformance D-1 on the five vehicles | 5, 2 | yes, Depot player only (`physics-delta`) |
 | 8 | `feat/classic-ai-path` | Classic AI body on its route: the rotation point on the lane, heading by the kinematic bicycle model, axles steered from its curvature (KA-1); height and attitude from the path, no springs (KA-4); speed as the planner hands it (as today) | 6, 0 (Q2) | yes, AI in Classic (`physics-delta`) |
-| 9 | `feat/classic-ai-drive` | Classic AI speed in two regimes: near the camera from the vehicle's own drive torque, brakes and grip with the AI driver setting throttle and brake, farther away equal to the target speed (KA-2); grip from a fixed road surface and the weather (KA-3) | 8 | yes, AI in Classic |
-| 10 | `feat/classic-ai-loose` | Rear sections as kinematic trailers (KA-5); release by any active body (whole vehicle, chain, not `[fixed]`), loose on the player's rigid body without a driver, full brake and hazard lights, back to a route when cleared or out of the detail radius (KA-6, D3); weight shared only while loose (KA-7); no AI-AI contacts on the route (KA-8) | 8 | yes, AI in Classic |
+| 9 | `feat/classic-ai-drive` | Classic AI speed in two regimes: within the detail radius from the vehicle's own drive torque, brakes and grip with the AI driver setting throttle and brake (KA-2), beyond it equal to the target speed with rear sections not updated (KA-9, maintainer's decision), always physical while serving a stop (KA-10); grip from a fixed road surface and the weather (KA-3) | 8 | yes, AI in Classic |
+| 10 | `feat/classic-ai-loose` | Rear sections as kinematic trailers (KA-5); release by any active body on any section (chain, not `[fixed]`), loose on the player's multibody train without a driver from the route poses with no jump, full brake and hazard lights, back to a route when cleared (KA-6, KA-6b, D3) or automatically beyond the detail radius (KA-11); weight shared only while loose (KA-7); no AI-AI or AI-scenery contacts on the route, loose AI against everything (KA-8, research R-R) | 8 | yes, AI in Classic |
 | 11 | `feat/physics-mode-setting` | Launcher "Physics" list in the Settings page's "Simulation" section (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
 
 Phases 7 and 8-10 can run in parallel after 6. A phase that finds today's code disagreeing with the

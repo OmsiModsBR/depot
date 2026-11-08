@@ -79,12 +79,13 @@ today). Both arms expose what the traffic and the scripts read today: `position`
 | Phase | Fields | Rows of R-A |
 |---|---|---|
 | 8 | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path | KA-1, KA-4 |
-| 9 | speed, `a_long`, regime (near: physical, far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3 |
-| 10 | articulation angle per joint (rear sections), `state: OnRoute \| LooseActive \| LooseAsleep` for the whole vehicle, the crash's strength (for the police) | KA-5..KA-8 |
+| 9 | speed, `a_long`, regime (near or serving a stop: physical; far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3, KA-9, KA-10 |
+| 10 | articulation angle per joint (rear sections), `state: OnRoute \| LooseActive \| LooseAsleep` for the whole vehicle, the crash's strength (for the police) | KA-5..KA-8, KA-6b, KA-11 |
 
 While loose, a Classic AI vehicle's sections run the player's `RigidBody` (Classic engine) with
-throttle 0, brake 1 and hazard lights on; `OnRoute` again when the crash is cleared or its tile leaves
-the detail radius, asking the planner for a new path.
+throttle 0, brake 1 and hazard lights on, starting from their route poses and articulation angles;
+`OnRoute` again, all sections together, when the crash is cleared or its tile leaves the detail radius
+(the camera's tile and its eight neighbours), asking the planner for a new path.
 
 ## AI static pose
 
