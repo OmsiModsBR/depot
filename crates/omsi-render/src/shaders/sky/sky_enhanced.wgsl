@@ -289,7 +289,7 @@ fn enhanced_sky(in: VsOut) -> vec4<f32> {
         let l = enh.sun_disc.rgb / (PI * r * r) * disc * limb * (1.0 - cover) * enh.lights.w * t;
         sun_px = l;
     }
-    col = col + night_sky(d, cube.a, fwidth(d));
+    col = col + night_sky(d, cube.a, dpdx(d), dpdy(d));
     // the dome is drawn pre-exposed; the disc only a little over white: the eye's glare round
     // it is drawn from its light (fog_lamps.wgsl `sun_glare`), and from the disc's pixels
     // as well the glow would have counted it twice
@@ -324,27 +324,13 @@ fn fs_enhanced_mirror(in: VsOut) -> @location(0) vec4<f32> {
     return vec4<f32>(clamp(mirror_tone(hdr, max(enh.debug.w, 1.0)), vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 
-fn star_hash(c: vec3<i32>) -> vec4<f32> {
-    var x = vec4<u32>(bitcast<vec3<u32>>(c), 0x9e3779b9u).xyzw;
-    x = x * 1664525u + 1013904223u;
-    x.x = x.x + x.y * x.w;
-    x.y = x.y + x.z * x.x;
-    x.z = x.z + x.x * x.y;
-    x.w = x.w + x.y * x.z;
-    x = x ^ (x >> vec4<u32>(16u));
-    x.x = x.x + x.y * x.w;
-    x.y = x.y + x.z * x.x;
-    x.z = x.z + x.x * x.y;
-    x.w = x.w + x.y * x.z;
-    return vec4<f32>(x & vec4<u32>(0xffffffu)) / 16777216.0;
-}
-
 // The moon and the stars towards d (radiance), behind what cloud covers it. The moon is a
 // lit sphere: its lit side faces the sun, its phase is what the sun's direction makes of
-// it, and its grey seas darken parts of the disc. The stars are a few thousand points
-// fixed in the sky, of a few magnitudes, slightly coloured; they show only where the sky
-// behind them is dark - a lit city's glow and the haze leave the brightest few.
-fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
+// it, and its grey seas darken parts of the disc. The stars are the star map's (stars.wgsl),
+// turning with the sky, each a point about a pixel across in its class's colour; they show
+// only where the sky behind them is dark - a lit city's glow and the haze leave the
+// brightest few. dx and dy: how d changes a pixel across and a pixel down.
+fn night_sky(d: vec3<f32>, cover: f32, dx: vec3<f32>, dy: vec3<f32>) -> vec3<f32> {
     var col = vec3<f32>(0.0);
     if (d.z < -0.01) {
         return col;
@@ -376,31 +362,18 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
         let l = enh.moon_disc.rgb / (PI * r * r * lit_share) * (sun_side + 0.004) * albedo * rim;
         col = col + l * through;
     }
-    // the stars: one candidate in some of the cells of a grid on the sphere
+    // the stars
     let vis = enh.moon_disc.w;
-    if (vis > 0.0 && d.z > 0.0) {
-        let cells = 140.0;
-        let g = d * cells;
-        let c = vec3<i32>(floor(g));
-        let h = star_hash(c);
-        let density = 0.014;
-        if (h.x < density) {
-            let p = (vec3<f32>(c) + vec3<f32>(0.25) + h.yzw * 0.5) / cells;
-            let sd = normalize(p);
-            let ang = acos(clamp(dot(d, sd), -1.0, 1.0));
-            // a point of light about a pixel across
-            let size = clamp(length(pix) * 0.6, 1e-5, 0.004);
-            let spot = exp(-ang * ang / (size * size));
-            // brightness: many faint ones, a few bright (a power law of the magnitudes)
-            let b = pow(1.0 - h.x / density, 4.0);
-            let tint = mix(vec3<f32>(1.0, 0.86, 0.72), vec3<f32>(0.8, 0.88, 1.0), h.w);
-            // the faintest that shows against the sky behind it (in the picture's own
-            // units): a dark country sky shows thousands, a city's glow the few dozen
-            // brightest, a twilight none
-            let sky_l = dot(sky_table(d), vec3<f32>(0.2126, 0.7152, 0.0722)) * enh.exposure.x;
-            let limit = clamp(sky_l * 90.0 + (1.0 - vis), 0.0, 1.2);
-            let shows = smoothstep(limit, limit + 0.15, b) * (1.0 - smoothstep(0.03, 0.1, sky_l));
-            col = col + tint * (0.04 + 1.4 * b) * spot * shows * through / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
+    if (vis > 0.0 && d.z > 0.0 && stars_on()) {
+        // the faintest that shows against the sky behind it (in the picture's own units): a
+        // dark country sky shows thousands, a city's glow the few dozen brightest, a
+        // twilight none
+        let sky_l = dot(sky_table(d), vec3<f32>(0.2126, 0.7152, 0.0722)) * enh.exposure.x;
+        let limit = clamp(sky_l * 90.0 + (1.0 - vis), 0.0, 1.2);
+        let dark = 1.0 - smoothstep(0.03, 0.1, sky_l);
+        if (dark > 0.0) {
+            let stars = stars_light(d, dx, dy, 1.5, 1, limit);
+            col = col + stars * dark * through / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
         }
     }
     return col;

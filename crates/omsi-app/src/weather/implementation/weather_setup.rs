@@ -122,6 +122,30 @@ pub fn weather_snow(args: &Args) -> (bool, bool) {
     (w.snow, w.snow_on_road)
 }
 
+/// The stars of `helper\stars.dat` laid out for the sky shaders; None (the sky without stars)
+/// when the file is not there. A line that holds no star is left out and named in the log.
+fn star_map(root: &std::path::Path) -> Option<omsi_content::StarMap> {
+    let p = omsi_cfg::resolve_path(root, "helper\\stars.dat");
+    let catalog = match omsi_content::StarCatalog::load(&p) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("stars {}: {e}", p.display());
+            return None;
+        }
+    };
+    for (line, what) in &catalog.skipped {
+        log::warn!("stars {} line {line}: {what}", p.display());
+    }
+    let map = omsi_content::StarMap::new(&catalog, omsi_content::stars::STAR_MAP_CELLS);
+    log::info!(
+        "stars: {} from {} ({} left out where two brighter ones share their place)",
+        catalog.stars.len() - map.crowded,
+        p.display(),
+        map.crowded
+    );
+    Some(map)
+}
+
 /// Sky gradient textures from envir.cfg uploaded into the scene.
 pub(crate) fn setup_sky(
     args: &Args,
@@ -194,6 +218,18 @@ pub(crate) fn setup_sky(
         }
     }
     renderer.set_sky_bodies(scene, bodies[0], bodies[1]);
+    // the night's stars (helper\stars.dat), laid out once for the sky shaders
+    if scene.sky_stars().is_none() {
+        if let Some(map) = star_map(&args.root) {
+            let image = omsi_texture::Image {
+                width: map.width,
+                height: map.height,
+                rgba: map.rgba,
+                has_alpha: true,
+            };
+            renderer.set_star_map(scene, Some((&image, map.cells)));
+        }
+    }
     // the sun's glare: a lamp's glow (Texture\licht.bmp) and star (Texture\light_effect1.bmp)
     renderer.set_sun_glare(
         scene,

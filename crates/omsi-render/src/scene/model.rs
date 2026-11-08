@@ -192,6 +192,10 @@ pub struct Scene {
     /// by `Renderer::set_sky_bodies`; the classic sky draws them.
     pub(crate) sky_sun: Option<TextureId>,
     pub(crate) sky_moon: Option<TextureId>,
+    /// The star map (`omsi_content::StarMap`) and its cells across a face, as set by
+    /// `Renderer::set_star_map`; the sky shaders draw the stars from it.
+    pub(crate) sky_stars: Option<TextureId>,
+    pub(crate) star_cells: u32,
     /// The sun's glare's pictures, corona pictures (the glow's and the star's), as set by
     /// `Renderer::set_sun_glare`; `None`: no glare.
     pub(crate) sun_glare: Option<[u16; 2]>,

@@ -61,6 +61,10 @@ pub(crate) struct CameraUniform {
     /// The classic sky's sun and moon pictures (`sky.wgsl`): xyz towards the moon (world),
     /// w 1 to draw them.
     pub(crate) moon: [f32; 4],
+    /// The starry sky (`sky/stars.wgsl`): the rows of the rotation from a world direction
+    /// into the stars' frame, w of the first how bright the stars are (0 none), w of the
+    /// second the star map's cells across a face (0: no map), w of the third 0.
+    pub(crate) stars: [[f32; 4]; 3],
 }
 
 #[derive(Debug, Clone, Copy)]

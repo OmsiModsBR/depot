@@ -49,6 +49,8 @@ impl Layouts {
                 // the sun's and the moon's pictures (the classic sky)
                 texture_entry(9),
                 texture_entry(10),
+                // the star map (read texel by texel)
+                texture_entry(11),
             ],
         });
         Self {

@@ -198,6 +198,7 @@ pub(crate) fn sky_shader_source() -> String {
         include_str!("common/fullscreen.wgsl"),
         include_str!("common/colour.wgsl"),
         include_str!("sky/sky.wgsl"),
+        include_str!("sky/stars.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         include_str!("sky/sky_enhanced.wgsl"),
     ]

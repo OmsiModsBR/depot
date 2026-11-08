@@ -270,6 +270,8 @@ impl Inner {
                     [sun, moon]
                 },
                 moon_dir: plan.moon,
+                stars: scene.sky_stars().map(|(t, _)| t),
+                star_frame: plan.stars,
             },
         };
         let material = |id: usize| {

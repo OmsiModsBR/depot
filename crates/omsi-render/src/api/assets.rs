@@ -2,9 +2,10 @@
 //! recycling them.
 use crate::assets::{
     drop_top_levels, fit_image, fit_size, make_meshes, mesh_page_bytes, mesh_vertices, next_gen,
-    snow_texture_flag, upload_speed_mb_s, upload_texture, AlphaMode, BindKey, GpuTexture, Material,
-    MaterialDesc, MaterialExtra, MaterialMaps, MaterialUniform, MeshPage, PbrMaps, PreparedMesh,
-    PreparedTexture, TexAddressing, MESH_PAGE_INDEX_BYTES, MESH_PAGE_VERTEX_BYTES,
+    snow_texture_flag, upload_data_texture, upload_speed_mb_s, upload_texture, AlphaMode, BindKey,
+    GpuTexture, Material, MaterialDesc, MaterialExtra, MaterialMaps, MaterialUniform, MeshPage,
+    PbrMaps, PreparedMesh, PreparedTexture, TexAddressing, MESH_PAGE_INDEX_BYTES,
+    MESH_PAGE_VERTEX_BYTES,
 };
 use crate::gpu::{buffer_init, mip_levels};
 use crate::renderer::{MirrorEvent, MirrorTexture, Renderer};
@@ -170,6 +171,22 @@ impl Renderer {
             texture: MirrorTexture::Image {
                 image: img,
                 mipmaps,
+            },
+        });
+        id
+    }
+
+    /// A picture that holds numbers, not colours (the star map): its bytes are read as they
+    /// are (one level, no sRGB decoding).
+    pub fn add_data_texture(&self, scene: &mut Scene, img: &omsi_texture::Image) -> TextureId {
+        let t = upload_data_texture(&self.device, &self.queue, img);
+        scene.textures.push(t);
+        let id = scene.textures.len() - 1;
+        self.mirror(MirrorEvent::Texture {
+            id,
+            texture: MirrorTexture::Image {
+                image: img,
+                mipmaps: false,
             },
         });
         id

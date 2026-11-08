@@ -11,6 +11,7 @@ pub mod money;
 pub mod options;
 pub mod remote_path;
 pub mod situation;
+pub mod stars;
 pub mod tickets;
 pub mod weather;
 
@@ -24,5 +25,6 @@ pub use language::Language;
 pub use money::Currency;
 pub use options::Options;
 pub use situation::Situation;
+pub use stars::{Star, StarCatalog, StarClass, StarMap};
 pub use tickets::{Ticket, TicketPack};
 pub use weather::Weather;

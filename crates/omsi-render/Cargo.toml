@@ -30,6 +30,7 @@ test-support = []
 omsi-render = { path = ".", features = ["test-support"] }
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
+omsi-content = { path = "../omsi-content" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"

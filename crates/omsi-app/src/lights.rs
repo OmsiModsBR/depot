@@ -49,6 +49,8 @@ pub fn lighting_from(d: &Daylight, fog_range: f32) -> Lighting {
         day_of_year: d.day_of_year,
         latitude: d.latitude,
         day_seed: d.day_seed,
+        star_frame: d.star_frame,
+        star_brightness: d.star_brightness(),
         ..Default::default()
     }
 }
