@@ -517,6 +517,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             player.tick_startup(dt);
             if let Some(d) = duty.as_mut() {
                 session::duty_skip_asked(d, player);
+                d.learn_loaded(&world.object_positions.lock());
                 // (a stop marked in the timetable window is skipped once it is the next)
                 while let Some(name) = d.skip_marked_next() {
                     log::info!(
