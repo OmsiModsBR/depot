@@ -22,8 +22,9 @@ OMSI 2. A candidate moves to Depot only when its check shows that OMSI 2 behaves
 | V7 | AI road body: `AiBody` (pure pursuit, planner speed, sprung body, `[cog]` sag) | `ai/`, `omsi-app` `traffic.rs` | — (decided by the request) | **Depot AI**; Classic gets a new body (R-A) |
 | V8 | AI may steer beyond the model's lock to keep to a junction's path (#249) | `ai/road.rs` | — | Part of the Depot AI. The Classic AI keeps to its path by construction (KA-1), so the question does not arise |
 
-**Decision**: V1 and V7 go into the engines now. V2, V5 and V6 stay shared. V3 and V4 wait on their
-checks (D2); until then they stay shared and the Classic document marks them "to validate".
+**Decision** (D2, maintainer, 2026-11-08): V1 and V7 go into the engines now; for now the Depot mode
+overrides nothing else. V2-V6 stay shared. The V3 and V4 checks are kept here for a later decision;
+until one is made the Classic document marks them "to validate".
 
 **Rationale**: moving a behaviour to Depot on a guess would make Classic *less* faithful if the
 guess is wrong; Principle II asks for the check first.
@@ -48,7 +49,7 @@ expectations disagree on KA-4, which is why the check comes before the code.
 | KA-3 | One grip value per vehicle (the road surface under it) limits the AI's acceleration and braking | An AI bus pulling away and stopping on a wet and on a dry road | 9 |
 | KA-4 | On its path the AI body has no sprung pitch or roll of its own: it stands on the ground under its wheels with its static sag | Watch an AI bus braking hard and in a bend: does the body pitch/roll? | 10 |
 | KA-5 | The rear sections of an articulated AI vehicle follow the path behind their joint | Film an articulated AI bus through a junction turn | 10 |
-| KA-6 | A hit by the player's vehicle releases the AI vehicle to the free rigid body, without a driver, until it is cleared | Nudge an AI car at walking pace; does it roll away or stay on its path? | 10, decision D3 |
+| KA-6 | A hit by the player's vehicle releases the AI vehicle to the free rigid body, without a driver, until it is cleared from the scene | Validated: the maintainer's in-game observation (2026-11-08): the AI vehicle becomes a free rigid body until it is cleared from the scene | 10, decision D3 |
 | KA-7 | The AI vehicle's weight is shared about the model origin, as the player's in Classic | An AI copy of the Mi5 standing at a stop: is it level, as the player's? | 10 |
 
 **Decision**: the Classic AI is a new body in `ai/classic/`, built in three steps (path, drive,
@@ -65,8 +66,8 @@ contradicts KA-4. (b) keep `AiBody` in both modes: rejected by the request.
 
 ## R-K. The `.bus` key
 
-**Decision**: `[depot_physics]`, a section with no value lines; its presence makes the vehicle use
-the Depot engine (decision D1, [contracts/bus-key.md](contracts/bus-key.md)).
+**Decision** (D1, maintainer, 2026-11-08): `[depot_physics]`, a section with no value lines; its
+presence makes the vehicle use the Depot engine ( [contracts/bus-key.md](contracts/bus-key.md)).
 
 **Rationale**: Depot's own parser already collects keys it does not know into
 `Vehicle::unknown_keywords` (`omsi-vehicle/src/vehicle.rs:484`) and goes on, which is the behaviour

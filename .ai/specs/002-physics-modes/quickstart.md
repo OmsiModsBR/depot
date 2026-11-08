@@ -30,10 +30,11 @@ The Caio Millennium V articulated at rest on a flat stop, in OMSI 2 and in Depot
 axles' `Axle_Suspension` (Depot's vehicle info) and a side screenshot from the same camera. Expected:
 9.1 / 9.8 / 9.1 cm in Depot and a level body in both.
 
-## Q4. Phase 0 and D2: override candidates (R-V)
+## Q4. Later: override candidates (R-V)
 
 The checks of R-V for V3 (coasting on a grade) and V4 (kerb), the same in OMSI 2 and in Depot. A row
-whose result differs moves to Depot (phase 12) or becomes a `fix/` for Classic, by decision D2.
+whose result differs is put to the maintainer as a new override (Depot) or a `fix/` for Classic. Not
+needed for this plan (D2: only the `[cog]` share for now).
 
 ## Q5. Phase 1: model documents
 

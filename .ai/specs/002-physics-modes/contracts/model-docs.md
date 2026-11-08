@@ -43,6 +43,8 @@ an equation that changes keeps its id and the document notes the change and its 
   equation once its check confirms it (path following, speed from drive and brakes, grip, pose,
   rear sections, release after a hit, static share about the origin). Until then the row stays in
   the document as "to validate" with no equation.
+- **KA-6** is validated by the maintainer's in-game observation (2026-11-08): a hit by the player makes
+  the AI vehicle a free rigid body, without a driver, until it is cleared from the scene.
 - **Open items**: the R-V candidates V3 and V4 while unchecked.
 
 ## `depot-model.md`: Project Depot Physics (D-* player, DA-* AI)
@@ -63,7 +65,7 @@ an equation that changes keeps its id and the document notes the change and its 
   pitch driven by `m · a_long · h_cog`, roll by `-m · a_lat · h_cog`; clamps ±0.15 m, ±0.07 rad,
   ±0.09 rad.
 - **DA-6 Static pose**: `[ai_deltaheight]` plus the sag of the weight shared about `[cog]`.
-- **Further D-***: one per override decided under D2.
+- **Further D-***: none for now (D2); a later override adds its id here.
 
 ## `README.md`
 

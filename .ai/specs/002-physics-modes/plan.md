@@ -119,7 +119,7 @@ scenarios (`t01`-`t16`, `b1`-`b7`) and the AI/traffic scenarios
 | VI. Tests outside `src/` | ✓ | Conformance tests and the five vehicles live in `omsi-sim/tests/`; no new test in `src/` |
 | VII. No performance regression | ✓ with a condition | Structural phases measure nothing new but must show no frame-time change; the Classic AI phases carry a before/after of the AI step per vehicle (R-P) |
 | VIII. Provenance and public text | ✓ | The model documents describe observed behaviour and the tests that show it; no addresses or internal names of the reference executable; hypotheses about OMSI 2 are written as observable checks |
-| IX. Small, traceable changes | ✓ | About twelve pull requests, one topic each, `docs/`, `feat/` or `fix/` by content |
+| IX. Small, traceable changes | ✓ | About eleven pull requests, one topic each, `docs/`, `feat/` or `fix/` by content |
 | X. Lean, clean code | ✓ | Only the stages that differ are split; everything else is shared, not copied. Old AI code is moved, not duplicated. No env flag or CLI switch for the mode (the setting and the key are the two ways in, as requested) |
 
 Result: **pass**, with two conditions that become tasks: validate each Classic rule that the model
@@ -203,8 +203,8 @@ which improves the default.
 
 | # | Branch | Content | Needs | Behaviour changes? |
 |---|---|---|---|---|
-| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-7 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3); the override candidates of R-V (Q4) | — | — |
-| 1 | `docs/physics-models` | `docs/physics/` with the common, Classic and Depot models; Classic AI and the R-V candidates marked "to validate" | — | no |
+| 0 | (no code) | Black-box checks in OMSI 2: the key is ignored (Q1); the Classic AI observations KA-1..KA-7 (Q2); the Mi5 levels as in OMSI 2 with #675 (Q3) | — | — |
+| 1 | `docs/physics-models` | `docs/physics/` with the common, Classic and Depot models; the Classic AI rows not yet checked marked "to validate" | — | no |
 | 2 | `feat/physics-test-vehicles` | The five synthetic vehicles; conformance tests of today's player physics against C-*/K-* (the Classic engine as it stands) | 1 | no (a mismatch found becomes a `fix/` PR) |
 | 3 | `feat/physics-mode-type` | `PhysicsMode` in `omsi-cfg`; `settings.cfg` key `physics` read by the game and the launcher core (not shown in the UI yet); `[depot_physics]` parsed; mode resolved per vehicle at spawn and held by the vehicle | 0 (Q1), D1 | no |
 | 4 | `feat/physics-traces-per-engine` | Trace and invariant harness runs each scenario per engine; `physics-trace-diff.sh` and CI cover both | 3 | no (Depot traces identical to Classic until phase 7) |
@@ -213,33 +213,28 @@ which improves the default.
 | 7 | `feat/depot-cog-load-share` | Depot: the player's weight shared about `[cog]` (struts and `wheel_rest_loads`); conformance D-1 on the five vehicles | 5, 2 | yes, Depot player only (`physics-delta`) |
 | 8 | `feat/classic-ai-path` | Classic AI body: the rotation point on the lane, heading from the path, rear axle on the path; speed as the planner hands it (as today) | 6, 0 (Q2) | yes, AI in Classic (`physics-delta`) |
 | 9 | `feat/classic-ai-drive` | Classic AI speed from the vehicle's own drive torque, brakes and grip, the AI driver setting throttle and brake for the target speed (KA-2, KA-3), if Q2 confirms it | 8 | yes, AI in Classic |
-| 10 | `feat/classic-ai-pose` | Classic AI static pose about the origin; body pose on the ground per KA-4; articulated rear sections per KA-5; release to the free rigid body after a hit per KA-6, if Q2 confirms it | 8 | yes, AI in Classic |
+| 10 | `feat/classic-ai-pose` | Classic AI static pose about the origin; body pose on the ground per KA-4; articulated rear sections per KA-5; release to the free rigid body after a hit until cleared (KA-6, decision D3) | 8 | yes, AI in Classic |
 | 11 | `feat/physics-mode-setting` | Launcher "Physics" list (OMSI Classic, Project Depot Physics); the key documented in `FORMATS.md`/`MODDING.md`; `USER_GUIDE.md`; the log line that names a vehicle's engine; `CHANGELOG.md` | 7, 10 | yes: the player can choose Depot |
-| 12 | `feat/depot-<override>` (one per item) | Each further override decided under D2, with its D-* equation and conformance test | 11, D2 | yes, Depot only |
 
 Phases 7 and 8-10 can run in parallel after 6. A phase that finds today's code disagreeing with the
 model document fixes the code (a `fix/` PR with its failing test) or corrects the document, never
 both silently.
 
-## Decisions for the maintainer
+## Decisions (maintainer, 2026-11-08)
 
-- **D1** (phase 3): name and format of the key. Recommended: `[depot_physics]` with no value lines,
-  presence means Depot ([contracts/bus-key.md](contracts/bus-key.md)). Alternative: a value line
-  (`1`), which adds a way to write a meaningless `0` and does not let a file force Classic anyway.
-- **D2** (phases 1 and 12): which of today's behaviours are overrides and move to Depot only. The
-  candidates and their checks are in [research.md](research.md), R-V. Recommended: only `[cog]` load
-  sharing is certain now; each other candidate moves only after its black-box check shows OMSI 2
-  behaves differently.
-- **D3** (phase 10): after a hit, does a Classic AI vehicle become a free rigid body without a driver
-  until it is cleared (KA-6)? Recommended: yes if Q2 confirms it in OMSI 2, otherwise the Classic AI
-  stays on its path and the hit is an impulse, as today.
-- **D4** (phase 3): in an articulated vehicle, which file's key counts. Recommended: the file the
-  vehicle is spawned from (the front section); a key found only in a rear section's file is reported
-  in the log and has no effect.
-- **D5** (phases 2 and 7): the 23 m articulated 8x2 is read as one vehicle (front section on two
-  axles, rear section on two axles with the fourth steered), making five vehicles in total. If a
-  separate rigid 8x2 bus was meant, it becomes a sixth vehicle in
-  [contracts/test-vehicles.md](contracts/test-vehicles.md).
+- **D1** (phase 3): the key is `[depot_physics]` with no value lines; its presence means Depot
+  ([contracts/bus-key.md](contracts/bus-key.md)). It still goes in only after the black-box check
+  Q1.
+- **D2** (phases 1 and 7): for now the Depot mode overrides only the weight shared about `[cog]`.
+  Every other candidate of [research.md](research.md) R-V stays shared; a later override is a new
+  decision with its own phase.
+- **D3** (phase 10): in OMSI 2 an AI vehicle hit by the player becomes a free rigid body until it is
+  cleared from the scene (the maintainer's in-game observation). The Classic AI replicates it (KA-6).
+- **D4** (phase 3): in an articulated vehicle only the key in the front section's file counts, and it
+  applies to every following section; a key found only in a rear section's file is reported in the
+  log and has no effect.
+- **D5** (phases 2 and 7): the 23 m articulated 8x2 is one vehicle (front section on two axles, rear
+  section on two axles with the fourth steered): five test vehicles in total.
 
 ## Complexity Tracking
 

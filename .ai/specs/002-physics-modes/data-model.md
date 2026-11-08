@@ -31,7 +31,7 @@ once as ignored.
 ```text
 global  = settings.physics                       # read at session start
 (mode, reason) = PhysicsMode::for_vehicle(global, spawned_file.depot_physics)
-for each section of the vehicle (front first):   # decision D4: the spawned file decides
+for each section of the vehicle (front first):   # decision D4: the front section's file decides, for every section
     section.engine = mode
     if section's own file has [depot_physics] and it is not the spawned file:
         log "key in a rear section's file has no effect"
@@ -55,7 +55,6 @@ Held by `RigidBody` (every section of a train has the same). The stages that dif
 |---|---|---|---|
 | Static load reference of the struts (the torque term in `wheel_contacts`) | model origin: adds `cog × F` back | `[cog]`: adds nothing | strut force `F`, `cog` |
 | Rest loads (`wheel_rest_loads`, used to place a body at rest and by the invariants) | balance about `y = 0` | balance about `cog_y` | axles, mass |
-| further overrides (decision D2) | one row each | | |
 
 `PhysicsState` (snapshot for retries) keeps the engine with the body, so a restored state keeps its
 engine.
@@ -80,7 +79,7 @@ today). Both arms expose what the traffic and the scripts read today: `position`
 |---|---|---|
 | 8 | rotation point on the path (distance along it), heading, steer angle per axle, `a_lat` | KA-1 |
 | 9 | speed, `a_long`, throttle/brake set by the AI driver, grip | KA-2, KA-3 |
-| 10 | static sag per axle about the origin, ground plane, rear sections' poses, `released: bool` (after a hit, decision D3) | KA-4..KA-7 |
+| 10 | static sag per axle about the origin, ground plane, rear sections' poses, `released: bool` (after a hit: the free rigid body until cleared, decision D3) | KA-4..KA-7 |
 
 ## AI static pose
 

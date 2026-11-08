@@ -1,7 +1,7 @@
 # Contract: the `[depot_physics]` key in a `.bus` file
 
-Status: **proposal**, waiting on decision D1 and on the black-box check (quickstart Q1). Public text
-for `docs/FORMATS.md` and `docs/MODDING.md` is written from this contract in phase 11.
+Status: name and format **decided** (D1, 2026-11-08); waiting on the black-box check (quickstart
+Q1). Public text for `docs/FORMATS.md` and `docs/MODDING.md` is written from this contract in phase 11.
 
 ## Format
 
@@ -20,7 +20,7 @@ the player's "Physics" setting says. There is no value that forces OMSI Classic.
 | `[depot_physics]` once | Depot |
 | `[depot_physics]` more than once | Depot; one log line |
 | lines under `[depot_physics]` before the next section | Depot; the lines are ignored with one log line (they are not read as another section) |
-| `[depot_physics]` in a rear section's file only (`[couple_back]` target) | no effect; one log line naming the file (decision D4) |
+| `[depot_physics]` in a rear section's file only (`[couple_back]` target) | no effect; one log line naming the file. The front section's key applies to every following section (decision D4) |
 | `[depot_physics]` in an AI-only copy (`*_KI.bus` or the file an AI list names) | that copy spawns with Depot physics: the spawned file decides |
 
 Nothing about the key can stop the load (Principle IV).

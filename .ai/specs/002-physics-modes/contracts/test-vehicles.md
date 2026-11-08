@@ -14,8 +14,7 @@ front section's rear axle for an articulated front section; a rear section's fir
 | V4 | Bi-articulated bus, 27 m (8x2) | 3 | front: steered front, second; middle: one axle; rear: driven | each section per the rules above |
 | V5 | Articulated bus, 23 m, 8x2 (puller) | 2 | front: steered front, driven second; rear: two axles, the **fourth steered** | front: its rear axle; rear: its first axle |
 
-Decision D5: if a rigid 8x2 bus was also meant, it is added as V6 (two steered front axles, driven
-third, tag fourth).
+Decision D5 (2026-11-08): V5 is one vehicle; five vehicles in total.
 
 Each vehicle is also given a `[cog]` y off the origin (between 0.3 and 0.8 m forward) so that the
 Classic and Depot static shares differ measurably (K-1 against D-1).
