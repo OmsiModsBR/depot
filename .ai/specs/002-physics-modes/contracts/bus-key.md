@@ -1,7 +1,7 @@
 # Contract: the `[depot_physics]` key in a `.bus` file
 
 Status: name and format **decided** (D1, 2026-11-08); waiting on the black-box check (quickstart
-Q1). Public text for `docs/FORMATS.md` and `docs/MODDING.md` is written from this contract in phase 11.
+Q1). Public text for `docs/FORMATS.md` and `docs/MODDING.md` is written from this contract in phase 9.
 
 ## Format
 
@@ -34,7 +34,7 @@ The key is written so that a reader that does not know it skips it:
   vehicle loads and drives as without it, and `logfile.txt` shows nothing new.
 - openOMSI and other forks: the same check on each one the maintainers name.
 
-## What a modder is told (phase 11)
+## What a modder is told (phase 9)
 
 - What Depot physics changes (the list of `D-*` items in `docs/physics/depot-model.md`), so a mod can
   be tuned for it, for example the springs for the weight shared about `[cog]`.

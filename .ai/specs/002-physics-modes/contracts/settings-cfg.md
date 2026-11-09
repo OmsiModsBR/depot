@@ -20,7 +20,7 @@ Written only as `classic` or `depot`, and only when the player saves.
   Portuguese; `SIMULATION` in `omsi-launcher-ui/src/window/domain/settings.rs`): `OMSI Classic` (default), `Project Depot Physics`.
 - One line under it: a vehicle you drive with `[depot_physics]` in its file uses Depot physics whatever is
   chosen here; mods tuned for OMSI 2 may stand or handle differently in Depot physics.
-- Shown only from phase 11; before that the key is read but not offered.
+- Shown only from phase 9; before that the key is read but not offered.
 - The game's own menu does not offer it: the engine is chosen for each vehicle at spawn.
 
 ## No other way in

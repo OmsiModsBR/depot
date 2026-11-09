@@ -20,7 +20,7 @@ gave them (2026-11-08): V4 drives the front section's second axle, V5 the rear s
 Each vehicle is also given a `[cog]` y off the origin (between 0.3 and 0.8 m forward) so that the
 Classic and Depot static shares differ measurably (K-1 against D-1).
 
-## Matrix (player body; the AI columns follow in phases 8-10)
+## Matrix (player body; the AI columns follow in phase 8)
 
 | Check | Ids | V1 | V2 | V3 | V4 | V5 | Engines |
 |---|---|---|---|---|---|---|---|

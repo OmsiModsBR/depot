@@ -64,7 +64,7 @@ engine.
 
 ```text
 enum AiMotion {
-    Classic(ClassicAiBody),   # phases 8-10
+    Classic(ClassicAiBody),   # phase 8
     Depot(AiBody),            # today's AiBody, moved to ai/depot/
 }
 ```
@@ -74,13 +74,13 @@ For road vehicles only; `MotionKind::Rail` and `MotionKind::Air` keep their shar
 today). Both arms expose what the traffic and the scripts read today: `position`, `heading`,
 `pitch_deg`, `bank_deg`, `steer`, `a_long`, `a_lat`, `suspension`, `apply(&mut VehicleInstance)`.
 
-### ClassicAiBody (phases 8-10), fields by phase
+### ClassicAiBody (phase 8), fields by concern
 
-| Phase | Fields | Rows of R-A |
+| Concern | Fields | Rows of R-A |
 |---|---|---|
-| 8 | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path | KA-1, KA-4 |
-| 9 | speed, `a_long`, regime (near or serving a stop: physical; far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3, KA-9, KA-10 |
-| 10 | articulation angle per joint (rear sections), `state: OnRoute \| LooseActive \| LooseAsleep` for the whole vehicle, the "clear crash" command | KA-5..KA-8, KA-6b, KA-11 |
+| Path | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path | KA-1, KA-4 |
+| Speed | speed, `a_long`, regime (near or serving a stop: physical; far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3, KA-9, KA-10 |
+| Rear sections and release | articulation angle per joint (rear sections), `state: OnRoute \| Loose` for the whole vehicle, the "clear crash" command | KA-5..KA-8, KA-6b, KA-11 |
 
 While loose, a Classic AI vehicle's sections run the player's `RigidBody` (Classic engine) with
 throttle 0, brake 1 and hazard lights on, starting from their route poses and articulation angles;
