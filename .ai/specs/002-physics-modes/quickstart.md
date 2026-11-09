@@ -22,7 +22,8 @@ The result is written in #677 and in `contracts/bus-key.md` before phase 3.
 
 For each row of R-A, the check in its "How it is checked" column, on a stock map with the AI density
 low enough to follow one vehicle. Record a short video or a screenshot sequence and fill the row with
-"confirmed", "not so" and what was seen. Phases 8-10 implement only confirmed rows.
+"confirmed", "not so" and what was seen. Phases 8-10 do not wait for it: an unconfirmed row is implemented from the AI map as "to validate"
+and corrected by a `fix/` pull request if the check differs (clarification 2026-11-09).
 
 ## Q3. Phase 0: the Mi5 levels as in OMSI 2 with #675 (#677 item d)
 
@@ -72,7 +73,7 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 
 ## Q9. Phases 8-10: Classic AI
 
-- `physics_model_classic`: the AI rows of the confirmed KA-* on V1-V5.
+- `physics_model_classic`: the AI rows of every KA-* on V1-V5.
 - Trace diff: Depot AI traces identical; Classic AI traces change (`physics-delta`).
 - Cost: the AI step per vehicle and frame on 40 AI vehicles, Classic against `AiBody`; Classic not
   slower (R-P).
@@ -83,5 +84,7 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 - Launcher: the "Physics" list saves `physics=classic|depot` and reads it back.
 - A session with `physics=depot`: every vehicle logs Depot; with `classic`, only the player's vehicle, if it has the key,
   log Depot.
+- The vehicle information panel shows "Physics: <engine> (<reason>)" for the player's vehicle; the
+  launcher's bus list marks a bus whose file has `[depot_physics]`.
 - `docs/FORMATS.md`, `docs/MODDING.md` and `docs/USER_GUIDE.md` describe the key and the setting;
   `CHANGELOG.md` has the line under **Unreleased**.

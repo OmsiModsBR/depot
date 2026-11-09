@@ -37,3 +37,7 @@
 - `.bus` keys (`[depot_physics]`, `[cog]`) are domain terms for modders, not implementation details.
 - The plan ([plan.md](../plan.md)) predates this spec; `/speckit-converge` or `/speckit-analyze` can
   check the two against each other.
+- Re-validated after `/speckit-clarify` (session 2026-11-09, five questions): unconfirmed KA rows are
+  built as "to validate" (FR-015), the engine is shown in the vehicle information panel and the
+  launcher's bus list (FR-008a), and a crash is cleared with the Alt menu's "Clear the accident"
+  button or by leaving the surroundings (FR-016); every item still passes.

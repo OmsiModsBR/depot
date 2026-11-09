@@ -17,6 +17,26 @@ implementation against the model with at least five kinds of vehicle: a 4x2 bus,
 steered third axle, a 6x2 articulated bus, a bi-articulated bus and a 23 m articulated 8x2 bus."
 Refined with the maintainer's decisions D1-D5 (2026-11-08) recorded in [plan.md](plan.md).
 
+## Clarifications
+
+### Session 2026-11-09
+
+- Q: In OMSI Classic, what does the AI do in a point (KA-*) not yet confirmed by the in-game
+  comparison? → A: It is implemented from the private map of OMSI 2's AI, marked "to validate" in the
+  model document, and corrected by a `fix/` pull request if the in-game check shows otherwise; phases
+  8-10 do not wait for phase 0.
+- Q: Where does the player see which engine each vehicle uses? → A: In the log, in one line of the
+  in-game vehicle information panel ("Physics: <engine> (<reason>)"), and as a notice in the
+  launcher's bus list when the bus's file has the `[depot_physics]` key.
+- Q: How does the player clear a crash with a loose AI vehicle, since Depot has no police yet? → A:
+  With a player command ("clear crash") and by the vehicle leaving the surroundings; police arriving
+  at the scene as in OMSI 2 is a separate feature, decided later.
+- Q: How does the player give the "clear crash" command? → A: With the "Clear the accident" button of
+  the in-game Alt menu, which exists today but is not yet in use.
+- Q: What does the "Clear the accident" button clear? → A: Every loose AI vehicle in the session at
+  once; the button is enabled only while one exists, so it stays disabled in Depot physics, whose AI
+  is never loose.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Mods behave as they were tuned for OMSI 2 (Priority: P1)
@@ -112,8 +132,8 @@ lane path while the body swings through bends as a vehicle does, articulated bus
 sections like trailers, buses near the player pull away and stop according to their own engines and
 brakes (farther away they simply hold their target speed, as OMSI 2's do), and AI vehicles on their
 routes never push each other or the scenery. When the player's vehicle, or any vehicle already knocked loose, hits an AI vehicle, it
-becomes a free body with no driver, fully braked with its hazard lights on, until the crash is cleared
-by the police or the vehicle is out of the player's surroundings; then it goes back to its route. An
+becomes a free body with no driver, fully braked with its hazard lights on, until the player clears the crash
+(a "clear crash" command) or the vehicle is out of the player's surroundings; then it goes back to its route. An
 articulated bus is knocked loose and put back as one vehicle, all its sections together.
 
 **Why this priority**: the request makes today's AI part of the Depot mode, so the default mode needs
@@ -176,7 +196,7 @@ directly.
   current setting and its file give; the log names it.
 - A session mixes vehicles of both engines (setting Classic, the player driving a bus with the key): each keeps its own
   engine, and they can still collide with each other.
-- A loose AI vehicle is cleared (by the police or by leaving the surroundings): it is not removed; it
+- A loose AI vehicle is cleared (by the player's command or by leaving the surroundings): it is not removed; it
   goes back onto a route, and its engine stays the one it had.
 - An AI vehicle whose type is marked `[fixed]`: a hit never knocks it loose.
 - A rail vehicle (tram, train) or an aircraft: it moves the same in both modes; the key and the setting
@@ -209,6 +229,9 @@ directly.
   applies to the player's vehicle only (FR-004a).
 - **FR-008**: The engine of each vehicle MUST be fixed when the vehicle appears and written to the log
   with the reason (the setting, or the key and its file).
+- **FR-008a**: The in-game vehicle information panel MUST show the engine of the vehicle and the
+  reason in one line, and the launcher's bus list MUST mark a bus whose file has the
+  `[depot_physics]` key with a notice that it runs Depot physics when the player drives it.
 - **FR-009**: The `[depot_physics]` line MUST NOT change how OMSI 2, openOMSI or another fork the
   maintainers name loads or drives the vehicle (verified before the key is introduced).
 - **FR-010**: A malformed setting value or key MUST NOT stop the game or the vehicle from loading; it
@@ -227,14 +250,18 @@ directly.
 - **FR-014**: In Project Depot Physics, AI road vehicles MUST move exactly as AI road vehicles move
   before this feature.
 - **FR-015**: In OMSI Classic, AI road vehicles on their routes MUST use a new AI behaviour that
-  matches OMSI 2's AI in each point confirmed by an in-game comparison: the turning point on the lane
+  matches OMSI 2's AI; each point not yet confirmed by an in-game comparison is marked "to validate"
+  in the model document and corrected by a `fix/` pull request if the check differs: the turning point on the lane
   path with the body turning as a vehicle; speed from the vehicle's own drive and brakes near the
   player and equal to the target speed farther away; one grip value from the road and the weather;
   no springs or body motion of their own; rear sections following their joints as trailers.
 - **FR-016**: In OMSI Classic, an AI vehicle touched by any active body (the player's vehicle or a
   loose vehicle) MUST become a free body without a driver, fully braked with its hazard lights on,
-  unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash or when
-  it leaves the player's surroundings (decision D3).
+  unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash with a
+  "clear crash" command or when it leaves the player's surroundings (decision D3). The command is the
+  "Clear the accident" button of the in-game Alt menu (today shown but not yet in use); it MUST be
+  enabled only while a loose AI vehicle exists (so never in Project Depot Physics) and clear every
+  loose AI vehicle in the session at once.
 - **FR-016a**: In OMSI Classic, AI vehicles on their routes MUST NOT collide physically with each
   other or with static scenery; they collide only with active bodies. A loose AI vehicle MUST collide
   with everything and release any AI vehicle it touches.
@@ -301,11 +328,14 @@ directly.
 - The engine is chosen in the launcher before a session; the game's own menu does not change it
   mid-session (the engine is fixed when each vehicle appears).
 - Rail vehicles and aircraft are out of scope: neither engine overrides them.
-- The Classic AI implements only the points an in-game comparison with OMSI 2 confirms (KA-1..KA-11 in
-  [research.md](research.md)); KA-6 (free body after a hit) is already confirmed in part by the
-  maintainer.
+- The Classic AI implements every point KA-1..KA-11 of [research.md](research.md) without waiting for
+  the in-game comparison; a point not yet confirmed is marked "to validate" and corrected by a `fix/`
+  pull request if the comparison differs. KA-6 (free body after a hit) is already confirmed in part by
+  the maintainer.
 - "The player's surroundings" is the tile neighbourhood the game already loads around the camera (the
   camera's tile and its eight neighbours). Making its size configurable is a separate decision.
+- Police coming to the scene of a crash (as in OMSI 2) is out of scope; the player clears a crash
+  with a command until a later feature adds it.
 - Handing the player's bus to the computer (an OMSI 2 menu feature) is out of scope.
 - Saved situations do not store the engine; it is resolved again when the situation loads.
 - Mods' scripts read and write the same variables in both engines; nothing in a script needs to change.
