@@ -22,7 +22,8 @@ The result is written in #677 and in `contracts/bus-key.md` before phase 3.
 
 For each row of R-A, the check in its "How it is checked" column, on a stock map with the AI density
 low enough to follow one vehicle. Record a short video or a screenshot sequence and fill the row with
-"confirmed", "not so" and what was seen. Phases 8-10 implement only confirmed rows.
+"confirmed", "not so" and what was seen. Phase 8 does not wait for it: an unconfirmed row is implemented from the AI map as "to validate"
+and corrected by a `fix/` pull request if the check differs (clarification 2026-11-09).
 
 ## Q3. Phase 0: the Mi5 levels as in OMSI 2 with #675 (#677 item d)
 
@@ -70,18 +71,23 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 - In the game: the Mi5 with `[depot_physics]` added stands nose down as before #675 (front 12.7 cm),
   without the key level as in Q3.
 
-## Q9. Phases 8-10: Classic AI
+## Q9. Phase 8: Classic AI
 
-- `physics_model_classic`: the AI rows of the confirmed KA-* on V1-V5.
+- `physics_model_classic`: the AI rows of every KA-* on V1-V5.
 - Trace diff: Depot AI traces identical; Classic AI traces change (`physics-delta`).
 - Cost: the AI step per vehicle and frame on 40 AI vehicles, Classic against `AiBody`; Classic not
-  slower (R-P).
-- In the game: the same junction filmed in Q2, in OMSI 2 and in Depot Classic, side by side.
+  slower (R-P). The frame time with 10 loose AI vehicles is measured and reported (there is no
+  limit on loose vehicles).
+- In the game: the same junction filmed in Q2, in OMSI 2 and in Depot Classic, side by side; the
+  maintainer judges the body and the rear sections by eye (SC-006). The 1 cm bound on the turning
+  point is the automated test on the test bends.
 
-## Q10. Phase 11: the setting
+## Q10. Phase 9: the setting
 
 - Launcher: the "Physics" list saves `physics=classic|depot` and reads it back.
 - A session with `physics=depot`: every vehicle logs Depot; with `classic`, only the player's vehicle, if it has the key,
   log Depot.
+- The vehicle information panel shows "Physics: <engine> (<reason>)" for the player's vehicle; the
+  launcher's bus list marks a bus whose file has `[depot_physics]`.
 - `docs/FORMATS.md`, `docs/MODDING.md` and `docs/USER_GUIDE.md` describe the key and the setting;
   `CHANGELOG.md` has the line under **Unreleased**.

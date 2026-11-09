@@ -17,6 +17,57 @@ implementation against the model with at least five kinds of vehicle: a 4x2 bus,
 steered third axle, a 6x2 articulated bus, a bi-articulated bus and a 23 m articulated 8x2 bus."
 Refined with the maintainer's decisions D1-D5 (2026-11-08) recorded in [plan.md](plan.md).
 
+## Clarifications
+
+### Session 2026-11-09
+
+- Q: In OMSI Classic, what does the AI do in a point (KA-*) not yet confirmed by the in-game
+  comparison? → A: It is implemented from the private map of OMSI 2's AI, marked "to validate" in the
+  model document, and corrected by a `fix/` pull request if the in-game check shows otherwise; the
+  Classic AI phase does not wait for phase 0.
+- Q: Where does the player see which engine each vehicle uses? → A: In the log, in one line of the
+  in-game vehicle information panel ("Physics: <engine> (<reason>)"), and as a notice in the
+  launcher's bus list when the bus's file has the `[depot_physics]` key.
+- Q: How does the player clear a crash with a loose AI vehicle, since Depot has no police yet? → A:
+  With a player command ("clear crash") and by the vehicle leaving the surroundings; police arriving
+  at the scene as in OMSI 2 is a separate feature, decided later.
+- Q: How does the player give the "clear crash" command? → A: With the "Clear the accident" button of
+  the in-game Alt menu, which exists today but is not yet in use.
+- Q: What does the "Clear the accident" button clear? → A: Every loose AI vehicle in the session at
+  once; the button is enabled only while one exists, so it stays disabled in Depot physics, whose AI
+  is never loose.
+
+### Session 2026-11-09 (second round)
+
+- Q: Does the Classic AI reach the game step by step (path, then speed, then release) or all at once?
+  → A: All at once, in a single pull request (plan phase 8), so the default traffic never runs a
+  partial Classic AI.
+- Q: Is there a limit on how many AI vehicles can be loose at once? → A: No limit, as in OMSI 2;
+  SC-007 also measures a scene with 10 loose AI vehicles so that the cost is known.
+- Q: How is SC-006 measured? → A: The 1 cm bound by an automated test on the contract's test bends
+  (90° junction, roundabout, lane change); the body and the rear sections compared by eye with OMSI 2
+  in the game (quickstart Q2 and Q9), judged by the maintainer.
+- Q: What happens to the passengers and the timetable of an AI bus that was loose and goes back to
+  its route? → A: It goes back empty and starts the next trip of its timetable.
+- Q: Does the AI honour the model's `[noDistanceCheck]` key? → A: Yes, in both engines. In OMSI
+  Classic a vehicle with the key always counts as near (full physics at any distance); in Project
+  Depot Physics today's AI already runs the same step at any distance, so the key changes nothing
+  there and FR-014 still holds.
+
+### Session 2026-11-09 (third round)
+
+- Q: In OMSI Classic, what spring travel do the scripts and animations of an AI vehicle on its route
+  read (variables such as `Axle_Suspension`)? → A: The static sag computed once at spawn, with the
+  weight shared about the model origin (K-1); the body's height and attitude still come from the path.
+- Q: What if the phase 0 check (Q1) shows that OMSI 2 or a fork does not accept the `[depot_physics]`
+  line? → A: The key moves to a separate file next to the `.bus` (`<name>.depot.cfg` holding the
+  `[depot_physics]` line), which OMSI 2 never reads; the effect is the same.
+- Q: Does knocking an AI vehicle loose count in the player's career or score? → A: No, not in this
+  feature; it belongs to a later accidents feature, together with the police.
+- Q: Is the surroundings that decides the AI's regime centred on the camera or on the player's
+  vehicle? → A: On the camera, as in OMSI 2 and as Depot already loads its tiles; the text says "the
+  camera's surroundings".
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Mods behave as they were tuned for OMSI 2 (Priority: P1)
@@ -109,11 +160,11 @@ Load the same file in OMSI 2: it loads and drives as without the line.
 
 In OMSI Classic the AI traffic moves as OMSI 2's AI does: each vehicle's turning point keeps to its
 lane path while the body swings through bends as a vehicle does, articulated buses trail their rear
-sections like trailers, buses near the player pull away and stop according to their own engines and
+sections like trailers, buses near the camera pull away and stop according to their own engines and
 brakes (farther away they simply hold their target speed, as OMSI 2's do), and AI vehicles on their
 routes never push each other or the scenery. When the player's vehicle, or any vehicle already knocked loose, hits an AI vehicle, it
-becomes a free body with no driver, fully braked with its hazard lights on, until the crash is cleared
-by the police or the vehicle is out of the player's surroundings; then it goes back to its route. An
+becomes a free body with no driver, fully braked with its hazard lights on, until the player clears the crash
+(a "clear crash" command) or the vehicle is out of the camera's surroundings; then it goes back to its route. An
 articulated bus is knocked loose and put back as one vehicle, all its sections together.
 
 **Why this priority**: the request makes today's AI part of the Depot mode, so the default mode needs
@@ -130,11 +181,11 @@ Depot (OMSI Classic); then nudge an AI car with the player's bus in both.
 2. **Given** OMSI Classic, **When** the player's vehicle hits an AI vehicle, **Then** the AI vehicle
    becomes a free body without a driver, fully braked with its hazard lights on; if it is pushed into
    another AI vehicle, that one is knocked loose too.
-3. **Given** a loose AI vehicle, **When** the player clears the crash or drives far enough away that
-   the vehicle leaves the surroundings, **Then** the vehicle goes back onto a route and drives on.
-4. **Given** OMSI Classic, **When** an AI bus pulls away next to the player, **Then** it accelerates
-   as its own engine and brakes allow; **When** it is far from the player, **Then** it holds its
-   target speed and its rear sections are not updated; **When** it serves a stop far from the player,
+3. **Given** a loose AI vehicle, **When** the player clears the crash or moves the camera far enough away that
+   the vehicle leaves the camera's surroundings, **Then** the vehicle goes back onto a route and drives on.
+4. **Given** OMSI Classic, **When** an AI bus pulls away near the camera, **Then** it accelerates
+   as its own engine and brakes allow; **When** it is far from the camera, **Then** it holds its
+   target speed and its rear sections are not updated; **When** it serves a stop far from the camera,
    **Then** its own brakes still hold it.
 5. **Given** OMSI Classic, **When** two AI vehicles on their routes meet in the same spot, **Then** they
    do not push each other.
@@ -176,8 +227,9 @@ directly.
   current setting and its file give; the log names it.
 - A session mixes vehicles of both engines (setting Classic, the player driving a bus with the key): each keeps its own
   engine, and they can still collide with each other.
-- A loose AI vehicle is cleared (by the police or by leaving the surroundings): it is not removed; it
-  goes back onto a route, and its engine stays the one it had.
+- A loose AI vehicle is cleared (by the player's command or by leaving the surroundings): it is not removed; it
+  goes back onto a route, and its engine stays the one it had. An AI bus goes back empty and starts
+  the next trip of its timetable.
 - An AI vehicle whose type is marked `[fixed]`: a hit never knocks it loose.
 - A rail vehicle (tram, train) or an aircraft: it moves the same in both modes; the key and the setting
   change nothing for it.
@@ -209,8 +261,14 @@ directly.
   applies to the player's vehicle only (FR-004a).
 - **FR-008**: The engine of each vehicle MUST be fixed when the vehicle appears and written to the log
   with the reason (the setting, or the key and its file).
+- **FR-008a**: The in-game vehicle information panel MUST show the engine of the vehicle and the
+  reason in one line, and the launcher's bus list MUST mark a bus whose file has the
+  `[depot_physics]` key with a notice that it runs Depot physics when the player drives it.
 - **FR-009**: The `[depot_physics]` line MUST NOT change how OMSI 2, openOMSI or another fork the
   maintainers name loads or drives the vehicle (verified before the key is introduced).
+- **FR-009a**: If the check of FR-009 fails for OMSI 2 or a named fork, the key MUST move to a
+  separate file next to the vehicle's `.bus` file (`<name>.depot.cfg` holding the `[depot_physics]`
+  line), with the same effect and rules (FR-004 to FR-008); the `.bus` key is then not introduced.
 - **FR-010**: A malformed setting value or key MUST NOT stop the game or the vehicle from loading; it
   is reported and a valid engine is used (Principle IV).
 
@@ -227,23 +285,32 @@ directly.
 - **FR-014**: In Project Depot Physics, AI road vehicles MUST move exactly as AI road vehicles move
   before this feature.
 - **FR-015**: In OMSI Classic, AI road vehicles on their routes MUST use a new AI behaviour that
-  matches OMSI 2's AI in each point confirmed by an in-game comparison: the turning point on the lane
+  matches OMSI 2's AI; each point not yet confirmed by an in-game comparison is marked "to validate"
+  in the model document and corrected by a `fix/` pull request if the check differs: the turning point on the lane
   path with the body turning as a vehicle; speed from the vehicle's own drive and brakes near the
   player and equal to the target speed farther away; one grip value from the road and the weather;
-  no springs or body motion of their own; rear sections following their joints as trailers.
+  no springs or body motion of their own; rear sections following their joints as trailers. The
+  spring travel the scripts and animations read for each axle MUST be the static sag computed once at
+  spawn with the weight shared about the model origin (K-1).
 - **FR-016**: In OMSI Classic, an AI vehicle touched by any active body (the player's vehicle or a
   loose vehicle) MUST become a free body without a driver, fully braked with its hazard lights on,
-  unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash or when
-  it leaves the player's surroundings (decision D3).
+  unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash with a
+  "clear crash" command or when it leaves the camera's surroundings (decision D3). The command is the
+  "Clear the accident" button of the in-game Alt menu (today shown but not yet in use); it MUST be
+  enabled only while a loose AI vehicle exists (so never in Project Depot Physics) and clear every
+  loose AI vehicle in the session at once. An AI bus that goes back to its route MUST go back empty
+  and start the next trip of its timetable.
 - **FR-016a**: In OMSI Classic, AI vehicles on their routes MUST NOT collide physically with each
   other or with static scenery; they collide only with active bodies. A loose AI vehicle MUST collide
   with everything and release any AI vehicle it touches.
 - **FR-016b**: In OMSI Classic, release and return MUST act on the whole vehicle (every section) at
   once, without any section jumping.
-- **FR-016c**: In OMSI Classic, an AI vehicle beyond the player's surroundings MUST move at its
+- **FR-016c**: In OMSI Classic, an AI vehicle beyond the camera's surroundings MUST move at its
   driver's target speed without force integration and without updating its rear sections, except
   while it serves a stop, where its drive and brakes apply; a loose AI vehicle beyond the surroundings
-  MUST be cleared automatically and go back to its route (maintainer, 2026-11-08).
+  MUST be cleared automatically and go back to its route (maintainer, 2026-11-08). A vehicle whose
+  model has `[noDistanceCheck]` MUST always count as within the surroundings, in both engines (in
+  Project Depot Physics this is already today's behaviour for every AI vehicle).
 - **FR-017**: The code of each engine MUST be kept apart wherever the engines differ, and shared
   wherever they do not, so that the switch selects one module or the other.
 - **FR-018**: Rail vehicles and aircraft MUST behave the same in both engines.
@@ -289,10 +356,13 @@ directly.
   [contracts/test-vehicles.md](contracts/test-vehicles.md)).
 - **SC-005**: A bus file with `[depot_physics]` loads and drives in OMSI 2 with no visible or logged
   difference from the same file without it.
-- **SC-006**: In OMSI Classic, an AI bus turning through the reference junction keeps its turning
-  point within 1 cm of its lane path.
+- **SC-006**: In OMSI Classic, an AI bus turning through each test bend (90° junction, roundabout,
+  lane change) keeps its turning point within 1 cm of its lane path in the automated tests, and its
+  body and rear sections look the same as in OMSI 2 through the same junction, side by side, as the
+  maintainer judges.
 - **SC-007**: The game's frame rate with 40 AI vehicles is not lower in OMSI Classic than before this
-  feature, measured on the same machine and scene.
+  feature, measured on the same machine and scene; the frame time of a scene with 10 loose AI
+  vehicles is also measured and reported (no limit on loose vehicles, as in OMSI 2).
 - **SC-008**: A player can switch engine in the launcher and see the result in the next session in
   under one minute, without editing any file.
 
@@ -301,11 +371,15 @@ directly.
 - The engine is chosen in the launcher before a session; the game's own menu does not change it
   mid-session (the engine is fixed when each vehicle appears).
 - Rail vehicles and aircraft are out of scope: neither engine overrides them.
-- The Classic AI implements only the points an in-game comparison with OMSI 2 confirms (KA-1..KA-11 in
-  [research.md](research.md)); KA-6 (free body after a hit) is already confirmed in part by the
-  maintainer.
-- "The player's surroundings" is the tile neighbourhood the game already loads around the camera (the
+- The Classic AI implements every point KA-1..KA-11 of [research.md](research.md) without waiting for
+  the in-game comparison; a point not yet confirmed is marked "to validate" and corrected by a `fix/`
+  pull request if the comparison differs. KA-6 (free body after a hit) is already confirmed in part by
+  the maintainer.
+- "The camera's surroundings" is the tile neighbourhood the game already loads around the camera (the
   camera's tile and its eight neighbours). Making its size configurable is a separate decision.
+- Police coming to the scene of a crash (as in OMSI 2) is out of scope; the player clears a crash
+  with a command until a later feature adds it. Knocking an AI vehicle loose has no effect on the
+  player's career or score in this feature; both belong to a later accidents feature.
 - Handing the player's bus to the computer (an OMSI 2 menu feature) is out of scope.
 - Saved situations do not store the engine; it is resolved again when the situation loads.
 - Mods' scripts read and write the same variables in both engines; nothing in a script needs to change.
