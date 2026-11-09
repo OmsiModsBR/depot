@@ -87,7 +87,7 @@ document error (corrected in `docs/physics/`), decided in the pull request.
 - Launcher: the "Physics" list saves `physics=classic|depot` and reads it back.
 - A session with `physics=depot`: every vehicle logs Depot; with `classic`, only the player's vehicle, if it has the key,
   log Depot.
-- The vehicle information panel shows "Physics: <engine> (<reason>)" for the player's vehicle; the
+- The menu's "Vehicle" list shows "Physics: <engine> (<reason>)" for the player's vehicle; the
   launcher's bus list marks a bus whose file has `[depot_physics]`.
 - `docs/FORMATS.md`, `docs/MODDING.md` and `docs/USER_GUIDE.md` describe the key and the setting;
   `CHANGELOG.md` has the line under **Unreleased**.

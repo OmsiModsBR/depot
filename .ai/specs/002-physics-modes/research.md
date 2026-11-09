@@ -83,6 +83,8 @@ rejected, KA-4 says OMSI 2 does not, and it would cost about five times `AiBody`
 
 **Decision**: the detail radius of KA-9 and KA-11 is the tile neighbourhood Depot already loads around
 the camera (the camera's tile and its eight neighbours); a vehicle is near while its tile is in it.
+The spec calls it "the camera's surroundings"; the two names mean the same thing (it is centred on the
+camera, never on the player's vehicle; clarification 2026-11-09).
 A configurable count of neighbour tiles is a separate decision, not part of this feature.
 
 **Contacts (phase 8)**: today only the player's body tests obstacles; it meets the AI vehicles'
@@ -109,6 +111,9 @@ a value adds nothing.
 **To validate before phase 3** (#677 item a, quickstart Q1): OMSI 2 loads a stock bus with
 `[depot_physics]` added, with no line in `logfile.txt` beyond what it writes without it, and drives
 the same. The same check on openOMSI and on any fork the maintainers name.
+
+**If that check fails** (FR-009a, maintainer 2026-11-09): the key moves to `<name>.depot.cfg` next to
+the `.bus` file, holding the `[depot_physics]` line, which OMSI 2 never reads; same rules otherwise.
 
 **Alternatives considered**: a `.bus` value under an existing section: rejected, an older reader would
 take it as that section's data. A separate file next to the `.bus`: rejected, mods are shared as
@@ -198,4 +203,4 @@ and the key, like any other setting. The log line of R-N shows which one applied
 refactors): the AI and player steps measured before/after in the existing physics benchmark scenes.
 The Classic AI phase (8) measure the AI step per vehicle against `AiBody` (1.1 µs and 4 ground
 probes per vehicle and frame in the 2026-10-10 study) on 40 AI vehicles; Classic must not be slower.
-The far-from-camera regime of KA-2 is expected to make Classic cheaper than `AiBody`.
+The far-from-camera regime of KA-9 is expected to make Classic cheaper than `AiBody`.
