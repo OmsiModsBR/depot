@@ -90,8 +90,9 @@ throttle 0, brake 1 and hazard lights on, starting from their route poses and ar
 ## AI static pose
 
 Depot keeps today's static pose (`kinematic_wheel_rest_loads` about `cog_y`, used by `vehicle.rs`,
-`vehicle_type.rs` and `coupled/trailer.rs`). A Classic AI vehicle on its route has no static sag: its
-height and attitude come from the path (KA-4, KA-7); loose, its rigid body shares the weight about the
+`vehicle_type.rs` and `coupled/trailer.rs`). A Classic AI vehicle on its route takes its height and
+attitude from the path (KA-4, KA-7); its scripts read, per axle, the static sag computed once at spawn
+with the weight shared about the origin (K-1); loose, its rigid body shares the weight about the
 origin (K-1).
 
 ## Settings (`omsi-app`, `omsi-launcher-core`)

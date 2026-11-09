@@ -3,6 +3,11 @@
 Status: name and format **decided** (D1, 2026-11-08); waiting on the black-box check (quickstart
 Q1). Public text for `docs/FORMATS.md` and `docs/MODDING.md` is written from this contract in phase 9.
 
+**If Q1 fails** (OMSI 2 or a named fork does not accept the line; maintainer, 2026-11-09): the key
+moves to a separate file next to the `.bus` file, `<name>.depot.cfg`, holding the `[depot_physics]`
+line, which OMSI 2 never reads. Its presence, format and rules are then the same as below, read from
+that file instead of the `.bus` file; the `.bus` key is not introduced.
+
 ## Format
 
 ```text

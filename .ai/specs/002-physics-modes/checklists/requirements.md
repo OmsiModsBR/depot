@@ -47,3 +47,8 @@
   comparison, a cleared AI bus goes back empty to its next trip (FR-016), and `[noDistanceCheck]`
   makes a vehicle count as near in both engines (FR-016c). The "loose and asleep" state was removed
   (a loose AI vehicle never sleeps). Every item still passes.
+- Re-validated after the third `/speckit-clarify` round (2026-11-09, four questions): the Classic AI's
+  scripts read a static sag computed at spawn about the origin (FR-015, KA-4, KA-7), the fallback
+  `<name>.depot.cfg` if OMSI 2 or a fork rejects the `.bus` key (FR-009a), no career effect of a
+  crash in this feature, and the surroundings centred on the camera ("the camera's surroundings").
+  Every item still passes.
