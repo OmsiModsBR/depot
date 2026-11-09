@@ -22,7 +22,7 @@ Phase 1 of the [plan](plan.md).
 
 | Field | Type | From |
 |---|---|---|
-| `depot_physics` (new) | `bool` | `[depot_physics]` present in the file ([contracts/bus-key.md](contracts/bus-key.md)) |
+| `depot_physics` (new) | `bool` | `[depot_physics]` present in the file ([contracts/bus-key.md](contracts/bus-key.md)); if the phase 0 check Q1 fails, present in `<name>.depot.cfg` next to the `.bus` file instead (FR-009a) |
 
 The key stops being an `unknown_keywords` entry. Lines under it before the next section are reported
 once as ignored.
@@ -78,14 +78,15 @@ today). Both arms expose what the traffic and the scripts read today: `position`
 
 | Concern | Fields | Rows of R-A |
 |---|---|---|
-| Path | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path | KA-1, KA-4 |
-| Speed | speed, `a_long`, regime (near or serving a stop: physical; far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3, KA-9, KA-10 |
+| Path | distance along the path, lateral offset, heading relative to the path, vehicle curvature (this and last frame), steer angle per axle, `a_lat`; pose from the path; static sag per axle for the scripts, computed once at spawn about the origin | KA-1, KA-4 |
+| Speed | speed, `a_long`, regime (near, by the detail radius about the camera or `[noDistanceCheck]`, or serving a stop: physical; far: target speed), throttle/brake set by the AI driver, grip | KA-2, KA-3, KA-9, KA-10 |
 | Rear sections and release | articulation angle per joint (rear sections), `state: OnRoute \| Loose` for the whole vehicle, the "clear crash" command | KA-5..KA-8, KA-6b, KA-11 |
 
 While loose, a Classic AI vehicle's sections run the player's `RigidBody` (Classic engine) with
 throttle 0, brake 1 and hazard lights on, starting from their route poses and articulation angles;
 `OnRoute` again, all sections together, when the crash is cleared or its tile leaves the detail radius
-(the camera's tile and its eight neighbours), asking the planner for a new path.
+(the camera's tile and its eight neighbours), asking the planner for a new path; an AI bus goes back
+empty and starts the next trip of its timetable.
 
 ## AI static pose
 

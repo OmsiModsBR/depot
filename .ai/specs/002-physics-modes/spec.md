@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-08
 
-**Status**: Draft
+**Status**: Clarified (three `/speckit-clarify` rounds, 2026-11-09)
 
 **Input**: User description: issue #677, its decision comment, and the maintainer's request of
 2026-11-08: "Plan the two physics modes. The code of each physics is kept apart, so that the switch
@@ -26,7 +26,7 @@ Refined with the maintainer's decisions D1-D5 (2026-11-08) recorded in [plan.md]
   model document, and corrected by a `fix/` pull request if the in-game check shows otherwise; the
   Classic AI phase does not wait for phase 0.
 - Q: Where does the player see which engine each vehicle uses? → A: In the log, in one line of the
-  in-game vehicle information panel ("Physics: <engine> (<reason>)"), and as a notice in the
+  in-game vehicle information panel ("Physics: <engine> (<reason>)"; placed in the menu's "Vehicle" list, since the game has no other vehicle panel: analysis of 2026-11-09), and as a notice in the
   launcher's bus list when the bus's file has the `[depot_physics]` key.
 - Q: How does the player clear a crash with a loose AI vehicle, since Depot has no police yet? → A:
   With a player command ("clear crash") and by the vehicle leaving the surroundings; police arriving
@@ -261,7 +261,7 @@ directly.
   applies to the player's vehicle only (FR-004a).
 - **FR-008**: The engine of each vehicle MUST be fixed when the vehicle appears and written to the log
   with the reason (the setting, or the key and its file).
-- **FR-008a**: The in-game vehicle information panel MUST show the engine of the vehicle and the
+- **FR-008a**: The menu's "Vehicle" list in the game MUST show the engine of the vehicle and the
   reason in one line, and the launcher's bus list MUST mark a bus whose file has the
   `[depot_physics]` key with a notice that it runs Depot physics when the player drives it.
 - **FR-009**: The `[depot_physics]` line MUST NOT change how OMSI 2, openOMSI or another fork the
@@ -376,7 +376,7 @@ directly.
   pull request if the comparison differs. KA-6 (free body after a hit) is already confirmed in part by
   the maintainer.
 - "The camera's surroundings" is the tile neighbourhood the game already loads around the camera (the
-  camera's tile and its eight neighbours). Making its size configurable is a separate decision.
+  camera's tile and its eight neighbours); the plan and research call it "the detail radius". Making its size configurable is a separate decision.
 - Police coming to the scene of a crash (as in OMSI 2) is out of scope; the player clears a crash
   with a command until a later feature adds it. Knocking an AI vehicle loose has no effect on the
   player's career or score in this feature; both belong to a later accidents feature.
