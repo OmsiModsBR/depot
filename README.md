@@ -445,6 +445,7 @@ The pages live in [`docs/`](docs) and are also published as the website
 | [Building](docs/BUILDING.md) | building from source on Windows |
 | [Content formats](docs/FORMATS.md) | every OMSI 2 file format |
 | [Architecture](docs/ARCHITECTURE.md) | crates, threading, renderer, roadmap |
+| [Physics models](docs/physics/README.md) | the equations of the two vehicle physics engines, OMSI Classic and Project Depot Physics |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
 | [Privacy](docs/PRIVACY.md) | what the program sends over the network (nothing unless you ask) and where its logs stay |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.PATCH` scheme and how a release is made |

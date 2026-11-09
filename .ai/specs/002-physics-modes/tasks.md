@@ -55,11 +55,11 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Model documents (US5's documents, needed by every test) `docs/physics-models`
 
-- [ ] T005 [P] [ph 1] Write `docs/physics/README.md`: the two engines, how a vehicle gets one (setting, key, log line), the id scheme, how to run the conformance tests ([contracts/model-docs.md](contracts/model-docs.md))
-- [ ] T006 [P] [ph 1] Write `docs/physics/common-model.md` with C-1..C-11 (inputs with `.bus` key and unit, outputs, implementing module for each)
-- [ ] T007 [P] [ph 1] Write `docs/physics/classic-model.md`: index of the C-* it runs, K-1, KA-1..KA-11 and KA-6b as in R-A (each "validated" with its check or "to validate"), including the static sag the AI scripts read (KA-4), the detail radius about the camera and `[noDistanceCheck]` (KA-9), the "Clear the accident" button and the empty next trip (KA-6)
-- [ ] T008 [P] [ph 1] Write `docs/physics/depot-model.md`: index of the C-* it runs, D-1 and DA-1..DA-6 from today's `AiBody` (`crates/omsi-sim/src/ai/mod.rs`, `crates/omsi-sim/src/ai/road.rs`)
-- [ ] T009 [ph 1] Check provenance (Principle VIII, quickstart Q5): `grep -nE "0x[0-9a-fA-F]{5,}" docs/physics` empty, no name or threshold of the reference executable, every Classic rule marked
+- [X] T005 [P] [ph 1] Write `docs/physics/README.md`: the two engines, how a vehicle gets one (setting, key, log line), the id scheme, how to run the conformance tests ([contracts/model-docs.md](contracts/model-docs.md))
+- [X] T006 [P] [ph 1] Write `docs/physics/common-model.md` with C-1..C-11 (inputs with `.bus` key and unit, outputs, implementing module for each)
+- [X] T007 [P] [ph 1] Write `docs/physics/classic-model.md`: index of the C-* it runs, K-1, KA-1..KA-11 and KA-6b as in R-A (each "validated" with its check or "to validate"), including the static sag the AI scripts read (KA-4), the detail radius about the camera and `[noDistanceCheck]` (KA-9), the "Clear the accident" button and the empty next trip (KA-6)
+- [X] T008 [P] [ph 1] Write `docs/physics/depot-model.md`: index of the C-* it runs, D-1 and DA-1..DA-6 from today's `AiBody` (`crates/omsi-sim/src/ai/mod.rs`, `crates/omsi-sim/src/ai/road.rs`)
+- [X] T009 [ph 1] Check provenance (Principle VIII, quickstart Q5): `grep -nE "0x[0-9a-fA-F]{5,}" docs/physics` empty, no name or threshold of the reference executable, every Classic rule marked
 
 ### Test vehicles and Classic player conformance `feat/physics-test-vehicles`
 
