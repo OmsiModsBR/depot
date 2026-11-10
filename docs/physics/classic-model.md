@@ -243,6 +243,7 @@ otherwise. Each is marked **to validate** and decided later (the plan's decision
 | V4 | tyre envelope and kerb climbing in `C-3` | drive over a 15 cm kerb at 10 km/h at 45° and square on |
 | V5 | wheels stopped at wall faces in `C-3` | drive a wheel slowly into a wall face |
 | — | the articulated stop wave of `C-9` | a known difference, left as it is (maintainer, 2026-10-23) |
+| — | the steady articulation angle of a section behind a joint with two axles (V5's rear section): the engine settles at about 85 % of the closed form of `C-9` (18.5° against 21.7° at half lock), while one-axle sections match it within 0.05° | cause not found; the fix comes with a test that fails first (T017) |
 
 ## Known divergences
 
