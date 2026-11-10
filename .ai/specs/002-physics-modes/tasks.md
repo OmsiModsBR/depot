@@ -38,8 +38,8 @@ Rust workspace: `crates/<crate>/src/` for code, `crates/<crate>/tests/` for test
 the maintainer on a machine with OMSI 2. Only T001-T002 block code (the key, phase 3); T003 corrects
 the Classic AI later by `fix/` (clarification 2026-11-09).
 
-- [ ] T001 [ph 0] Q1: add `[depot_physics]` (alone, and with a stray line) to a copy of a stock bus, load and drive it in OMSI 2; record the result in #677 and in `.ai/specs/002-physics-modes/contracts/bus-key.md` ("Other readers")
-- [ ] T002 [P] [ph 0] Q1 on openOMSI and each fork the maintainers name; record each result in `.ai/specs/002-physics-modes/contracts/bus-key.md`
+- [X] T001 [ph 0] Q1: add `[depot_physics]` (alone, and with a stray line) to a copy of a stock bus, load and drive it in OMSI 2; record the result in #677 and in `.ai/specs/002-physics-modes/contracts/bus-key.md` ("Other readers")
+- [X] T002 [P] [ph 0] Q1 on openOMSI and each fork the maintainers name; record each result in `.ai/specs/002-physics-modes/contracts/bus-key.md`
 - [ ] T003 [P] [ph 0] Q2: run the check of each KA-1..KA-11 and KA-6b row on a stock map; fill the "Status" column of R-A in `.ai/specs/002-physics-modes/research.md` with "confirmed" or "not so" and what was seen
 - [ ] T004 [P] [ph 0] Q3: the Mi5 at rest on a flat stop in OMSI 2 and in Depot (Classic), each axle's `Axle_Suspension` and a side screenshot from the same camera; record the result in #677
 
