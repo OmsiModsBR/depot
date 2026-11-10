@@ -7,6 +7,7 @@
 
 #![allow(dead_code)]
 
+pub mod closed_form;
 pub mod ground;
 pub mod scratch;
 pub mod trace;

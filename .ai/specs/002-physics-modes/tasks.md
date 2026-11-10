@@ -63,10 +63,10 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Test vehicles and Classic player conformance `feat/physics-test-vehicles`
 
-- [ ] T010 [ph 2] Add V1-V5 to `crates/omsi-sim/tests/support/vehicles.rs` as in [contracts/test-vehicles.md](contracts/test-vehicles.md) (axles, driven and steered axles, `[rot_pnt_long]`, `[cog]` y 0.3-0.8 m forward)
-- [ ] T011 [ph 2] Add the closed forms the tests compare with (static share about a reference y, sag per axle, pitch at rest; turning radius; steady-turn articulation angle) in `crates/omsi-sim/tests/support/closed_form.rs`
-- [ ] T012 [P] [ph 2] Static sag per axle and pitch at rest, Classic (C-3, K-1), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
-- [ ] T013 [P] [ph 2] Pull-away and braking below the grip, stop distance (C-4, C-5, C-8), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
+- [X] T010 [ph 2] Add V1-V5 to `crates/omsi-sim/tests/support/vehicles.rs` as in [contracts/test-vehicles.md](contracts/test-vehicles.md) (axles, driven and steered axles, `[rot_pnt_long]`, `[cog]` y 0.3-0.8 m forward)
+- [X] T011 [ph 2] Add the closed forms the tests compare with (static share about a reference y, sag per axle, pitch at rest; turning radius; steady-turn articulation angle) in `crates/omsi-sim/tests/support/closed_form.rs`
+- [X] T012 [P] [ph 2] Static sag per axle and pitch at rest, Classic (C-3, K-1), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
+- [X] T013 [P] [ph 2] Pull-away and braking below the grip, stop distance (C-4, C-5, C-8), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [ ] T014 [P] [ph 2] Steady turn at full lock: turning radius and each steered axle's angle, tag axle opposite (C-6, C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [ ] T015 [P] [ph 2] Steady articulation angles (C-9), V3-V5, and release when the bend asks more than the grip (C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [ ] T016 [ph 2] Optional static-sag check on installed buses (the Mi5 first), skipped without `OMSI_ROOT`, in `crates/omsi-sim/tests/physics_model_classic.rs`

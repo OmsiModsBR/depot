@@ -242,4 +242,5 @@ otherwise. Each is marked **to validate** and decided later (the plan's decision
 | V3 | air drag in `C-8` | coast down a long 6-8 % grade without brakes: does the speed level off, and where? |
 | V4 | tyre envelope and kerb climbing in `C-3` | drive over a 15 cm kerb at 10 km/h at 45° and square on |
 | V5 | wheels stopped at wall faces in `C-3` | drive a wheel slowly into a wall face |
+| — | where a joint's load turns a section: about `[cog]` (the struts turn it about the origin, `K-1`); found by the conformance tests of the articulated vehicles | no OMSI 2 check yet |
 | — | the articulated stop wave of `C-9` | a known difference, left as it is (maintainer, 2026-10-23) |
