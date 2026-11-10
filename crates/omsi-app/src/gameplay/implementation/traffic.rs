@@ -1201,6 +1201,7 @@ impl Traffic {
             unsched_factor: crate::settings::Settings::load().ai_unsched_factor,
             max_scheduled: crate::settings::Settings::load().ai_max_scheduled,
             max_random: crate::settings::Settings::load().ai_max_random,
+            physics: crate::settings::Settings::load().physics,
             no_timetable_buses: false,
             viewer: None,
             occluders: None,
@@ -2894,6 +2895,15 @@ impl Traffic {
         };
         host.paint_scheme = Some(scheme);
         let mut vehicle = VehicleInstance::new(ty.clone(), host);
+        // an AI vehicle follows the setting; the bus key is for the player's vehicle only (D6)
+        vehicle.set_physics_mode(
+            omsi_cfg::PhysicsMode::for_vehicle(
+                self.physics,
+                ty.def.depot_physics,
+                omsi_cfg::Driver::Ai,
+            )
+            .0,
+        );
         if let Some((num, reg)) = bus.as_ref().and_then(|b| b.number.clone()) {
             if let Some(i) = ty.program.str_var("number") {
                 vehicle.state.str_vars[i as usize] = num;

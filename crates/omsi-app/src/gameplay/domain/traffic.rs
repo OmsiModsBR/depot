@@ -357,6 +357,8 @@ pub struct Traffic {
     /// The options' `[AIMaxCountRandom]` (first line): no more vehicles without a timetable
     /// than that on the streets at once.
     pub max_random: u32,
+    /// The options' `physics`: the engine of every AI vehicle (the bus key is the player's only).
+    pub physics: omsi_cfg::PhysicsMode,
     /// `--no-timetable-buses`: the timetable runs for the player's duty, but puts no AI
     /// bus on the road (#1762).
     pub no_timetable_buses: bool,

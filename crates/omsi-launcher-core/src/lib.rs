@@ -3202,7 +3202,7 @@ const INFO_ITEM_KEYS: [&str; 9] = [
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
 pub fn settings_from_text(text: Option<&str>) -> Value {
-    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "texture_memory": 0, "texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "mirror_size": 256, "doppler": true, "physics": "classic", "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["triple_screen"] = json!(false);
     v["triple_span"] = json!(true);
     v["triple_hud_center"] = json!(true);
@@ -4121,6 +4121,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     .unwrap_or_else(|| "1".into()))
             }
             "language" => v[&k] = json!(language_code(val)),
+            "physics" => v[&k] = json!(omsi_cfg::PhysicsMode::parse(val).as_str()),
             "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
             // the game's default
@@ -4489,6 +4490,12 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("precision_zoom", false),
     );
     // OMSI's "Smoke Systems": active, the player's vehicle only, particles a system, mirrors
+    // the vehicle physics engine: saved only as one of its two spellings
+    let text = format!(
+        "{text}physics={}\n",
+        omsi_cfg::PhysicsMode::parse(v.get("physics").and_then(|x| x.as_str()).unwrap_or(""))
+            .as_str(),
+    );
     let text = format!(
         "{text}smoke={}\nsmoke_user_only={}\nsmoke_max={}\nsmoke_in_mirrors={}\n",
         b("smoke", true),

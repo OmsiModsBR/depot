@@ -154,6 +154,10 @@ pub struct Vehicle {
     pub contact_shoes: Vec<[f32; 6]>,
     pub ai_brake_performance: Option<[f32; 5]>,
     pub fixed: bool,
+    /// The file has the `[depot_physics]` key: the player's vehicle then runs Project Depot
+    /// Physics whatever the game's setting says. A section with no value lines; OMSI 2 and
+    /// the other readers skip it as an unknown line.
+    pub depot_physics: bool,
     pub unknown_keywords: Vec<(String, usize)>,
 }
 
@@ -481,6 +485,23 @@ impl Vehicle {
                 "contact_shoe" => v.contact_shoes.push(r.f32s::<6>()),
                 "ai_brakeperformance" => v.ai_brake_performance = Some(r.f32s::<5>()),
                 "fixed" => v.fixed = true,
+                "depot_physics" => {
+                    if v.depot_physics {
+                        log::info!(
+                            "{}: [depot_physics] is given more than once",
+                            r.path().display()
+                        );
+                    }
+                    v.depot_physics = true;
+                    // a key with no value lines: what is under it is not another section's
+                    // values, and is left out
+                    if r.rest_of_block().iter().any(|l| !l.trim().is_empty()) {
+                        log::info!(
+                            "{}: the lines under [depot_physics] are ignored",
+                            r.path().display()
+                        );
+                    }
+                }
                 _ => v.unknown_keywords.push((k, r.block_line())),
             }
         }

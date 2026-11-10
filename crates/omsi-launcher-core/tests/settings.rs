@@ -27,3 +27,38 @@ fn directx9_fixes_the_graphics_only_without_vr() {
     assert!(!d3d9_fixes_vanilla(&json!({"graphics_api": "auto"})));
     assert!(!d3d9_fixes_vanilla(&json!({})));
 }
+
+/// The `physics` key (spec 002, `contracts/settings-cfg.md`): a file without it is OMSI
+/// Classic, every spelling of the contract reads as its mode, and what is saved is one of the
+/// two canonical spellings.
+#[test]
+fn the_physics_setting_reads_and_is_saved_as_the_contract_says() {
+    use omsi_launcher_lib::{settings_from_text, settings_to_text};
+    assert_eq!(settings_from_text(None)["physics"], "classic");
+    assert_eq!(settings_from_text(Some("msaa=4\n"))["physics"], "classic");
+    for (saved, want) in [
+        ("classic", "classic"),
+        ("omsi", "classic"),
+        ("omsi2", "classic"),
+        ("OMSI_Classic", "classic"),
+        ("depot", "depot"),
+        ("Project-Depot", "depot"),
+        ("nonsense", "classic"),
+        ("", "classic"),
+    ] {
+        let v = settings_from_text(Some(&format!("physics={saved}\n")));
+        assert_eq!(v["physics"], want, "physics={saved}");
+    }
+    for mode in ["classic", "depot"] {
+        let v = json!({ "physics": mode });
+        let text = settings_to_text(&v, None);
+        assert!(
+            text.lines().any(|l| l == format!("physics={mode}")),
+            "{text}"
+        );
+        assert_eq!(settings_from_text(Some(&text))["physics"], mode);
+    }
+    // a value that is not a mode is not written as it is
+    let text = settings_to_text(&json!({ "physics": "nonsense" }), None);
+    assert!(text.lines().any(|l| l == "physics=classic"), "{text}");
+}

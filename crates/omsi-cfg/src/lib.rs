@@ -42,6 +42,7 @@ mod format;
 mod fs;
 mod install;
 pub mod limits;
+mod physics;
 pub mod text;
 
 pub use content::vfs::{self, add_content_zip, mount_zip};
@@ -61,6 +62,7 @@ pub use install::{
     original_keyboard_cfg, CONTENT_FOLDERS, CONTENT_MARKER, LEGACY_CONTENT_MARKER,
     ORIGINAL_ESSENTIALS,
 };
+pub use physics::{Driver, PhysicsMode, Reason};
 pub use text::number::{parse_f32, parse_f64, parse_i32, parse_i64};
 pub use text::{
     codepage, decode_text, decode_with_encoding, encode_like, encode_text, encode_utf16_bom,

@@ -34,7 +34,7 @@ pub use host::VehicleHost;
 pub use input::{engine_action, EngineAction, KeyboardAxes};
 pub use physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 pub use textures::{htmltex, scripttex, texttex};
-pub use vehicle::{VehicleInstance, VehicleType};
+pub use vehicle::{resolve_physics_mode, VehicleInstance, VehicleType};
 
 #[cfg(feature = "test-support")]
 pub mod testing;

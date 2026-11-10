@@ -75,14 +75,14 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Mode type, settings key and `.bus` key `feat/physics-mode-type`
 
-- [ ] T018 [P] [ph 3] Tests for `PhysicsMode::parse`, `as_str` and `for_vehicle` (every row of [contracts/settings-cfg.md](contracts/settings-cfg.md); the key never applies to AI; no path to Classic from the key) in `crates/omsi-cfg/tests/physics_mode.rs`
-- [ ] T019 [ph 3] `PhysicsMode`, `Reason`, `Driver`, `parse`, `as_str`, `for_vehicle` in `crates/omsi-cfg/src/physics.rs`, exported from `crates/omsi-cfg/src/lib.rs`
-- [ ] T020 [P] [ph 3] Tests for the `physics` key: every row, round trip, no line added to a file that had none, in `crates/omsi-app/tests/app/settings/physics.rs` and `crates/omsi-launcher-core/tests/settings.rs`
-- [ ] T021 [ph 3] `Settings::physics` in `crates/omsi-app/src/settings.rs`; read and write in `crates/omsi-launcher-core/src/lib.rs` (not shown in the launcher yet)
-- [ ] T022 [P] [ph 3] Tests for every row of [contracts/bus-key.md](contracts/bus-key.md) (once, twice, stray lines, no `unknown_keywords` entry) in `crates/omsi-vehicle/tests/depot_physics_key.rs`
-- [ ] T023 [ph 3] Read `[depot_physics]` into `Vehicle::depot_physics` in `crates/omsi-vehicle/src/vehicle.rs` (stray lines reported once, never a load failure)
-- [ ] T024 [ph 3] Resolve the mode once per vehicle at spawn (front section's file decides, D4; AI ignores the key, D6), hold it in the vehicle instance and log "<vehicle>: <mode> physics (<reason>)" and the rear-section key note, in `crates/omsi-sim/src/vehicle.rs` and `crates/omsi-app/src/gameplay/implementation/spawn.rs`
-- [ ] T025 [P] [ph 3] Tests of the resolution at spawn (player with key in a Classic session; AI copy of the same bus; key only in a rear section's file; setting Depot) in `crates/omsi-sim/tests/physics_mode_spawn.rs`
+- [X] T018 [P] [ph 3] Tests for `PhysicsMode::parse`, `as_str` and `for_vehicle` (every row of [contracts/settings-cfg.md](contracts/settings-cfg.md); the key never applies to AI; no path to Classic from the key) in `crates/omsi-cfg/tests/physics_mode.rs`
+- [X] T019 [ph 3] `PhysicsMode`, `Reason`, `Driver`, `parse`, `as_str`, `for_vehicle` in `crates/omsi-cfg/src/physics.rs`, exported from `crates/omsi-cfg/src/lib.rs`
+- [X] T020 [P] [ph 3] Tests for the `physics` key: every row, round trip, no line added to a file that had none, in `crates/omsi-app/tests/app/settings/physics.rs` and `crates/omsi-launcher-core/tests/settings.rs`
+- [X] T021 [ph 3] `Settings::physics` in `crates/omsi-app/src/settings.rs`; read and write in `crates/omsi-launcher-core/src/lib.rs` (not shown in the launcher yet)
+- [X] T022 [P] [ph 3] Tests for every row of [contracts/bus-key.md](contracts/bus-key.md) (once, twice, stray lines, no `unknown_keywords` entry) in `crates/omsi-vehicle/tests/depot_physics_key.rs`
+- [X] T023 [ph 3] Read `[depot_physics]` into `Vehicle::depot_physics` in `crates/omsi-vehicle/src/vehicle.rs` (stray lines reported once, never a load failure)
+- [X] T024 [ph 3] Resolve the mode once per vehicle at spawn (front section's file decides, D4; AI ignores the key, D6), hold it in the vehicle instance and log "<vehicle>: <mode> physics (<reason>)" and the rear-section key note, in `crates/omsi-sim/src/vehicle.rs` and `crates/omsi-app/src/gameplay/implementation/spawn.rs`
+- [X] T025 [P] [ph 3] Tests of the resolution at spawn (player with key in a Classic session; AI copy of the same bus; key only in a rear section's file; setting Depot) in `crates/omsi-sim/tests/physics_mode_spawn.rs`
 
 ### Traces per engine `feat/physics-traces-per-engine`
 
@@ -115,7 +115,7 @@ exactly as before.
 **Independent test**: the Mi5 at a flat stop with the default setting: 9.1 / 9.8 / 9.1 cm and a level
 body, as in OMSI 2 (quickstart Q3).
 
-- [ ] T035 [P] [US1] [ph 3] Test: a settings file without `physics` gives Classic for every vehicle, in `crates/omsi-app/tests/app/settings/physics.rs`
+- [X] T035 [P] [US1] [ph 3] Test: a settings file without `physics` gives Classic for every vehicle, in `crates/omsi-app/tests/app/settings/physics.rs`
 - [ ] T036 [US1] [ph 4-7] Every Classic player trace identical to `origin/main` in each phase (SC-001), checked by `scripts/physics-trace-diff.sh` in each pull request
 - [ ] T037 [US1] [ph 2] The Mi5 static sag within 1 cm of OMSI 2 (SC-003): the `OMSI_ROOT` test of T016 compared with T004's numbers
 
