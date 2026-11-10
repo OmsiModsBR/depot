@@ -16,7 +16,7 @@ been run (the plan's clarification of 2026-11-09).
 | Id | Concept | Status |
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
-| [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated in part |
+| [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | to validate |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | to validate |
 | [KA-3](#ka-3-grip) | one grip value per vehicle | to validate |
@@ -40,10 +40,10 @@ Depot AI of [depot-model.md](depot-model.md) in both engines.
   `Axle_Suspension`) and the body's rest height and pitch. **Module**:
   `physics/implementation/suspension.rs` (the `cog x F` term of the load reference, `C-3`), `physics/implementation/spec.rs` (`wheel_rest_loads`, the
   centre `0`).
-- **Basis**: *OMSI*. **Status**: **validated in part**: the reasoning and the check of #675 (merged
+- **Basis**: *OMSI*. **Status**: **validated**: the reasoning and the check of #675 (merged
   2026-11-04), in which the Mi5 articulated bus stands level in OMSI 2, with the sag 9.1 / 9.8 / 9.1 cm per
-  axle. The in-game check of the Mi5 under this engine (quickstart Q3)
-  is still pending.
+  axle. The maintainer also compared the Mi5 at rest in OMSI 2 and in the game, which is how the
+  difference in where `[cog]` acts was found, before spec 002 (quickstart Q3).
 
 Classic adds the term `(cog_y · N, −cog_x · N, 0)` of `C-3` to the torque about the centre of gravity,
 so the struts turn the body as if they acted about the model origin: the load is shared about the
