@@ -38,10 +38,10 @@ Rust workspace: `crates/<crate>/src/` for code, `crates/<crate>/tests/` for test
 the maintainer on a machine with OMSI 2. Only T001-T002 block code (the key, phase 3); T003 corrects
 the Classic AI later by `fix/` (clarification 2026-11-09).
 
-- [ ] T001 [ph 0] Q1: add `[depot_physics]` (alone, and with a stray line) to a copy of a stock bus, load and drive it in OMSI 2; record the result in #677 and in `.ai/specs/002-physics-modes/contracts/bus-key.md` ("Other readers")
-- [ ] T002 [P] [ph 0] Q1 on openOMSI and each fork the maintainers name; record each result in `.ai/specs/002-physics-modes/contracts/bus-key.md`
+- [X] T001 [ph 0] Q1: add `[depot_physics]` (alone, and with a stray line) to a copy of a stock bus, load and drive it in OMSI 2; record the result in #677 and in `.ai/specs/002-physics-modes/contracts/bus-key.md` ("Other readers")
+- [X] T002 [P] [ph 0] Q1 on openOMSI and each fork the maintainers name; record each result in `.ai/specs/002-physics-modes/contracts/bus-key.md`
 - [ ] T003 [P] [ph 0] Q2: run the check of each KA-1..KA-11 and KA-6b row on a stock map; fill the "Status" column of R-A in `.ai/specs/002-physics-modes/research.md` with "confirmed" or "not so" and what was seen
-- [ ] T004 [P] [ph 0] Q3: the Mi5 at rest on a flat stop in OMSI 2 and in Depot (Classic), each axle's `Axle_Suspension` and a side screenshot from the same camera; record the result in #677
+- [X] T004 [P] [ph 0] Q3: the Mi5 at rest on a flat stop in OMSI 2 and in Depot (Classic), each axle's `Axle_Suspension` and a side screenshot from the same camera; record the result in #677
 
 **Checkpoint**: T001-T002 passed, or the `<name>.depot.cfg` fallback (T048) applies.
 
@@ -55,11 +55,11 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Model documents (US5's documents, needed by every test) `docs/physics-models`
 
-- [ ] T005 [P] [ph 1] Write `docs/physics/README.md`: the two engines, how a vehicle gets one (setting, key, log line), the id scheme, how to run the conformance tests ([contracts/model-docs.md](contracts/model-docs.md))
-- [ ] T006 [P] [ph 1] Write `docs/physics/common-model.md` with C-1..C-11 (inputs with `.bus` key and unit, outputs, implementing module for each)
-- [ ] T007 [P] [ph 1] Write `docs/physics/classic-model.md`: index of the C-* it runs, K-1, KA-1..KA-11 and KA-6b as in R-A (each "validated" with its check or "to validate"), including the static sag the AI scripts read (KA-4), the detail radius about the camera and `[noDistanceCheck]` (KA-9), the "Clear the accident" button and the empty next trip (KA-6)
-- [ ] T008 [P] [ph 1] Write `docs/physics/depot-model.md`: index of the C-* it runs, D-1 and DA-1..DA-6 from today's `AiBody` (`crates/omsi-sim/src/ai/mod.rs`, `crates/omsi-sim/src/ai/road.rs`)
-- [ ] T009 [ph 1] Check provenance (Principle VIII, quickstart Q5): `grep -nE "0x[0-9a-fA-F]{5,}" docs/physics` empty, no name or threshold of the reference executable, every Classic rule marked
+- [X] T005 [P] [ph 1] Write `docs/physics/README.md`: the two engines, how a vehicle gets one (setting, key, log line), the id scheme, how to run the conformance tests ([contracts/model-docs.md](contracts/model-docs.md))
+- [X] T006 [P] [ph 1] Write `docs/physics/common-model.md` with C-1..C-11 (inputs with `.bus` key and unit, outputs, implementing module for each)
+- [X] T007 [P] [ph 1] Write `docs/physics/classic-model.md`: index of the C-* it runs, K-1, KA-1..KA-11 and KA-6b as in R-A (each "validated" with its check or "to validate"), including the static sag the AI scripts read (KA-4), the detail radius about the camera and `[noDistanceCheck]` (KA-9), the "Clear the accident" button and the empty next trip (KA-6)
+- [X] T008 [P] [ph 1] Write `docs/physics/depot-model.md`: index of the C-* it runs, D-1 and DA-1..DA-6 from today's `AiBody` (`crates/omsi-sim/src/ai/mod.rs`, `crates/omsi-sim/src/ai/road.rs`)
+- [X] T009 [ph 1] Check provenance (Principle VIII, quickstart Q5): `grep -nE "0x[0-9a-fA-F]{5,}" docs/physics` empty, no name or threshold of the reference executable, every Classic rule marked
 
 ### Test vehicles and Classic player conformance `feat/physics-test-vehicles`
 

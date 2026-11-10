@@ -35,9 +35,10 @@ Nothing about the key can stop the load (Principle IV).
 
 The key is written so that a reader that does not know it skips it:
 
-- OMSI 2: to validate (Q1). Expected: the line is not a section OMSI 2 knows, so it reads past it; the
-  vehicle loads and drives as without it, and `logfile.txt` shows nothing new.
-- openOMSI and other forks: the same check on each one the maintainers name.
+- OMSI 2: **validated** (Q1, maintainer's test, 2026-11-09): OMSI 2 ignores `[depot_physics]`; the
+  vehicle loads and drives as without it.
+- openOMSI and other forks: the maintainer's test of 2026-11-09 found the same on the derivatives
+  tested; the key stays `[depot_physics]` and the `<name>.depot.cfg` fallback (FR-009a) is not needed.
 
 ## What a modder is told (phase 9)
 
