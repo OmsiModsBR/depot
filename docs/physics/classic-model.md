@@ -243,3 +243,13 @@ otherwise. Each is marked **to validate** and decided later (the plan's decision
 | V4 | tyre envelope and kerb climbing in `C-3` | drive over a 15 cm kerb at 10 km/h at 45° and square on |
 | V5 | wheels stopped at wall faces in `C-3` | drive a wheel slowly into a wall face |
 | — | the articulated stop wave of `C-9` | a known difference, left as it is (maintainer, 2026-10-23) |
+
+## Known divergences
+
+Rules the Classic engine runs that are believed to differ from OMSI 2. They stay as they are until
+the engines are split (plan phases 5 and 6); each is then resolved by a `fix/` pull request, with
+the OMSI 2 check below settling what the Classic rule must be.
+
+| Id | What the engine does | What is believed of OMSI 2 | Check that settles it |
+|---|---|---|---|
+| X-1 | Articulated vehicles: the joint carries part of a section's weight to its neighbour, and a joint's load turns a section about `[cog]` while its struts turn it about the origin (`K-1`, `C-9`). Found by the conformance tests of the articulated vehicles | Each section's springs may carry that section's own weight alone, with no weight passed through the joint. Not confirmed: how OMSI 2 poses a section behind a joint is still to be found | an articulated bus whose rear section has its axle off the model origin and a very soft rear spring: does the front section sink when the rear is coupled? |
