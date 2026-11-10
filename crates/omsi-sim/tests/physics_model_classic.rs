@@ -205,19 +205,22 @@ fn braking_distance(defs: Vec<Vehicle>) {
 /// C-6, C-7: a steady turn at full lock and walking pace. The wheels point at the turning
 /// line, `delta_i = atan((y_i - y_turn) kappa)` with `y_turn = [cog] y + [rot_pnt_long]`, and
 /// the body turns on it, `omega_z = v kappa`.
-fn steady_turn(def: Vehicle) {
-    let (mut bodies, joints) = build(std::slice::from_ref(&def));
+fn steady_turn(defs: Vec<Vehicle>) {
+    let def = defs[0].clone();
+    let (mut bodies, joints) = build(&defs);
     let v = 3.0_f32;
     launch(&mut bodies, v);
-    let brakes = vec![vec![0.0; bodies[0].wheels().len()]];
-    let radius = bodies[0]
-        .wheels()
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let radius = bodies
         .iter()
+        .flat_map(|b| b.wheels())
         .find(|w| w.driven())
         .map_or(0.5, |w| w.radius());
     for _ in 0..600 {
         let b = &bodies[0];
-        let torque = ((v - b.forward_speed()) * b.mass() * 2.0 + b.rolling_resistance()) * radius;
+        let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+        let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+        let torque = ((v - b.forward_speed()) * mass * 2.0 + rolling) * radius;
         step(&mut bodies, &joints, &brakes, torque, 1.0);
     }
     let b = &bodies[0];
@@ -286,13 +289,13 @@ fn braking_v5_articulated_8x2() {
 /// Checks: C-6, C-7
 #[test]
 fn steady_turn_v1_solo_4x2() {
-    steady_turn(v1_solo_4x2().remove(0));
+    steady_turn(v1_solo_4x2());
 }
 
 /// Checks: C-6, C-7
 #[test]
 fn steady_turn_v2_rigid_6x2() {
-    steady_turn(v2_rigid_6x2().remove(0));
+    steady_turn(v2_rigid_6x2());
 }
 
 /// C-4, C-5, C-8: pulling away below the grip. The drive force is `0.15` of the train's
@@ -352,4 +355,142 @@ fn pull_away_v4_biarticulated() {
 #[test]
 fn pull_away_v5_articulated_8x2() {
     pull_away(v5_articulated_8x2());
+}
+
+/// Checks: C-6, C-7, C-9
+#[test]
+fn steady_turn_v3_articulated_6x2() {
+    steady_turn(v3_articulated_6x2());
+}
+
+/// Checks: C-6, C-7, C-9
+#[test]
+fn steady_turn_v4_biarticulated() {
+    steady_turn(v4_biarticulated());
+}
+
+/// Checks: C-6, C-7, C-9
+#[test]
+fn steady_turn_v5_articulated_8x2() {
+    steady_turn(v5_articulated_8x2());
+}
+
+/// C-9: the steady articulation angles at half lock and walking pace. A section behind a
+/// joint turns about its own turning line; its ball moves as the lead's does, so the angle
+/// `alpha` satisfies `R sin(alpha) + D cos(alpha) = d` and the next section turns on
+/// `R cos(alpha) - D sin(alpha)`, where `R` is the radius the lead turns on, `D` the distance
+/// of its ball from its turning line and `d` the distance of the follower's ball from its own.
+/// Sections with one axle only: a section with two holds its tyres on a line the joint cannot
+/// reach (the last row of the open items in `classic-model.md`).
+fn articulation_angles(defs: Vec<Vehicle>) {
+    let (mut bodies, joints) = build(&defs);
+    let (v, steer) = (3.0_f32, 0.5_f32);
+    launch(&mut bodies, v);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let radius = bodies
+        .iter()
+        .flat_map(|b| b.wheels())
+        .find(|w| w.driven())
+        .map(|w| w.radius())
+        .unwrap();
+    let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+    let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+    for _ in 0..1500 {
+        let torque = ((v - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
+        step(&mut bodies, &joints, &brakes, torque, steer);
+    }
+    let line = |d: &Vehicle| d.cog.unwrap()[1] as f64 + d.rot_pnt_long as f64;
+    let mut r = 1.0 / (steer as f64 * defs[0].inv_min_turn_radius as f64);
+    for (k, joint) in joints.iter().enumerate() {
+        let (lead, follower) = (&defs[k], &defs[k + 1]);
+        let ball = lead.coupling_back.as_ref().unwrap().pos[1] as f64 - line(lead);
+        let d = follower.coupling_front.as_ref().unwrap().pos[1] as f64 - line(follower);
+        let alpha = (d / (r * r + ball * ball).sqrt()).asin() - ball.atan2(r);
+        let got = joint.angles(&bodies).0 as f64;
+        assert!(
+            (got - alpha).abs() < 0.3_f64.to_radians(),
+            "joint {k}: {} deg, want {} deg",
+            got.to_degrees(),
+            alpha.to_degrees()
+        );
+        r = r * alpha.cos() - ball * alpha.sin();
+    }
+}
+
+/// Checks: C-9
+#[test]
+fn articulation_angles_v3_articulated_6x2() {
+    articulation_angles(v3_articulated_6x2());
+}
+
+/// Checks: C-9
+#[test]
+fn articulation_angles_v4_biarticulated() {
+    articulation_angles(v4_biarticulated());
+}
+
+/// C-7: the body follows its wheels while the bend asks less than the grip and slides when it
+/// asks more. At full lock the bend asks `m v^2 kappa`, the grip gives `mu m g`: the limit is
+/// `sqrt(mu g / kappa)`. The steering is put on over one second, and the test goes at 0.6 of the limit and at 1.4 of it, looking at the state after five seconds.
+fn release_by_speed(defs: Vec<Vehicle>) {
+    let kappa = defs[0].inv_min_turn_radius as f64;
+    let limit = (0.85 * G / kappa).sqrt();
+    let holds_at = |v: f64| {
+        let (mut bodies, joints) = build(&defs);
+        launch(&mut bodies, v as f32);
+        let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+        let radius = bodies
+            .iter()
+            .flat_map(|b| b.wheels())
+            .find(|w| w.driven())
+            .map(|w| w.radius())
+            .unwrap();
+        let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+        let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+        let mut held = true;
+        for i in 0..300 {
+            let torque = ((v as f32 - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
+            step(
+                &mut bodies,
+                &joints,
+                &brakes,
+                torque,
+                (i as f32 / 60.0).min(1.0),
+            );
+            held = bodies[0].holding();
+        }
+        held
+    };
+    assert!(holds_at(0.6 * limit), "must hold at {} m/s", 0.6 * limit);
+    assert!(!holds_at(1.4 * limit), "must slide at {} m/s", 1.4 * limit);
+}
+
+/// Checks: C-7
+#[test]
+fn release_v1_solo_4x2() {
+    release_by_speed(v1_solo_4x2());
+}
+
+/// Checks: C-7
+#[test]
+fn release_v2_rigid_6x2() {
+    release_by_speed(v2_rigid_6x2());
+}
+
+/// Checks: C-7
+#[test]
+fn release_v3_articulated_6x2() {
+    release_by_speed(v3_articulated_6x2());
+}
+
+/// Checks: C-7
+#[test]
+fn release_v4_biarticulated() {
+    release_by_speed(v4_biarticulated());
+}
+
+/// Checks: C-7
+#[test]
+fn release_v5_articulated_8x2() {
+    release_by_speed(v5_articulated_8x2());
 }
