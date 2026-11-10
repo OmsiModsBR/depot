@@ -71,6 +71,7 @@ changes here: every player, AI and traffic trace stays bit-identical.
 - [ ] T015 [P] [ph 2] Steady articulation angles (C-9), V3-V5, and release when the bend asks more than the grip (C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [ ] T016 [ph 2] Optional static-sag check on installed buses (the Mi5 first), skipped without `OMSI_ROOT`, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [ ] T017 [ph 2] Each failing row of T012-T016 becomes a `fix/` pull request with that test failing first, or a correction of `docs/physics/` (decided in the pull request)
+- [X] T017a [ph 2] Record X-1 (joint load, articulated vehicles) as a known divergence of OMSI Classic in `docs/physics/classic-model.md`; resolve it with a `fix/` pull request after phases 5 and 6 (maintainer, 2026-11-10)
 
 ### Mode type, settings key and `.bus` key `feat/physics-mode-type`
 
