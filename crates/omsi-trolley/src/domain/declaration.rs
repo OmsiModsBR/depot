@@ -45,6 +45,24 @@ pub struct PoleParams {
     pub contact_force_max: f64,
     /// A frame longer than this (seconds) puts the poles back on their hooks.
     pub stall_reset: f64,
+    /// Dewirement: the wire out of reach by more than `reach_release_error` metres for
+    /// `reach_release_time` seconds; the contact force under `force_dewire` N for
+    /// `force_dewire_time`; the sideways pull over `side_force_dewire` N for
+    /// `side_force_time`; the pole turned more than `yaw_limit` degrees off straight back.
+    pub reach_release_error: f64,
+    pub reach_release_time: f64,
+    pub force_dewire: f64,
+    pub force_dewire_time: f64,
+    pub side_force_dewire: f64,
+    pub side_force_time: f64,
+    pub yaw_limit: f64,
+    /// After a dewirement: the pole springs up at `free_rise_rate` degrees a second (to
+    /// `max_pitch` degrees above the horizontal), and after `catcher_delay` seconds the
+    /// retriever pulls it down at `catcher_lower_rate` degrees a second.
+    pub free_rise_rate: f64,
+    pub max_pitch: f64,
+    pub catcher_delay: f64,
+    pub catcher_lower_rate: f64,
 }
 
 /// One registry entry that applies to the player's vehicle.

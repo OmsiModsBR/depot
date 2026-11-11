@@ -1,18 +1,29 @@
 //! The poles of the player's trolleybus, step by step: up from the hooks onto the wire,
-//! along it, and down again.
+//! along it, off it (dewired, or taken off by the retract control), and down again.
 
 use glam::DVec3;
 
 use super::walk::{self, Reached};
-use crate::domain::declaration::{PoleGeometry, TrolleyDeclaration};
-use crate::domain::network::WireNetwork;
+use crate::domain::declaration::{PoleGeometry, PoleParams, TrolleyDeclaration};
+use crate::domain::network::{WireNetwork, WireSide};
 use crate::domain::pole::{
-    BodyPose, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim, PoleState,
-    WireCursor,
+    BodyPose, DewireReason, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim,
+    PoleState, WireCursor,
 };
 
 /// How far around the modelled shoe a rising pole looks for wire, metres.
 const SEARCH_RADIUS: f64 = 2.5;
+
+/// How the shoe sits on the wire this frame, for the dewirement rules.
+#[derive(Debug, Clone, Copy)]
+struct Contact {
+    /// Degrees the pole stands off straight back (body frame).
+    side_angle: f64,
+    /// Degrees the shoe is turned against the wire.
+    turn: f64,
+    /// The wire ended under the shoe.
+    wire_ended: bool,
+}
 
 impl PoleSim {
     /// One frame of `dt` seconds for the vehicle declared by `decl`, whose pole-carrying part
@@ -34,6 +45,8 @@ impl PoleSim {
             }
             self.poles = Default::default();
         }
+        let retract = inputs.retract && !self.retract_before;
+        self.retract_before = inputs.retract;
         let mut out = PoleOutputs {
             spline_id: -1,
             ..Default::default()
@@ -41,6 +54,9 @@ impl PoleSim {
         for i in 0..2 {
             let pressed = inputs.grab[i] && !self.grab_before[i];
             self.grab_before[i] = inputs.grab[i];
+            if retract {
+                self.retract(i, decl, net, body);
+            }
             out.poles[i] = self.step_pole(i, decl, net, body, pressed, dt);
         }
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
@@ -64,78 +80,93 @@ impl PoleSim {
     ) -> PoleOutput {
         let geo = decl.poles[i];
         let p = decl.params;
-        let up = body.rotation * DVec3::Z;
-        let foot = body.position + body.rotation * geo.base;
-        // (the pole's end stands `shoe_height_offset` off the wire it presses on)
-        let foot_to_wire = foot - up * p.shoe_height_offset;
-        let len = geo.length();
-        let state = &mut self.poles[i];
-        state.timer += dt;
-        match state.phase {
+        let foot_to_wire = foot_to_wire(decl, i, body);
+        self.poles[i].timer += dt;
+        match self.poles[i].phase {
             PolePhase::Hooked => {
-                if pressed {
-                    match capture(
-                        net,
-                        body,
-                        &geo,
-                        i == 0,
-                        foot_to_wire,
-                        len,
-                        p.capture_distance,
-                    ) {
-                        Some((cursor, sideways)) => {
-                            let id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
-                            self.events.push(PoleEvent::Captured {
-                                pole: i,
-                                spline_id: id,
-                                sideways,
-                            });
-                            *state = PoleState {
-                                phase: PolePhase::Rising,
-                                cursor: Some(cursor),
-                                ..Default::default()
-                            };
-                        }
-                        None => self.events.push(PoleEvent::NoWire { pole: i }),
-                    }
+                if !pressed {
+                    return hooked(&geo);
                 }
-                if state.phase == PolePhase::Hooked {
-                    return hooked(geo, body);
-                }
-            }
-            PolePhase::OnWire if pressed => {
-                let now = self.track(i, decl, net, body, foot_to_wire);
-                let state = &mut self.poles[i];
-                *state = PoleState {
-                    phase: PolePhase::Lowering,
-                    lowered_from: now.map_or((0.0, 0.0), |o| (o.yaw, o.pitch)),
+                let found = capture(
+                    net,
+                    body,
+                    &geo,
+                    i == 0,
+                    foot_to_wire,
+                    geo.length(),
+                    p.capture_distance,
+                );
+                let Some((cursor, sideways)) = found else {
+                    self.events.push(PoleEvent::NoWire { pole: i });
+                    return hooked(&geo);
+                };
+                let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
+                self.events.push(PoleEvent::Captured {
+                    pole: i,
+                    spline_id,
+                    sideways,
+                });
+                self.poles[i] = PoleState {
+                    phase: PolePhase::Rising,
+                    cursor: Some(cursor),
                     ..Default::default()
                 };
-                return lowering(state, decl, &geo, body, &mut self.events, i);
+            }
+            PolePhase::OnWire if pressed => {
+                let from = self
+                    .track(i, decl, net, body, foot_to_wire)
+                    .map_or((0.0, 0.0), |(o, _)| (o.yaw, o.pitch));
+                self.poles[i] = PoleState {
+                    phase: PolePhase::Lowering,
+                    lowered_from: from,
+                    ..Default::default()
+                };
+                return lowering(&mut self.poles[i], &p, &geo, &mut self.events, i);
             }
             PolePhase::Lowering => {
-                return lowering(&mut self.poles[i], decl, &geo, body, &mut self.events, i);
+                return lowering(&mut self.poles[i], &p, &geo, &mut self.events, i);
             }
-            _ => {}
+            PolePhase::Dewired => {
+                return dewired(&mut self.poles[i], &p, &geo, &mut self.events, i);
+            }
+            PolePhase::Retracting => {
+                return retracting(&mut self.poles[i], &p, &geo, &mut self.events, i);
+            }
+            PolePhase::Rising | PolePhase::OnWire => {}
         }
         // rising or on the wire: the shoe follows the wire
-        let Some(mut o) = self.track(i, decl, net, body, foot_to_wire) else {
+        let Some((mut o, contact)) = self.track(i, decl, net, body, foot_to_wire) else {
             self.poles[i] = PoleState::default();
-            return hooked(geo, body);
+            return hooked(&geo);
         };
         let state = &mut self.poles[i];
-        if state.phase == PolePhase::Rising {
-            let k = (state.timer / p.raise_duration.max(1e-3)).clamp(0.0, 1.0);
-            if k >= 1.0 {
-                state.phase = PolePhase::OnWire;
-                state.timer = 0.0;
-            } else {
-                o.yaw *= k;
-                o.pitch *= k;
-                o.shoe_rot *= k;
-                o.force = 0.0;
-                o.on_wire = false;
+        match state.phase {
+            PolePhase::OnWire => {
+                if let Some(reason) = dewirement(state, &p, &o, &contact, dt) {
+                    self.events.push(PoleEvent::Dewired { pole: i, reason });
+                    *state = PoleState {
+                        phase: PolePhase::Dewired,
+                        lowered_from: (o.yaw, o.pitch),
+                        dewire: Some(reason),
+                        ..Default::default()
+                    };
+                    return dewired(state, &p, &geo, &mut self.events, i);
+                }
             }
+            PolePhase::Rising => {
+                let k = (state.timer / p.raise_duration.max(1e-3)).clamp(0.0, 1.0);
+                if k >= 1.0 {
+                    state.phase = PolePhase::OnWire;
+                    state.timer = 0.0;
+                } else {
+                    o.yaw *= k;
+                    o.pitch *= k;
+                    o.shoe_rot *= k;
+                    o.force = 0.0;
+                    o.on_wire = false;
+                }
+            }
+            _ => {}
         }
         o
     }
@@ -148,7 +179,7 @@ impl PoleSim {
         net: &WireNetwork,
         body: &BodyPose,
         foot_to_wire: DVec3,
-    ) -> Option<PoleOutput> {
+    ) -> Option<(PoleOutput, Contact)> {
         let geo = decl.poles[i];
         let cursor = self.poles[i].cursor?;
         let Reached {
@@ -157,7 +188,13 @@ impl PoleSim {
             error,
             joints,
             wire_ended,
-        } = walk::reach(net, cursor, foot_to_wire, geo.length())?;
+        } = walk::reach(
+            net,
+            cursor,
+            foot_to_wire,
+            geo.length(),
+            body.rotation * DVec3::NEG_Y,
+        )?;
         for (from, to, gap) in joints {
             self.events.push(PoleEvent::Joint {
                 pole: i,
@@ -167,11 +204,8 @@ impl PoleSim {
             });
         }
         if wire_ended {
-            let id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
-            self.events.push(PoleEvent::WireEnds {
-                pole: i,
-                spline_id: id,
-            });
+            let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
+            self.events.push(PoleEvent::WireEnds { pole: i, spline_id });
         }
         let state = &mut self.poles[i];
         state.cursor = Some(cursor);
@@ -179,7 +213,153 @@ impl PoleSim {
         let up = body.rotation * DVec3::Z;
         let end = point + up * decl.params.shoe_height_offset;
         let wire_dir = walk::tangent(net, &cursor).unwrap_or(DVec3::Y);
-        Some(on_wire(decl, i, body, end, wire_dir))
+        let (o, mut contact) = on_wire(decl, i, body, end, wire_dir);
+        contact.wire_ended = wire_ended;
+        Some((o, contact))
+    }
+
+    /// The retract control for pole `i`: off the wire, or off its way up, to the hook.
+    fn retract(&mut self, i: usize, decl: &TrolleyDeclaration, net: &WireNetwork, body: &BodyPose) {
+        let phase = self.poles[i].phase;
+        if !matches!(phase, PolePhase::OnWire | PolePhase::Rising) {
+            return;
+        }
+        let k = match phase {
+            PolePhase::Rising => {
+                (self.poles[i].timer / decl.params.raise_duration.max(1e-3)).clamp(0.0, 1.0)
+            }
+            _ => 1.0,
+        };
+        let from = self
+            .track(i, decl, net, body, foot_to_wire(decl, i, body))
+            .map_or((0.0, 0.0), |(o, _)| (o.yaw * k, o.pitch * k));
+        self.poles[i] = PoleState {
+            phase: PolePhase::Retracting,
+            lowered_from: from,
+            ..Default::default()
+        };
+        self.events.push(PoleEvent::Retracted { pole: i });
+    }
+}
+
+/// The point the wire must lie at the pole's length from: its foot, moved by the shoe's
+/// height off the wire (the pole's end stands `shoe_height_offset` off the wire).
+fn foot_to_wire(decl: &TrolleyDeclaration, i: usize, body: &BodyPose) -> DVec3 {
+    let foot = body.position + body.rotation * decl.poles[i].base;
+    foot - body.rotation * DVec3::Z * decl.params.shoe_height_offset
+}
+
+/// Does the pole leave the wire this frame, and why? Each condition with a time must hold
+/// that long without a break (so the frame rate does not change the outcome); a pole turned
+/// past its limit, or a wire that ends under the shoe, leaves at once.
+fn dewirement(
+    state: &mut PoleState,
+    p: &PoleParams,
+    o: &PoleOutput,
+    c: &Contact,
+    dt: f64,
+) -> Option<DewireReason> {
+    if c.wire_ended {
+        return Some(DewireReason::Gap);
+    }
+    // (out of reach the shoe stands at the nearest point of the wire, beside the foot: its
+    // angle says nothing, the reach rule decides)
+    if state.reach_error <= 0.0 && c.side_angle.abs() > p.yaw_limit {
+        return Some(DewireReason::SideAngle);
+    }
+    let side_force = o.force * c.turn.abs().min(89.0).to_radians().tan();
+    let conditions = [
+        (
+            state.reach_error > p.reach_release_error,
+            p.reach_release_time,
+            DewireReason::Reach,
+        ),
+        (
+            o.force < p.force_dewire,
+            p.force_dewire_time,
+            DewireReason::Force,
+        ),
+        (
+            side_force > p.side_force_dewire,
+            p.side_force_time,
+            DewireReason::SideForce,
+        ),
+    ];
+    for (k, (holds, time, reason)) in conditions.into_iter().enumerate() {
+        state.held[k] = if holds { state.held[k] + dt } else { 0.0 };
+        if holds && state.held[k] >= time {
+            return Some(reason);
+        }
+    }
+    None
+}
+
+/// A dewired pole: up freely, a pause, then the retriever pulls it down to its hook.
+fn dewired(
+    state: &mut PoleState,
+    p: &PoleParams,
+    geo: &PoleGeometry,
+    events: &mut Vec<PoleEvent>,
+    i: usize,
+) -> PoleOutput {
+    let (yaw0, pitch0) = state.lowered_from;
+    // (the highest the pole goes, in output degrees from the modelled pose)
+    let top = ((p.max_pitch - elevation(geo.rest_shoe - geo.base)) * p.pitch_factor).max(pitch0);
+    let t = state.timer;
+    let risen = (pitch0 + p.free_rise_rate * t.min(p.catcher_delay)).min(top);
+    let pitch = if t <= p.catcher_delay {
+        risen
+    } else {
+        risen - p.catcher_lower_rate * (t - p.catcher_delay)
+    };
+    if pitch <= 0.0 {
+        *state = PoleState::default();
+        events.push(PoleEvent::Lowered { pole: i });
+        return hooked(geo);
+    }
+    // (the pole swings back in line as the retriever brings it down)
+    let yaw = if t <= p.catcher_delay || risen <= 0.0 {
+        yaw0
+    } else {
+        yaw0 * pitch / risen
+    };
+    PoleOutput {
+        yaw,
+        pitch,
+        shoe_pos: geo.rest_shoe,
+        dewired: true,
+        ..Default::default()
+    }
+}
+
+/// A pole the retract control takes down: halfway in half the lowering time, a pause as
+/// long as the retriever's, then the rest of the way.
+fn retracting(
+    state: &mut PoleState,
+    p: &PoleParams,
+    geo: &PoleGeometry,
+    events: &mut Vec<PoleEvent>,
+    i: usize,
+) -> PoleOutput {
+    let half = p.lower_duration.max(1e-3) / 2.0;
+    let t = state.timer;
+    let k = if t <= half {
+        0.5 * t / half
+    } else if t <= half + p.catcher_delay {
+        0.5
+    } else {
+        (0.5 + 0.5 * (t - half - p.catcher_delay) / half).min(1.0)
+    };
+    if k >= 1.0 {
+        *state = PoleState::default();
+        events.push(PoleEvent::Lowered { pole: i });
+        return hooked(geo);
+    }
+    PoleOutput {
+        yaw: state.lowered_from.0 * (1.0 - k),
+        pitch: state.lowered_from.1 * (1.0 - k),
+        shoe_pos: geo.rest_shoe,
+        ..Default::default()
     }
 }
 
@@ -222,16 +402,15 @@ fn capture(
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-fn other_side(s: crate::domain::network::WireSide) -> crate::domain::network::WireSide {
-    use crate::domain::network::WireSide::*;
+fn other_side(s: WireSide) -> WireSide {
     match s {
-        Left => Right,
-        Right => Left,
+        WireSide::Left => WireSide::Right,
+        WireSide::Right => WireSide::Left,
     }
 }
 
 /// A pole on its hook: the modelled pose.
-fn hooked(geo: PoleGeometry, _body: &BodyPose) -> PoleOutput {
+fn hooked(geo: &PoleGeometry) -> PoleOutput {
     PoleOutput {
         shoe_pos: geo.rest_shoe,
         ..Default::default()
@@ -240,17 +419,16 @@ fn hooked(geo: PoleGeometry, _body: &BodyPose) -> PoleOutput {
 
 fn lowering(
     state: &mut PoleState,
-    decl: &TrolleyDeclaration,
+    p: &PoleParams,
     geo: &PoleGeometry,
-    body: &BodyPose,
     events: &mut Vec<PoleEvent>,
     i: usize,
 ) -> PoleOutput {
-    let k = (state.timer / decl.params.lower_duration.max(1e-3)).clamp(0.0, 1.0);
+    let k = (state.timer / p.lower_duration.max(1e-3)).clamp(0.0, 1.0);
     if k >= 1.0 {
         *state = PoleState::default();
         events.push(PoleEvent::Lowered { pole: i });
-        return hooked(*geo, body);
+        return hooked(geo);
     }
     PoleOutput {
         yaw: state.lowered_from.0 * (1.0 - k),
@@ -267,7 +445,7 @@ fn on_wire(
     body: &BodyPose,
     end: DVec3,
     wire_dir: DVec3,
-) -> PoleOutput {
+) -> (PoleOutput, Contact) {
     let geo = decl.poles[i];
     let p = decl.params;
     let to_body = body.rotation.transpose();
@@ -288,14 +466,22 @@ fn on_wire(
     let force = (p.spring_nominal_force
         + p.spring_gain_per_deg * (el_v - p.spring_reference_elevation))
         .clamp(0.0, p.contact_force_max);
-    PoleOutput {
-        yaw: -(az_v - az_r) * p.yaw_factor[i],
-        pitch: (el_v - el_r) * p.pitch_factor,
-        shoe_rot: -turn * p.shoe_factor[i],
-        shoe_pos: shoe,
-        force,
-        on_wire: true,
-    }
+    (
+        PoleOutput {
+            yaw: -(az_v - az_r) * p.yaw_factor[i],
+            pitch: (el_v - el_r) * p.pitch_factor,
+            shoe_rot: -turn * p.shoe_factor[i],
+            shoe_pos: shoe,
+            force,
+            on_wire: true,
+            dewired: false,
+        },
+        Contact {
+            side_angle: az_v,
+            turn,
+            wire_ended: false,
+        },
+    )
 }
 
 /// Degrees about the vertical from straight back (0) towards the right (+).

@@ -7,8 +7,8 @@ pub use crate::domain::network::{
     WireSide, WireSpan, JOIN_TOLERANCE,
 };
 pub use crate::domain::pole::{
-    BodyPose, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim, PoleState,
-    WireCursor,
+    BodyPose, DewireReason, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim,
+    PoleState, WireCursor,
 };
 pub use crate::implementation::convention::{
     load_convention, parse_params, parse_registry, PARAMS_FILE, REGISTRY_FILE,

@@ -70,6 +70,7 @@ impl VehicleInstance {
                     flag(self, "shtanga_manual_grab_right"),
                 ],
                 reset: flag(self, "shtanga_wire_reset"),
+                retract: flag(self, "shtanga_recolher_cmd"),
             };
             let out = {
                 let net = t.network.lock();
@@ -96,6 +97,12 @@ impl VehicleInstance {
             self.set_engine_var(&format!("shtanga_{s}_shoe_pos_y"), p.shoe_pos.y as f32);
             self.set_engine_var(&format!("shtanga_{s}_shoe_pos_z"), p.shoe_pos.z as f32);
             self.set_engine_var(&format!("shtanga_contact_force_{en}"), p.force as f32);
+            self.set_engine_var(
+                &format!("shtanga_dewired_{en}"),
+                f32::from(u8::from(p.dewired)),
+            );
+            // (no sparks in this feature)
+            self.set_engine_var(&format!("shtanga_spark_{en}"), 0.0);
         }
         self.set_engine_var(
             "shtanga_wire_present",
@@ -134,6 +141,12 @@ fn log_event(e: &PoleEvent) {
             "trolleybus: {} pole at the end of the wire of spline {spline_id}",
             side(pole)
         ),
+        PoleEvent::Dewired { pole, reason } => {
+            log::info!("trolleybus: {} pole left the wire ({reason:?})", side(pole))
+        }
+        PoleEvent::Retracted { pole } => {
+            log::debug!("trolleybus: {} pole taken off the wire", side(pole))
+        }
         PoleEvent::Lowered { pole } => {
             log::debug!("trolleybus: {} pole down on its hook", side(pole))
         }

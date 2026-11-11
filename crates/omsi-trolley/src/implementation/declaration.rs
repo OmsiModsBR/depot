@@ -47,6 +47,13 @@ pub fn declaration_from(
             None => global("global", key),
         }
     };
+    // the entry's own key, else the parameter file's [physics] one
+    let own_or_physics = |key: &str| -> Result<f64, ConventionError> {
+        match entry.get(key) {
+            Some(_) => num(key),
+            None => global("physics", key),
+        }
+    };
     // the entry's own scale or offset, else none (1 or 0: the value passes unchanged)
     let own_or = |key: &str, neutral: f64| -> Result<f64, ConventionError> {
         match entry.get(key) {
@@ -100,6 +107,17 @@ pub fn declaration_from(
             spring_gain_per_deg: global("physics", "spring_gain_n_per_deg")?,
             contact_force_max: global("physics", "contact_force_max_n")?,
             stall_reset: global("global", "lost_reset_frames")? / FRAMES_PER_SECOND,
+            reach_release_error: own_or_physics("contact_reach_release_error_m")?,
+            reach_release_time: own_or_physics("contact_reach_release_time")?,
+            force_dewire: global("physics", "contact_force_dewire_n")?,
+            force_dewire_time: global("physics", "contact_force_dewire_time")?,
+            side_force_dewire: global("physics", "dewire_lateral_force_n")?,
+            side_force_time: global("physics", "dewire_lateral_force_time")?,
+            yaw_limit: global("physics", "dewire_yaw_limit_deg")?,
+            free_rise_rate: global("physics", "dewire_free_rise_deg_s")?,
+            max_pitch: global("global", "max_pitch")?,
+            catcher_delay: global("physics", "dewire_catcher_delay")?,
+            catcher_lower_rate: global("physics", "dewire_catcher_lower_deg_s")?,
         },
     })
 }

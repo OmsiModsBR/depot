@@ -4,8 +4,8 @@ use glam::{DMat3, DVec2, DVec3};
 use omsi_trolley::testing::{spline, tile};
 use omsi_trolley::{
     build_tile_wires, declaration_from, find_declaration, parse_params, parse_registry, BodyPose,
-    Convention, ConventionParams, PoleEvent, PoleInputs, PolePhase, PoleSim, TrolleyDeclaration,
-    WireNetwork,
+    Convention, ConventionParams, DewireReason, PoleEvent, PoleInputs, PolePhase, PoleSim,
+    TrolleyDeclaration, WireNetwork,
 };
 
 const WIRE: &str = "Splines\\Net\\wire_x.sli";
@@ -18,6 +18,7 @@ wire_x_left=-0.255
 wire_x_right=0.255
 manual_capture_distance=0.45
 lost_reset_frames=90
+max_pitch=55
 [physics]
 pole_raise_duration=1.5
 pole_lower_duration=1.0
@@ -25,6 +26,16 @@ spring_nominal_force_n=82
 spring_reference_elevation_deg=25
 spring_gain_n_per_deg=1.15
 contact_force_max_n=160
+contact_force_dewire_n=12
+contact_force_dewire_time=0.18
+contact_reach_release_error_m=0.10
+contact_reach_release_time=0.12
+dewire_yaw_limit_deg=87
+dewire_free_rise_deg_s=42
+dewire_catcher_delay=0.55
+dewire_catcher_lower_deg_s=34
+dewire_lateral_force_n=260
+dewire_lateral_force_time=0.20
 ";
 
 const REGISTRY: &str = "\
@@ -105,6 +116,7 @@ fn grab(sim: &mut PoleSim, d: &TrolleyDeclaration, net: &WireNetwork, at: &BodyP
         PoleInputs {
             grab: [true, true],
             reset: false,
+            retract: false,
         },
         1.0 / 60.0,
     );
@@ -173,6 +185,7 @@ fn no_wire_in_reach_leaves_the_poles_down() {
         PoleInputs {
             grab: [true, false],
             reset: false,
+            retract: false,
         },
         0.016,
     );
@@ -333,6 +346,7 @@ fn raising_takes_the_same_time_at_any_frame_rate() {
             PoleInputs {
                 grab: [true, true],
                 reset: false,
+                retract: false,
             },
             1.0 / fps,
         );
@@ -360,6 +374,7 @@ fn a_second_press_lowers_the_pole_to_its_hook() {
         PoleInputs {
             grab: [true, false],
             reset: false,
+            retract: false,
         },
         0.016,
     );
@@ -427,4 +442,147 @@ fn a_parameter_the_poles_need_must_be_in_the_file() {
     let e =
         declaration_from(&parse_registry(REGISTRY)[0], &parse_params(&text).unwrap()).unwrap_err();
     assert_eq!(e.to_string(), "[physics] has no pole_raise_duration");
+}
+
+/// Run frames of `dt` until `done` (at most `limit` seconds); the seconds it took.
+fn run_until(
+    sim: &mut PoleSim,
+    d: &TrolleyDeclaration,
+    net: &WireNetwork,
+    at: &BodyPose,
+    dt: f64,
+    limit: f64,
+    done: impl Fn(&PoleSim) -> bool,
+) -> f64 {
+    let mut t = 0.0;
+    while !done(sim) {
+        sim.step(d, net, at, PoleInputs::default(), dt);
+        t += dt;
+        assert!(t < limit, "still not done after {limit} s");
+    }
+    t
+}
+
+#[test]
+fn a_pole_too_far_from_its_wire_dewires_springs_up_and_the_retriever_hooks_it() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    let mut sim = PoleSim::default();
+    raise(&mut sim, &d, &net, &body(0.0, 20.0, 0.0));
+    // the bus moves 7 m to the side: beyond the poles' reach
+    let away = body(7.0, 20.0, 0.0);
+    let mut dewired_at = None;
+    let mut highest: f64 = 0.0;
+    let mut t = 0.0;
+    while sim.poles[0].phase != PolePhase::Hooked {
+        let o = sim.step(&d, &net, &away, PoleInputs::default(), 1.0 / 60.0);
+        t += 1.0 / 60.0;
+        assert!(t < 5.0);
+        if dewired_at.is_none() && sim.poles[0].phase == PolePhase::Dewired {
+            dewired_at = Some(t);
+            assert_eq!(sim.poles[0].dewire, Some(DewireReason::Reach));
+        }
+        if sim.poles[0].phase == PolePhase::Dewired {
+            assert!(o.poles[0].dewired && !o.wire_present);
+            highest = highest.max(o.poles[0].pitch);
+        }
+    }
+    let at: f64 = dewired_at.expect("it dewired");
+    assert!((at - 0.12).abs() < 0.04, "after the reach time ({at:.3} s)");
+    assert!(highest > 15.0, "it sprang up ({highest:.1} degrees)");
+    let o = sim.step(&d, &net, &away, PoleInputs::default(), 1.0 / 60.0);
+    assert!(
+        !o.poles[0].dewired && o.poles[0].pitch == 0.0,
+        "back on the hook"
+    );
+}
+
+#[test]
+fn a_short_stretch_out_of_reach_does_not_dewire_whatever_the_frame_rate() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    for fps in [20.0, 60.0, 200.0] {
+        let mut sim = PoleSim::default();
+        raise(&mut sim, &d, &net, &body(0.0, 20.0, 0.0));
+        // out of reach for 0.1 s (under the 0.12 s the file allows), then back
+        let frames = (0.1 * fps) as usize;
+        for _ in 0..frames {
+            sim.step(
+                &d,
+                &net,
+                &body(7.0, 20.0, 0.0),
+                PoleInputs::default(),
+                1.0 / fps,
+            );
+        }
+        let o = sim.step(
+            &d,
+            &net,
+            &body(0.0, 20.0, 0.0),
+            PoleInputs::default(),
+            1.0 / fps,
+        );
+        assert!(o.wire_present, "{fps} fps");
+        // and 0.2 s out of reach does
+        for _ in 0..(0.2 * fps) as usize {
+            sim.step(
+                &d,
+                &net,
+                &body(7.0, 20.0, 0.0),
+                PoleInputs::default(),
+                1.0 / fps,
+            );
+        }
+        assert_eq!(sim.poles[0].phase, PolePhase::Dewired, "{fps} fps");
+    }
+}
+
+#[test]
+fn the_end_of_the_wire_dewires_the_shoe() {
+    let d = decl();
+    let net = straight(60.0, 60.0);
+    let mut sim = PoleSim::default();
+    raise(&mut sim, &d, &net, &body(0.0, 20.0, 0.0));
+    let mut y = 20.0;
+    while sim.poles[0].phase == PolePhase::OnWire {
+        y += 0.2;
+        sim.step(
+            &d,
+            &net,
+            &body(0.0, y, 0.0),
+            PoleInputs::default(),
+            1.0 / 60.0,
+        );
+        assert!(y < 80.0);
+    }
+    assert_eq!(sim.poles[0].dewire, Some(DewireReason::Gap));
+    // the shoe trails 6 m behind the foot (2.24 m ahead of the origin): it runs off the end
+    // when the bus is about 64 m along
+    assert!((62.0..66.0).contains(&y), "at y = {y:.1}");
+}
+
+#[test]
+fn the_retract_control_takes_both_poles_down_halfway_pauses_and_hooks_them() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    let at = body(0.0, 20.0, 0.0);
+    let mut sim = PoleSim::default();
+    raise(&mut sim, &d, &net, &at);
+    let on = sim.step(&d, &net, &at, PoleInputs::default(), 1.0 / 60.0);
+    let retract = PoleInputs {
+        retract: true,
+        ..Default::default()
+    };
+    sim.step(&d, &net, &at, retract, 1.0 / 60.0);
+    assert!(sim.poles.iter().all(|p| p.phase == PolePhase::Retracting));
+    // halfway after half the lowering time (0.5 s), and still there during the pause
+    let mid = sim.step(&d, &net, &at, retract, 0.5);
+    assert!((mid.poles[0].pitch - on.poles[0].pitch / 2.0).abs() < 0.5);
+    assert!(!mid.poles[0].dewired && !mid.wire_present);
+    let paused = sim.step(&d, &net, &at, PoleInputs::default(), 0.4);
+    assert_eq!(paused.poles[0].pitch, mid.poles[0].pitch);
+    let t = run_until(&mut sim, &d, &net, &at, 1.0 / 60.0, 2.0, |s| {
+        s.poles.iter().all(|p| p.phase == PolePhase::Hooked)
+    });
+    assert!(t < 0.8, "down {t:.2} s after the pause");
 }

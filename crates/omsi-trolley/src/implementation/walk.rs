@@ -57,8 +57,15 @@ pub(crate) fn sphere_crossings(a: DVec3, b: DVec3, foot: DVec3, len: f64) -> Vec
 }
 
 /// Walk from `from` along its wire (across joints) to the nearest point at `len` from
-/// `foot`: towards the foot when the wire there is too far, away from it when too near.
-pub(crate) fn reach(net: &WireNetwork, from: WireCursor, foot: DVec3, len: f64) -> Option<Reached> {
+/// `foot`: towards the foot when the wire there is too far; when too near, out the way
+/// `back` points (a trailing pole's shoe stays behind its foot).
+pub(crate) fn reach(
+    net: &WireNetwork,
+    from: WireCursor,
+    foot: DVec3,
+    len: f64,
+    back: DVec3,
+) -> Option<Reached> {
     let mut c = from;
     let mut p = point(net, &c)?;
     let start_error = p.distance(foot) - len;
@@ -72,12 +79,18 @@ pub(crate) fn reach(net: &WireNetwork, from: WireCursor, foot: DVec3, len: f64) 
             wire_ended: false,
         });
     }
-    let away = (p - foot).dot(tangent(net, &c)?);
+    let t = tangent(net, &c)?;
     // +1 along the wire's points, -1 against them
-    let mut dir: i32 = if (start_error < 0.0) == (away >= 0.0) {
-        1
-    } else {
+    let mut dir: i32 = if start_error < 0.0 {
+        if t.dot(back) >= 0.0 {
+            1
+        } else {
+            -1
+        }
+    } else if (p - foot).dot(t) >= 0.0 {
         -1
+    } else {
+        1
     };
     let mut closest = (c, p, start_error);
     for _ in 0..MAX_PIECES {
@@ -174,6 +187,17 @@ pub(crate) fn reach(net: &WireNetwork, from: WireCursor, foot: DVec3, len: f64) 
         c = nc;
         dir = ndir;
         p = point(net, &c)?;
+        // the pole's length fell in the joint's gap: the shoe passes the loose joint onto
+        // the next wire's end
+        if (start_error < 0.0) == (p.distance(foot) > len) {
+            return Some(Reached {
+                cursor: c,
+                point: p,
+                error: 0.0,
+                joints,
+                wire_ended: false,
+            });
+        }
     }
     let (cur, pt, err) = closest;
     Some(Reached {
