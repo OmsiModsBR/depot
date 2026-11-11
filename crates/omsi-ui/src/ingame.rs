@@ -865,7 +865,15 @@ pub enum AddVehicleEvent {
     Number(usize),
     /// The registration's field was clicked.
     Plate,
+    /// "Place": the list of the map's entry points to put the vehicle at.
     Place,
+    /// "Place with the mouse cursor": the vehicle follows the mouse until a click puts it down.
+    PlaceWithMouse,
+    /// The entry point at this line of the list was chosen.
+    EntryPoint(usize),
+    /// The entry point chosen is confirmed: the vehicle stands there.
+    ConfirmEntryPoint,
+    /// The window (or its entry point list) is closed without a vehicle.
     Cancel,
     /// The live 3D view's button: on or off.
     Live(bool),
@@ -1221,15 +1229,72 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     ) {
         event = Some(AddVehicleEvent::Plate);
     }
-    let hint = "The vehicle follows the mouse until a click puts it down";
+    let hint = "Place it at an entry point of the map or with the mouse";
+    let any = !v.vehicles.is_empty();
     match foot(
         ui,
         "add",
         r,
-        &[("Place", !v.vehicles.is_empty()), ("Cancel", true)],
+        &[
+            ("Place", any),
+            ("Place with the mouse cursor", any),
+            ("Cancel", true),
+        ],
         hint,
     ) {
         Some(0) => event = Some(AddVehicleEvent::Place),
+        Some(1) => event = Some(AddVehicleEvent::PlaceWithMouse),
+        Some(_) => event = Some(AddVehicleEvent::Cancel),
+        None => {}
+    }
+    event
+}
+
+/// Where the list of the map's entry points of the "Add vehicle" window is in a picture of
+/// `size` points: in the middle.
+pub fn entry_points_rect(size: glam::Vec2) -> Rect {
+    let w = 480.0f32.min(size.x - 32.0);
+    let h = 560.0f32.min(size.y - 32.0);
+    Rect::new(
+        ((size.x - w) * 0.5).floor(),
+        ((size.y - h) * 0.5).floor(),
+        w,
+        h,
+    )
+}
+
+/// The list of the map's entry points that "Place" of the "Add vehicle" window opens: one
+/// line per entry point (its name, drawn as it is), the one `chosen` marked, and Confirm
+/// (only with one chosen) and Cancel under it.
+pub fn entry_points(
+    ui: &mut Ui,
+    size: glam::Vec2,
+    labels: &[String],
+    chosen: Option<usize>,
+) -> Option<AddVehicleEvent> {
+    let r = entry_points_rect(size);
+    let body = window(ui, r, "Choose an entry point", "");
+    let area = Rect::new(
+        body.x + 12.0,
+        body.y + 12.0,
+        (body.w - 24.0).max(0.0),
+        (body.h - FOOT_H - 24.0).max(0.0),
+    );
+    let look = ListLook {
+        as_is: true,
+        empty: "This map has no entry points",
+        ..ListLook::default()
+    };
+    let mut event =
+        list_rows(ui, "add:entry", area, labels, chosen, &look).map(AddVehicleEvent::EntryPoint);
+    match foot(
+        ui,
+        "add:entry",
+        r,
+        &[("Confirm", chosen.is_some()), ("Cancel", true)],
+        "",
+    ) {
+        Some(0) => event = Some(AddVehicleEvent::ConfirmEntryPoint),
         Some(_) => event = Some(AddVehicleEvent::Cancel),
         None => {}
     }
@@ -1591,7 +1656,9 @@ mod tests {
         assert_eq!(click(&mut ui, plate), Some(AddVehicleEvent::Plate));
         let place = ui.drawn[&id_of("add:btn:0")].center();
         assert_eq!(click(&mut ui, place), Some(AddVehicleEvent::Place));
-        let cancel = ui.drawn[&id_of("add:btn:1")].center();
+        let mouse = ui.drawn[&id_of("add:btn:1")].center();
+        assert_eq!(click(&mut ui, mouse), Some(AddVehicleEvent::PlaceWithMouse));
+        let cancel = ui.drawn[&id_of("add:btn:2")].center();
         assert_eq!(click(&mut ui, cancel), Some(AddVehicleEvent::Cancel));
         let live = ui.drawn[&id_of("add:live")].center();
         assert_eq!(click(&mut ui, live), Some(AddVehicleEvent::Live(true)));

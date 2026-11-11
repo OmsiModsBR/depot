@@ -1,4 +1,5 @@
-//! Placing a vehicle with the mouse (Esc menu, Place a vehicle...): the vehicle chosen
+//! Placing a vehicle with the mouse (Esc menu, Place a vehicle...; the "Add vehicle"
+//! window's "Place with the mouse cursor"): the vehicle chosen
 //! stands where the cursor points on the ground and follows it, sitting on the surface there
 //! (a slope, a kerb); the wheel (or Q / E) turns it, R turns it round, a left click sets it
 //! down and Escape takes it away again. Where it would stand in another vehicle, the click
@@ -155,18 +156,8 @@ impl App {
                     for _ in 0..3 {
                         q.vehicle.update(1.0 / 30.0);
                     }
-                    let name = format!(
-                        "{} {}",
-                        q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name
-                    );
-                    let name = name.trim();
-                    let msg = if self.player.is_some() {
-                        format!("Placed: {name} (Esc menu: Drive the next vehicle to drive it)")
-                    } else {
-                        format!("Placed: {name} (G at its driver's door to drive it)")
-                    };
-                    self.service_msg = Some((msg, 5.0));
                 }
+                self.announce_placed(uid);
             }
             (Some(_), true) => {
                 self.service_msg = Some(("It would stand in another vehicle here".into(), 2.0))
@@ -176,6 +167,24 @@ impl App {
             }
         }
         true
+    }
+
+    /// The HUD says the placed vehicle `uid` stands where it was put, and how to drive it.
+    pub(crate) fn announce_placed(&mut self, uid: u64) {
+        let Some(q) = self.placed.iter().find(|q| q.uid == uid) else {
+            return;
+        };
+        let name = format!(
+            "{} {}",
+            q.vehicle.ty.def.manufacturer, q.vehicle.ty.def.type_name
+        );
+        let name = name.trim();
+        let msg = if self.player.is_some() {
+            format!("Placed: {name} (Esc menu: Drive the next vehicle to drive it)")
+        } else {
+            format!("Placed: {name} (G at its driver's door to drive it)")
+        };
+        self.service_msg = Some((msg, 5.0));
     }
 
     /// Keys while placing; true when the key was taken.

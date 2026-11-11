@@ -5,7 +5,7 @@ use crate::core::app::App;
 use crate::core::cli::Args;
 use crate::gameplay::player::Player;
 use crate::gameplay::spawn::spawn_player;
-use crate::input::part_in_reach;
+use crate::input::{part_in_reach, PlaceAt};
 use crate::output::ORBIT_DEFAULT;
 use crate::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
@@ -362,11 +362,12 @@ impl App {
     pub(crate) fn place_vehicle(&mut self, bus: &str, paint: Option<String>, hof: Option<String>) {
         // (the vehicle takes the startup number and plate, as before)
         let (number, plate) = (self.args.number.clone(), self.args.plate.clone());
-        self.place_vehicle_with(bus, paint, hof, number, plate);
+        self.place_vehicle_with(bus, paint, hof, number, plate, PlaceAt::Mouse);
     }
 
     /// `place_vehicle` with the fleet number and the registration the player picked (`None`:
-    /// the vehicle's own rules, not the startup arguments').
+    /// the vehicle's own rules, not the startup arguments'), put down `at` the mouse or a
+    /// map's entry point.
     pub(crate) fn place_vehicle_with(
         &mut self,
         bus: &str,
@@ -374,6 +375,7 @@ impl App {
         hof: Option<String>,
         number: Option<String>,
         plate: Option<String>,
+        at: PlaceAt,
     ) {
         // (in the driven vehicle's place, see `swap_pending`)
         let swap = std::mem::take(&mut self.swap_pending) && self.player.is_some();
@@ -398,28 +400,40 @@ impl App {
         ) else {
             return;
         };
-        let (x, y, heading) = match (self.view.as_str(), self.player.as_ref()) {
-            (_, Some(p)) if swap => (
+        // where it stands first: by the driven vehicle or the camera, for the mouse to take
+        // it from there; at an entry point, where the spawn puts a vehicle started there
+        let start = match (at, self.view.as_str(), self.player.as_ref()) {
+            (PlaceAt::EntryPoint(_), _, _) => None,
+            (PlaceAt::Mouse, _, Some(p)) if swap => Some((
                 p.vehicle.position.x,
                 p.vehicle.position.y,
                 p.vehicle.heading,
-            ),
-            ("free", _) | (_, None) => {
+            )),
+            (PlaceAt::Mouse, "free", _) | (PlaceAt::Mouse, _, None) => {
                 let f = cam.forward();
                 let flat = glam::DVec2::new(f.x as f64, f.y as f64).normalize_or_zero();
                 let at = cam.position.truncate() + flat * 15.0;
-                (at.x, at.y, cam.yaw as f64)
+                Some((at.x, at.y, cam.yaw as f64))
             }
-            (_, Some(p)) => {
+            (PlaceAt::Mouse, _, Some(p)) => {
                 let h = p.vehicle.heading.to_radians();
                 let right = glam::DVec2::new(h.cos(), -h.sin());
                 let at = p.vehicle.position.truncate() + right * 5.0;
-                (at.x, at.y, p.vehicle.heading)
+                Some((at.x, at.y, p.vehicle.heading))
             }
+        };
+        let entry = match at {
+            PlaceAt::EntryPoint(i) => {
+                // (the entry points of tiles that are not loaded come from the map index)
+                w.index();
+                i
+            }
+            PlaceAt::Mouse => self.args.entry,
         };
         let one = Args {
             bus: Some(bus.clone()),
-            spawn: Some(format!("{x},{y},{heading}")),
+            entry,
+            spawn: start.map(|(x, y, heading)| format!("{x},{y},{heading}")),
             situation_vars: Vec::new(),
             situation_strvars: Vec::new(),
             situation_odometer_km: None,
@@ -439,16 +453,24 @@ impl App {
         };
         match spawn_player(&one, &w, r, scene) {
             Ok(Some(q)) if swap => {
-                log::info!("{bus} takes the driven vehicle's place at ({x:.1}, {y:.1})");
+                let p = q.vehicle.position;
+                log::info!(
+                    "{bus} takes the driven vehicle's place at ({:.1}, {:.1})",
+                    p.x,
+                    p.y
+                );
                 self.replace_driven_vehicle(q);
             }
             Ok(Some(q)) => {
-                log::info!("placed {bus} at ({x:.1}, {y:.1})");
-                let uid = q.uid;
+                let (uid, p) = (q.uid, q.vehicle.position);
+                log::info!("placed {bus} at ({:.1}, {:.1})", p.x, p.y);
                 self.placed.push(q);
-                // (then put down with the mouse, where the player wants it)
-                self.begin_placing(uid, heading);
-                let _ = name;
+                match start {
+                    // (then put down with the mouse, where the player wants it)
+                    Some((_, _, heading)) => self.begin_placing(uid, heading),
+                    // (it stands at the entry point already)
+                    None => self.announce_placed(uid),
+                }
             }
             Ok(None) => {}
             Err(e) => self.service_msg = Some((format!("Could not place {name}: {e:#}"), 5.0)),

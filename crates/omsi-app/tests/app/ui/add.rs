@@ -170,3 +170,40 @@ fn the_live_view_shows_its_own_frame_or_says_how_it_stands() {
     f.live = Some((9, true));
     assert_eq!(f.preview(pic, Some((9, 4))), Preview::Failed);
 }
+
+#[test]
+fn place_lists_the_entry_points_and_confirms_the_one_chosen() {
+    let mut w = window();
+    assert!(!w.lists_entry_points());
+    assert_eq!(w.frame().entry_points, None);
+    w.focus_plate();
+    w.list_entry_points(vec!["Depot".into(), "Terminus".into()]);
+    assert!(w.lists_entry_points());
+    // (typing goes to the game again: the registration's field is not shown)
+    assert!(!w.frame().plate_focused);
+    // nothing chosen at first: Confirm has nothing to put down
+    assert_eq!(w.entry_point(), None);
+    assert_eq!(
+        w.frame().entry_points,
+        Some(EntryPoints {
+            labels: vec!["Depot".into(), "Terminus".into()],
+            chosen: None,
+        })
+    );
+    w.choose_entry_point(1);
+    assert_eq!(w.entry_point(), Some(1));
+    assert_eq!(w.frame().entry_points.and_then(|e| e.chosen), Some(1));
+    // a line that is not there changes nothing
+    w.choose_entry_point(2);
+    assert_eq!(w.entry_point(), Some(1));
+    // the vehicle chosen before stays the one put down
+    assert_eq!(w.placement(), Some(("Vehicles/A/a.bus".into(), None, None)));
+}
+
+#[test]
+fn a_map_without_entry_points_lists_none() {
+    let mut w = window();
+    w.list_entry_points(Vec::new());
+    w.choose_entry_point(0);
+    assert_eq!(w.entry_point(), None);
+}

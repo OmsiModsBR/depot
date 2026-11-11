@@ -25,3 +25,5 @@ testing = []
 [dev-dependencies]
 naga = { workspace = true, features = ["wgsl-in"] }
 image.workspace = true
+# (the tests in `tests/` click the widgets where `Ui::drawn` says they were)
+omsi-ui = { path = ".", features = ["testing"] }

@@ -236,16 +236,8 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             }
         }
         ListKind::Spots => {
-            if let Some(w) = app.world.as_ref() {
-                // (the map's entry points, as the launcher's "Start at" lists them)
-                for (i, e) in w.global.entry_points.iter().enumerate() {
-                    let label = if e.name.trim().is_empty() {
-                        format!("{} {}", tr("entry"), e.index + 1)
-                    } else {
-                        e.name.trim().to_string()
-                    };
-                    out.push((label, format!("spot {i}")));
-                }
+            for (i, label) in entry_point_labels(app).into_iter().enumerate() {
+                out.push((label, format!("spot {i}")));
             }
             if out.is_empty() {
                 out.push((tr("This map has no entry points"), "back".into()));
@@ -323,6 +315,25 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     }
     out.push((tr("Back"), "back".into()));
     out
+}
+
+/// The map's entry points by name, in `global.cfg`'s order (as the launcher's "Start at"
+/// lists them); one without a name by its number. Empty without a map.
+pub(crate) fn entry_point_labels(app: &App) -> Vec<String> {
+    let Some(w) = app.world.as_ref() else {
+        return Vec::new();
+    };
+    w.global
+        .entry_points
+        .iter()
+        .map(|e| {
+            if e.name.trim().is_empty() {
+                format!("{} {}", omsi_ui::tr("entry"), e.index + 1)
+            } else {
+                e.name.trim().to_string()
+            }
+        })
+        .collect()
 }
 
 /// A tour of line `line` as the line's preview shows it: "Tour 3  ›  Terminus" (where the

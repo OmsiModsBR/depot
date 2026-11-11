@@ -1,13 +1,13 @@
 //! What the screens take from the rest of the game: the game itself (their `impl App`
 //! parts), the map's picture as the launcher reads it, the game's folder names and version,
-//! the menu lists and the duty the Alt bar's windows show, and the HUD's frame and hit list
-//! the menu pages are made from and written to.
+//! the menu lists, where a vehicle placed is put down, the duty the Alt bar's windows show,
+//! and the HUD's frame and hit list the menu pages are made from and written to.
 
 pub(in crate::ui) use crate::core::app::App;
 pub(in crate::ui) use crate::core::startup::VERSION;
 pub(in crate::ui) use crate::gameplay::schedule::PlayerDuty;
 pub(in crate::ui) use crate::hud::lists::{self, ListKind, Move};
 pub(in crate::ui) use crate::hud::{Frame, Hits, MenuKind};
-pub(in crate::ui) use crate::input::ROUTE_NUMBER_MAX;
+pub(in crate::ui) use crate::input::{PlaceAt, ROUTE_NUMBER_MAX};
 pub(in crate::ui) use crate::screenshot_name::folder_of;
 pub(in crate::ui) use omsi_launcher_ui::picture::MapPicture;
