@@ -2,11 +2,31 @@
 
 use glam::DVec3;
 
-use crate::domain::network::{SegmentRef, WireNetwork, WireSide};
+use crate::domain::network::{SegmentRef, SpanId, WireNetwork, WireObjectKind, WireSide};
 use crate::domain::pole::WireCursor;
 
 /// How many pieces of wire one step may walk over.
 const MAX_PIECES: usize = 64;
+
+/// One way on from the end of a span: the joined span's wire on the same side, where it
+/// starts and which way it runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Way {
+    pub cursor: WireCursor,
+    pub dir: i32,
+    /// The joined wire's end point.
+    pub start: DVec3,
+    /// Its direction leaving that end (unit).
+    pub heading: DVec3,
+    pub gap: f64,
+    /// The switch or crossing whose gap the way crosses.
+    pub via: Option<WireObjectKind>,
+}
+
+/// Picks the way a shoe takes where a span's end has more than one: given the span end
+/// (span, 0 start or 1 end), the ways and the direction the shoe travels in, the index of
+/// the way.
+pub(crate) type Chooser<'a> = dyn FnMut((SpanId, usize), &[Way], DVec3) -> usize + 'a;
 
 /// Where a walk ended.
 #[derive(Debug, Clone, PartialEq)]
@@ -65,6 +85,7 @@ pub(crate) fn reach(
     foot: DVec3,
     len: f64,
     back: DVec3,
+    choose: &mut Chooser<'_>,
 ) -> Option<Reached> {
     let mut c = from;
     let mut p = point(net, &c)?;
@@ -161,7 +182,9 @@ pub(crate) fn reach(
         }
         let end = usize::from(dir > 0);
         let from_id = net.span(c.span)?.spline_id;
-        let Some((nc, ndir, gap)) = across_joint(net, &c, end, q) else {
+        let travel = if dir > 0 { b - a } else { a - b }.normalize_or_zero();
+        let ways = ways_on(net, &c, end)?;
+        if ways.is_empty() {
             let e = q.distance(foot) - len;
             let (cur, pt, err) = if start_error > 0.0 {
                 closest
@@ -182,13 +205,32 @@ pub(crate) fn reach(
                 joints,
                 wire_ended: true,
             });
+        }
+        let pick = if ways.len() == 1 {
+            0
+        } else {
+            choose((c.span, end), &ways, travel).min(ways.len() - 1)
         };
-        joints.push((from_id, net.span(nc.span)?.spline_id, gap));
-        c = nc;
-        dir = ndir;
-        p = point(net, &c)?;
-        // the pole's length fell in the joint's gap: the shoe passes the loose joint onto
-        // the next wire's end
+        let w = ways[pick];
+        joints.push((from_id, net.span(w.cursor.span)?.spline_id, w.gap));
+        // the gap itself (a joint's looseness, or the wire a switch or crossing draws): the
+        // pole's length may fall in it
+        let in_gap = sphere_crossings(q, w.start, foot, len)
+            .into_iter()
+            .reduce(f64::min);
+        c = w.cursor;
+        dir = w.dir;
+        p = w.start;
+        if let Some(u) = in_gap {
+            return Some(Reached {
+                cursor: c,
+                point: q.lerp(w.start, u),
+                error: 0.0,
+                joints,
+                wire_ended: false,
+            });
+        }
+        // past the gap already: the shoe goes on from the joined wire's end
         if (start_error < 0.0) == (p.distance(foot) > len) {
             return Some(Reached {
                 cursor: c,
@@ -209,44 +251,70 @@ pub(crate) fn reach(
     })
 }
 
-/// The wire that goes on from the end `end` of `c`'s span (whose wire ends at `at`): the
-/// joined span's wire nearest to `at`, the cursor at its joined end and the way into it.
-fn across_joint(
-    net: &WireNetwork,
-    c: &WireCursor,
-    end: usize,
-    at: DVec3,
-) -> Option<(WireCursor, i32, f64)> {
-    let mut best: Option<(WireCursor, i32, f64)> = None;
-    for j in net.joints_at(c.span, end) {
-        let (other, other_end) = if j.a == (c.span, end) { j.b } else { j.a };
-        let span = net.span(other)?;
-        for side in WireSide::BOTH {
-            let pts = &span.wires[side.index()];
-            if pts.len() < 2 {
-                continue;
-            }
-            let (seg, t, dir, p) = if other_end == 0 {
-                (0, 0.0, 1, pts[0])
-            } else {
-                (pts.len() - 2, 1.0, -1, pts[pts.len() - 1])
-            };
-            let gap = p.distance(at);
-            if best.as_ref().is_none_or(|b| gap < b.2) {
-                best = Some((
-                    WireCursor {
-                        span: other,
-                        side,
-                        seg,
-                        t,
-                    },
-                    dir,
-                    gap,
-                ));
-            }
+/// The ways on from the end `end` of `c`'s span, keeping the shoe's side: of each joined
+/// span's two wires, the one that lies on the same side of its partner as `c`'s wire does
+/// of its own (seen along the way the shoe travels), so a left shoe stays on the left wire
+/// through reversed splices and into either branch of a switch.
+pub(crate) fn ways_on(net: &WireNetwork, c: &WireCursor, end: usize) -> Option<Vec<Way>> {
+    let here = net.span(c.span)?;
+    let tip = |wire: &Vec<DVec3>, e: usize| {
+        if e == 0 {
+            wire[0]
+        } else {
+            wire[wire.len() - 1]
         }
+    };
+    let own = tip(&here.wires[c.side.index()], end);
+    let partner = tip(&here.wires[other(c.side).index()], end);
+    let out = here.ends[end].outward;
+    // (which side of the partner the shoe's wire is, about the vertical, along the travel)
+    let side_of = |w: DVec3, p: DVec3, along: DVec3| along.cross(w - p).z.signum();
+    let ours = side_of(own, partner, out);
+    let mut ways = Vec::new();
+    for j in net.joints_at(c.span, end) {
+        let (span_id, other_end) = if j.a == (c.span, end) { j.b } else { j.a };
+        let span = net.span(span_id)?;
+        if span.wires.iter().any(|w| w.len() < 2) {
+            continue;
+        }
+        let heading = -span.ends[other_end].outward;
+        let side = WireSide::BOTH
+            .into_iter()
+            .find(|s| {
+                let w = tip(&span.wires[s.index()], other_end);
+                let p = tip(&span.wires[other(*s).index()], other_end);
+                side_of(w, p, heading) == ours
+            })
+            .unwrap_or(c.side);
+        let pts = &span.wires[side.index()];
+        let (seg, t, dir) = if other_end == 0 {
+            (0, 0.0, 1)
+        } else {
+            (pts.len() - 2, 1.0, -1)
+        };
+        let start = tip(pts, other_end);
+        ways.push(Way {
+            cursor: WireCursor {
+                span: span_id,
+                side,
+                seg,
+                t,
+            },
+            dir,
+            start,
+            heading,
+            gap: start.distance(own),
+            via: j.via,
+        });
     }
-    best
+    Some(ways)
+}
+
+fn other(s: WireSide) -> WireSide {
+    match s {
+        WireSide::Left => WireSide::Right,
+        WireSide::Right => WireSide::Left,
+    }
 }
 
 /// Points of the wire pieces near `p` that lie at `len` from `foot`, with their cursor.

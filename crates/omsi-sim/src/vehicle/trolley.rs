@@ -71,6 +71,7 @@ impl VehicleInstance {
                 ],
                 reset: flag(self, "shtanga_wire_reset"),
                 retract: flag(self, "shtanga_recolher_cmd"),
+                switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
             };
             let out = {
                 let net = t.network.lock();
@@ -144,6 +145,17 @@ fn log_event(e: &PoleEvent) {
         PoleEvent::Dewired { pole, reason } => {
             log::info!("trolleybus: {} pole left the wire ({reason:?})", side(pole))
         }
+        PoleEvent::Fork {
+            pole,
+            kind,
+            spline_id,
+            demand,
+        } => log::debug!(
+            "trolleybus: {} pole at a {} took spline {spline_id}{}",
+            side(pole),
+            kind.map_or("fork".to_string(), |k| format!("{k:?}")),
+            if *demand { " (demand)" } else { "" }
+        ),
         PoleEvent::Retracted { pole } => {
             log::debug!("trolleybus: {} pole taken off the wire", side(pole))
         }

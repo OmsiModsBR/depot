@@ -63,6 +63,8 @@ pub struct PoleParams {
     pub max_pitch: f64,
     pub catcher_delay: f64,
     pub catcher_lower_rate: f64,
+    /// The switch demand above which a switch turns.
+    pub switch_threshold: f64,
 }
 
 /// One registry entry that applies to the player's vehicle.

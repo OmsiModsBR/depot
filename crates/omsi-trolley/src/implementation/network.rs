@@ -6,8 +6,9 @@ use glam::{DVec2, DVec3};
 
 use crate::domain::convention::ConventionParams;
 use crate::domain::network::{
-    SegmentRef, SpanEnd, SpanId, TileWires, WireJoint, WireNetwork, WireObject, WireSide, WireSpan,
-    GRID_CELL, JOIN_MIN_ALIGNMENT, JOIN_TOLERANCE, OBJECT_MARKERS,
+    SegmentRef, SpanEnd, SpanId, TileWires, WireJoint, WireNetwork, WireObject, WireObjectKind,
+    WireSide, WireSpan, BRIDGE_MAX_GAP, BRIDGE_MIN_ALIGNMENT, BRIDGE_RADIUS, GRID_CELL,
+    JOIN_MIN_ALIGNMENT, JOIN_TOLERANCE, OBJECT_MARKERS,
 };
 use crate::interface::output::{MapObject, MapSpline, SplineCurve, Tile};
 
@@ -176,6 +177,7 @@ impl WireNetwork {
                                 b,
                                 gap,
                                 reversed: end == other_end,
+                                via: None,
                             });
                         }
                     }
@@ -183,7 +185,7 @@ impl WireNetwork {
             }
             self.end_grid.entry((cx, cy)).or_default().push((span, end));
         }
-        self.joints.sort_by_key(|j| (j.a, j.b));
+        self.rebuild_bridges();
     }
 
     /// Take a tile's wire away (the tile was unloaded).
@@ -213,10 +215,77 @@ impl WireNetwork {
             }
         }
         self.joints.retain(|j| j.a.0 .0 != tile && j.b.0 .0 != tile);
+        self.rebuild_bridges();
+    }
+
+    /// The joints across the gaps of the loaded switches and crossings (see
+    /// [`BRIDGE_RADIUS`]), made again from scratch: a tile that comes or goes can add or take
+    /// the ends on either side of a gap.
+    fn rebuild_bridges(&mut self) {
+        self.joints.retain(|j| j.via.is_none());
+        let objects: Vec<WireObject> = self
+            .tiles
+            .values()
+            .flat_map(|t| t.objects.iter())
+            .filter(|o| o.kind != WireObjectKind::SoundMarker)
+            .cloned()
+            .collect();
+        let reach = (BRIDGE_RADIUS / JOIN_TOLERANCE).ceil() as i64;
+        let mut bridges: Vec<WireJoint> = Vec::new();
+        for o in &objects {
+            let (cx, cy) = cell_of(o.position, JOIN_TOLERANCE);
+            let mut near: Vec<(SpanId, usize, SpanEnd)> = Vec::new();
+            for dx in -reach..=reach {
+                for dy in -reach..=reach {
+                    for &(span, end) in self.end_grid.get(&(cx + dx, cy + dy)).into_iter().flatten()
+                    {
+                        let Some(e) = self.span(span).map(|s| s.ends[end]) else {
+                            continue;
+                        };
+                        if (e.point - o.position).truncate().length() <= BRIDGE_RADIUS {
+                            near.push((span, end, e));
+                        }
+                    }
+                }
+            }
+            near.sort_by_key(|(span, end, _)| (*span, *end));
+            for (n, (sa, ea, a)) in near.iter().enumerate() {
+                for (sb, eb, b) in &near[n + 1..] {
+                    if sa == sb {
+                        continue;
+                    }
+                    let gap = a.point.distance(b.point);
+                    if gap <= JOIN_TOLERANCE || gap > BRIDGE_MAX_GAP {
+                        continue;
+                    }
+                    let d = (b.point - a.point) / gap;
+                    let facing = a.outward.dot(b.outward) <= -BRIDGE_MIN_ALIGNMENT
+                        && d.dot(a.outward) >= BRIDGE_MIN_ALIGNMENT
+                        && (-d).dot(b.outward) >= BRIDGE_MIN_ALIGNMENT;
+                    let pair = ((*sa, *ea), (*sb, *eb));
+                    if facing && !bridges.iter().any(|j| (j.a, j.b) == pair) {
+                        bridges.push(WireJoint {
+                            a: pair.0,
+                            b: pair.1,
+                            gap,
+                            reversed: ea == eb,
+                            via: Some(o.kind),
+                        });
+                    }
+                }
+            }
+        }
+        self.joints.extend(bridges);
+        self.joints.sort_by_key(|j| (j.a, j.b));
     }
 
     pub fn is_empty(&self) -> bool {
         self.tiles.is_empty()
+    }
+
+    /// The loaded tiles' wire.
+    pub fn tiles(&self) -> impl Iterator<Item = ((i32, i32), &TileWires)> {
+        self.tiles.iter().map(|(k, t)| (*k, t))
     }
 
     pub fn tile(&self, tile: (i32, i32)) -> Option<&TileWires> {

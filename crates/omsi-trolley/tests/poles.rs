@@ -19,6 +19,7 @@ wire_x_right=0.255
 manual_capture_distance=0.45
 lost_reset_frames=90
 max_pitch=55
+switch_throttle_threshold=0.05
 [physics]
 pole_raise_duration=1.5
 pole_lower_duration=1.0
@@ -117,6 +118,7 @@ fn grab(sim: &mut PoleSim, d: &TrolleyDeclaration, net: &WireNetwork, at: &BodyP
             grab: [true, true],
             reset: false,
             retract: false,
+            switch_demand: 0.0,
         },
         1.0 / 60.0,
     );
@@ -186,6 +188,7 @@ fn no_wire_in_reach_leaves_the_poles_down() {
             grab: [true, false],
             reset: false,
             retract: false,
+            switch_demand: 0.0,
         },
         0.016,
     );
@@ -347,6 +350,7 @@ fn raising_takes_the_same_time_at_any_frame_rate() {
                 grab: [true, true],
                 reset: false,
                 retract: false,
+                switch_demand: 0.0,
             },
             1.0 / fps,
         );
@@ -375,6 +379,7 @@ fn a_second_press_lowers_the_pole_to_its_hook() {
             grab: [true, false],
             reset: false,
             retract: false,
+            switch_demand: 0.0,
         },
         0.016,
     );

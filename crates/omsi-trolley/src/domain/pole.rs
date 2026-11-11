@@ -97,6 +97,9 @@ pub struct PoleInputs {
     pub reset: bool,
     /// The retract control: take both poles off the wire to their hooks.
     pub retract: bool,
+    /// What the vehicle asks of the next switch (the convention feeds the throttle in):
+    /// above the parameter file's `switch_throttle_threshold` the switch turns.
+    pub switch_demand: f64,
 }
 
 /// What one pole shows.
@@ -158,6 +161,13 @@ pub enum PoleEvent {
     Retracted {
         pole: usize,
     },
+    /// A shoe came to a span end with more than one way on and took one.
+    Fork {
+        pole: usize,
+        kind: Option<super::network::WireObjectKind>,
+        spline_id: i64,
+        demand: bool,
+    },
     StallReset {
         seconds: f64,
     },
@@ -169,6 +179,10 @@ pub struct PoleSim {
     pub poles: [PoleState; 2],
     pub(crate) grab_before: [bool; 2],
     pub(crate) retract_before: bool,
+    /// The way each recently passed fork was set to: (span end, span taken, seconds since),
+    /// so both shoes take the same branch.
+    pub(crate) forks: Vec<((SpanId, usize), SpanId, f64)>,
+    pub(crate) demand: bool,
     /// What happened in the last step.
     pub events: Vec<PoleEvent>,
 }

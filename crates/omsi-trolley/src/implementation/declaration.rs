@@ -118,6 +118,7 @@ pub fn declaration_from(
             max_pitch: global("global", "max_pitch")?,
             catcher_delay: global("physics", "dewire_catcher_delay")?,
             catcher_lower_rate: global("physics", "dewire_catcher_lower_deg_s")?,
+            switch_threshold: global("global", "switch_throttle_threshold")?,
         },
     })
 }

@@ -3,9 +3,9 @@
 
 use glam::DVec3;
 
-use super::walk::{self, Reached};
+use super::walk::{self, Reached, Way};
 use crate::domain::declaration::{PoleGeometry, PoleParams, TrolleyDeclaration};
-use crate::domain::network::{WireNetwork, WireSide};
+use crate::domain::network::{SpanId, WireNetwork, WireObjectKind, WireSide};
 use crate::domain::pole::{
     BodyPose, DewireReason, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim,
     PoleState, WireCursor,
@@ -13,6 +13,47 @@ use crate::domain::pole::{
 
 /// How far around the modelled shoe a rising pole looks for wire, metres.
 const SEARCH_RADIUS: f64 = 2.5;
+
+/// How long a fork stays set for the second shoe (and a shoe that steps back across the
+/// gap), seconds.
+const FORK_MEMORY: f64 = 10.0;
+
+/// The way on at a fork, and the kind of object it is: a switch sets itself by the
+/// vehicle's demand - with demand a Y turns left and a branch switch takes its branch,
+/// without demand a Y turns right and a branch switch runs straight; a crossing runs
+/// straight; where the content has no object the shoe keeps to the closest, straightest
+/// wire.
+fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObjectKind>) {
+    let rank = |k: &WireObjectKind| match k {
+        WireObjectKind::SwitchY
+        | WireObjectKind::SwitchBranchLeft
+        | WireObjectKind::SwitchBranchRight => 2,
+        WireObjectKind::Crossing => 1,
+        WireObjectKind::SoundMarker => 0,
+    };
+    let kind = ways.iter().filter_map(|w| w.via).max_by_key(rank);
+    // degrees each way turns off the travel, left positive
+    let turn = |w: &Way| {
+        let t = travel.truncate().normalize_or_zero();
+        let h = w.heading.truncate().normalize_or_zero();
+        t.perp_dot(h).atan2(t.dot(h)).to_degrees()
+    };
+    let by = |f: &dyn Fn(&Way) -> f64| {
+        (0..ways.len())
+            .min_by(|a, b| f(&ways[*a]).total_cmp(&f(&ways[*b])))
+            .unwrap_or(0)
+    };
+    let k = match (kind, demand) {
+        (Some(WireObjectKind::SwitchY), true) => by(&|w| -turn(w)),
+        (Some(WireObjectKind::SwitchY), false) => by(&|w| turn(w)),
+        (Some(WireObjectKind::SwitchBranchLeft | WireObjectKind::SwitchBranchRight), true) => {
+            by(&|w| -turn(w).abs())
+        }
+        (Some(_), _) => by(&|w| turn(w).abs()),
+        (None, _) => by(&|w| w.gap + turn(w).abs() / 20.0),
+    };
+    (k, kind)
+}
 
 /// How the shoe sits on the wire this frame, for the dewirement rules.
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +86,12 @@ impl PoleSim {
             }
             self.poles = Default::default();
         }
+        // a fork is set for the two shoes passing it; forget it a while after
+        self.demand = inputs.switch_demand > decl.params.switch_threshold;
+        for f in self.forks.iter_mut() {
+            f.2 += dt;
+        }
+        self.forks.retain(|f| f.2 < FORK_MEMORY);
         let retract = inputs.retract && !self.retract_before;
         self.retract_before = inputs.retract;
         let mut out = PoleOutputs {
@@ -188,13 +235,35 @@ impl PoleSim {
             error,
             joints,
             wire_ended,
-        } = walk::reach(
-            net,
-            cursor,
-            foot_to_wire,
-            geo.length(),
-            body.rotation * DVec3::NEG_Y,
-        )?;
+        } = {
+            let (forks, events, demand) = (&mut self.forks, &mut self.events, self.demand);
+            let mut choose = |at: (SpanId, usize), ways: &[Way], travel: DVec3| -> usize {
+                if let Some(k) = forks
+                    .iter()
+                    .find(|f| f.0 == at)
+                    .and_then(|f| ways.iter().position(|w| w.cursor.span == f.1))
+                {
+                    return k;
+                }
+                let (k, kind) = fork_way(ways, travel, demand);
+                forks.push((at, ways[k].cursor.span, 0.0));
+                events.push(PoleEvent::Fork {
+                    pole: i,
+                    kind,
+                    spline_id: net.span(ways[k].cursor.span).map_or(-1, |s| s.spline_id),
+                    demand,
+                });
+                k
+            };
+            walk::reach(
+                net,
+                cursor,
+                foot_to_wire,
+                geo.length(),
+                body.rotation * DVec3::NEG_Y,
+                &mut choose,
+            )?
+        };
         for (from, to, gap) in joints {
             self.events.push(PoleEvent::Joint {
                 pole: i,
