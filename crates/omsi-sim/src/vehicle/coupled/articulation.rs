@@ -8,7 +8,7 @@
 //! hung on their coupling and pitched towards the ground under their axle.
 
 use super::trailer::{body_reversed, joint_angles, TrailerPart, ARTICULATION_SIGN};
-use crate::physics::{BodyInputs, Joint, RigidBody};
+use crate::physics::{BodyInputs, Engine, Joint, RigidBody};
 use crate::vehicle::physics_bridge::PartWheelVars;
 use crate::vehicle::VehicleInstance;
 use glam::{DVec3, Mat4, Vec3};
@@ -24,13 +24,13 @@ pub struct PartBody {
 }
 
 impl PartBody {
-    fn new(t: &TrailerPart, program: &Program) -> PartBody {
+    fn new(t: &TrailerPart, program: &Program, engine: Engine) -> PartBody {
         // (its hubs from the `.bus` alone, as the lead body's - see `enable_rigid_body`)
         // (it turns about its own `[rot_pnt_long]` as the file gives it, 0 included, as
         // OMSI's sections do; the kinematic part's line, `TrailerPart::axle_long`, takes the
         // farthest axle for a 0. Counting it from the `[cog]` is the front vehicle's turning
         // line, `PhysicsSpec::turn_line`, not a section's)
-        let mut rb = RigidBody::from_definition(&t.ty.def, &[]);
+        let mut rb = RigidBody::for_engine(&t.ty.def, &[], engine);
         rb.rot_pnt_long = t.ty.def.rot_pnt_long;
         let vars = (0..rb.wheels.len())
             .map(|i| {
@@ -122,7 +122,7 @@ impl VehicleInstance {
             lead.coupled = self.coupled_parts();
             if self.rest_loads_for != 0 {
                 // the parts that were carried by the bodies are gone: the wheels carry their own again
-                let loads = crate::physics::wheel_rest_loads(&self.ty.def);
+                let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
                 for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                     w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
                 }
@@ -146,8 +146,9 @@ impl VehicleInstance {
         lead.coupled.clear();
         let created = self.trailers.iter().any(|t| t.body.is_none());
         let ty = self.ty.clone();
+        let engine = Engine::from(self.physics_mode());
         for t in self.trailers.iter_mut().filter(|t| t.body.is_none()) {
-            t.body = Some(PartBody::new(t, &ty.program));
+            t.body = Some(PartBody::new(t, &ty.program, engine));
         }
         let joints: Vec<Joint> = self
             .trailers
@@ -170,7 +171,7 @@ impl VehicleInstance {
             self.rest_loads_for = self.trailers.len();
             // the joints carry part of each part behind (from the front: each load the part in
             // front of it takes on its axles)
-            let loads = crate::physics::wheel_rest_loads(&self.ty.def);
+            let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
             let lead = &mut bodies[0];
             for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                 w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);

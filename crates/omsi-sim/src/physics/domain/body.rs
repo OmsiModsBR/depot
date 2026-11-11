@@ -1,6 +1,6 @@
 //! The body ([`RigidBody`]) and the parts it tows ([`CoupledPart`]), with what reading them gives.
 
-use super::{Impact, RigidWheel};
+use super::{Engine, Impact, RigidWheel};
 use glam::{DVec3, Quat, Vec3};
 
 /// A part towed behind the body (the rear section of an articulated bus). The parts follow
@@ -33,6 +33,8 @@ pub struct CoupledPart {
 
 #[derive(Debug, Clone)]
 pub struct RigidBody {
+    /// The rules the body follows where the engines differ (see [`Engine`]).
+    pub(crate) engine: Engine,
     /// The mass the body moves with (kg): its own and what it carries (`payload`).
     pub(crate) mass: f32,
     /// The body's own mass (kg, the `.bus` file's `[mass]`) and the mass it carries (kg: the
@@ -103,6 +105,11 @@ pub struct RigidBody {
 }
 
 impl RigidBody {
+    /// The rules the body follows where the engines differ.
+    pub fn engine(&self) -> Engine {
+        self.engine
+    }
+
     /// The body's mass (kg): its own and its payload's.
     pub fn mass(&self) -> f32 {
         self.mass

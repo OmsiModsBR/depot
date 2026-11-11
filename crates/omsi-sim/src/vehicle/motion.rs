@@ -166,7 +166,11 @@ impl VehicleInstance {
     pub fn enable_rigid_body(&mut self) {
         // (its hubs from the `.bus` alone, a tyre radius over the model origin's plane where
         // OMSI's springs stand: neither the model's wheels nor their animation move them)
-        let mut rb = crate::physics::RigidBody::from_definition(&self.ty.def, &[]);
+        let mut rb = crate::physics::RigidBody::for_engine(
+            &self.ty.def,
+            &[],
+            crate::physics::Engine::from(self.physics_mode()),
+        );
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -427,7 +431,7 @@ impl VehicleInstance {
                     .filter(|(_, a)| a.driven)
                     .map(|(i, _)| i)
                     .collect();
-                let loads = crate::physics::wheel_rest_loads(def);
+                let loads = crate::physics::wheel_rest_loads(def, self.physics_mode().into());
                 let wheel_load = |a: usize| loads.get(a).copied().unwrap_or(0.0) * 2.0;
                 crate::physics::CoupledPart {
                     point: first.coupling_back,

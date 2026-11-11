@@ -15,7 +15,7 @@
 
 // The objects.
 pub use super::domain::{
-    AiSpec, AiWheelSpec, AxleSpec, BodyInputs, Controls, CoupledPart, Dynamics, Ground,
+    AiSpec, AiWheelSpec, AxleSpec, BodyInputs, Controls, CoupledPart, Dynamics, Engine, Ground,
     GroundProbe, Impact, Joint, JointKind, KinematicModel, PhysicsSpec, PhysicsState, RigidBody,
     RigidWheel, VehicleMotion, WallFace, WheelState,
 };

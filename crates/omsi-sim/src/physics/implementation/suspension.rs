@@ -4,10 +4,11 @@
 
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
+use super::{classic, depot};
 use crate::physics::domain::params::{
     BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K,
 };
-use crate::physics::domain::{GroundProbe, RigidBody};
+use crate::physics::domain::{Engine, GroundProbe, RigidBody};
 use glam::{DVec3, Vec3};
 
 impl RigidBody {
@@ -110,13 +111,12 @@ impl RigidBody {
             // the strut's force turns the body about its length from the outer width, not
             // from where the tyre stands (see `RigidWheel::lever`): body x cross body z
             *torque += Vec3::new(0.0, -w.lever * n, 0.0);
-            // OMSI 2 turns the body by the strut's force times the axle's place along the
-            // model (`achse_long`) and across it, measured from the model's origin and not
-            // from `[cog]`: the weight is shared out about the origin, so a `[cog]` ahead of
-            // it loads no axle more than another (and the body does not stand nose down on a
-            // soft front spring). The force acts at the wheel, about the centre of gravity,
-            // so what that adds is put back here: `cog` x the strut's force.
-            *torque += Vec3::new(self.cog.y * n, -self.cog.x * n, 0.0);
+            // the strut's force turns the body about the model's origin (Classic) or about
+            // `[cog]` (Depot): see `classic::load_share`
+            *torque += match self.engine {
+                Engine::Classic => classic::load_share::strut_reference_torque(self.cog, n),
+                Engine::Depot => depot::load_share::strut_reference_torque(self.cog, n),
+            };
             let Some((slope, contact_dx)) = found[i].filter(|_| tyre_f > 0.0) else {
                 // off the ground the wheel keeps its turning (a brake stops it)
                 let (drive_w, brake_w) = (

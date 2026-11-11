@@ -92,8 +92,8 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Engine split `feat/physics-engine-split`
 
-- [ ] T029 [ph 5] `Engine { Classic, Depot }` (`From<PhysicsMode>`) held by `RigidBody` and kept by `PhysicsState`, in `crates/omsi-sim/src/physics/domain/vehicle.rs`
-- [ ] T030 [ph 5] Move the static load reference of the struts (the torque term of `wheel_contacts`, `crates/omsi-sim/src/physics/implementation/suspension.rs`) and the rest loads (`wheel_rest_loads`, `crates/omsi-sim/src/physics/implementation/spec.rs`) into `crates/omsi-sim/src/physics/implementation/classic/load_share.rs` and `crates/omsi-sim/src/physics/implementation/depot/load_share.rs`, both still today's rule, chosen by a `match` on `Engine`
+- [X] T029 [ph 5] `Engine { Classic, Depot }` (`From<PhysicsMode>`) held by `RigidBody` and kept by `PhysicsState`, in `crates/omsi-sim/src/physics/domain/vehicle.rs`
+- [X] T030 [ph 5] Move the static load reference of the struts (the torque term of `wheel_contacts`, `crates/omsi-sim/src/physics/implementation/suspension.rs`) and the rest loads (`wheel_rest_loads`, `crates/omsi-sim/src/physics/implementation/spec.rs`) into `crates/omsi-sim/src/physics/implementation/classic/load_share.rs` and `crates/omsi-sim/src/physics/implementation/depot/load_share.rs`, both still today's rule, chosen by a `match` on `Engine`
 
 ### AI split `feat/ai-engine-split`
 
