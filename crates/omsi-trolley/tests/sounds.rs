@@ -114,6 +114,8 @@ fn body(x: f64, y: f64, heading: f64) -> BodyPose {
 struct Drive {
     sounds: Vec<WireSound>,
     spark_frames: usize,
+    /// Where (the body's position) the left shoe was first seen right of the right one.
+    swapped_at: Option<DVec2>,
 }
 
 fn drive(
@@ -142,6 +144,7 @@ fn drive(
     let mut out = Drive {
         sounds: Vec::new(),
         spark_frames: 0,
+        swapped_at: None,
     };
     let step = kmh / 3.6 / 60.0;
     for w in path.windows(2) {
@@ -166,6 +169,12 @@ fn drive(
             );
             out.sounds.extend(sim.sounds.iter().copied());
             out.spark_frames += o.poles.iter().filter(|p| p.spark).count();
+            if o.wire_present
+                && o.poles[0].shoe_pos.x >= o.poles[1].shoe_pos.x
+                && out.swapped_at.is_none()
+            {
+                out.swapped_at = Some(p);
+            }
         }
     }
     out
@@ -284,4 +293,139 @@ fn a_pole_leaving_the_wire_under_power_sparks() {
         "{:?}",
         d.sounds
     );
+}
+
+const RIGHT: &str = "Sceneryobjects\\Net\\chave_segmento_direita_depot.sco";
+const LEFT: &str = "Sceneryobjects\\Net\\chave_segmento_esquerda_depot.sco";
+
+/// A 20 degree switch at y = 52 whose branch leaves to the `side` (+1 right, -1 left): the
+/// line ends at y = 50, the straight goes on at y = 54 and the branch leaves at y = 54,
+/// 0.72 m to that side.
+fn branch_switch(side: f64) -> WireNetwork {
+    net(
+        vec![
+            spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 50.0, 0.0),
+            spline(2, WIRE, [0.0, 54.0, 0.0], 0.0, 40.0, 0.0),
+            spline(3, WIRE, [0.72 * side, 54.0, 0.0], 20.0 * side, 40.0, 0.0),
+        ],
+        vec![object(
+            9,
+            if side > 0.0 { RIGHT } else { LEFT },
+            [0.0, 52.0, 0.0],
+            0.0,
+        )],
+    )
+}
+
+#[test]
+fn coming_in_to_a_switch_from_either_way_each_shoe_keeps_its_side() {
+    let (s20, c20) = (20f64.to_radians().sin(), 20f64.to_radians().cos());
+    let t10 = 32.15 * 10f64.to_radians().tan();
+    let cases: Vec<(&str, WireNetwork, Vec<(f64, f64)>)> = vec![
+        (
+            "Y, left branch",
+            y_switch(),
+            vec![(-0.5 - t10, 85.0), (-0.5, 52.85), (0.0, 50.0), (0.0, 20.0)],
+        ),
+        (
+            "Y, right branch",
+            y_switch(),
+            vec![(0.5 + t10, 85.0), (0.5, 52.85), (0.0, 50.0), (0.0, 20.0)],
+        ),
+        (
+            "right switch, branch",
+            branch_switch(1.0),
+            vec![
+                (0.72 + 30.0 * s20, 54.0 + 30.0 * c20),
+                (0.72, 54.0),
+                (0.0, 50.0),
+                (0.0, 20.0),
+            ],
+        ),
+        (
+            "right switch, straight",
+            branch_switch(1.0),
+            vec![(0.0, 85.0), (0.0, 20.0)],
+        ),
+        (
+            "left switch, branch",
+            branch_switch(-1.0),
+            vec![
+                (-0.72 - 30.0 * s20, 54.0 + 30.0 * c20),
+                (-0.72, 54.0),
+                (0.0, 50.0),
+                (0.0, 20.0),
+            ],
+        ),
+        (
+            "left switch, straight",
+            branch_switch(-1.0),
+            vec![(0.0, 85.0), (0.0, 20.0)],
+        ),
+    ];
+    for (name, n, path) in cases {
+        let d = drive(&n, &path, 0.0, 10.0, WireWeather::Dry);
+        assert_eq!(d.swapped_at, None, "{name}: the shoes swapped sides");
+    }
+}
+
+/// A straight spline from `a` to `b` (drawn from `b` to `a` when `back`).
+fn straight(id: i64, a: (f64, f64), b: (f64, f64), back: bool) -> omsi_map::tile::MapSpline {
+    let (from, to) = if back { (b, a) } else { (a, b) };
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    spline(
+        id,
+        WIRE,
+        [from.0, from.1, 0.0],
+        dx.atan2(dy).to_degrees(),
+        dx.hypot(dy),
+        0.0,
+    )
+}
+
+#[test]
+fn whichever_way_the_splines_are_drawn_the_shoes_keep_their_sides_through_a_switch() {
+    let (s20, c20) = (20f64.to_radians().sin(), 20f64.to_radians().cos());
+    for side in [1.0f64, -1.0] {
+        let far = (0.72 * side + 40.0 * s20 * side, 54.0 + 40.0 * c20);
+        for mask in 0..8 {
+            let n = net(
+                vec![
+                    straight(1, (0.0, 0.0), (0.0, 50.0), mask & 1 != 0),
+                    straight(2, (0.0, 54.0), (0.0, 94.0), mask & 2 != 0),
+                    straight(3, (0.72 * side, 54.0), far, mask & 4 != 0),
+                ],
+                vec![object(
+                    9,
+                    if side > 0.0 { RIGHT } else { LEFT },
+                    [0.0, 52.0, 0.0],
+                    0.0,
+                )],
+            );
+            let back = (0.72 * side + 30.0 * s20 * side, 54.0 + 30.0 * c20);
+            for (way, path) in [
+                (
+                    "in from the branch",
+                    vec![back, (0.72 * side, 54.0), (0.0, 50.0), (0.0, 20.0)],
+                ),
+                ("in from the straight", vec![(0.0, 85.0), (0.0, 20.0)]),
+                (
+                    "out to the branch",
+                    vec![(0.0, 20.0), (0.0, 50.0), (0.72 * side, 54.0), back],
+                ),
+                ("out straight", vec![(0.0, 20.0), (0.0, 85.0)]),
+            ] {
+                let demand = if (side > 0.0) == way.contains("straight") {
+                    1.0
+                } else {
+                    0.0
+                };
+                let d = drive(&n, &path, demand, 10.0, WireWeather::Dry);
+                assert_eq!(
+                    d.swapped_at, None,
+                    "side {side}, splines drawn {mask:03b}, {way}: the shoes swapped sides"
+                );
+            }
+        }
+    }
 }
