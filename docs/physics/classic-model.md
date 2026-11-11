@@ -95,12 +95,18 @@ Module for all the `KA-*` rules: `ai/classic/` (new, phase 8), using `physics/` 
   junction turn and a lane change; the rotation point stays on the lane while the front swings out.
 
 The point at `[rot_pnt_long]` moves along the lane path, shifted sideways during a lane change. The
-heading relative to the path, `ψ_r`, is a state of its own, integrated by a kinematic bicycle model:
+body's axis lags the path's tangent by `ψ_r`, a state of its own: the axis follows the path as a rod
+of length `L` whose front end does not slip sideways. Over a step `Δs = v · dt` along the path:
 
 ```
-sin ψ_r = L · κ                      (steady bend: the axis is turned in, not on the tangent)
-δ_i     = atan((y_i - r) · κ_v)      (each axle)
+Δθ   = Δs · κ                                     (the path's turn)
+ψ_r ← ψ_r + Δθ - (Δs / L) · sin(ψ_r + Δθ / 2)
+κ_v  = sin ψ_r / L
+δ_i  = atan((y_i - r) · κ_v)                      (each axle, with κ_v of the frame before)
 ```
+
+In a steady bend `sin ψ_r = L · κ`: the rotation point stays on the lane and the front swings out of
+the bend. A vehicle put down on a bend starts in that steady state.
 
 ## KA-2. Speed near the camera
 

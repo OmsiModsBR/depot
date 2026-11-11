@@ -59,10 +59,10 @@ fn ka1_the_rotation_point_stays_on_the_lane() {
     assert!(worst < 0.01, "the rotation point is {worst} m off the lane");
 }
 
-/// KA-1: in a steady bend the body's axis is turned off the path's tangent so that
-/// `sin ψ_r = L κ`, and the wheels point at the turning centre.
+/// KA-1: in a steady bend the body's axis lags the path's tangent so that `sin ψ_r = L κ`,
+/// its front swung out of the bend, and the wheels point at the turning centre.
 #[test]
-fn ka1_the_axis_is_turned_in_a_steady_bend() {
+fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
     let def = bus();
     let mut body = AiClassic::new(&def, MotionKind::Road);
     let (speed, dt, r) = (5.0f32, 1.0 / 30.0, 25.0);
@@ -81,8 +81,16 @@ fn ka1_the_axis_is_turned_in_a_steady_bend() {
     };
     let length = (3.2 - def.rot_pnt_long) as f64;
     let want = (length / r).asin().to_degrees();
-    let got = (body.heading - tangent + 540.0).rem_euclid(360.0) - 180.0;
+    let got = (tangent - body.heading + 540.0).rem_euclid(360.0) - 180.0;
     assert!((got - want).abs() < 0.5, "ψ_r {got}°, want {want}°");
+    // the front is outside the bend: farther from its centre than the lane
+    let h = body.heading.to_radians();
+    let front = body.position.truncate() + glam::DVec2::new(h.sin(), h.cos()) * 3.2;
+    let centre = glam::DVec2::new(r, 40.0);
+    assert!(
+        (front - centre).length() > r,
+        "the front is inside the bend"
+    );
     let delta = (((3.2 - def.rot_pnt_long) as f64) / r).atan().to_degrees();
     assert!(
         (body.steer as f64 - delta).abs() < 0.5,

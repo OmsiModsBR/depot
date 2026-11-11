@@ -1,6 +1,6 @@
 //! The OMSI Classic AI body (`KA-1` to `KA-11` of `docs/physics/classic-model.md`): on its route
 //! a vehicle is no rigid body. Its rotation point sits on the lane, its heading is a state of its
-//! own integrated by a kinematic bicycle model, and its height and attitude come from the path:
+//! own integrated as a rod whose front end does not slip sideways, and its height and attitude come from the path:
 //! it has no springs, no settling and no dynamic pitch or roll.
 //!
 //! Every rule here is **to validate** against OMSI 2 (see the status of each `KA-*` row).
@@ -29,10 +29,12 @@ pub struct AiClassic {
     started: bool,
     /// World position of the rotation point.
     rear: DVec2,
-    /// The path's heading at the rotation point and the body's heading relative to it, `ψ_r`
-    /// (deg, clockwise from north).
+    /// The path's heading at the rotation point (deg, clockwise from north), how far the
+    /// body's axis lags behind it, `ψ_r` (rad, + = behind a bend to the right), and the
+    /// vehicle's curvature `κ_v = sin ψ_r / L` (1/m).
     path_heading: f64,
-    relative: f32,
+    lag: f64,
+    kappa_v: f64,
     /// Heading (deg, clockwise from north).
     pub heading: f64,
     /// The front wheel angle (deg, + = right).
@@ -78,7 +80,8 @@ impl AiClassic {
             started: false,
             rear: DVec2::ZERO,
             path_heading: 0.0,
-            relative: 0.0,
+            lag: 0.0,
+            kappa_v: 0.0,
             heading: 0.0,
             steer: 0.0,
             last_speed: 0.0,
@@ -136,37 +139,40 @@ impl AiClassic {
             self.follow_without_bicycle(way);
             return;
         }
-        // (KA-1) the rotation point is on the lane; the heading is the path's turned by the
-        // relative angle, which follows `sin ψ_r = L κ`
+        // (KA-1) the rotation point is on the lane. The body's axis lags the path's tangent by
+        // `ψ_r`: the path turns by `Δθ = Δs κ` and the axis follows it as a rod of length `L`
+        // whose front end does not slip sideways, `Δψ_r = Δθ - (Δs / L) sin(ψ_r + Δθ / 2)`, so
+        // that in a steady bend `sin ψ_r = L κ` with the front swung out of the bend
         let on = way(self.rot_long);
         self.rear = on.truncate();
         let ahead = way(self.rot_long + 1.0).truncate();
         let path = heading_of(ahead - self.rear).unwrap_or(self.path_heading);
         let kappa = Self::curvature(way, self.rot_long);
-        let wanted = (self.length as f64 * kappa)
-            .clamp(-1.0, 1.0)
-            .asin()
-            .to_degrees() as f32;
+        let length = self.length as f64;
         if !self.started {
-            self.relative = wanted;
+            // put down already in the steady state of its bend, with no swing at the start
+            self.lag = (length * kappa).clamp(-1.0, 1.0).asin();
             self.started = true;
-        } else if dt > 0.0 {
-            // one body length of travel brings the angle in
-            let rate = (speed.abs() * dt / self.length).min(1.0);
-            self.relative += (wanted - self.relative) * rate;
+        } else {
+            let ds = (speed * dt) as f64;
+            let turn = ds * kappa;
+            self.lag += turn - (ds / length) * (self.lag + 0.5 * turn).sin();
         }
         self.path_heading = path;
-        self.heading = (path + self.relative as f64).rem_euclid(360.0);
-        // each axle's wheels point at the turning centre: `δ = atan((y - r) κ)`; the front
-        // wheel angle is what the scripts read
+        self.heading = (path - self.lag.to_degrees()).rem_euclid(360.0);
+        // each axle's wheels point at the turning centre, `δ_i = atan((y_i - r) κ_v)`, with the
+        // vehicle's curvature of the frame before; the front wheel angle is what the scripts read
         let front = self.axle_long.iter().copied().fold(f32::MIN, f32::max);
         self.steer = if self.axle_long.is_empty() {
             0.0
         } else {
-            (((front - self.rot_long) as f64 * kappa).atan().to_degrees() as f32)
+            (((front - self.rot_long) as f64 * self.kappa_v)
+                .atan()
+                .to_degrees() as f32)
                 .clamp(-self.max_steer.max(1.0), self.max_steer.max(1.0))
         };
-        self.a_lat = (speed * speed) * kappa as f32;
+        self.kappa_v = self.lag.sin() / length;
+        self.a_lat = (speed * speed) * self.kappa_v as f32;
         self.pose(way);
     }
 
