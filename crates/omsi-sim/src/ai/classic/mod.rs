@@ -5,6 +5,12 @@
 //!
 //! Every rule here is **to validate** against OMSI 2 (see the status of each `KA-*` row).
 
+mod speed;
+
+pub use speed::{
+    integrate, target_speed, within_detail_radius, DriveForces, Pedals, Regime, TARGET_HORIZON,
+};
+
 use super::MotionKind;
 use crate::physics::AiSpec;
 use crate::vehicle::VehicleInstance;
@@ -43,6 +49,8 @@ pub struct AiClassic {
     /// The front wheel angle (deg, + = right).
     pub steer: f32,
     last_speed: f32,
+    /// The driver's throttle and brake for the scripts (`KA-2`).
+    pedals: Pedals,
     /// Longitudinal and lateral acceleration (m/s², forward / right positive).
     pub a_long: f32,
     pub a_lat: f32,
@@ -89,6 +97,7 @@ impl AiClassic {
             heading: 0.0,
             steer: 0.0,
             last_speed: 0.0,
+            pedals: Pedals::default(),
             a_long: 0.0,
             a_lat: 0.0,
             position: DVec3::ZERO,
@@ -203,6 +212,30 @@ impl AiClassic {
 
     /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
     /// read and each wheel's travel.
+    /// One frame of the speed (`KA-2`, `KA-9`, `KA-10`): from `speed` by the forces the
+    /// scripts left in the physical regime, the driver's `target` otherwise; then the driver's
+    /// pedals for the scripts' next frame. The grip `mu` bounds the change (`KA-3`).
+    pub fn speed_step(
+        &mut self,
+        regime: Regime,
+        speed: f32,
+        target: f32,
+        forces: DriveForces,
+        mu: f32,
+        dt: f32,
+    ) -> f32 {
+        let v = match regime {
+            Regime::Physical => integrate(speed, forces, mu, dt),
+            Regime::Target => target,
+        };
+        self.pedals.update(v, target, dt);
+        v
+    }
+
+    pub fn pedals(&self) -> Pedals {
+        self.pedals
+    }
+
     /// Whether the vehicle is within the detail radius about the camera (`KA-9`).
     pub fn near(&self) -> bool {
         self.near
@@ -216,6 +249,7 @@ impl AiClassic {
         // `KA-5`: the rear sections follow as kinematic trailers (the part's turning axle
         // pulled along the line to its coupling), and not at all beyond the detail radius
         v.hold_coupled_parts(!self.near);
+        v.set_ai_pedals(self.pedals);
         let (lift, delta) = if self.kind == MotionKind::Road {
             v.ai_rest_offset()
         } else {

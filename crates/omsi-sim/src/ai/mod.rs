@@ -15,7 +15,10 @@
 mod classic;
 mod depot;
 
-pub use classic::AiClassic;
+pub use classic::{
+    integrate, target_speed, within_detail_radius, AiClassic, DriveForces, Pedals, Regime,
+    TARGET_HORIZON,
+};
 pub use depot::{
     back_in_ramp, pull_out_ramps, pull_out_room, straight_pull_out, AiBody, AI_RAY_UP,
     BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT,

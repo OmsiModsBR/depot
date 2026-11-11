@@ -168,4 +168,50 @@ impl VehicleInstance {
             self.ai_visuals_missed = (self.ai_visuals_missed + dt).min(10.0);
         }
     }
+
+    /// The Classic AI driver's pedals (`KA-2`): `Throttle` and `Brake` for the scripts.
+    pub fn set_ai_pedals(&mut self, pedals: crate::ai::Pedals) {
+        self.put(self.v_throttle, pedals.throttle);
+        self.put(self.v_brake, pedals.brake);
+    }
+
+    /// What the scripts left for the Classic AI's speed (`KA-2`): twice `M_Wheel` over the
+    /// first axle's radius; the rolling resistance of every section and every wheel's brake
+    /// force (the vehicle's own cleared once read, as for the player's); the mass of all
+    /// sections and `payload_kg`.
+    pub fn ai_drive_forces(&mut self, payload_kg: f32) -> crate::ai::DriveForces {
+        let inputs = self.take_script_drive();
+        let radius = self
+            .motion
+            .wheels
+            .first()
+            .map(|w| w[0].radius)
+            .filter(|r| *r > 0.05)
+            .unwrap_or(0.5);
+        let parts_brakes: f32 = self
+            .trailers
+            .iter()
+            .map(|t| self.part_brakes(t).sum::<f32>())
+            .sum();
+        let parts_roll: f32 = self
+            .trailers
+            .iter()
+            .map(|t| crate::physics::coupled_rolling_resistance(&t.ty.def))
+            .sum();
+        let parts_kg: f32 = self
+            .trailers
+            .iter()
+            .map(|t| crate::physics::kinematic_mass_kg(&t.ty.def))
+            .sum();
+        crate::ai::DriveForces {
+            drive: 2.0 * inputs.m_wheel / radius,
+            resist: inputs.brakes.iter().sum::<f32>()
+                + crate::physics::coupled_rolling_resistance(&self.ty.def)
+                + parts_brakes
+                + parts_roll,
+            mass_kg: crate::physics::kinematic_mass_kg(&self.ty.def)
+                + parts_kg
+                + payload_kg.max(0.0),
+        }
+    }
 }

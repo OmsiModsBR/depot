@@ -118,9 +118,23 @@ the bend. A vehicle put down on a bend starts in that steady state.
   copy of a bus and time its pull-away next to the camera.
 
 Within the detail radius (`KA-9`) the leading section integrates its speed from the drive force
-`Σ M_Wheel / r`, the rolling resistance and the brake forces over the mass of all sections. The AI
-driver turns the ratio of speed to target speed into throttle and brake for the scripts. The other
-sections take the leading section's speed.
+`F = 2·M_Wheel / r` (`r`: the first axle's radius), the resistance `R` (every section's
+`[rollwiderstand]` and every wheel's brake forces) and the mass `M` of all sections with their
+passengers:
+
+- standing, `F_n = F − sgn(F)·R`, and `F_n = 0` when that turns its sign (the brakes hold);
+- rolling, `F_n = F − sgn(v)·R`;
+- `Δv = dt·F_n / M`, bounded by `±g·μ` per frame (`KA-3`), and `v = 0` when `v + Δv` would change
+  its sign.
+
+The other sections take the leading section's speed.
+
+The AI driver turns the ratio `r = v / v_t` of the speed to the target speed into throttle and
+brake for the scripts' next frame: brake `clamp(2·(r − 1.05), 0, 0.7)`, and 1 when `r > 2`; with the
+brake off, the throttle goes towards `clamp(10·(1 − r), 0, 1)`, rising by at most 1 per second;
+asked to stop (`v_t = 0`), throttle 0 and brake 1. The traffic planner shared by both engines decides
+an acceleration `a`, not a speed: the target speed is `v_t = max(0, v + a·1 s)` (a choice of this
+code, **to validate** with the rest of the row).
 
 ## KA-3. Grip
 
@@ -130,7 +144,9 @@ sections take the leading section's speed.
 - **Basis**: *OMSI*. **Status**: **to validate**. **Check**: an AI bus pulling away and stopping on a
   wet and a dry road, and on a gravel patch.
 
-The grip is not read from the surface under each wheel, as in `C-5` for the player's vehicle.
+The grip is not read from the surface under each wheel, as in `C-5` for the player's vehicle: it is
+the grip of a road (`C-5`'s values) in the current weather. It bounds the change of speed of a
+frame (`KA-2`); the comfortable braking stays the shared traffic planner's.
 
 ## KA-4. No body dynamics on the route
 
