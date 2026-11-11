@@ -938,6 +938,10 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 &renderer,
                 &mut scene,
             );
+            // the people aboard weigh on the section of the bus they are in, as the window does
+            if let Some(p) = player.as_mut() {
+                p.vehicle.set_payload(&h.player_payload());
+            }
             session::people_stamped(h, player.as_mut(), traffic.as_mut());
             if let Some(t) = traffic.as_mut() {
                 session::people_to_traffic(h, t);
