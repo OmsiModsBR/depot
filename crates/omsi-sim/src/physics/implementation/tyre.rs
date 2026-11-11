@@ -4,11 +4,12 @@
 
 use super::ground::{track_walls, tyre_line};
 use super::wheel::{sign, TyreFrame};
+use super::{classic, depot};
 use crate::physics::domain::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
     GRIPPED_ALONG, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
-use crate::physics::domain::{GroundProbe, Impact, RigidBody};
+use crate::physics::domain::{Engine, GroundProbe, Impact, RigidBody};
 use glam::{Quat, Vec2, Vec3};
 
 /// A wheel on the ground in one substep, before its tyre forces are settled.
@@ -51,6 +52,8 @@ pub struct Substep {
 pub struct Lateral {
     pub(super) lat: Vec<usize>,
     pub(super) arms: Vec<(Vec3, f32)>,
+    /// Where each tyre's hold across acts, relative to the centre of gravity (world).
+    pub(super) at: Vec<Vec3>,
     pub(super) j: Vec<f32>,
     pub(super) v: Vec3,
     pub(super) w: Vec3,
@@ -350,13 +353,28 @@ impl RigidBody {
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS
             && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
+        // where each tyre is held across: at the tyre, or for a section behind a joint by
+        // the engine's rule (`K-2`, `D-2`)
+        let line = self.rot_pnt_long - self.cog.y;
+        let at = &mut l.at;
+        at.clear();
+        at.extend(lat.iter().map(|&k| {
+            let r = contacts[k].r;
+            if steered {
+                return r;
+            }
+            match self.engine {
+                Engine::Classic => classic::follower::hold_at(r, rot, line),
+                Engine::Depot => depot::follower::hold_at(r, rot, line),
+            }
+        }));
         let arms = &mut l.arms;
         arms.clear();
-        arms.extend(lat.iter().map(|&k| {
+        arms.extend(lat.iter().zip(at.iter()).map(|(&k, &r)| {
             let c = &contacts[k];
             let mut rn = rot
                 .inverse()
-                .mul_vec3(c.r)
+                .mul_vec3(r)
                 .cross(rot.inverse().mul_vec3(c.right));
             // (holding, no roll from the tyres' hold across: OMSI 2 then sets the
             // sideways motion outright and rolls the body by the bend's pull alone,
@@ -423,6 +441,7 @@ impl RigidBody {
         let Lateral {
             lat,
             arms,
+            at,
             j,
             v,
             w,
@@ -435,7 +454,7 @@ impl RigidBody {
         let lin = |p: Vec3| lin(p, body_fwd, m, mt);
         for (q, &k) in lat.iter().enumerate() {
             let c = &contacts[k];
-            let v_lat = (*v + rot.mul_vec3(*w).cross(c.r)).dot(c.right);
+            let v_lat = (*v + rot.mul_vec3(*w).cross(at[q])).dot(c.right);
             let cap = self.friction * c.grip * h * reach;
             let before = j[q];
             j[q] = (before - v_lat / arms[q].1).clamp(-cap, cap);
@@ -451,6 +470,7 @@ impl RigidBody {
         let Lateral {
             lat,
             arms,
+            at,
             j,
             v,
             w,
@@ -467,11 +487,8 @@ impl RigidBody {
         }
         if !self.holding
             && !slipping
-            && lat.iter().all(|&k| {
-                (v + rot.mul_vec3(w).cross(contacts[k].r))
-                    .dot(contacts[k].right)
-                    .abs()
-                    < REHOLD_SPEED
+            && lat.iter().zip(at.iter()).all(|(&k, &r)| {
+                (v + rot.mul_vec3(w).cross(r)).dot(contacts[k].right).abs() < REHOLD_SPEED
             })
         {
             self.holding = true;

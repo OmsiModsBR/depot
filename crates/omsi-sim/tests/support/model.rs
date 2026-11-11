@@ -276,8 +276,9 @@ pub fn pull_away(defs: Vec<Vehicle>, engine: Engine) {
 /// `alpha` satisfies `R sin(alpha) + D cos(alpha) = d` and the next section turns on
 /// `R cos(alpha) - D sin(alpha)`, where `R` is the radius the lead turns on, `D` the distance
 /// of its ball from its turning line and `d` the distance of the follower's ball from its own.
-/// Sections with one axle only: a section with two holds its tyres on a line the joint cannot
-/// reach (the last row of the open items in `classic-model.md`).
+/// A section behind a joint turns about its turning line whatever axles it has in OMSI
+/// Classic (`K-2`); Project Depot Physics steers its tyres instead (`D-2`), which holds a section
+/// with two axles short of it.
 pub fn articulation_angles(defs: Vec<Vehicle>, engine: Engine) {
     let steer = 0.5_f32;
     let (bodies, joints) = steady_bend(&defs, engine, steer);

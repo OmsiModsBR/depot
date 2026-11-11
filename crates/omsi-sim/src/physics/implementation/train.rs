@@ -600,8 +600,8 @@ fn slice(
                     .map_or(0.0, |j| j.kappa(bodies)),
             })
             .collect();
-        for (b, k) in bodies.iter_mut().zip(kappas) {
-            b.steer_to(k);
+        for ((b, k), s) in bodies.iter_mut().zip(kappas).zip(steers.iter()) {
+            b.steer_to(k, s.is_none());
         }
         let SolverScratch {
             subs,

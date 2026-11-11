@@ -4,6 +4,7 @@
 
 use super::train::step_train;
 use super::tyre::Substep;
+use super::{classic, depot};
 use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
@@ -274,8 +275,9 @@ impl RigidBody {
         );
     }
 
-    /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right).
-    pub(super) fn steer_to(&mut self, kappa: f32) {
+    /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right),
+    /// set by the steering or, for a section behind a joint (`follower`), by the joint's bend.
+    pub(super) fn steer_to(&mut self, kappa: f32, follower: bool) {
         // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
         // `[inv_min_turnradius]`) and every axle points at the centre of that turn on the
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
@@ -287,7 +289,19 @@ impl RigidBody {
             .iter()
             .map(|w| w.attach.y)
             .fold(f32::MIN, f32::max);
+        // a section behind a joint: its axles show the bend (`axle_steer`), its tyres steer by
+        // the engine's rule (`K-2`, `D-2`)
+        let tyres = !follower
+            || match self.engine {
+                Engine::Classic => classic::follower::TYRES_STEER,
+                Engine::Depot => depot::follower::TYRES_STEER,
+            };
         for w in self.wheels.iter_mut() {
+            if !tyres {
+                w.steer = 0.0;
+                w.steered = false;
+                continue;
+            }
             // each tyre square to the line from the centre of the turn to itself - the inner
             // one turned further than the outer (Ackermann). With both at the axle's angle the
             // tyres of an axle pulled against each other through the side constraint: the

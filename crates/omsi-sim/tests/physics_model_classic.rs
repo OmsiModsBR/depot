@@ -148,6 +148,12 @@ fn articulation_angles_v4_biarticulated() {
     articulation_angles(v4_biarticulated(), Engine::Classic);
 }
 
+/// Checks: C-9, K-2
+#[test]
+fn articulation_angles_v5_articulated_8x2() {
+    articulation_angles(v5_articulated_8x2(), Engine::Classic);
+}
+
 /// Checks: C-7
 #[test]
 fn release_v1_solo_4x2() {

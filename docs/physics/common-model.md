@@ -186,7 +186,8 @@ lock    = atan( [inv_min_turnradius] · |y_front − y_turn| )
 ```
 
 An axle behind the line (`y_i < y_turn`) points the other way, and so does a tag axle. A section behind
-a joint has no steering of its own: its curvature comes from the joint (`C-9`).
+a joint has no steering of its own: its curvature comes from the joint (`C-9`). Whether its tyres steer
+by it is each engine's own rule (`K-2`, `D-2`).
 
 **Status**: the turning line counted from `[cog]` is **validated**: with a `[cog]` of `0 / 3 / 1.2` on a
 copy of a stock bus, driven at about 5 km/h at full lock, OMSI 2's pivot moves forward and the rear
