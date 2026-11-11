@@ -12,8 +12,10 @@
 //! made-up yaw. In `depot` the heading only ever changes by speed × tan(steering) / wheelbase,
 //! the rear axle never moves sideways, and the steering itself is rate limited.
 
+mod classic;
 mod depot;
 
+pub use classic::AiClassic;
 pub use depot::{
     back_in_ramp, pull_out_ramps, pull_out_room, straight_pull_out, AiBody, AI_RAY_UP,
     BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT,
