@@ -18,6 +18,7 @@ members = [
     "crates/omsi-render",
     "crates/omsi-render-d3d9",
     "crates/omsi-html",
+    "crates/omsi-trolley",
     "crates/omsi-sim",
     "crates/omsi-audio",
     "crates/omsi-ui",

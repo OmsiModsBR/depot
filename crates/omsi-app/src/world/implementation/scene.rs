@@ -2248,6 +2248,8 @@ impl World {
             missing: Mutex::new(Default::default()),
             staged: Mutex::new(HashMap::new()),
             layout: Mutex::new(None),
+            trolley: load_trolley_convention(),
+            wires: Mutex::new(Default::default()),
             sound_cfgs: Mutex::new(HashMap::new()),
             timetable_boards: Mutex::new(StopBoards::default()),
             calendar: std::sync::OnceLock::new(),
@@ -3415,10 +3417,16 @@ impl World {
             anchors: Vec::new(),
             counts: LoadStats::default(),
             resolved: std::sync::OnceLock::new(),
+            wires: None,
         };
         let Some(tile) = tile else {
             return out;
         };
+        out.wires = self
+            .trolley
+            .as_ref()
+            .map(|c| omsi_trolley::build_tile_wires((tx, ty), origin2, &tile, &c.params))
+            .filter(|w| !w.is_empty());
         out.bakes_light_map = tile.variable_terrain_lightmap;
         // a tile with water carries one surface with a height at each corner. As in OMSI
         // only a `[water]` tile has it: the editor never
@@ -4912,6 +4920,9 @@ impl World {
             }
         }
         self.tile_state.lock().insert(key, state);
+        if let Some(w) = &st.wires {
+            self.wires.lock().insert_tile(w.clone());
+        }
         // the tile's night light map (lamp light pools on the ground). OMSI bakes a
         // `[variable_terrainlightmap]` tile's own from the lamps of the tiles round it once
         // those are loaded (unless `[no_generateTerrLightMaps]`) and writes it over
@@ -8175,6 +8186,7 @@ impl World {
             self.drop_scripted(key, audio);
             return false;
         };
+        self.wires.lock().remove_tile(key);
         let _ = self.parked_live.fetch_update(
             std::sync::atomic::Ordering::Relaxed,
             std::sync::atomic::Ordering::Relaxed,
@@ -13851,3 +13863,28 @@ fn night_texture_name(texture: &str) -> String {
 pub(crate) static SPLINE_ENDS: std::sync::LazyLock<
     Mutex<HashMap<i64, (DVec3, DVec3, i64, i64, String)>>,
 > = std::sync::LazyLock::new(Default::default);
+
+/// The trolleybus content convention of the installation, read once with the map (see
+/// `omsi_trolley::load_convention`); a broken parameter file is reported and leaves the
+/// session without wire.
+fn load_trolley_convention() -> Option<Arc<omsi_trolley::Convention>> {
+    match omsi_trolley::load_convention() {
+        Ok(Some(c)) => {
+            log::info!(
+                "trolleybus: parameters from {}, {} vehicle entries{}",
+                c.params_path.display(),
+                c.entries.len(),
+                c.registry_path
+                    .as_ref()
+                    .map(|p| format!(" from {}", p.display()))
+                    .unwrap_or_default()
+            );
+            Some(Arc::new(c))
+        }
+        Ok(None) => None,
+        Err(e) => {
+            log::warn!("trolleybus: {e}; no overhead wire this session");
+            None
+        }
+    }
+}

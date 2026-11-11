@@ -93,6 +93,7 @@ fn staged(path: PathBuf, ot: Arc<ObjectType>, pose: Pose) -> StagedTile {
         anchors: Vec::new(),
         counts: LoadStats::default(),
         resolved: std::sync::OnceLock::new(),
+        wires: None,
     }
 }
 

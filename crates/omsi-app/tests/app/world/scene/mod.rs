@@ -1388,6 +1388,7 @@ fn a_crossing_far_over_the_ground_is_draped_by_its_height_field() {
         anchors: Vec::new(),
         counts: LoadStats::default(),
         resolved: std::sync::OnceLock::new(),
+        wires: None,
     };
     // on the ground and 20 m over it, alike
     for z in [0.0, 20.0] {

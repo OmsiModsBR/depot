@@ -703,6 +703,17 @@ impl App {
                 self.started.elapsed().as_secs_f64(),
                 w.loaded_tiles().len()
             );
+            {
+                let wires = w.wires.lock();
+                if !wires.is_empty() {
+                    log::info!(
+                        "wire network: {} spans, {} joints, {} wire objects in the loaded tiles",
+                        wires.span_count(),
+                        wires.joints().len(),
+                        wires.objects().count()
+                    );
+                }
+            }
             self.start_world(w, cam, &renderer, &mut scene);
             self.renderer = Some(renderer);
             self.scene = Some(scene);
