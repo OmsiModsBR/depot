@@ -185,7 +185,7 @@ an AI car with the player's bus (quickstart Q9).
 - [X] T052 [P] [US4] [ph 8] Route following (KA-1) and pose from the path (KA-4) in `crates/omsi-sim/src/ai/classic/path.rs`
 - [X] T053 [P] [US4] [ph 8] Static sag the scripts read per axle, computed once at spawn about the origin (FR-015, KA-4), in `crates/omsi-sim/src/ai/classic/pose.rs`
 - [ ] T054 [P] [US4] [ph 8] Speed in two regimes by the detail radius about the camera, `[noDistanceCheck]`, the stop exception and grip (KA-2, KA-3, KA-9, KA-10) in `crates/omsi-sim/src/ai/classic/speed.rs`
-- [ ] T055 [P] [US4] [ph 8] Rear sections as kinematic trailers, not updated far away (KA-5) in `crates/omsi-sim/src/ai/classic/trailer.rs`
+- [X] T055 [P] [US4] [ph 8] Rear sections as kinematic trailers, not updated far away (KA-5) in `crates/omsi-sim/src/ai/classic/trailer.rs`
 - [ ] T056 [US4] [ph 8] Release and return of the whole vehicle (KA-6, KA-6b, KA-7, KA-11): the player's `RigidBody` (Classic) with throttle 0, brake 1 and hazard lights, from the route poses without a jump; back to a route when cleared, in `crates/omsi-sim/src/ai/classic/loose.rs`
 - [ ] T057 [US4] [ph 8] Contacts (KA-8): no AI-AI or AI-scenery contacts on the route, a loose vehicle against everything, in `crates/omsi-sim/src/physics/implementation/collide.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
 - [ ] T058 [US4] [ph 8] `AiMotion::Classic` built for Classic road vehicles; a cleared AI bus goes back empty and starts its next trip, in `crates/omsi-sim/src/ai/mod.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`

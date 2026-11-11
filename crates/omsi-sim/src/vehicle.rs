@@ -48,6 +48,9 @@ pub struct VehicleInstance {
     pub ty: Arc<VehicleType>,
     /// The engine that runs this vehicle, decided when it appeared (see `resolve_physics_mode`).
     physics_mode: omsi_cfg::PhysicsMode,
+    /// The coupled parts keep the pose they have (the Classic AI beyond the detail radius:
+    /// `KA-5`, `KA-9`).
+    coupled_parts_held: bool,
     pub state: State,
     pub vm: Vm,
     pub host: VehicleHost,
@@ -339,6 +342,16 @@ impl VehicleInstance {
         self.physics_mode
     }
 
+    /// Whether the coupled parts keep the pose they have, not following the vehicle.
+    pub fn coupled_parts_held(&self) -> bool {
+        self.coupled_parts_held
+    }
+
+    /// Hold the coupled parts where they stand (`true`) or let them follow again.
+    pub fn hold_coupled_parts(&mut self, held: bool) {
+        self.coupled_parts_held = held;
+    }
+
     /// Fix the engine of this vehicle, once, when it appears.
     pub fn set_physics_mode(&mut self, mode: omsi_cfg::PhysicsMode) {
         self.physics_mode = mode;
@@ -432,6 +445,7 @@ impl VehicleInstance {
             v_wheels,
             ty,
             physics_mode: omsi_cfg::PhysicsMode::Classic,
+            coupled_parts_held: false,
             state,
             vm,
             host,

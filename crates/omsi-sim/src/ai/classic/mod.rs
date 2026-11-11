@@ -27,6 +27,9 @@ pub struct AiClassic {
     axle_long: Vec<f32>,
     max_steer: f32,
     started: bool,
+    /// Within the detail radius about the camera (`KA-9`): beyond it the rear sections keep
+    /// the pose they have (`KA-5`).
+    near: bool,
     /// World position of the rotation point.
     rear: DVec2,
     /// The path's heading at the rotation point (deg, clockwise from north), how far the
@@ -78,6 +81,7 @@ impl AiClassic {
             axle_long,
             max_steer: spec.max_steer,
             started: false,
+            near: true,
             rear: DVec2::ZERO,
             path_heading: 0.0,
             lag: 0.0,
@@ -199,7 +203,19 @@ impl AiClassic {
 
     /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
     /// read and each wheel's travel.
+    /// Whether the vehicle is within the detail radius about the camera (`KA-9`).
+    pub fn near(&self) -> bool {
+        self.near
+    }
+
+    pub fn set_near(&mut self, near: bool) {
+        self.near = near;
+    }
+
     pub fn apply(&self, v: &mut VehicleInstance) {
+        // `KA-5`: the rear sections follow as kinematic trailers (the part's turning axle
+        // pulled along the line to its coupling), and not at all beyond the detail radius
+        v.hold_coupled_parts(!self.near);
         let (lift, delta) = if self.kind == MotionKind::Road {
             v.ai_rest_offset()
         } else {
