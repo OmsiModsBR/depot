@@ -22,10 +22,10 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 | [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
 | [KA-4](#ka-4-no-body-dynamics-on-the-route) | no body dynamics on the route | confirmed |
 | [KA-5](#ka-5-rear-sections-as-kinematic-trailers) | rear sections as kinematic trailers | confirmed |
-| [KA-6](#ka-6-release-by-an-active-body) | release by any active body, and return | not so: release only by the player |
+| [KA-6](#ka-6-release-by-the-players-vehicle) | release by the player's vehicle, and return | confirmed (corrected) |
 | [KA-6b](#ka-6b-release-and-return-of-the-whole-vehicle) | release and return act on the whole vehicle | confirmed |
 | [KA-7](#ka-7-weight-sharing-only-while-loose) | weight shared only while loose | confirmed |
-| [KA-8](#ka-8-contacts) | no contacts between vehicles on their routes | not so: as KA-6 |
+| [KA-8](#ka-8-contacts) | no contacts between vehicles on their routes | confirmed (corrected) |
 | [KA-9](#ka-9-speed-beyond-the-detail-radius) | speed beyond the detail radius | confirmed |
 | [KA-10](#ka-10-vehicle-serving-a-stop) | vehicle serving a stop | confirmed |
 | [KA-11](#ka-11-automatic-clearing) | automatic clearing of a loose vehicle | not so: the loose vehicle disappears |
@@ -176,18 +176,19 @@ The articulation angle is integrated every frame from the front section's curvat
 distances of the joint and of the rotation line, so a rear section cuts a bend as a real trailer does.
 Beyond the detail radius the rear sections' poses are not recalculated (`KA-9`).
 
-## KA-6. Release by an active body
+## KA-6. Release by the player's vehicle
 
-- **Inputs**: contacts of any section of the AI vehicle with any active body (the player's vehicle,
-  an AI vehicle already loose); the vehicle type. **Outputs**: the vehicle's state (on its route or
+- **Inputs**: contacts of any section of the AI vehicle with the player's vehicle; the vehicle
+  type. **Outputs**: the vehicle's state (on its route or
   loose). **Module**: `ai/classic/` (release, phase 8); the player's body for the loose state.
-- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): an AI
-  vehicle the player pushes into another one does not touch it; only the player's vehicle releases
-  an AI vehicle. Corrected by a `fix/` pull request. **Check**: nudge an AI car at walking pace with
+- **Basis**: *OMSI*. **Status**: **confirmed** as written here by the maintainer's in-game check
+  (2026-11-11), which found that an AI vehicle the player pushes into another one does not touch it
+  (the row first said any active body released it, in a chain). **Check**: nudge an AI car at walking pace with
   the player's bus, then push it into a second AI car.
 
-Contact with any active body on any section releases the AI vehicle from its route, unless its type
-is `[fixed]`. A loose vehicle can release another (a chain). Loose, it runs the player's rigid body
+Contact with the player's vehicle on any section releases the AI vehicle from its route, unless its
+type is `[fixed]`. A loose vehicle releases no other: it does not touch the AI vehicles on their
+routes (`KA-8`). Loose, it runs the player's rigid body
 without a driver, fully braked with its hazard lights on, and never falls asleep for standing still.
 
 It goes back to its route when the player clears the crash from the Alt menu ("Clear the accident",
@@ -218,21 +219,22 @@ scripts read. The weight is shared, about the model origin (`K-1`), only while t
 
 ## KA-8. Contacts
 
-- **Inputs**: the bodies' boxes, the scenery. **Outputs**: release (`KA-6`) or an ordinary hit
-  (`C-10`). **Module**: `ai/classic/` (contacts, phase 8), `physics/implementation/collide.rs`.
-- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): as
-  `KA-6`, a loose AI vehicle does not touch the AI vehicles on their routes. Corrected by a `fix/`
-  pull request. **Check**: two AI cars forced into the same spot (a blocked junction) overlap rather
+- **Inputs**: the bodies' boxes, the scenery. **Outputs**: release by the player's vehicle (`KA-6`)
+  or an ordinary hit (`C-10`). **Module**: `ai/classic/` (contacts, phase 8), `physics/implementation/collide.rs`.
+- **Basis**: *OMSI*. **Status**: **confirmed** as written here by the maintainer's in-game check
+  (2026-11-11), which found that a loose AI vehicle does not touch the AI vehicles on their routes
+  (the row first said it collided with everything). **Check**: two AI cars forced into the same spot (a blocked junction) overlap rather
   than push; a loose AI car pushed against a wall stops at it.
 
 On their routes, AI vehicles collide neither with each other nor with static scenery (walls, posts,
 buildings): they only avoid obstacles by the driver's checks. An AI vehicle on its route collides
-only with active bodies (`KA-6`). A loose AI vehicle is an ordinary body: it collides with everything
-and releases any AI vehicle it touches.
+only with the player's vehicle (`KA-6`). A loose AI vehicle collides with the scenery, the player's
+vehicle and the other loose vehicles, and passes through the AI vehicles on their routes without
+releasing them.
 
 In this code the player's vehicle meets the AI vehicles' boxes as moving obstacles, and an AI vehicle
 it touched is released at the next frame. A loose vehicle meets the scenery's solids, the player's
-vehicle and the boxes of the AI vehicles within 80 m, and releases those it touches the same way.
+vehicle and the boxes of the other loose vehicles within 80 m.
 
 ## KA-9. Speed beyond the detail radius
 

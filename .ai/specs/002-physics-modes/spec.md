@@ -292,9 +292,9 @@ directly.
   no springs or body motion of their own; rear sections following their joints as trailers. The
   spring travel the scripts and animations read for each axle MUST be the static sag computed once at
   spawn with the weight shared about the model origin (K-1).
-- **FR-016**: In OMSI Classic, an AI vehicle touched by any active body (the player's vehicle or a
-  loose vehicle) MUST become a free body without a driver, fully braked with its hazard lights on,
-  unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash with a
+- **FR-016**: In OMSI Classic, an AI vehicle touched by the player's vehicle (a loose vehicle does
+  not release it, T003) MUST become a free body without a driver, fully braked with its hazard lights
+  on, unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash with a
   "clear crash" command or when it leaves the camera's surroundings (decision D3). The command is the
   "Clear the accident" button of the in-game Alt menu (today shown but not yet in use); it MUST be
   enabled only while a loose AI vehicle exists (so never in Project Depot Physics) and clear every

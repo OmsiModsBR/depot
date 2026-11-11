@@ -7771,13 +7771,11 @@ impl Traffic {
         std::mem::take(&mut self.cleared)
     }
 
-    /// OMSI Classic (`KA-6`, `KA-8`): every car on its route that the player's vehicle or a
-    /// loose car touched leaves its route, all its sections at once.
+    /// OMSI Classic (`KA-6`, `KA-8`): every car on its route that the player's vehicle touched
+    /// leaves its route, all its sections at once. Only the player's vehicle releases a car: a
+    /// loose car does not touch the cars on their routes (`surround_loose`).
     fn release_touched(&mut self) {
-        let mut keys = std::mem::take(&mut self.player_touching);
-        for c in self.cars.iter().filter(|c| c.is_loose()) {
-            keys.extend(c.vehicle.touching_keys());
-        }
+        let keys = std::mem::take(&mut self.player_touching);
         if keys.is_empty() {
             return;
         }
@@ -7815,13 +7813,13 @@ impl Traffic {
         }
     }
 
-    /// What a loose car runs into (`KA-8`): the scenery's solids, the player's vehicle and
-    /// every other car about it.
+    /// What a loose car runs into (`KA-8`): the scenery's solids, the player's vehicle and the
+    /// other loose cars about it; the cars on their routes it passes through.
     fn surround_loose(&mut self) {
         if !self.cars.iter().any(|c| c.is_loose()) {
             return;
         }
-        let mut others = self.boxes_with(|_| true);
+        let mut others = self.boxes_with(|c| c.is_loose());
         others.extend(self.player_obb);
         for c in self.cars.iter_mut().filter(|c| c.is_loose()) {
             let me = c.vehicle.position;
