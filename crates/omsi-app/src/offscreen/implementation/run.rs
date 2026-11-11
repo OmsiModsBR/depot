@@ -955,8 +955,17 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 if took {
                     p.vehicle.set_var("GivenTicket", -1.0);
                 }
+                // the ticket and change the player asks for by the keys (as the window hands them over)
+                h.give_ticket = std::mem::take(&mut p.give_ticket);
+                h.give_change_all = std::mem::take(&mut p.give_change);
+                if std::mem::take(&mut p.take_change) {
+                    h.take_change_tray();
+                }
                 p.vehicle.host.humans_on_path_link = h.path_link_counts();
                 p.vehicle.host.humans_on_seat = h.seat_counts();
+                let coins: Vec<usize> = std::mem::take(&mut p.vehicle.host.change_coins);
+                h.give_change(&world, &renderer, &mut scene, &coins);
+                h.sync_money(&world, &renderer, &mut scene, &p.vehicle);
             }
             if h.tracing() {
                 // OMSI_TRACE_PAX wants every frame as a window would draw it
