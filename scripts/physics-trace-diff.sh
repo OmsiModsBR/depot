@@ -8,7 +8,8 @@
 # and on the working tree, and compares the traces. A
 # change that only moves code (the structural phases of the physics refactor) leaves them
 # all identical, to the bit; a change that is meant to alter the physics shows where it
-# does.
+# does. The vehicle, AI and traffic scenarios run once for each engine (`<name>.classic.trace`
+# and `<name>.depot.trace`); the Classic traces are the ones a split by engine must leave as they are.
 #
 #   scripts/physics-trace-diff.sh [base-ref]        (default: origin/main)
 #

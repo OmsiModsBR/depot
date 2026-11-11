@@ -23,7 +23,7 @@ use omsi_sim::traffic::{
     TrafficLightController,
 };
 use std::fmt::Write;
-use support::trace::{check, dv3, n32, Trace};
+use support::trace::{check_per_engine, dv3, n32, Trace};
 
 // ---------------------------------------------------------------------------------------
 // The town
@@ -443,7 +443,7 @@ macro_rules! scenarios {
         $(
             #[test]
             fn $name() {
-                check(stringify!($name), scenarios::$name);
+                check_per_engine(stringify!($name), scenarios::$name);
             }
         )*
     };

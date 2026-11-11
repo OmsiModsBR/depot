@@ -5,6 +5,8 @@
 //! same bits -, NaN with its bits.
 
 use glam::{DVec3, Quat, Vec3};
+use omsi_cfg::PhysicsMode;
+use std::cell::Cell;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -59,9 +61,32 @@ impl Trace {
     }
 }
 
+thread_local! {
+    static ENGINE: Cell<PhysicsMode> = const { Cell::new(PhysicsMode::Classic) };
+}
+
+/// The engine the scenario that is running now is run for (see [`check_per_engine`]).
+pub fn engine() -> PhysicsMode {
+    ENGINE.with(Cell::get)
+}
+
+/// [`check`] for each engine, its trace named `<name>.<engine>.trace`: the traces of the
+/// Classic engine are the ones that must not change when the code is split by engine
+/// (spec 002, I7); those of the Depot engine change only where its overrides do.
+pub fn check_per_engine(name: &str, scenario: fn() -> String) {
+    for mode in [PhysicsMode::Classic, PhysicsMode::Depot] {
+        ENGINE.with(|e| e.set(mode));
+        check_as(name, &format!("{name}.{}", mode.as_str()), scenario);
+    }
+}
+
 /// Writes the scenario's trace where `OMSI_PHYSICS_TRACE_DIR` says; without it, runs it
 /// twice and compares (and looks for a state that left the numbers).
 pub fn check(name: &str, scenario: fn() -> String) {
+    check_as(name, name, scenario)
+}
+
+fn check_as(name: &str, file: &str, scenario: fn() -> String) {
     let first = scenario();
     assert!(first.lines().count() > 10, "{name}: no trace");
     // (the inputs may be no number, the state never; a `known` line writes down a value that
@@ -79,7 +104,7 @@ pub fn check(name: &str, scenario: fn() -> String) {
         Some(dir) => {
             let dir = PathBuf::from(dir);
             std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(format!("{name}.trace")), first).unwrap();
+            std::fs::write(dir.join(format!("{file}.trace")), first).unwrap();
         }
         None => {
             let second = scenario();

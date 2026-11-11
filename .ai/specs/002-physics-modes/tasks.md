@@ -86,9 +86,9 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### Traces per engine `feat/physics-traces-per-engine`
 
-- [ ] T026 [ph 4] Run each scenario per engine with the engine in the trace file name, in `crates/omsi-sim/tests/physics_traces.rs`, `crates/omsi-sim/tests/ai_traces.rs`, `crates/omsi-sim/tests/traffic_traces.rs`
+- [X] T026 [ph 4] Run each scenario per engine with the engine in the trace file name, in `crates/omsi-sim/tests/physics_traces.rs`, `crates/omsi-sim/tests/ai_traces.rs`, `crates/omsi-sim/tests/traffic_traces.rs`
 - [ ] T027 [ph 4] Invariant I1 per engine (the static share differs) in `crates/omsi-sim/tests/physics_invariants.rs`
-- [ ] T028 [ph 4] Both engines in `scripts/physics-trace-diff.sh` and in the `physics-traces` job of `.github/workflows/depot-ci.yml`
+- [X] T028 [ph 4] Both engines in `scripts/physics-trace-diff.sh` and in the `physics-traces` job of `.github/workflows/depot-ci.yml`
 
 ### Engine split `feat/physics-engine-split`
 
