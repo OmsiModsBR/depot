@@ -645,6 +645,12 @@ Axle_Brakeforce_ Axle_SurfaceID_` × `{n}_{L|R}`, `PAX_Entry{n}_Open/_Req`, `PAX
 `PAX_Entry{n}_Busy` / `PAX_Exit{n}_Busy` (somebody in that doorway; see MODDING.md).
 Callbacks: `program/callbacklist_*.txt`.
 
+`[depot_physics]` (Project Depot only; a section with no value lines): the vehicle runs Project
+Depot Physics when the player drives it, whatever the player's "Physics" setting says. Read from
+the front section's file only (the key in a rear section's file is left out with a log line); lines
+under it are ignored with a log line; AI copies ignore it and follow the setting. OMSI 2 and
+openOMSI skip the section (checked by loading and driving a keyed bus in each). See MODDING.md.
+
 Passenger cabin: entry ({noticketsale} {withbutton}) exit linkToNextVeh linkToPrevVeh stamper
 ticket_sale ticket_sale_money_point(_2) ticket_sale_change_point(_2) passpos drivpos
 illumination_interior. Paths: stepsoundpack pathpnt pathlink pathlink_oneway next_roomheight

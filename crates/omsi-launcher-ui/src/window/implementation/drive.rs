@@ -1426,14 +1426,19 @@ fn step_bus(f: &mut Frame, dv: &mut DriveView, r: Rect) {
             } else {
                 subtitle
             };
-            ui.text_in(
-                &subtitle,
-                Rect::new(title.x, row.y + 29.0, title.w, 17.0),
-                11.5,
-                Weight::Regular,
-                TEXT_DIM,
-                Align::Left,
-            );
+            // a type that runs Depot physics when driven (its file's `[depot_physics]` key)
+            let physics = selected
+                .or((model.variants.len() == 1).then(|| &model.variants[0]))
+                .and_then(physics_notice);
+            let subtitle = match physics {
+                Some((badge, _)) => format!("{subtitle} · {}", omsi_ui::tr(badge)),
+                None => subtitle,
+            };
+            let sub = Rect::new(title.x, row.y + 29.0, title.w, 17.0);
+            ui.text_in(&subtitle, sub, 11.5, Weight::Regular, TEXT_DIM, Align::Left);
+            if let Some((_, notice)) = physics {
+                ui.tooltip(sub, &omsi_ui::tr(notice));
+            }
             ui.icon(
                 if model.variants.len() == 1 {
                     if selected.is_some() {

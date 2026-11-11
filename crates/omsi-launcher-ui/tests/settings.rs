@@ -197,6 +197,7 @@ const BEFORE: &[&str] = &[
     "start.passengers",
     "start.schedule",
     "start.autostart",
+    "physics",
 ];
 
 /// Settings that show every row: Enhanced (Vanilla hides the shadows and effects), triple
@@ -777,5 +778,42 @@ fn the_performance_section_is_directx9s_and_owns_no_option() {
         ] {
             assert!(drawn("d3d9", &format!("opt-{key}")), "{key} under DirectX9");
         }
+    }
+}
+
+/// The engine is chosen in the Simulation section (spec 002, FR-003): OMSI Classic by default
+/// or Project Depot Physics, with the one-line notice under the list; the choice is saved as
+/// `physics=classic|depot` and read back. The original OMSI 2 has no such setting.
+#[test]
+fn the_physics_list_is_saved_and_read_back_with_its_notice() {
+    let o = OPTS.iter().find(|o| o.key == "physics").unwrap();
+    assert_eq!(o.sec, SIMULATION);
+    assert_eq!(o.hint, PHYSICS_NOTICE);
+    assert!(PHYSICS_NOTICE.contains("[depot_physics]") && PHYSICS_NOTICE.contains("OMSI 2"));
+    let (mut s, mut start) = (all_rows(), start());
+    assert_eq!(default_of("physics"), Some(json!("classic")));
+    assert_eq!(s["physics"], json!("classic"));
+    let st = Store {
+        s: &mut s,
+        start: &mut start,
+        changed: false,
+        start_changed: false,
+        omsi2: false,
+        adapter_mb: 0,
+        ceiling_mb: 0,
+    };
+    let choices: Vec<String> = options_of(o, &st).into_iter().map(|c| c.0).collect();
+    assert_eq!(choices, ["classic", "depot"]);
+    assert_eq!(shown(o, &st), Shown::Row);
+    let omsi2 = Store { omsi2: true, ..st };
+    assert_eq!(shown(o, &omsi2), Shown::Hidden);
+    for mode in ["depot", "classic"] {
+        s["physics"] = json!(mode);
+        let text = core::settings_to_text(&s, None);
+        assert!(text.contains(&format!("physics={mode}\n")), "{text}");
+        assert_eq!(
+            core::settings_from_text(Some(&text))["physics"],
+            json!(mode)
+        );
     }
 }

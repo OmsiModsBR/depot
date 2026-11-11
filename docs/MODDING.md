@@ -309,6 +309,37 @@ the front section's: the GN92's rear section has 7.2 t and `150 40 150`, the fro
 `300 80 300`, and its joint `52.5 -20 20 1`. `OMSI_DEBUG_TRAILER` logs the joint's gap and
 angles every step.
 
+## A bus made for Project Depot Physics: `[depot_physics]`
+
+Project Depot has two vehicle physics engines: OMSI Classic, the default, which keeps OMSI 2's
+rules so that existing mods behave as tuned, and Project Depot Physics, with deliberate
+improvements. The player chooses one in the launcher (see USER_GUIDE.md, "Vehicle physics"). A
+bus tuned for Project Depot Physics says so in its `.bus` file:
+
+```text
+[depot_physics]
+```
+
+- With the key, the bus runs Project Depot Physics whenever the player drives it, even when the
+  player chose OMSI Classic. Without it, the bus follows the player's setting. No key forces OMSI
+  Classic.
+- Put it in the front section's file: it applies to every section of an articulated bus, and the
+  key in a rear section's file is left out (with a log line).
+- AI copies of the bus ignore it and follow the setting, so keyed mods in the traffic cost
+  nothing extra.
+- The launcher's bus list marks the bus **DEPOT PHYSICS**, and in the game the menu's
+  **Vehicle** list says "Physics: Project Depot Physics (bus key)".
+- OMSI 2 and openOMSI ignore the section: the same file loads and drives there with their own
+  physics.
+
+What Project Depot Physics changes, so you can tune a bus for it, is listed in
+[physics/depot-model.md](physics/depot-model.md) (the `D-*` items). Today it is one item:
+
+- **D-1, the weight is shared about `[cog]`**: the springs carry the weight about the centre of
+  gravity, as a real body's would, instead of about the model's origin as in OMSI 2. A bus whose
+  `[cog]` is off the middle of its axles stands nose or tail down unless its `achse_feder`
+  values carry that share; tune the springs for it.
+
 ## A map's package: surface, icons, regions, bus lines
 
 A map may bring a pre-built picture of itself for the navigator and the city map: water, green

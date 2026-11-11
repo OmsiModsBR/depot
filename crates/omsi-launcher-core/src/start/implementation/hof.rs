@@ -110,6 +110,7 @@ mod tests {
             installed: false,
             missing_packs: Vec::new(),
             numbers: Vec::new(),
+            depot_physics: false,
         }
     }
 
