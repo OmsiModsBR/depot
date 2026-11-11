@@ -22,8 +22,8 @@ pub(in crate::physics) fn strut_reference_torque(cog: Vec3, n: f32) -> Vec3 {
 
 /// The static load on each wheel of each axle (N) as the kinematic model (the AI's copies and
 /// their parts) stands on it: with its mass, each wheel taking at least a share of an even
-/// split, the weight shared about `[cog]`.
+/// split, the weight shared about the model's origin as `K-1` shares it (`KA-4`: the static
+/// sag the scripts read, worked out once when the vehicle appears).
 pub(in crate::physics) fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, cog_y)
+    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, 0.0)
 }

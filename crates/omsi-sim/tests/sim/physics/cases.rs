@@ -1140,3 +1140,21 @@ fn a_wheel_far_from_the_weight_carries_nothing() {
     // the kinematic model's parts keep their least share
     assert!(kinematic_wheel_rest_loads(&def, Engine::Classic)[0] > 0.0);
 }
+
+#[test]
+fn the_classic_kinematic_model_rests_about_the_origin() {
+    // `KA-4`: the AI's static sag shares the weight about the origin, as `K-1` does, so
+    // `[cog]` leaves it alone; the Depot engine shares it about `[cog]`
+    let ahead = Vehicle {
+        cog: Some([0.0, 1.5, 1.2]),
+        ..bus()
+    };
+    assert_eq!(
+        kinematic_wheel_rest_loads(&ahead, Engine::Classic),
+        kinematic_wheel_rest_loads(&bus(), Engine::Classic)
+    );
+    assert_ne!(
+        kinematic_wheel_rest_loads(&ahead, Engine::Depot),
+        kinematic_wheel_rest_loads(&bus(), Engine::Depot)
+    );
+}
