@@ -292,6 +292,7 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         unsched_factor: 1.0,
         max_scheduled: 1000,
         max_random: 1000,
+        physics: Default::default(),
         no_timetable_buses: false,
         viewer: None,
         occluders: None,

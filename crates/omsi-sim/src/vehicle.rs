@@ -14,6 +14,7 @@ mod builtins;
 pub(crate) mod coupled;
 pub(crate) mod motion;
 pub(crate) mod physics_bridge;
+mod physics_mode;
 mod pose;
 pub(crate) mod props;
 pub(crate) mod radio;
@@ -27,6 +28,7 @@ pub(crate) mod winding;
 
 pub use ai_frame::AiFrame;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
+pub use physics_mode::resolve_physics_mode;
 use props::PropsPlan;
 pub use props::{compute_mesh_props, override_slot, MeshProps};
 pub use skin::skin_vertices;
@@ -44,6 +46,8 @@ pub struct VehicleInstance {
     /// `A_Trans_*` taken over OMSI's frames (see [`OmsiFrames`]).
     a_trans: OmsiFrames,
     pub ty: Arc<VehicleType>,
+    /// The engine that runs this vehicle, decided when it appeared (see `resolve_physics_mode`).
+    physics_mode: omsi_cfg::PhysicsMode,
     pub state: State,
     pub vm: Vm,
     pub host: VehicleHost,
@@ -330,6 +334,16 @@ impl VehicleInstance {
         ai_lift
     }
 
+    /// The engine that runs this vehicle.
+    pub fn physics_mode(&self) -> omsi_cfg::PhysicsMode {
+        self.physics_mode
+    }
+
+    /// Fix the engine of this vehicle, once, when it appears.
+    pub fn set_physics_mode(&mut self, mode: omsi_cfg::PhysicsMode) {
+        self.physics_mode = mode;
+    }
+
     pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
         let program = ty.program.clone();
         let mut host = host;
@@ -405,6 +419,7 @@ impl VehicleInstance {
             v_accel: [v("A_Trans_X"), v("A_Trans_Y"), v("A_Trans_Z")],
             v_wheels,
             ty,
+            physics_mode: omsi_cfg::PhysicsMode::Classic,
             state,
             vm,
             host,

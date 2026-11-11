@@ -93,6 +93,7 @@ const VARIED: &[(&str, &str)] = &[
     ("mirror_refresh", "eco"),
     ("texture_memory", "2048"),
     ("maintenance", "3"),
+    ("physics", "depot"),
     ("ai_unsched_factor", "150"),
     ("ai_max_scheduled", "40"),
     ("ai_max_humans", "80"),

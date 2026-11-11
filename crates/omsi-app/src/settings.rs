@@ -284,6 +284,9 @@ pub struct Settings {
     pub mirror_hud: u8,
     /// OMSI's `sound_doppler`: approaching sounds higher, receding ones lower.
     pub doppler: bool,
+    /// Which vehicle physics engine the game runs (`physics`): OMSI Classic by default, or
+    /// Project Depot Physics. A vehicle gets its own mode once, when it appears.
+    pub physics: omsi_cfg::PhysicsMode,
     /// Outside sounds heard from a cab (other vehicles', the bus's own exterior ones) go
     /// through a low-pass, as the game did before it mixed as OMSI 2 does. Off by default:
     /// OMSI 2 has no such filter.
@@ -580,6 +583,7 @@ impl Settings {
             mirror_hud: 0,
             mirror_refresh: "full".into(),
             doppler: true,
+            physics: omsi_cfg::PhysicsMode::Classic,
             muffle_outside: false,
             driver: true,
             maintenance: 0,
@@ -990,6 +994,7 @@ impl Settings {
                         .unwrap_or(s.vol_scenery)
                 }
                 "doppler" | "sound_doppler" => s.doppler = b(v),
+                "physics" => s.physics = omsi_cfg::PhysicsMode::parse(v),
                 "muffle_outside" => s.muffle_outside = b(v),
                 "mirror_hud" => {
                     s.mirror_hud = v.parse::<u8>().map(|x| x.min(3)).unwrap_or(s.mirror_hud)

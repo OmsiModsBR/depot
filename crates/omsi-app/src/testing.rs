@@ -410,6 +410,7 @@ pub mod settings {
             text.push_str(&format!("autosave_minutes={}\n", self.autosave_minutes));
             text.push_str(&format!("ui_accent={}\n", self.ui_accent));
             text.push_str(&format!("ui_corners={}\n", self.ui_corners));
+            text.push_str(&format!("physics={}\n", self.physics.as_str()));
             text
         }
     }

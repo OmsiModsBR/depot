@@ -422,6 +422,14 @@ pub(crate) fn spawn_player(
     let render = world.add_vehicle(renderer, scene, &vt, scheme);
     // coupled rear sections / trailers
     let parts = load_coupled_parts(&args.root, &mut vehicle);
+    let rear: Vec<&omsi_vehicle::Vehicle> = parts.iter().map(|t| &t.def).collect();
+    vehicle.set_physics_mode(omsi_sim::resolve_physics_mode(
+        &format!("{} {}", vt.def.manufacturer, vt.def.type_name),
+        crate::settings::Settings::load().physics,
+        &vt.def,
+        &rear,
+        omsi_cfg::Driver::Player,
+    ));
     build_trees_aside(
         std::iter::once(vt.clone())
             .chain(parts.iter().cloned())
