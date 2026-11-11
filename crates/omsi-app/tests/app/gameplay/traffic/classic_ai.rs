@@ -83,6 +83,42 @@ fn a_touched_classic_car_is_loose_until_cleared() {
     assert!(w.of(id).state.speed > 1.0);
 }
 
+/// `KA-6`, `KA-8`: a loose car does not touch the cars on their routes: it meets none of
+/// their boxes, and a car it runs through stays on its route; only the player's vehicle
+/// releases a car.
+/// Checks: KA-6, KA-8
+#[test]
+fn a_loose_car_passes_through_the_cars_on_their_routes() {
+    let mut w = World::new(Layout::default(), Vec::new());
+    let classic = |w: &mut World, s: f32, seed: u64| {
+        w.car_of(
+            engine_car_type(),
+            PhysicsMode::Classic,
+            w.x.approach[NORTH],
+            s,
+            0.0,
+            seed,
+            false,
+        )
+    };
+    let loose = classic(&mut w, 0.0, 3);
+    let other = classic(&mut w, 2.0, 5);
+    w.t.touched_by_player(vec![loose], None);
+    w.tick();
+    assert!(w.of(loose).is_loose());
+    w.run(2.0, |w| {
+        let own = -2 - other as i64;
+        assert!(w
+            .of(loose)
+            .vehicle
+            .dynamic_boxes
+            .iter()
+            .all(|b| b.id != own));
+        assert!(!w.of(other).is_loose());
+    });
+    assert_eq!(w.t.loose_count(), 1);
+}
+
 /// `KA-11`: a loose car beyond the detail radius about the camera goes back to its route.
 /// Checks: KA-11
 #[test]
