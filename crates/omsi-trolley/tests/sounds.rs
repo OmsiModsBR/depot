@@ -43,11 +43,6 @@ dewire_catcher_lower_deg_s=34
 dewire_lateral_force_n=260
 dewire_lateral_force_time=0.20
 [sound]
-switch_left_merg_chance=1
-switch_left_sep_chance=1
-switch_right_merg_chance=1
-switch_right_sep_chance=1
-cross_chance=1
 cross_trigger_radius=0.85
 min_distance=1.5
 max_distance=35

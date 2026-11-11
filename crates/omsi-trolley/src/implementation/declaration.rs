@@ -164,11 +164,6 @@ pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, Co
     }
     let v = |k: &str| value(params, "sound", k);
     Ok(Some(SoundParams {
-        switch_left_sep_chance: v("switch_left_sep_chance")?,
-        switch_right_sep_chance: v("switch_right_sep_chance")?,
-        switch_left_merg_chance: v("switch_left_merg_chance")?,
-        switch_right_merg_chance: v("switch_right_merg_chance")?,
-        cross_chance: v("cross_chance")?,
         cross_trigger_radius: v("cross_trigger_radius")?,
         min_distance: v("min_distance")?,
         max_distance: v("max_distance")?,

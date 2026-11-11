@@ -36,34 +36,18 @@ impl PoleSim {
         if let Some(s) = decl.sound {
             let events = std::mem::take(&mut self.events);
             for e in &events {
-                let (kind, at, chance) = match *e {
+                let (kind, at) = match *e {
                     PoleEvent::Fork {
                         kind: Some(k),
                         left,
                         at,
                         ..
-                    } if k.is_switch() => (
-                        WireSoundKind::SwitchSeparate { left },
-                        at,
-                        if left {
-                            s.switch_left_sep_chance
-                        } else {
-                            s.switch_right_sep_chance
-                        },
-                    ),
+                    } if k.is_switch() => (WireSoundKind::SwitchSeparate { left }, at),
                     PoleEvent::Joint {
                         merge_left: Some(left),
                         at,
                         ..
-                    } => (
-                        WireSoundKind::SwitchMerge { left },
-                        at,
-                        if left {
-                            s.switch_left_merg_chance
-                        } else {
-                            s.switch_right_merg_chance
-                        },
-                    ),
+                    } => (WireSoundKind::SwitchMerge { left }, at),
                     _ => continue,
                 };
                 if self
@@ -74,11 +58,7 @@ impl PoleSim {
                     continue;
                 }
                 self.heard.push((at, 0.0));
-                if self.draw() < chance {
-                    self.sounds.push(WireSound { kind, position: at });
-                } else {
-                    log::info!("trolleybus: {kind:?} left silent by its chance ({chance})");
-                }
+                self.sounds.push(WireSound { kind, position: at });
             }
             self.events = events;
             // crossings and sound markers: the middle of the two shoes on the wire passing one
@@ -97,12 +77,10 @@ impl PoleSim {
                 None
             };
             if let Some(p) = near.filter(|p| self.near_object != Some(*p)) {
-                if self.draw() < s.cross_chance {
-                    self.sounds.push(WireSound {
-                        kind: WireSoundKind::Cross,
-                        position: p,
-                    });
-                }
+                self.sounds.push(WireSound {
+                    kind: WireSoundKind::Cross,
+                    position: p,
+                });
             }
             self.near_object = near;
         }

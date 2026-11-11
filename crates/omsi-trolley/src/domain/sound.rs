@@ -10,15 +10,9 @@ pub const SOUND_DIR: &str = "Sounds/AckerTroll";
 /// The `[sound]` section.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SoundParams {
-    /// How likely (0..1) a shoe passing a switch is heard: separating to the left, to the
-    /// right, merging from the left, from the right.
-    pub switch_left_sep_chance: f64,
-    pub switch_right_sep_chance: f64,
-    pub switch_left_merg_chance: f64,
-    pub switch_right_merg_chance: f64,
-    /// How likely a crossing (or a wire sound marker) is heard, and how near (metres, along
-    /// the ground) the middle of the two shoes passes it to be.
-    pub cross_chance: f64,
+    /// How near (metres, along the ground) the middle of the two shoes passes a crossing (or
+    /// a wire sound marker) to be heard. Every switch and crossing passed is heard: the
+    /// parameter file's `*_chance` keys are not read.
     pub cross_trigger_radius: f64,
     /// Outside: full volume up to `min_distance` metres from the shoe, nothing beyond
     /// `max_distance`.
