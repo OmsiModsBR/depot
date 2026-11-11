@@ -1213,6 +1213,7 @@ impl Traffic {
             player_touching: Vec::new(),
             player_obb: None,
             cleared: Vec::new(),
+            fled: 0,
             walkers: Vec::new(),
             people: Vec::new(),
             initial: true,
@@ -1929,7 +1930,10 @@ impl Traffic {
                 && c.state.s > self.net.lanes[c.state.lane].length() - 25.0;
             // a random car still on its way that goes out of range sleeps instead (see
             // `DormantCar`); only one whose trip is over leaves the map
+            // a car knocked off its route (`KA-11`) stays where it lies until its tile goes
+            let loose = c.is_loose();
             let sleeps_instead = random
+                && !loose
                 && !c.gone
                 && !c.is_bus()
                 && self
@@ -1940,6 +1944,8 @@ impl Traffic {
                     .unwrap_or(false);
             let remove = if unloaded {
                 true
+            } else if loose {
+                false
             } else if at_edge {
                 // (its trip comes back with the tiles; kept until nobody saw it, a bus stood
                 // with its passengers at the far end of a straight road for good)
@@ -2009,6 +2015,15 @@ impl Traffic {
                 }
             } else if remove {
                 let c = self.cars.swap_remove(i);
+                if loose {
+                    // the player left the accident without anybody clearing it
+                    self.fled += 1;
+                    log::info!(
+                        "Crash: car {} ({}) went with its tile",
+                        c.id,
+                        c.vehicle.ty.def.type_name
+                    );
+                }
                 if c.is_bus() && (unloaded || at_edge) {
                     self.removed_scheduled.push(c.id);
                 }
@@ -5723,7 +5738,6 @@ impl Traffic {
         self.held_at_red = 0;
         self.player = player;
         self.release_touched();
-        self.clear_far_crashes();
         self.surround_loose();
         self.geo_prev = self.cars.iter_mut().map(|c| c.geo_block.take()).collect();
         self.index_of = self
@@ -7736,7 +7750,7 @@ impl Traffic {
         self.cars.iter().filter(|c| c.is_loose()).count()
     }
 
-    /// Put every car knocked off its route back on it (`KA-6`, `KA-11`); how many.
+    /// Put every car knocked off its route back on it (`KA-6`); how many.
     pub fn clear_crashes(&mut self) -> usize {
         let loose: Vec<usize> = (0..self.cars.len())
             .filter(|&i| self.cars[i].is_loose())
@@ -7766,6 +7780,12 @@ impl Traffic {
         loose.len()
     }
 
+    /// How many loose cars went with their tiles since the last call, nobody having cleared
+    /// the accident (`KA-11`).
+    pub fn take_fled(&mut self) -> usize {
+        std::mem::take(&mut self.fled)
+    }
+
     /// The cars put back on their routes since the last call (their riders leave them).
     pub fn take_cleared(&mut self) -> Vec<u64> {
         std::mem::take(&mut self.cleared)
@@ -7792,24 +7812,6 @@ impl Traffic {
                     );
                 }
             }
-        }
-    }
-
-    /// `KA-11`: once a loose car is beyond the detail radius about the camera, every loose
-    /// car goes back to its route.
-    fn clear_far_crashes(&mut self) {
-        let Some(cam) = self.camera else {
-            return;
-        };
-        let cam = omsi_map::world_to_tile_local(cam.x, cam.y).0;
-        let far = self.cars.iter().any(|c| {
-            let p = c.vehicle.position;
-            c.is_loose()
-                && !c.vehicle.ty.model.no_distance_check
-                && !within_detail_radius(omsi_map::world_to_tile_local(p.x, p.y).0, cam)
-        });
-        if far {
-            self.clear_crashes();
         }
     }
 

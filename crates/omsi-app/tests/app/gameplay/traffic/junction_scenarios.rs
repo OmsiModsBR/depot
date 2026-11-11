@@ -324,6 +324,7 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         player_touching: Vec::new(),
         player_obb: None,
         cleared: Vec::new(),
+        fled: 0,
         walkers: Vec::new(),
         people: Vec::new(),
         initial: false,
