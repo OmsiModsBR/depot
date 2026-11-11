@@ -15,6 +15,8 @@ pub struct BusVariant {
     pub(crate) installed: bool,
     pub(crate) paints: usize,
     pub(crate) incomplete: bool,
+    /// Its file has the `[depot_physics]` key (see [`physics_notice`]).
+    pub depot_physics: bool,
 }
 
 #[derive(Clone)]
@@ -113,6 +115,7 @@ pub fn build_bus_manufacturers(
             installed: vehicle.installed,
             paints: vehicle.paints.len(),
             incomplete: !vehicle.missing_packs.is_empty(),
+            depot_physics: vehicle.depot_physics,
         });
     }
     let mut manufacturers: Vec<BusManufacturer> = grouped.into_values().collect();
@@ -208,6 +211,15 @@ pub fn liveries_text(repaints: usize) -> String {
         "{n} {}",
         omsi_ui::tr(if n == 1 { "livery" } else { "liveries" })
     )
+}
+
+/// The badge and the notice the bus list shows for a type whose file has the `[depot_physics]`
+/// key (spec 002, FR-008a): it runs Project Depot Physics when the player drives it.
+pub fn physics_notice(variant: &BusVariant) -> Option<(&'static str, &'static str)> {
+    variant.depot_physics.then_some((
+        "DEPOT PHYSICS",
+        "Runs Project Depot Physics when you drive it ([depot_physics] in its file), whatever the Physics setting says",
+    ))
 }
 
 /// A type of a bus family in its dropdown: the type and its liveries.

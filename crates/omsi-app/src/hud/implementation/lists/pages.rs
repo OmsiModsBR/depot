@@ -7,7 +7,9 @@ use super::rows::{button, limit_or, opens, row, slider_row, switch_row};
 use super::select::{preset_row, select_row, settings_file};
 use super::values::cloud_index;
 use crate::core::app::App;
-use crate::hud::domain::lists::{ListKind, Page, TitlesCache, CLOUD_TYPES, PRECIP_KINDS};
+use crate::hud::domain::lists::{
+    physics_line, ListKind, Page, TitlesCache, CLOUD_TYPES, PRECIP_KINDS,
+};
 
 pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
     let s = &app.settings;
@@ -430,6 +432,22 @@ pub(in crate::hud) fn vehicle_pages(app: &App) -> Vec<Page> {
         ));
     }
     let mut fleet: Vec<(String, String)> = Vec::new();
+    if let Some(p) = app.player.as_ref() {
+        // the engine it runs, fixed when it appeared (spec 002, FR-008a)
+        let (engine, reason) =
+            physics_line(p.vehicle.physics_mode(), p.vehicle.ty.def.depot_physics);
+        let text = format!("{} ({})", omsi_ui::tr(engine), omsi_ui::tr(reason));
+        fleet.push((
+            row(
+                "Physics",
+                'i',
+                &text,
+                "Chosen in the launcher's settings, or by the bus's own file",
+                None,
+            ),
+            "noop".to_string(),
+        ));
+    }
     if has || !app.placed.is_empty() {
         fleet.push(button(
             "Drive the next vehicle",

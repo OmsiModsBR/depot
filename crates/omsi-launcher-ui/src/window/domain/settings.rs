@@ -8,6 +8,9 @@ use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
 use omsi_ui::widgets::matches;
 use serde_json::{json, Value};
 
+/// The line under the "Physics" list (spec 002, FR-003).
+pub const PHYSICS_NOTICE: &str = "A bus with [depot_physics] in its file runs Project Depot Physics when you drive it, whatever is chosen here. Mods tuned for OMSI 2 may stand or handle differently in Project Depot Physics";
+
 /// The page's sections, as the list on the left shows them.
 pub const SECTIONS: [&str; 14] = [
     "General",
@@ -26,7 +29,7 @@ pub const SECTIONS: [&str; 14] = [
     "Performance",
 ];
 pub const GENERAL: usize = 0;
-pub(crate) const SIMULATION: usize = 1;
+pub const SIMULATION: usize = 1;
 pub const GRAPHICS: usize = 2;
 pub(crate) const ADVANCED: usize = 3;
 pub(crate) const DISPLAY: usize = 4;
@@ -768,6 +771,17 @@ pub static OPTS: &[Opt] = &[
         "Tools for people who make or test vehicles and maps. Off by default: while it is off, nothing of them runs. The tools themselves are not in this version yet",
     ),
     // Simulation
+    pick(
+        SIMULATION,
+        "Vehicle physics",
+        "physics",
+        "Physics",
+        PHYSICS_NOTICE,
+        &[
+            ("classic", "OMSI Classic"),
+            ("depot", "Project Depot Physics"),
+        ],
+    ),
     toggle(
         SIMULATION,
         "Collisions",

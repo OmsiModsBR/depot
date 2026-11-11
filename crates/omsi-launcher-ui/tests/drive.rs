@@ -17,6 +17,7 @@ fn vehicle(folder: &str, maker: &str, name: &str, file: &str) -> omsi_launcher_l
         missing_packs: vec![],
         numbers: vec![],
         default_paint: "Beige".into(),
+        depot_physics: false,
     }
 }
 
@@ -171,4 +172,24 @@ fn numbers_in_type_names_sort_naturally_and_default_livery_has_its_omsi_name() {
     assert_eq!(default_livery_label(&vehicle), "Beige");
     vehicle.default_paint.clear();
     assert_eq!(default_livery_label(&vehicle), "Default paint");
+}
+
+/// A bus whose file has the `[depot_physics]` key is marked in the bus list: it runs Project
+/// Depot Physics when the player drives it (spec 002, FR-008a); the others carry no mark.
+#[test]
+fn a_bus_with_the_depot_physics_key_is_marked() {
+    let plain = vehicle("MAN_SD200", "MAN", "SD77", "sd77");
+    let mut keyed = vehicle("MAN_SD200", "MAN", "SD78", "sd78");
+    keyed.depot_physics = true;
+    let manufacturers = build_bus_manufacturers(&[plain, keyed], None, &Default::default());
+    let marks: Vec<_> = manufacturers[0]
+        .variants
+        .iter()
+        .map(|v| (v.variant.clone(), physics_notice(v)))
+        .collect();
+    assert_eq!(marks[0], ("SD77".to_string(), None));
+    let (badge, notice) = marks[1].1.unwrap();
+    assert_eq!(marks[1].0, "SD78");
+    assert_eq!(badge, "DEPOT PHYSICS");
+    assert!(notice.contains("Project Depot Physics") && notice.contains("[depot_physics]"));
 }

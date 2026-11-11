@@ -228,6 +228,30 @@ lines, as in the game, whose default date is 1989-05-30.
 
 ## Settings, enhanced graphics, the navigator
 
+### Vehicle physics
+
+The launcher's Settings page, section **Simulation**, card **Vehicle physics**, has a
+**Physics** list with two engines:
+
+- **OMSI Classic** (the default): the vehicles behave as they do in OMSI 2, so mods tuned for
+  OMSI 2 stand and drive as their authors set them up.
+- **Project Depot Physics**: Project Depot's deliberate improvements (listed in
+  [physics/depot-model.md](physics/depot-model.md)); mods tuned for OMSI 2 may stand or handle
+  differently.
+
+The choice applies to the player's vehicle and to the AI traffic from the next session; the game's
+own menu does not change it. A bus whose file has the `[depot_physics]` key (see
+[MODDING.md](MODDING.md)) runs Project Depot Physics whenever you drive it, whatever this list
+says; the launcher's bus list marks it **DEPOT PHYSICS**. In the game, the menu's **Vehicle**
+list shows the engine of the vehicle you drive and why ("Physics: OMSI Classic (setting)"), and
+the game log names each vehicle's engine when it appears. The setting is saved in `settings.cfg`
+as `physics=classic` or `physics=depot`.
+
+With OMSI Classic, an AI vehicle your bus touches is knocked off its route: it stands fully braked
+with its hazard lights on until you clear it with the Alt bar's **Clear the accident** button. If
+you drive away and its tile is unloaded first, it disappears and the game tells you that you left
+the scene of the accident without calling the police.
+
 `~/.depot/settings.cfg` (written by the launcher's settings page, or by hand) holds
 `msaa` (1/2/4/8; a count the GPU cannot do falls back to the next lower one), `anisotropy`
 (1..16), `ssao`, `shadows`, `shadow_size`, `shadow_blobs` (the models' `[isshadow]` shadow

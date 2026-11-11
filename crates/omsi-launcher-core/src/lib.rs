@@ -1173,6 +1173,10 @@ pub struct VehicleInfo {
     /// (OMSI's number combo in the vehicle dialog; empty: the bus has no list).
     #[serde(default)]
     pub numbers: Vec<(String, String)>,
+    /// The file has the `[depot_physics]` key: the bus runs Project Depot Physics when the
+    /// player drives it, whatever the setting says (spec 002, FR-008a).
+    #[serde(default)]
+    pub depot_physics: bool,
 }
 
 /// Names in older vehicle packs use underscores as spaces.
@@ -1468,7 +1472,7 @@ pub fn list_vehicles_progress(
         .iter()
         .map(|(_, dirs)| {
             format!(
-                "bus4|{lang}|{}",
+                "bus5|{lang}|{}",
                 dirs.iter()
                     .map(|d| d.to_string_lossy())
                     .collect::<Vec<_>>()
@@ -1704,6 +1708,7 @@ fn read_vehicle_folder(
             installed: in_content(f),
             missing_packs,
             numbers: v.numbers_with_plates(),
+            depot_physics: v.depot_physics,
         });
     }
     deps.sort();

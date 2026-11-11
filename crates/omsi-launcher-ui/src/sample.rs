@@ -18,6 +18,7 @@ fn bus(name: &str, maker: &str, kind: &str, installed: bool, paints: &[&str]) ->
         installed,
         missing_packs: Vec::new(),
         numbers: vec![("50044".into(), "XX-AB 123".into())],
+        depot_physics: false,
     }
 }
 

@@ -135,13 +135,13 @@ vehicle and the Mi5 stands nose down (front 12.7 cm) (quickstart Q8, Q10).
 
 - [X] T038 [P] [US2] [ph 7] Static sag per axle and pitch at rest, Depot (C-3, D-1), V1-V5, differing from Classic by the closed form, in `crates/omsi-sim/tests/physics_model_depot.rs`
 - [X] T039 [P] [US2] [ph 7] The other player rows of the matrix (C-4..C-9) in Depot, V1-V5, in `crates/omsi-sim/tests/physics_model_depot.rs`
-- [ ] T040 [P] [US2] [ph 9] Launcher test: the "Physics" list saves `physics=classic|depot` and reads it back, with the one-line notice, in `crates/omsi-launcher-ui/tests/settings.rs`
+- [X] T040 [P] [US2] [ph 9] Launcher test: the "Physics" list saves `physics=classic|depot` and reads it back, with the one-line notice, in `crates/omsi-launcher-ui/tests/settings.rs`
 
 ### Implementation for User Story 2
 
 - [X] T041 [US2] [ph 7] Depot rule (weight about `[cog]`) in `crates/omsi-sim/src/physics/implementation/depot/load_share.rs`; only the `.depot` player traces change, label `physics-delta` with the delta predicted from D-1
-- [ ] T042 [US2] [ph 9] "Physics" list (OMSI Classic, Project Depot Physics) and the one-line notice in the `SIMULATION` section of `crates/omsi-launcher-ui/src/window/domain/settings.rs`
-- [ ] T043 [P] [US2] [ph 9] Describe the setting in `docs/USER_GUIDE.md`
+- [X] T042 [US2] [ph 9] "Physics" list (OMSI Classic, Project Depot Physics) and the one-line notice in the `SIMULATION` section of `crates/omsi-launcher-ui/src/window/domain/settings.rs`
+- [X] T043 [P] [US2] [ph 9] Describe the setting in `docs/USER_GUIDE.md`
 
 **Checkpoint**: a player can switch engine and see it in the next session (SC-008).
 
@@ -155,10 +155,10 @@ the player sees which engine a vehicle uses.
 **Independent test**: a test bus with the key, setting Classic: as the player's vehicle it runs Depot,
 as an AI vehicle Classic (quickstart Q10).
 
-- [ ] T044 [P] [US3] [ph 9] Tests: the launcher's bus list marks a bus whose file has the key (`crates/omsi-launcher-ui/tests/drive.rs`); the menu's "Vehicle" list shows "Physics: <engine> (<reason>)" (`crates/omsi-app/tests/app/hud/vehicle_physics_line.rs`)
-- [ ] T045 [US3] [ph 9] The notice on keyed buses in the launcher's bus list, in `crates/omsi-launcher-ui/src/window/domain/drive.rs` (and the bus scan that feeds it in `crates/omsi-launcher-core/src/lib.rs`)
-- [ ] T046 [US3] [ph 9] The line "Physics: <engine> (<reason>)" for the player's vehicle in the menu's "Vehicle" list (`ListKind::Vehicle`, `crates/omsi-app/src/hud/domain/lists.rs`) (FR-008a)
-- [ ] T047 [P] [US3] [ph 9] Document the key in `docs/FORMATS.md` and `docs/MODDING.md` from [contracts/bus-key.md](contracts/bus-key.md), with the list of D-* items
+- [X] T044 [P] [US3] [ph 9] Tests: the launcher's bus list marks a bus whose file has the key (`crates/omsi-launcher-ui/tests/drive.rs`); the menu's "Vehicle" list shows "Physics: <engine> (<reason>)" (`crates/omsi-app/tests/app/hud/vehicle_physics_line.rs`)
+- [X] T045 [US3] [ph 9] The notice on keyed buses in the launcher's bus list, in `crates/omsi-launcher-ui/src/window/domain/drive.rs` (and the bus scan that feeds it in `crates/omsi-launcher-core/src/lib.rs`)
+- [X] T046 [US3] [ph 9] The line "Physics: <engine> (<reason>)" for the player's vehicle in the menu's "Vehicle" list (`ListKind::Vehicle`, `crates/omsi-app/src/hud/domain/lists.rs`) (FR-008a)
+- [X] T047 [P] [US3] [ph 9] Document the key in `docs/FORMATS.md` and `docs/MODDING.md` from [contracts/bus-key.md](contracts/bus-key.md), with the list of D-* items
 - [ ] T048 [US3] [ph 3] Only if T001 or T002 fails (FR-009a): read the key from `<name>.depot.cfg` next to the `.bus` file instead, in `crates/omsi-vehicle/src/vehicle.rs`, with the tests of T022 moved to that file
 
 **Checkpoint**: keyed and plain mods share a session, each with its engine.
@@ -203,14 +203,14 @@ an AI car with the player's bus (quickstart Q9).
 
 **Independent test**: pick an equation, find the tests that name it, run them.
 
-- [ ] T062 [US5] [ph 8] Coverage check: every C-*, K-*, KA-*, D-*, DA-* id in `docs/physics/` is named by at least one test, and every cell of the matrix in [contracts/test-vehicles.md](contracts/test-vehicles.md) has its test (SC-004), in `scripts/physics-model-coverage.sh`
+- [X] T062 [US5] [ph 8] Coverage check: every C-*, K-*, KA-*, D-*, DA-* id in `docs/physics/` is named by at least one test, and every cell of the matrix in [contracts/test-vehicles.md](contracts/test-vehicles.md) has its test (SC-004), in `scripts/physics-model-coverage.sh`
 - [X] T063 [US5] [ph 8] Update the status of each Classic rule in `docs/physics/classic-model.md` from T003's results; each "not so" row becomes a `fix/` pull request
 
 ---
 
 ## Phase 8: Polish and cross-cutting
 
-- [ ] T064 [ph 9] `CHANGELOG.md` line under **Unreleased** (quickstart Q10)
+- [X] T064 [ph 9] `CHANGELOG.md` line under **Unreleased** (quickstart Q10)
 - [ ] T065 [P] [ph 9] Run quickstart Q7-Q10 end to end and record the results in the phase 9 pull request
 - [ ] T066 [P] [ph 9] Run `cargo test --workspace`, `cargo fmt --check` and clippy on the final state
 

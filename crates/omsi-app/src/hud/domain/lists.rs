@@ -117,3 +117,20 @@ pub(crate) struct Dropdown {
 
 pub(in crate::hud) type TitlesCache =
     Option<(ListKind, bool, std::time::Instant, (Vec<String>, usize))>;
+
+/// The line on the player's vehicle's engine in the menu's "Vehicle" list (spec 002, FR-008a):
+/// "Physics: <engine> (<reason>)", as the engine's name and the reason, both to translate. The
+/// player's vehicle runs Depot physics for its file's `[depot_physics]` key (`depot_key`) or
+/// for the setting.
+pub fn physics_line(mode: omsi_cfg::PhysicsMode, depot_key: bool) -> (&'static str, &'static str) {
+    let engine = match mode {
+        omsi_cfg::PhysicsMode::Classic => "OMSI Classic",
+        omsi_cfg::PhysicsMode::Depot => "Project Depot Physics",
+    };
+    let reason = if depot_key && mode == omsi_cfg::PhysicsMode::Depot {
+        "bus key"
+    } else {
+        "setting"
+    };
+    (engine, reason)
+}
