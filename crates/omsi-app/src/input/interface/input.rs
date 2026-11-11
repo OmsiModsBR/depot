@@ -2,6 +2,7 @@
 
 pub(crate) use super::super::domain::hpattern;
 pub(crate) use super::super::domain::keys;
+pub(crate) use super::super::domain::place::PlaceAt;
 pub(crate) use super::super::implementation::actions;
 pub(crate) use super::super::implementation::controllers;
 #[cfg(windows)]

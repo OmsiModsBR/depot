@@ -2,7 +2,9 @@
 //!
 //! It offers what the game menu's "Place a vehicle" list offers (the manufacturers, then a
 //! manufacturer's models, then a model's paints and depot files) in dropdowns, with a picture
-//! of the vehicle chosen and its author's description, and "Place" does what the end of that
+//! of the vehicle chosen and its author's description. "Place" lists the map's entry points
+//! in the window's place: Confirm puts the vehicle down at the one chosen, Cancel goes back to
+//! the game without a vehicle. "Place with the mouse cursor" does what the end of the menu's
 //! list does: the vehicle follows the mouse until a click puts it down. The window never
 //! pauses the game. Esc closes it; a click outside it goes to the game as usual (while a
 //! dropdown's list is open, the click closes the list).
@@ -19,7 +21,7 @@
 use super::super::domain::add::{AddFrame, AddWindow, Picture, PLACING};
 use super::super::domain::menu::scale_for;
 use super::super::domain::win_input::WinInput;
-use super::super::interface::output::App;
+use super::super::interface::output::{lists, App, PlaceAt};
 use glam::Vec2;
 use omsi_ui::ingame::{self, AddVehicle, AddVehicleEvent, Preview};
 use omsi_ui::widgets::Ui;
@@ -43,6 +45,9 @@ impl AddFrame {
         size: Vec2,
         preview: Preview,
     ) -> Option<AddVehicleEvent> {
+        if let Some(e) = &self.entry_points {
+            return ingame::entry_points(ui, size, &e.labels, e.chosen);
+        }
         ingame::add_vehicle(
             ui,
             size,
@@ -263,7 +268,17 @@ impl App {
         };
         let (w, h) = (s.config.width, s.config.height);
         let scale = scale_for(w, h);
-        let rect = ingame::add_vehicle_rect(Vec2::new(w as f32, h as f32) / scale);
+        let size = Vec2::new(w as f32, h as f32) / scale;
+        let listing = self
+            .new_ui
+            .add
+            .as_ref()
+            .is_some_and(AddWindow::lists_entry_points);
+        let rect = if listing {
+            ingame::entry_points_rect(size)
+        } else {
+            ingame::add_vehicle_rect(size)
+        };
         rect.contains(Vec2::new(self.cursor.0, self.cursor.1) / scale)
     }
 
@@ -357,6 +372,21 @@ impl App {
         true
     }
 
+    /// Close the window and put down the vehicle chosen in it `at` the mouse or an entry
+    /// point.
+    fn add_place(&mut self, at: PlaceAt) {
+        let Some(win) = self.new_ui.add.as_ref() else {
+            return;
+        };
+        let placement = win.placement();
+        let (number, plate) = win.identity();
+        self.new_ui.close_add();
+        if let Some((bus, livery, depot)) = placement {
+            self.swap_pending = false;
+            self.place_vehicle_with(&bus, livery, depot, number, plate, at);
+        }
+    }
+
     /// Apply what the clicks in the window chose (before each frame).
     pub(crate) fn add_events(&mut self) {
         for e in self.new_ui.take_add_events() {
@@ -388,14 +418,27 @@ impl App {
                         self.service_msg = Some((PLACING.into(), 3.0));
                         continue;
                     }
-                    let placement = win.placement();
-                    let (number, plate) = win.identity();
-                    self.new_ui.close_add();
-                    if let Some((bus, livery, depot)) = placement {
-                        self.swap_pending = false;
-                        self.place_vehicle_with(&bus, livery, depot, number, plate);
+                    let labels = lists::entry_point_labels(self);
+                    if let Some(win) = self.new_ui.add.as_mut() {
+                        win.list_entry_points(labels);
                     }
+                    // (the list takes the window's place: its live view is not shown again)
+                    self.new_ui.stop_add_live();
+                }
+                AddVehicleEvent::PlaceWithMouse => {
+                    if self.placing.is_some() {
+                        self.service_msg = Some((PLACING.into(), 3.0));
+                        continue;
+                    }
+                    self.add_place(PlaceAt::Mouse);
                     return;
+                }
+                AddVehicleEvent::EntryPoint(i) => win.choose_entry_point(i),
+                AddVehicleEvent::ConfirmEntryPoint => {
+                    if let Some(i) = win.entry_point() {
+                        self.add_place(PlaceAt::EntryPoint(i));
+                        return;
+                    }
                 }
                 AddVehicleEvent::Cancel => {
                     self.new_ui.close_add();

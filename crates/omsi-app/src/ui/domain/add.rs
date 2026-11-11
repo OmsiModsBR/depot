@@ -43,6 +43,15 @@ pub struct AddFrame {
     /// The live 3D view, while it is on: the vehicle and paint it should show
     /// (`showroom::tag`), and whether it could not be shown.
     pub live: Option<(u64, bool)>,
+    /// The map's entry points, while "Place" lists them (the window shows the list then).
+    pub entry_points: Option<EntryPoints>,
+}
+
+/// The map's entry points "Place" lists, by name, and the one chosen (none at first).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EntryPoints {
+    pub labels: Vec<String>,
+    pub chosen: Option<usize>,
 }
 
 impl AddFrame {
@@ -102,6 +111,8 @@ pub struct AddWindow {
     description: String,
     /// The picture asked for (see [`picture_key`]).
     picture: Option<u64>,
+    /// The map's entry points, while "Place" lists them.
+    entry_points: Option<EntryPoints>,
     /// A press over the window was taken: its release goes to the window too.
     pub(in crate::ui) pressed: bool,
 }
@@ -165,6 +176,7 @@ impl AddWindow {
             description: self.description.clone(),
             picture: self.picture,
             live: None,
+            entry_points: self.entry_points.clone(),
         }
     }
 
@@ -297,6 +309,33 @@ impl AddWindow {
 
     pub(crate) fn set_picture(&mut self, key: u64) {
         self.picture = Some(key);
+    }
+
+    /// "Place": the window lists the map's entry points by `labels` (none chosen yet); the
+    /// registration's field lets go of the keyboard.
+    pub fn list_entry_points(&mut self, labels: Vec<String>) {
+        self.plate_focused = false;
+        self.entry_points = Some(EntryPoints {
+            labels,
+            chosen: None,
+        });
+    }
+
+    /// Whether the window lists the map's entry points.
+    pub fn lists_entry_points(&self) -> bool {
+        self.entry_points.is_some()
+    }
+
+    /// Choose the entry point at line `i` of the list.
+    pub fn choose_entry_point(&mut self, i: usize) {
+        if let Some(e) = self.entry_points.as_mut().filter(|e| i < e.labels.len()) {
+            e.chosen = Some(i);
+        }
+    }
+
+    /// The entry point chosen in the list (its line, which is its place in the map's list).
+    pub fn entry_point(&self) -> Option<usize> {
+        self.entry_points.as_ref()?.chosen
     }
 
     /// What "Place" puts down: the vehicle's file, its livery (`None`: random) and its depot
