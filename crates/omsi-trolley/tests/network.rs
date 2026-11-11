@@ -220,3 +220,42 @@ fn wire_objects_are_found_by_file_name() {
     assert!(close(w.objects[0].position, DVec3::new(305.0, 6.0, 7.0)));
     assert_eq!(w.objects[0].heading_deg, 90.0);
 }
+
+#[test]
+fn the_joints_do_not_depend_on_the_order_tiles_load_in() {
+    let p = params("wire_x");
+    let tiles = [
+        tile(
+            vec![spline(1, WIRE, [0.0, 280.0, 0.0], 0.0, 20.0, 0.0)],
+            vec![],
+        ),
+        tile(
+            vec![
+                spline(2, WIRE, [0.0, 0.0, 0.0], 0.0, 20.0, 0.0),
+                spline(3, WIRE, [0.0, 40.0, 0.0], 180.0, 20.0, 0.0),
+            ],
+            vec![],
+        ),
+    ];
+    let build = |order: [usize; 2]| {
+        let mut net = WireNetwork::default();
+        for i in order {
+            let origin = DVec2::new(0.0, 300.0 * i as f64);
+            net.insert_tile(build_tile_wires((0, i as i32), origin, &tiles[i], &p));
+        }
+        net.joints().to_vec()
+    };
+    let forward = build([0, 1]);
+    assert_eq!(forward.len(), 2, "tile border and the reversed splice");
+    assert_eq!(forward, build([1, 0]));
+    // a tile loaded again replaces its old wire
+    let mut net = WireNetwork::default();
+    for _ in 0..2 {
+        for (i, t) in tiles.iter().enumerate() {
+            let origin = DVec2::new(0.0, 300.0 * i as f64);
+            net.insert_tile(build_tile_wires((0, i as i32), origin, t, &p));
+        }
+    }
+    assert_eq!(net.joints(), forward.as_slice());
+    assert_eq!(net.span_count(), 3);
+}

@@ -1,6 +1,6 @@
 //! Building the wire of a tile and keeping the network of the loaded tiles.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use glam::{DVec2, DVec3};
 
@@ -110,14 +110,15 @@ fn object_of(o: &MapObject, origin: DVec2) -> Option<WireObject> {
 }
 
 impl WireNetwork {
-    /// Add (or replace) a tile's wire. An empty tile is not kept.
+    /// Add (or replace) a tile's wire: its segments go into the grid and its span ends are
+    /// joined to the ends already there. An empty tile is not kept.
     pub fn insert_tile(&mut self, wires: TileWires) {
         let key = wires.tile;
         self.drop_tile(key);
         if wires.is_empty() {
-            self.rebuild_joints();
             return;
         }
+        let mut used = HashSet::new();
         for (i, span) in wires.spans.iter().enumerate() {
             for side in WireSide::BOTH {
                 let pts = &span.wires[side.index()];
@@ -129,30 +130,89 @@ impl WireNetwork {
                     };
                     for c in cells(pts[index], pts[index + 1], 0.0) {
                         self.grid.entry(c).or_default().push(r);
+                        used.insert(c);
                     }
                 }
             }
         }
+        self.tile_cells.insert(key, used.into_iter().collect());
+        let ends: Vec<(SpanId, usize, SpanEnd)> = wires
+            .spans
+            .iter()
+            .enumerate()
+            .flat_map(|(i, span)| (0..2).map(move |e| ((key, i), e, span.ends[e])))
+            .collect();
         self.tiles.insert(key, wires);
-        self.rebuild_joints();
+        for (span, end, at) in ends {
+            let (cx, cy) = cell_of(at.point, JOIN_TOLERANCE);
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    let Some(list) = self.end_grid.get(&(cx + dx, cy + dy)) else {
+                        continue;
+                    };
+                    for &(other, other_end) in list {
+                        if other == span {
+                            continue;
+                        }
+                        let Some(o) = self
+                            .tiles
+                            .get(&other.0)
+                            .map(|t| t.spans[other.1].ends[other_end])
+                        else {
+                            continue;
+                        };
+                        let gap = at.point.distance(o.point);
+                        // (one end's way out is the other's way in)
+                        if gap <= JOIN_TOLERANCE && at.outward.dot(o.outward) <= -JOIN_MIN_ALIGNMENT
+                        {
+                            // (each joint names its lower end first, whatever came in first)
+                            let (a, b) = if (span, end) < (other, other_end) {
+                                ((span, end), (other, other_end))
+                            } else {
+                                ((other, other_end), (span, end))
+                            };
+                            self.joints.push(WireJoint {
+                                a,
+                                b,
+                                gap,
+                                reversed: end == other_end,
+                            });
+                        }
+                    }
+                }
+            }
+            self.end_grid.entry((cx, cy)).or_default().push((span, end));
+        }
+        self.joints.sort_by_key(|j| (j.a, j.b));
     }
 
     /// Take a tile's wire away (the tile was unloaded).
     pub fn remove_tile(&mut self, tile: (i32, i32)) {
-        if self.drop_tile(tile) {
-            self.rebuild_joints();
-        }
+        self.drop_tile(tile);
     }
 
-    fn drop_tile(&mut self, tile: (i32, i32)) -> bool {
-        if self.tiles.remove(&tile).is_none() {
-            return false;
+    fn drop_tile(&mut self, tile: (i32, i32)) {
+        let Some(old) = self.tiles.remove(&tile) else {
+            return;
+        };
+        for c in self.tile_cells.remove(&tile).unwrap_or_default() {
+            if let Some(refs) = self.grid.get_mut(&c) {
+                refs.retain(|r| r.span.0 != tile);
+                if refs.is_empty() {
+                    self.grid.remove(&c);
+                }
+            }
         }
-        self.grid.retain(|_, refs| {
-            refs.retain(|r| r.span.0 != tile);
-            !refs.is_empty()
-        });
-        true
+        for end in old.spans.iter().flat_map(|s| s.ends.iter()) {
+            let c = cell_of(end.point, JOIN_TOLERANCE);
+            if let Some(list) = self.end_grid.get_mut(&c) {
+                list.retain(|(span, _)| span.0 != tile);
+                if list.is_empty() {
+                    self.end_grid.remove(&c);
+                }
+            }
+        }
+        self.joints.retain(|j| j.a.0 .0 != tile && j.b.0 .0 != tile);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -209,57 +269,6 @@ impl WireNetwork {
             .collect();
         out.sort_by(|x, y| x.1.total_cmp(&y.1));
         out
-    }
-
-    fn rebuild_joints(&mut self) {
-        let mut ends: Vec<(SpanId, usize, SpanEnd)> = Vec::new();
-        for (tile, t) in &self.tiles {
-            for (i, span) in t.spans.iter().enumerate() {
-                for (e, end) in span.ends.iter().enumerate() {
-                    ends.push(((*tile, i), e, *end));
-                }
-            }
-        }
-        // (the tiles come out of a hash map: order the ends so the same wire gives the same
-        // joints, each with its lower end first)
-        ends.sort_by_key(|(span, end, _)| (*span, *end));
-        let mut buckets: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
-        for (n, (_, _, end)) in ends.iter().enumerate() {
-            buckets
-                .entry(cell_of(end.point, JOIN_TOLERANCE))
-                .or_default()
-                .push(n);
-        }
-        let mut joints = Vec::new();
-        for (n, (span_a, end_a, a)) in ends.iter().enumerate() {
-            let (cx, cy) = cell_of(a.point, JOIN_TOLERANCE);
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    let Some(list) = buckets.get(&(cx + dx, cy + dy)) else {
-                        continue;
-                    };
-                    for &m in list.iter().filter(|&&m| m > n) {
-                        let (span_b, end_b, b) = &ends[m];
-                        if span_a == span_b {
-                            continue;
-                        }
-                        let gap = a.point.distance(b.point);
-                        // (one end's way out is the other's way in)
-                        if gap <= JOIN_TOLERANCE && a.outward.dot(b.outward) <= -JOIN_MIN_ALIGNMENT
-                        {
-                            joints.push(WireJoint {
-                                a: (*span_a, *end_a),
-                                b: (*span_b, *end_b),
-                                gap,
-                                reversed: end_a == end_b,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        joints.sort_by_key(|j| (j.a.0, j.a.1, j.b.0, j.b.1));
-        self.joints = joints;
     }
 }
 

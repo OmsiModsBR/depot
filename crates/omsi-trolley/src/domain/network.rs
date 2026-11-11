@@ -147,4 +147,8 @@ pub struct WireNetwork {
     pub(crate) tiles: HashMap<(i32, i32), TileWires>,
     pub(crate) joints: Vec<WireJoint>,
     pub(crate) grid: HashMap<(i64, i64), Vec<SegmentRef>>,
+    /// The grid cells each tile's segments are in (to take them out with the tile).
+    pub(crate) tile_cells: HashMap<(i32, i32), Vec<(i64, i64)>>,
+    /// Span ends by cell of [`JOIN_TOLERANCE`] size, to find the ends a new tile's ends meet.
+    pub(crate) end_grid: HashMap<(i64, i64), Vec<(SpanId, usize)>>,
 }
