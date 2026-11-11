@@ -154,7 +154,18 @@ impl PoleSim {
                     p.capture_distance,
                 );
                 let Some((cursor, sideways)) = found else {
-                    self.events.push(PoleEvent::NoWire { pole: i });
+                    let shoe = body.position + body.rotation * geo.rest_shoe;
+                    let nearest = net.segments_near(shoe, 30.0).first().and_then(|(r, _)| {
+                        let (a, b) = net.segment(*r)?;
+                        let ab = b - a;
+                        let u = if ab.length_squared() > 0.0 {
+                            ((shoe - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        Some(body.rotation.transpose() * (a.lerp(b, u) - shoe))
+                    });
+                    self.events.push(PoleEvent::NoWire { pole: i, nearest });
                     return hooked(&geo);
                 };
                 let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);

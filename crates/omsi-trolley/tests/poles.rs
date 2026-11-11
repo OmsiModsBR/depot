@@ -198,7 +198,10 @@ fn no_wire_in_reach_leaves_the_poles_down() {
         },
         0.016,
     );
-    assert!(sim.events.contains(&PoleEvent::NoWire { pole: 0 }));
+    assert!(sim
+        .events
+        .iter()
+        .any(|e| matches!(e, PoleEvent::NoWire { pole: 0, .. })));
 }
 
 #[test]

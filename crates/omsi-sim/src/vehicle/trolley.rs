@@ -168,9 +168,22 @@ fn log_event(e: &PoleEvent) {
             "trolleybus: {} pole took the wire of spline {spline_id} ({sideways:.2} m from its shoe)",
             side(pole)
         ),
-        PoleEvent::NoWire { pole } => {
-            log::info!("trolleybus: {} pole found no wire within reach", side(pole))
-        }
+        PoleEvent::NoWire { pole, nearest } => match nearest {
+            Some(d) => log::info!(
+                "trolleybus: {} pole found no wire within reach: the nearest is {:.2} m {}, {:.2} m {}, {:.2} m {} of its resting shoe",
+                side(pole),
+                d.x.abs(),
+                if d.x < 0.0 { "left" } else { "right" },
+                d.y.abs(),
+                if d.y < 0.0 { "behind" } else { "ahead" },
+                d.z.abs(),
+                if d.z < 0.0 { "below" } else { "above" },
+            ),
+            None => log::info!(
+                "trolleybus: {} pole found no wire within reach (none within 30 m)",
+                side(pole)
+            ),
+        },
         PoleEvent::Joint {
             pole,
             from,

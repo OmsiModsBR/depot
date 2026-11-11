@@ -154,6 +154,9 @@ pub enum PoleEvent {
     },
     NoWire {
         pole: usize,
+        /// The nearest wire within 30 m, from where the shoe rests (body frame: x right,
+        /// y forward, z up).
+        nearest: Option<DVec3>,
     },
     Joint {
         pole: usize,
