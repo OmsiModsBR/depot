@@ -8,9 +8,7 @@ use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
-use crate::physics::domain::{
-    BodyInputs, Engine, GroundProbe, PhysicsSpec, RigidBody, RigidWheel,
-};
+use crate::physics::domain::{BodyInputs, Engine, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 

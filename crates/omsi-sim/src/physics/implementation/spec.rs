@@ -13,11 +13,11 @@
 //! values the player's vehicle no longer uses are kept behind the `model-fallbacks` feature
 //! (`params::fallbacks`) until the physics is validated in game.
 
+use super::{classic, depot};
 use crate::physics::domain::params::{
     AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE,
     TRACK_SHARE,
 };
-use super::{classic, depot};
 use crate::physics::domain::{AiSpec, AiWheelSpec, AxleSpec, Engine, PhysicsSpec};
 use glam::Vec3;
 use omsi_vehicle::{Axle, Vehicle};

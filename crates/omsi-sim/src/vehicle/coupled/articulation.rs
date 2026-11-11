@@ -122,7 +122,8 @@ impl VehicleInstance {
             lead.coupled = self.coupled_parts();
             if self.rest_loads_for != 0 {
                 // the parts that were carried by the bodies are gone: the wheels carry their own again
-                let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
+                let loads =
+                    crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
                 for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                     w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
                 }
