@@ -17,5 +17,5 @@ pub use impact::Impact;
 pub use kinematic::KinematicModel;
 pub use spec::{AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
 pub use train::{BodyInputs, Joint, JointKind};
-pub use vehicle::{Controls, Dynamics, PhysicsState, VehicleMotion, WheelState};
+pub use vehicle::{Controls, Dynamics, Engine, PhysicsState, VehicleMotion, WheelState};
 pub use wheel::RigidWheel;

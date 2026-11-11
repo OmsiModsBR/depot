@@ -8,7 +8,7 @@ use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
-use crate::physics::domain::{BodyInputs, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
+use crate::physics::domain::{BodyInputs, Engine, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 
@@ -26,7 +26,12 @@ impl RigidBody {
     /// radius when not given. The player's vehicle gives none: OMSI's springs stand on the
     /// model origin's plane, whatever the model's wheels look like.
     pub fn from_definition(def: &Vehicle, hub_heights: &[Option<f32>]) -> RigidBody {
-        let spec = PhysicsSpec::from(def);
+        RigidBody::for_engine(def, hub_heights, Engine::Classic)
+    }
+
+    /// [`RigidBody::from_definition`] under the rules of `engine`, which the body keeps.
+    pub fn for_engine(def: &Vehicle, hub_heights: &[Option<f32>], engine: Engine) -> RigidBody {
+        let spec = PhysicsSpec::for_engine(def, engine);
         let mass = spec.mass_kg;
         let mut wheels = Vec::new();
         let mut wheel_axle = Vec::new();
@@ -69,6 +74,7 @@ impl RigidBody {
             w.rest_load = spec.rest_loads.get(*a).copied().unwrap_or(0.0);
         }
         RigidBody {
+            engine,
             mass,
             empty_mass: mass,
             payload: 0.0,

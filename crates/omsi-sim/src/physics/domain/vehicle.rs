@@ -4,6 +4,25 @@
 
 use super::{KinematicModel, RigidBody};
 use glam::Vec3;
+use omsi_cfg::PhysicsMode;
+
+/// The rules a vehicle's physics follows where OMSI Classic and Project Depot Physics differ
+/// (spec 002). Decided when the vehicle appears and held by its [`RigidBody`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Engine {
+    #[default]
+    Classic,
+    Depot,
+}
+
+impl From<PhysicsMode> for Engine {
+    fn from(mode: PhysicsMode) -> Engine {
+        match mode {
+            PhysicsMode::Classic => Engine::Classic,
+            PhysicsMode::Depot => Engine::Depot,
+        }
+    }
+}
 
 /// Driver inputs, all in `0..1` except steering in `-1..1` (positive = right).
 #[derive(Debug, Clone, Copy, Default)]

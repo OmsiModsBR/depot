@@ -13,11 +13,12 @@
 //! values the player's vehicle no longer uses are kept behind the `model-fallbacks` feature
 //! (`params::fallbacks`) until the physics is validated in game.
 
+use super::{classic, depot};
 use crate::physics::domain::params::{
     AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE,
     TRACK_SHARE,
 };
-use crate::physics::domain::{AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};
+use crate::physics::domain::{AiSpec, AiWheelSpec, AxleSpec, Engine, PhysicsSpec};
 use glam::Vec3;
 use omsi_vehicle::{Axle, Vehicle};
 
@@ -95,7 +96,13 @@ pub fn body_centre_long(def: &Vehicle) -> f32 {
 }
 
 impl PhysicsSpec {
+    /// What `def` comes to under the Classic rules.
     pub fn from(def: &Vehicle) -> PhysicsSpec {
+        PhysicsSpec::for_engine(def, Engine::Classic)
+    }
+
+    /// What `def` comes to under the rules of `engine`.
+    pub fn for_engine(def: &Vehicle, engine: Engine) -> PhysicsSpec {
         let mass = mass_kg(def);
         // in t m², as OMSI reads it whatever the numbers, and 100 t m² about each axis for a
         // file without the section (OMSI's default; this parser leaves it at zero)
@@ -135,21 +142,21 @@ impl PhysicsSpec {
             body_freq: (springs / (mass / 1000.0)).max(0.0).sqrt(),
             wheelbase: (front_long - rear_long).abs().max(1.0),
             axles: def.axles.iter().map(AxleSpec::of).collect(),
-            rest_loads: wheel_rest_loads(def),
+            rest_loads: wheel_rest_loads(def, engine),
         }
     }
 }
 
-/// The static load on each wheel of each axle (N): the weight shared so that the axle loads
-/// balance about the model's origin, as OMSI 2's struts turn the body (see
-/// `RigidBody::wheel_contacts`) - `[cog]` does not move it - (a least-squares split when there
-/// are more than two axles). A wheel carries no less than nothing - an OMSI strut only
-/// pushes -, however far the origin lies from its axle.
-pub fn wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    rest_loads(def, mass_kg(def), 0.0, 0.0)
+/// The static load on each wheel of each axle (N) by the rule of `engine`: the weight shared
+/// about the model's origin (Classic, `K-1`) or about `[cog]` (Depot, `D-1`).
+pub fn wheel_rest_loads(def: &Vehicle, engine: Engine) -> Vec<f32> {
+    match engine {
+        Engine::Classic => classic::load_share::wheel_rest_loads(def),
+        Engine::Depot => depot::load_share::wheel_rest_loads(def),
+    }
 }
 
-/// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them:
+/// [`wheel_rest_loads`] (Classic) as the kinematic model (the AI's copies and their parts) reads them:
 /// with its mass ([`kinematic_mass_kg`]), each wheel taking at least a share of an even split
 /// (`MIN_LOAD_SHARE`).
 pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
@@ -176,7 +183,7 @@ pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)
         .collect()
 }
 
-fn rest_loads(def: &Vehicle, mass: f32, least_share: f32, centre: f32) -> Vec<f32> {
+pub(super) fn rest_loads(def: &Vehicle, mass: f32, least_share: f32, centre: f32) -> Vec<f32> {
     let cog_y = centre;
     let g = GRAVITY;
     let n = (def.axles.len() * 2).max(1) as f32;

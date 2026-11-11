@@ -1123,7 +1123,10 @@ fn a_wheel_far_from_the_weight_carries_nothing() {
         cog: Some([0.0, -4.0, 1.2]),
         ..bus()
     };
-    assert_eq!(wheel_rest_loads(&def), wheel_rest_loads(&bus()));
+    assert_eq!(
+        wheel_rest_loads(&def, Engine::Classic),
+        wheel_rest_loads(&bus(), Engine::Classic)
+    );
     // a part resting on its joint, its centre of gravity behind the rear axle: the front
     // wheels carry nothing (an OMSI strut only pushes), not a fifth of an even share
     let (loads, _) = wheel_rest_loads_supported(
