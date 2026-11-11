@@ -7,9 +7,9 @@ brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
 
-Nothing below says that OMSI 2 does something unless the status says it was **validated**. A row marked
-**to validate** is built that way on purpose and corrected by a `fix/` pull request once its check has
-been run (the plan's clarification of 2026-11-09).
+Nothing below says that OMSI 2 does something unless the status says it was **validated** or
+**confirmed**. A row marked **to validate** is built that way on purpose and corrected by a `fix/`
+pull request once its check has been run (the plan's clarification of 2026-11-09).
 
 ## Index
 
@@ -17,18 +17,18 @@ been run (the plan's clarification of 2026-11-09).
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
-| [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | to validate |
-| [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | to validate |
-| [KA-3](#ka-3-grip) | one grip value per vehicle | to validate |
-| [KA-4](#ka-4-no-body-dynamics-on-the-route) | no body dynamics on the route | to validate |
-| [KA-5](#ka-5-rear-sections-as-kinematic-trailers) | rear sections as kinematic trailers | to validate |
-| [KA-6](#ka-6-release-by-an-active-body) | release by any active body, and return | validated in part |
-| [KA-6b](#ka-6b-release-and-return-of-the-whole-vehicle) | release and return act on the whole vehicle | to validate |
-| [KA-7](#ka-7-weight-sharing-only-while-loose) | weight shared only while loose | to validate |
-| [KA-8](#ka-8-contacts) | no contacts between vehicles on their routes | to validate |
-| [KA-9](#ka-9-speed-beyond-the-detail-radius) | speed beyond the detail radius | decided; details to validate |
-| [KA-10](#ka-10-vehicle-serving-a-stop) | vehicle serving a stop | to validate |
-| [KA-11](#ka-11-automatic-clearing) | automatic clearing of a loose vehicle | to validate |
+| [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
+| [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |
+| [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
+| [KA-4](#ka-4-no-body-dynamics-on-the-route) | no body dynamics on the route | confirmed |
+| [KA-5](#ka-5-rear-sections-as-kinematic-trailers) | rear sections as kinematic trailers | confirmed |
+| [KA-6](#ka-6-release-by-an-active-body) | release by any active body, and return | not so: release only by the player |
+| [KA-6b](#ka-6b-release-and-return-of-the-whole-vehicle) | release and return act on the whole vehicle | confirmed |
+| [KA-7](#ka-7-weight-sharing-only-while-loose) | weight shared only while loose | confirmed |
+| [KA-8](#ka-8-contacts) | no contacts between vehicles on their routes | not so: as KA-6 |
+| [KA-9](#ka-9-speed-beyond-the-detail-radius) | speed beyond the detail radius | confirmed |
+| [KA-10](#ka-10-vehicle-serving-a-stop) | vehicle serving a stop | confirmed |
+| [KA-11](#ka-11-automatic-clearing) | automatic clearing of a loose vehicle | not so: the loose vehicle disappears |
 
 The AI body (`ai/classic/`) runs every road vehicle of the AI traffic in OMSI Classic. Rail
 vehicles and aircraft keep the Depot AI of [depot-model.md](depot-model.md) in both engines.
@@ -91,8 +91,9 @@ Module for all the `KA-*` rules: `ai/classic/` (new, phase 8), using `physics/` 
 - **Inputs**: the lane path (planner), `[rot_pnt_long]`, `achse_long`, the lane change's sideways shift.
   **Outputs**: the pose of the leading section and each axle's steering angle. **Module**:
   `ai/classic/` (route and pose, phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: film an AI bus from above through a tight
-  junction turn and a lane change; the rotation point stays on the lane while the front swings out.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: film an AI bus from above through a tight junction turn and a lane change; the rotation
+  point stays on the lane while the front swings out.
 
 The point at `[rot_pnt_long]` moves along the lane path, shifted sideways during a lane change. The
 body's axis lags the path's tangent by `ψ_r`, a state of its own: the axis follows the path as a rod
@@ -114,8 +115,9 @@ the bend. A vehicle put down on a bend starts in that steady state.
   every wheel's brake forces, the masses of all sections with their passengers, the target speed of
   the driver. **Outputs**: the leading section's speed; the throttle and brake the scripts read.
   **Module**: `ai/classic/` (speed, phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: halve the engine torque of an AI-only
-  copy of a bus and time its pull-away next to the camera.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11): the
+  vehicle's scripts give the drive force. **Check**: halve the engine torque of an AI-only copy of a
+  bus and time its pull-away next to the camera.
 
 Within the detail radius (`KA-9`) the leading section integrates its speed from the drive force
 `F = 2·M_Wheel / r` (`r`: the first axle's radius), the resistance `R` (every section's
@@ -141,8 +143,9 @@ code, **to validate** with the rest of the row).
 - **Inputs**: a fixed road surface and the weather (wet, snow, ice). **Outputs**: one `μ` per
   vehicle, bounding the AI's acceleration, braking and comfortable braking. **Module**: `ai/classic/`
   (phase 8), the values of `C-5`.
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: an AI bus pulling away and stopping on a
-  wet and a dry road, and on a gravel patch.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11): the
+  grip does not change with the surface under the wheels. **Check**: an AI bus pulling away and
+  stopping on a wet and a dry road, and on a gravel patch.
 
 The grip is not read from the surface under each wheel, as in `C-5` for the player's vehicle: it is
 the grip of a road (`C-5`'s values) in the current weather. It bounds the change of speed of a
@@ -152,8 +155,9 @@ frame (`KA-2`); the comfortable braking stays the shared traffic planner's.
 
 - **Inputs**: the path's geometry; the static sag of `K-1`. **Outputs**: the vehicle's height and
   attitude, and the `Axle_Suspension` the scripts read. **Module**: `ai/classic/` (phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: watch an AI bus braking hard and in a
-  bend; the body neither pitches nor rolls.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11): no
+  inertia, no suspension dynamics. **Check**: watch an AI bus braking hard and in a bend; the body
+  neither pitches nor rolls.
 
 On its route the vehicle has no springs, no settling and no dynamic pitch or roll: its height and
 attitude come from the path. The spring travel the scripts read is the static sag of `K-1`
@@ -164,8 +168,9 @@ attitude come from the path. The spring travel the scripts read is the static sa
 - **Inputs**: the front section's curvature, the joint and rotation-line distances. **Outputs**: the
   articulation angle and the pose of each rear section. **Module**: `ai/classic/` (rear sections,
   phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: film an articulated AI bus through a
-  junction turn; the rear section cuts inside the lane.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: film an articulated AI bus through a junction turn; the rear section cuts inside the
+  lane.
 
 The articulation angle is integrated every frame from the front section's curvature and the
 distances of the joint and of the rotation line, so a rear section cuts a bend as a real trailer does.
@@ -176,10 +181,10 @@ Beyond the detail radius the rear sections' poses are not recalculated (`KA-9`).
 - **Inputs**: contacts of any section of the AI vehicle with any active body (the player's vehicle,
   an AI vehicle already loose); the vehicle type. **Outputs**: the vehicle's state (on its route or
   loose). **Module**: `ai/classic/` (release, phase 8); the player's body for the loose state.
-- **Basis**: *OMSI*. **Status**: **validated in part**: the maintainer's in-game observation
-  (2026-11-08) that an AI vehicle hit by the player becomes a free rigid body, without a driver, until
-  it is cleared. The rest is **to validate**. **Check**: nudge an AI car at walking pace with the
-  player's bus, then push it into a second AI car.
+- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): an AI
+  vehicle the player pushes into another one does not touch it; only the player's vehicle releases
+  an AI vehicle. Corrected by a `fix/` pull request. **Check**: nudge an AI car at walking pace with
+  the player's bus, then push it into a second AI car.
 
 Contact with any active body on any section releases the AI vehicle from its route, unless its type
 is `[fixed]`. A loose vehicle can release another (a chain). Loose, it runs the player's rigid body
@@ -194,8 +199,8 @@ timetable (maintainer, 2026-11-09). Crashes have no effect on the career.
 
 - **Inputs / outputs**: the poses and articulation angles of all sections. **Module**: `ai/classic/`
   (phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: release an articulated AI bus in a bend;
-  no section jumps at the moment of the hit.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: release an articulated AI bus in a bend; no section jumps at the moment of the hit.
 
 Release and return act on all sections at once. Released, the sections become the player's multibody
 train (rigid bodies on joints), starting from their poses and articulation angles on the route with
@@ -204,8 +209,9 @@ no jump. Back on the route, every section is put back on it.
 ## KA-7. Weight sharing only while loose
 
 - **Inputs / outputs**: as `K-1`. **Module**: `ai/classic/` (phase 8), `physics/` for the loose state.
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: an AI copy of the Mi5 at a stop next to
-  the player's Mi5; its height follows the path, not its springs.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: an AI copy of the Mi5 at a stop next to the player's Mi5; its height follows the path,
+  not its springs.
 
 On its route no weight is shared between axles in the motion (`KA-4`), only the static sag the
 scripts read. The weight is shared, about the model origin (`K-1`), only while the vehicle is loose.
@@ -214,8 +220,10 @@ scripts read. The weight is shared, about the model origin (`K-1`), only while t
 
 - **Inputs**: the bodies' boxes, the scenery. **Outputs**: release (`KA-6`) or an ordinary hit
   (`C-10`). **Module**: `ai/classic/` (contacts, phase 8), `physics/implementation/collide.rs`.
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: two AI cars forced into the same spot
-  (a blocked junction) overlap rather than push; a loose AI car pushed against a wall stops at it.
+- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): as
+  `KA-6`, a loose AI vehicle does not touch the AI vehicles on their routes. Corrected by a `fix/`
+  pull request. **Check**: two AI cars forced into the same spot (a blocked junction) overlap rather
+  than push; a loose AI car pushed against a wall stops at it.
 
 On their routes, AI vehicles collide neither with each other nor with static scenery (walls, posts,
 buildings): they only avoid obstacles by the driver's checks. An AI vehicle on its route collides
@@ -231,9 +239,9 @@ vehicle and the boxes of the AI vehicles within 80 m, and releases those it touc
 - **Inputs**: the tile of the vehicle, the camera's tile, `[noDistanceCheck]`, the driver's target
   speed. **Outputs**: the speed; the rear sections' poses are left as they are. **Module**:
   `ai/classic/` (speed, phase 8).
-- **Basis**: *OMSI*. **Status**: **decided** by the maintainer (2026-11-08): the Classic AI far from
-  the camera behaves as OMSI 2's; the details are **to validate**. **Check**: watch an AI bus leave
-  and re-enter the detail radius; far away it keeps its target speed exactly.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: watch an AI bus leave and re-enter the detail radius; far away it keeps its target
+  speed exactly.
 
 The detail radius is the camera's tile and its eight neighbours (centred on the camera, never on the
 player's vehicle). A vehicle is near while its tile is in it. Beyond it the vehicle's speed equals the
@@ -243,8 +251,8 @@ count as near in both engines.
 ## KA-10. Vehicle serving a stop
 
 - **Inputs / outputs**: as `KA-2`. **Module**: `ai/classic/` (speed, phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: an AI bus at a stop far from the camera
-  on a grade; the scripts' brakes hold it.
+- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
+  **Check**: an AI bus at a stop far from the camera on a grade; the scripts' brakes hold it.
 
 While the vehicle serves a stop (doors open until the scripts close them), its speed always comes
 from its drive and brakes (`KA-2`), even beyond the detail radius.
@@ -253,8 +261,11 @@ from its drive and brakes (`KA-2`), even beyond the detail radius.
 
 - **Inputs**: the tile of a loose vehicle. **Outputs**: the state of every loose vehicle. **Module**:
   `ai/classic/` (release, phase 8).
-- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: knock an AI car loose, drive away until it
-  is out of the detail radius, come back; it drives on its route again.
+- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): when its
+  tile is unloaded the loose vehicle disappears, and the game warns that the player left the
+  accident without calling the police. Corrected by a `fix/` pull request. **Check**: knock an AI
+  car loose, drive away until it is out of the detail radius, come back; it drives on its route
+  again.
 
 A loose vehicle is cleared automatically once its tile is beyond the detail radius; every loose
 vehicle then goes back to its route (`KA-6`). There is no limit on the number of loose vehicles.
