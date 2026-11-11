@@ -34,7 +34,7 @@ use omsi_vehicle::{Axle, Vehicle};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use support::trace::{check_per_engine, dv3, list32, n32, n64, v3, Trace};
+use support::trace::{check_per_engine, dv3, engine, list32, n32, n64, v3, Trace};
 
 // ---------------------------------------------------------------------------------------
 // Writing the state
@@ -364,7 +364,9 @@ mod scenarios {
         let mut host = VehicleHost::new(SimClock::default());
         host.street_cond = 0.0;
         host.temperature = 15.0;
-        VehicleInstance::new(ty, host)
+        let mut v = VehicleInstance::new(ty, host);
+        v.set_physics_mode(engine());
+        v
     }
 
     #[derive(Clone, Copy)]

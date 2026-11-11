@@ -133,13 +133,13 @@ vehicle and the Mi5 stands nose down (front 12.7 cm) (quickstart Q8, Q10).
 
 ### Tests for User Story 2
 
-- [ ] T038 [P] [US2] [ph 7] Static sag per axle and pitch at rest, Depot (C-3, D-1), V1-V5, differing from Classic by the closed form, in `crates/omsi-sim/tests/physics_model_depot.rs`
-- [ ] T039 [P] [US2] [ph 7] The other player rows of the matrix (C-4..C-9) in Depot, V1-V5, in `crates/omsi-sim/tests/physics_model_depot.rs`
+- [X] T038 [P] [US2] [ph 7] Static sag per axle and pitch at rest, Depot (C-3, D-1), V1-V5, differing from Classic by the closed form, in `crates/omsi-sim/tests/physics_model_depot.rs`
+- [X] T039 [P] [US2] [ph 7] The other player rows of the matrix (C-4..C-9) in Depot, V1-V5, in `crates/omsi-sim/tests/physics_model_depot.rs`
 - [ ] T040 [P] [US2] [ph 9] Launcher test: the "Physics" list saves `physics=classic|depot` and reads it back, with the one-line notice, in `crates/omsi-launcher-ui/tests/settings.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T041 [US2] [ph 7] Depot rule (weight about `[cog]`) in `crates/omsi-sim/src/physics/implementation/depot/load_share.rs`; only the `.depot` player traces change, label `physics-delta` with the delta predicted from D-1
+- [X] T041 [US2] [ph 7] Depot rule (weight about `[cog]`) in `crates/omsi-sim/src/physics/implementation/depot/load_share.rs`; only the `.depot` player traces change, label `physics-delta` with the delta predicted from D-1
 - [ ] T042 [US2] [ph 9] "Physics" list (OMSI Classic, Project Depot Physics) and the one-line notice in the `SIMULATION` section of `crates/omsi-launcher-ui/src/window/domain/settings.rs`
 - [ ] T043 [P] [US2] [ph 9] Describe the setting in `docs/USER_GUIDE.md`
 
