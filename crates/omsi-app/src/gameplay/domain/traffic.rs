@@ -6,7 +6,7 @@ use crate::gameplay::bus_service::BusService;
 use crate::world::scene::VehicleRender;
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
-use omsi_sim::ai::AiBody;
+use omsi_sim::ai::AiMotion;
 use omsi_sim::traffic::{AiState, LaneKind, Network, TrafficLightController};
 use omsi_sim::{VehicleInstance, VehicleType};
 use std::sync::Arc;
@@ -74,7 +74,7 @@ pub struct AiCar {
     pub render: VehicleRender,
     pub trailer_renders: Vec<VehicleRender>,
     /// The body following the way `state` lays out.
-    pub body: AiBody,
+    pub body: AiMotion,
     /// Seconds this car has been standing still without a stop of its own: a red light or
     /// a queue is seconds, a jam that never clears grows without bound.
     pub stopped: f32,

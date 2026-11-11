@@ -6,6 +6,7 @@ use std::sync::Arc;
 use glam::Quat;
 use omsi_model::Model;
 use omsi_script::Program;
+use omsi_sim::physics::Engine;
 use omsi_sim::testing::vehicle::physics_bridge::script_speed;
 use omsi_sim::testing::vehicle::props::PropsPlan;
 use omsi_sim::testing::vehicle::trailer::body_rotation;
@@ -66,7 +67,16 @@ fn bogie_orientation_is_independent_of_consist_flags() {
                 < 1e-5
         );
         for reversed in [false, true] {
-            let mut t = TrailerPart::new_ex(ty.clone(), &ty, false, reversed, &ty.program, 2, 0);
+            let mut t = TrailerPart::new_ex(
+                ty.clone(),
+                &ty,
+                false,
+                reversed,
+                &ty.program,
+                2,
+                0,
+                Engine::Classic,
+            );
             t.heading = v.heading;
             t.set_pitch(v.pitch);
             t.set_bank(v.bank);
@@ -202,6 +212,7 @@ fn bogie_couplings_agree_with_spawn_placement_and_following() {
                         &lead.program,
                         2,
                         0,
+                        Engine::Classic,
                     );
                     for _ in 0..30 {
                         t.update(&mut v, 0.0, Some((DVec3::ZERO, lead_rot, heading)));

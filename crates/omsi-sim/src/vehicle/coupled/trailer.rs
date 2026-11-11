@@ -4,6 +4,7 @@
 use super::articulation;
 use crate::anim::MeshAnimator;
 use crate::particles::ParticleSet;
+use crate::physics::Engine;
 use crate::vehicle::pose::camera_in_body;
 use crate::vehicle::props::{MeshProps, PropsPlan};
 use crate::vehicle::skin::{rest_transforms, skin_key, skin_vertices};
@@ -101,6 +102,7 @@ impl VehicleInstance {
             self.ty.program.as_ref(),
             first_axle,
             self.trailers.len(),
+            Engine::from(self.physics_mode()),
         );
         self.trailers.push(t);
     }
@@ -406,10 +408,20 @@ impl TrailerPart {
         program: &Program,
         first_axle: usize,
     ) -> TrailerPart {
-        Self::new_ex(ty, main, false, false, program, first_axle, 0)
+        Self::new_ex(
+            ty,
+            main,
+            false,
+            false,
+            program,
+            first_axle,
+            0,
+            Engine::Classic,
+        )
     }
 
     /// `joint`: which joint of the train this part hangs on (0 behind the leading vehicle).
+    #[allow(clippy::too_many_arguments)]
     pub fn new_ex(
         ty: Arc<VehicleType>,
         main: &VehicleType,
@@ -418,6 +430,7 @@ impl TrailerPart {
         program: &Program,
         first_axle: usize,
         joint: usize,
+        engine: Engine,
     ) -> TrailerPart {
         let mut animators: Vec<MeshAnimator> = ty
             .meshes
@@ -465,12 +478,12 @@ impl TrailerPart {
             .map(|a| crate::physics::AxleSpec::of(a).shown_radius)
             .unwrap_or(0.5);
         let n = ty.meshes.len();
-        let loads = crate::physics::kinematic_wheel_rest_loads(&ty.def);
+        let loads = crate::physics::kinematic_wheel_rest_loads(&ty.def, engine);
         let rest = ty
             .def
             .axles
             .iter()
-            .zip(ty.hub_heights(first_axle))
+            .zip(ty.hub_heights(first_axle, engine))
             .enumerate()
             .map(|(a, (axle, z))| {
                 let axle = crate::physics::AxleSpec::of(axle);

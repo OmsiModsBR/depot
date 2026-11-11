@@ -15,7 +15,7 @@ use hashbrown::HashMap;
 use omsi_geometry::util::wrap_deg;
 use omsi_render::{Renderer, Scene};
 use omsi_sim::ai::{
-    back_in_ramp, pull_out_ramps, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
+    back_in_ramp, pull_out_ramps, AiMotion, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
     PULL_OUT_CLEARANCE,
 };
 use omsi_sim::collision::Obb;
@@ -135,7 +135,7 @@ impl AiCar {
 
     /// Bound to rails (a train, a tram).
     pub fn is_rail(&self) -> bool {
-        self.body.kind == MotionKind::Rail
+        self.body.kind() == MotionKind::Rail
     }
 
     /// Boarding at a stop: the script is told to open the doors (`AI_Scheduled_AtStation`).
@@ -517,8 +517,8 @@ pub fn place_body(
     state: &AiState,
     vehicle: &mut VehicleInstance,
     kind: MotionKind,
-) -> AiBody {
-    let mut body = AiBody::new(&vehicle.ty.def, kind);
+) -> AiMotion {
+    let mut body = AiMotion::new(&vehicle.ty.def, kind, vehicle.physics_mode());
     let ground = vehicle.ground.clone();
     let contact = vehicle.contact.clone();
     body.place(
@@ -6877,7 +6877,7 @@ impl Traffic {
             let net = &self.net;
             type Work<'a> = (
                 &'a AiState,
-                &'a mut AiBody,
+                &'a mut AiMotion,
                 &'a mut VehicleInstance,
                 &'a mut AiFrame,
                 &'a mut std::collections::VecDeque<(f64, DVec3)>,
@@ -6917,7 +6917,7 @@ impl Traffic {
                     let t0 = std::time::Instant::now();
                     let ground = vehicle.ground.clone();
                     let contact = vehicle.contact.clone();
-                    let rail = body.kind == MotionKind::Rail;
+                    let rail = body.kind() == MotionKind::Rail;
                     if rail {
                         record_rail_trail(trail, state.odometer as f64, state.way_point(net, 0.0));
                     }
@@ -6944,7 +6944,7 @@ impl Traffic {
                         // came along, not dragged round the bends like a road trailer
                         vehicle.retrail(0.0, &|d| Some(behind(d)));
                     }
-                    frame.steer_deg = body.steer;
+                    frame.steer_deg = body.steer();
                     let t1 = std::time::Instant::now();
                     vehicle.update_ai(dt, frame);
                     *secs = t0.elapsed().as_secs_f32();
@@ -6981,7 +6981,7 @@ impl Traffic {
         if debug {
             // a car pulled round harder than a driver would: what way was it given?
             for (c, fr) in self.cars.iter().zip(&frames) {
-                if fr.is_none() || c.body.a_lat.abs() < 4.0 || !self.logged_hard.insert(c.id) {
+                if fr.is_none() || c.body.a_lat().abs() < 4.0 || !self.logged_hard.insert(c.id) {
                     continue;
                 }
                 let st = &c.state;
@@ -7002,7 +7002,7 @@ impl Traffic {
                         )
                     })
                     .collect();
-                log::info!("t={:.1}: car {} {} at {:.1} m/s pulled {:.1} m/s² sideways (steering {:.1}°), bend speed {:.1}, s {:.1}, way {}", self.time, c.id, c.vehicle.ty.def.path.file_stem().unwrap_or_default().to_string_lossy(), st.speed, c.body.a_lat, c.body.steer, st.curve_speed(&self.net), st.s, lanes.join(" / "));
+                log::info!("t={:.1}: car {} {} at {:.1} m/s pulled {:.1} m/s² sideways (steering {:.1}°), bend speed {:.1}, s {:.1}, way {}", self.time, c.id, c.vehicle.ty.def.path.file_stem().unwrap_or_default().to_string_lossy(), st.speed, c.body.a_lat(), c.body.steer(), st.curve_speed(&self.net), st.s, lanes.join(" / "));
             }
         }
         if let Some(f) = self.trace.as_mut() {

@@ -3,7 +3,7 @@
 use crate::anim::MeshAnimator;
 use crate::host::VehicleHost;
 use crate::particles::ParticleSet;
-use crate::physics::{Controls, Dynamics, KinematicModel, VehicleMotion};
+use crate::physics::{Controls, Dynamics, Engine, KinematicModel, VehicleMotion};
 use glam::{DVec3, Mat4, Vec3};
 use hashbrown::HashMap;
 use omsi_script::{Program, State, Vm};
@@ -342,6 +342,14 @@ impl VehicleInstance {
     /// Fix the engine of this vehicle, once, when it appears.
     pub fn set_physics_mode(&mut self, mode: omsi_cfg::PhysicsMode) {
         self.physics_mode = mode;
+        // the static pose of the AI copy is the engine's own
+        let engine = Engine::from(mode);
+        self.rest_sag = crate::physics::kinematic_rest_sag(
+            &self.ty.def,
+            &self.ty.hub_heights(0, engine),
+            engine,
+        );
+        self.ai_lift = Self::ai_lift(&self.ty, &self.rest_sag);
     }
 
     pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
@@ -381,7 +389,11 @@ impl VehicleInstance {
                 ]
             })
             .collect();
-        let rest_sag = crate::physics::kinematic_rest_sag(&ty.def, &ty.hub_heights(0));
+        let rest_sag = crate::physics::kinematic_rest_sag(
+            &ty.def,
+            &ty.hub_heights(0, Engine::Classic),
+            Engine::Classic,
+        );
         let ai_lift = Self::ai_lift(&ty, &rest_sag);
         VehicleInstance {
             a_trans: OmsiFrames::default(),

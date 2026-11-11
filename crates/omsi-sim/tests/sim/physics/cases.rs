@@ -1138,5 +1138,5 @@ fn a_wheel_far_from_the_weight_carries_nothing() {
     );
     assert_eq!(loads[0], 0.0, "{loads:?}");
     // the kinematic model's parts keep their least share
-    assert!(kinematic_wheel_rest_loads(&def)[0] > 0.0);
+    assert!(kinematic_wheel_rest_loads(&def, Engine::Classic)[0] > 0.0);
 }

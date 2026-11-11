@@ -97,9 +97,9 @@ changes here: every player, AI and traffic trace stays bit-identical.
 
 ### AI split `feat/ai-engine-split`
 
-- [ ] T031 [ph 6] Move `AiBody` and `road.rs` unchanged to `crates/omsi-sim/src/ai/depot/`; add `AiMotion` with only the Depot arm built, in `crates/omsi-sim/src/ai/mod.rs`
-- [ ] T032 [ph 6] Build the AI body from the vehicle's resolved mode in `crates/omsi-app/src/gameplay/implementation/traffic.rs` (Depot arm for both modes until phase 8)
-- [ ] T033 [ph 6] AI static pose by engine (both still today's) in `crates/omsi-sim/src/vehicle/vehicle_type.rs`, `crates/omsi-sim/src/vehicle/visuals.rs`, `crates/omsi-sim/src/vehicle/coupled/trailer.rs`
+- [X] T031 [ph 6] Move `AiBody` and `road.rs` unchanged to `crates/omsi-sim/src/ai/depot/`; add `AiMotion` with only the Depot arm built, in `crates/omsi-sim/src/ai/mod.rs`
+- [X] T032 [ph 6] Build the AI body from the vehicle's resolved mode in `crates/omsi-app/src/gameplay/implementation/traffic.rs` (Depot arm for both modes until phase 8)
+- [X] T033 [ph 6] AI static pose by engine (both still today's) in `crates/omsi-sim/src/vehicle/vehicle_type.rs`, `crates/omsi-sim/src/vehicle/visuals.rs`, `crates/omsi-sim/src/vehicle/coupled/trailer.rs`
 - [ ] T034 [ph 3-6] Each structural pull request shows the physics benchmark scenes' frame time before and after, within noise (Principle VII, quickstart Q7)
 
 **Checkpoint**: every trace identical in both engines; the mode is resolved and logged per vehicle;
