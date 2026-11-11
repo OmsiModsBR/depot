@@ -888,6 +888,11 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
             // value and the new formula returns 0 for the whole session when the map has
             // a low hourly density at the start time)
             session::people_clock(h, &world, &settings, &run_clock, envir.as_ref());
+            // how late the duty's bus is, for the passengers' complaints, as the window sets it
+            h.delay = duty
+                .as_ref()
+                .map(|d| d.delay(run_clock.time))
+                .unwrap_or(0.0);
             // populate stops near every LAN player every 2 seconds, as app_events.rs
             // does every 2 s near the local player.  At startup `center` is ZERO (no
             // player bus on a headless server), so stops on the actual map – which can
