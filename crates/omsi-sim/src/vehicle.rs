@@ -28,7 +28,6 @@ pub(crate) mod weather;
 pub(crate) mod winding;
 
 pub use ai_frame::AiFrame;
-pub use trolley::Trolley;
 pub use builtins::{builtin_str_vars, builtin_vars, PAX_DOORS};
 pub use physics_mode::resolve_physics_mode;
 use props::PropsPlan;
@@ -38,6 +37,7 @@ pub use trailer::{
     body_heading, body_reversed, body_rotation, coupling_offsets, coupling_placement,
     coupling_points, joint_angles, TrailerPart,
 };
+pub use trolley::Trolley;
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
 pub use weather::{relative_humidity, road_grip};
