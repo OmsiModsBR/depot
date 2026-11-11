@@ -177,3 +177,64 @@ fn release_v4_biarticulated() {
 fn release_v5_articulated_8x2() {
     release_by_speed(v5_articulated_8x2(), Engine::Classic, 0.6);
 }
+
+mod model_ai;
+
+/// The AI's rows (OMSI Classic): `KA-1` the rotation point on the lane within 1 cm (SC-006),
+/// `KA-4` no roll, `KA-5` the rear sections on their joints.
+fn classic_ai_follows_the_lane(defs: Vec<omsi_vehicle::Vehicle>) {
+    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Classic);
+    assert!(off < 0.01, "the rotation point {off} m off the lane");
+    assert_eq!(roll, 0.0);
+    assert!(gap < 0.02, "a joint {gap} m apart");
+    // `KA-4`, FR-015: the static sag the scripts read is shared about the origin
+    assert!(!model_ai::static_loads_follow_cog(&defs, Engine::Classic));
+}
+
+/// Checks: KA-1, KA-4
+#[test]
+fn ai_route_v1_solo_4x2() {
+    classic_ai_follows_the_lane(v1_solo_4x2());
+}
+
+/// Checks: KA-1, KA-4
+#[test]
+fn ai_route_v2_rigid_6x2() {
+    classic_ai_follows_the_lane(v2_rigid_6x2());
+}
+
+/// Checks: KA-1, KA-4, KA-5
+#[test]
+fn ai_route_v3_articulated_6x2() {
+    classic_ai_follows_the_lane(v3_articulated_6x2());
+}
+
+/// Checks: KA-1, KA-4, KA-5
+#[test]
+fn ai_route_v4_biarticulated() {
+    classic_ai_follows_the_lane(v4_biarticulated());
+}
+
+/// Checks: KA-1, KA-4, KA-5
+#[test]
+fn ai_route_v5_articulated_8x2() {
+    classic_ai_follows_the_lane(v5_articulated_8x2());
+}
+
+/// Checks: KA-6, KA-6b, KA-7
+#[test]
+fn ai_release_v1_solo_4x2() {
+    assert!(model_ai::release_and_return(&v1_solo_4x2()) < 4.0);
+}
+
+/// Checks: KA-6, KA-6b, KA-7
+#[test]
+fn ai_release_v3_articulated_6x2() {
+    assert!(model_ai::release_and_return(&v3_articulated_6x2()) < 4.0);
+}
+
+/// Checks: KA-6, KA-6b, KA-7
+#[test]
+fn ai_release_v4_biarticulated() {
+    assert!(model_ai::release_and_return(&v4_biarticulated()) < 4.0);
+}

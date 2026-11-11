@@ -38,6 +38,7 @@ fn bend(r: f64, grade: f64, s: f64) -> DVec3 {
 }
 
 /// KA-1: the rotation point stays on the lane through a bend, within 1 cm (SC-006).
+/// Checks: KA-1
 #[test]
 fn ka1_the_rotation_point_stays_on_the_lane() {
     let def = bus();
@@ -61,6 +62,7 @@ fn ka1_the_rotation_point_stays_on_the_lane() {
 
 /// KA-1: in a steady bend the body's axis lags the path's tangent so that `sin ψ_r = L κ`,
 /// its front swung out of the bend, and the wheels point at the turning centre.
+/// Checks: KA-1
 #[test]
 fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
     let def = bus();
@@ -101,6 +103,7 @@ fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
 
 /// KA-4: braking hard or cornering leans nothing: the pose comes from the path, the spring
 /// travel is 0 and the bank is 0.
+/// Checks: KA-4
 #[test]
 fn ka4_the_pose_comes_from_the_path() {
     let def = bus();
@@ -129,6 +132,7 @@ fn ka4_the_pose_comes_from_the_path() {
 
 /// KA-2: standing, the resistance only holds the vehicle against the drive; rolling, it acts
 /// against the motion and never turns the vehicle round.
+/// Checks: KA-2, KA-3
 #[test]
 fn ka2_the_speed_comes_from_the_drive_and_the_brakes() {
     let f = |drive: f32, resist: f32| DriveForces {
@@ -149,6 +153,7 @@ fn ka2_the_speed_comes_from_the_drive_and_the_brakes() {
 }
 
 /// KA-2: the driver's pedals from the ratio of the speed to the target speed.
+/// Checks: KA-2
 #[test]
 fn ka2_the_driver_sets_throttle_and_brake_from_the_target() {
     let mut p = Pedals::default();
@@ -176,6 +181,7 @@ fn ka2_the_driver_sets_throttle_and_brake_from_the_target() {
 }
 
 /// KA-9 and KA-10: the regimes, and the detail radius about the camera.
+/// Checks: KA-9, KA-10
 #[test]
 fn ka9_the_target_speed_beyond_the_detail_radius() {
     assert!(within_detail_radius((4, 7), (4, 7)));

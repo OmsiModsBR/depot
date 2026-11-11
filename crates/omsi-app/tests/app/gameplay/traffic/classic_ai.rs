@@ -5,6 +5,7 @@ use super::junction_scenarios::*;
 
 /// A Classic car whose script turns the throttle into drive torque pulls away and drives on;
 /// one whose script hands no drive torque stays where it stands.
+/// Checks: KA-2
 #[test]
 fn a_classic_car_moves_by_its_own_drive() {
     let mut w = World::new(Layout::default(), Vec::new());
@@ -45,6 +46,7 @@ fn a_classic_car_moves_by_its_own_drive() {
 /// `KA-6`: a Classic car the player's vehicle touches leaves its route: fully braked on its
 /// rigid body, its driver standing where it left the way, until the accident is cleared and it
 /// drives on from its route.
+/// Checks: KA-6, KA-8
 #[test]
 fn a_touched_classic_car_is_loose_until_cleared() {
     let mut w = World::new(Layout::default(), Vec::new());
@@ -82,6 +84,7 @@ fn a_touched_classic_car_is_loose_until_cleared() {
 }
 
 /// `KA-11`: a loose car beyond the detail radius about the camera goes back to its route.
+/// Checks: KA-11
 #[test]
 fn a_loose_car_far_from_the_camera_is_cleared() {
     let mut w = World::new(Layout::default(), Vec::new());
@@ -103,6 +106,7 @@ fn a_loose_car_far_from_the_camera_is_cleared() {
 }
 
 /// In Project Depot Physics nothing leaves its route.
+/// Checks: KA-6
 #[test]
 fn a_touched_depot_car_stays_on_its_route() {
     let mut w = World::new(Layout::default(), Vec::new());
@@ -111,4 +115,32 @@ fn a_touched_depot_car_stays_on_its_route() {
     w.tick();
     assert!(!w.of(id).is_loose());
     assert_eq!(w.t.loose_count(), 0);
+}
+
+/// FR-016: a timetable bus put back on its route goes back empty (its riders leave it, by the
+/// cleared list the session reads) and waits for the next trip of its timetable.
+/// Checks: KA-6
+#[test]
+fn a_cleared_bus_waits_empty_for_its_next_trip() {
+    use openomsi_game::testing::bus_service::{BusService, Phase};
+    let mut w = World::new(Layout::default(), Vec::new());
+    let id = w.car_of(
+        engine_car_type(),
+        PhysicsMode::Classic,
+        w.x.approach[NORTH],
+        0.0,
+        0.0,
+        3,
+        false,
+    );
+    let car = w.t.cars.iter_mut().find(|c| c.id == id).unwrap();
+    car.bus = Some(Box::new(BusService::new(Vec::new())));
+    w.t.touched_by_player(vec![id], None);
+    w.tick();
+    assert!(w.of(id).is_loose());
+    assert_eq!(w.t.clear_crashes(), 1);
+    let bus = w.of(id).bus.as_ref().unwrap();
+    assert_eq!(bus.phase, Phase::TripDone);
+    assert!(bus.stops.is_empty());
+    assert_eq!(w.t.take_cleared(), vec![id]);
 }

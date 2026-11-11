@@ -22,7 +22,7 @@ use omsi_model::Model;
 use omsi_script::Program;
 use omsi_sim::ai::{
     back_in_ramp, pull_out_ramps, pull_out_room, rotation_point, straight_pull_out, AiBody,
-    MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT,
+    AiMotion, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, PULL_OUT_WAIT,
 };
 use omsi_sim::collision::Obb;
 use omsi_sim::physics::VehicleMotion;
@@ -40,6 +40,23 @@ use support::trace::{check_per_engine, dv3, engine, list32, n32, n64, v3, Trace}
 // Writing the state
 
 impl Trace {
+    /// The AI body of either engine as the traffic reads it: the Depot body in full, the
+    /// Classic body by what it hands the vehicle (its pose is in `vehicle`).
+    fn motion(&mut self, m: &AiMotion) {
+        #[allow(unreachable_patterns)]
+        match m {
+            AiMotion::Depot(b) => self.body(b),
+            _ => {
+                let _ = writeln!(
+                    self.text,
+                    "  ai motion steer {} a_lat {}",
+                    n32(m.steer()),
+                    n32(m.a_lat())
+                );
+            }
+        }
+    }
+
     /// The AI body as the traffic reads it.
     fn body(&mut self, b: &AiBody) {
         let susp: Vec<String> = b
@@ -377,23 +394,23 @@ mod scenarios {
     }
 
     /// The vehicle the AI drives (with its rear section), its body and its variables.
-    fn ai_vehicle(kind: Kind) -> (VehicleInstance, AiBody, Vec<String>) {
+    fn ai_vehicle(kind: Kind) -> (VehicleInstance, AiMotion, Vec<String>) {
         match kind {
             Kind::Car => {
                 let ty = vehicle_type(car(), 2, vec![0, 1]);
-                let body = AiBody::new(&ty.def, MotionKind::Road);
+                let body = AiMotion::new(&ty.def, MotionKind::Road, engine());
                 (instance(ty), body, var_names(2))
             }
             Kind::ThreeAxles => {
                 let ty = vehicle_type(lorry(), 3, Vec::new());
-                let body = AiBody::new(&ty.def, MotionKind::Road);
+                let body = AiMotion::new(&ty.def, MotionKind::Road, engine());
                 (instance(ty), body, var_names(3))
             }
             Kind::Articulated => {
                 let front =
                     vehicle_type(section(&[(3.2, false), (-2.6, true)], 8.0), 3, vec![0, 1]);
                 let rear = vehicle_type(section(&[(-0.4, false)], 7.2), 3, vec![0]);
-                let body = AiBody::new(&front.def, MotionKind::Road);
+                let body = AiMotion::new(&front.def, MotionKind::Road, engine());
                 let mut v = instance(front);
                 v.attach_trailer(rear);
                 (v, body, var_names(3))
@@ -513,7 +530,7 @@ mod scenarios {
     #[allow(clippy::too_many_arguments)]
     fn ai_step(
         t: &mut Trace,
-        body: &mut AiBody,
+        body: &mut AiMotion,
         v: &mut VehicleInstance,
         names: &[String],
         dt: f32,
@@ -541,10 +558,10 @@ mod scenarios {
             ),
         );
         body.step(dt, speed, way, ground, contact);
-        t.body(body);
+        t.motion(body);
         body.apply(v);
         let frame = AiFrame {
-            steer_deg: body.steer,
+            steer_deg: body.steer(),
             ..frame
         };
         v.update_ai(dt, &frame);
@@ -560,7 +577,7 @@ mod scenarios {
         v.contact = Some(Arc::new(contact) as Arc<dyn Ground>);
         body.place(&|d| lane(way, slope, d as f64), None, Some(&contact), 0.0);
         t.line("placed");
-        t.body(&body);
+        t.motion(&body);
         body.apply(&mut v);
         let dt = 1.0 / 60.0;
         let (mut s, mut speed, mut still) = (0.0f64, 0.0f32, 0usize);
@@ -792,7 +809,7 @@ mod scenarios {
         v.contact = Some(Arc::new(faces) as Arc<dyn Ground>);
         let way = |s: f64| DVec3::new(0.0, s, 10.0);
         body.place(&|d| way(d as f64), None, Some(&faces), 6.0);
-        t.body(&body);
+        t.motion(&body);
         let dt = 1.0 / 60.0;
         let speed = 6.0f32;
         let mut s = 0.0f64;
@@ -841,7 +858,7 @@ mod scenarios {
         v.ground = Some(Arc::new(sample));
         let way = |s: f64| DVec3::new(0.0, s, if s < 30.0 { 0.02 * s } else { 0.6 });
         body.place(&|d| way(d as f64), Some(&sample), None, 0.0);
-        t.body(&body);
+        t.motion(&body);
         let dt = 1.0 / 60.0;
         let (mut s, mut speed) = (0.0f64, 0.0f32);
         for _ in 0..1500 {
@@ -1258,7 +1275,7 @@ mod scenarios {
     fn rail(pieces: &'static [(f64, f64)], rise: f64) -> String {
         let mut t = Trace::default();
         let ty = vehicle_type(tram(), 2, Vec::new());
-        let mut body = AiBody::new(&ty.def, MotionKind::Rail);
+        let mut body = AiMotion::Depot(AiBody::new(&ty.def, MotionKind::Rail));
         let mut v = instance(ty);
         let names = var_names(2);
         let track = move |s: f64| {
@@ -1266,7 +1283,7 @@ mod scenarios {
             DVec3::new(p.x, p.y, rise * (s + 20.0))
         };
         body.place(&|d| track(d as f64), None, None, 0.0);
-        t.body(&body);
+        t.motion(&body);
         let dt = 1.0 / 60.0;
         let (mut s, mut speed) = (0.0f64, 0.0f32);
         for _ in 0..1500 {
@@ -1435,7 +1452,7 @@ mod scenarios {
             2,
             vec![0, 1],
         );
-        let mut body = AiBody::new(&ty.def, MotionKind::Road);
+        let mut body = AiMotion::new(&ty.def, MotionKind::Road, engine());
         let mut v = instance(ty);
         let names = var_names(2);
         let contact = probe(Slope::Flat);
@@ -1523,7 +1540,7 @@ mod scenarios {
         ];
         for (name, def, axles) in cases {
             let ty = vehicle_type(def, 2, axles);
-            let mut body = AiBody::new(&ty.def, MotionKind::Road);
+            let mut body = AiMotion::new(&ty.def, MotionKind::Road, engine());
             let mut v = instance(ty);
             let (lift, delta) = v.ai_rest_offset();
             t.line(&format!(

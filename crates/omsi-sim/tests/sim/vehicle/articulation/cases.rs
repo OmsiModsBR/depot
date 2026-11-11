@@ -434,6 +434,7 @@ fn the_steering_comes_back_from_the_axle_angles() {
 
 /// `KA-5`: a kinematic vehicle's rear section follows it as a trailer, and keeps the pose it
 /// has while its coupled parts are held (the Classic AI beyond the detail radius).
+/// Checks: KA-5, KA-9
 #[test]
 fn a_held_rear_section_keeps_its_pose() {
     let (front, rear) = sections();
