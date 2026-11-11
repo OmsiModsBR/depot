@@ -352,6 +352,22 @@ impl VehicleInstance {
         self.coupled_parts_held = held;
     }
 
+    /// The keys of the moving obstacles (`Obb::moving`) the body touched in its last step.
+    pub fn touching_keys(&self) -> impl Iterator<Item = u64> + '_ {
+        self.touching
+            .iter()
+            .filter(|&&id| id <= -2)
+            .map(|&id| (-2 - id) as u64)
+    }
+
+    /// The bodies of the coupled parts are put away: the parts hang on their joints again
+    /// (and get bodies anew, from where they stand, when the vehicle runs on its rigid body).
+    pub fn put_parts_down(&mut self) {
+        for t in &mut self.trailers {
+            t.unplace();
+        }
+    }
+
     /// Fix the engine of this vehicle, once, when it appears.
     pub fn set_physics_mode(&mut self, mode: omsi_cfg::PhysicsMode) {
         self.physics_mode = mode;

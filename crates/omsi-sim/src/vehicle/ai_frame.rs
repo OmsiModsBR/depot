@@ -106,6 +106,38 @@ impl VehicleInstance {
             |w| w[0].rpm,
         ));
         self.show_a_trans(self.motion.accel);
+        self.run_ai_scripts(dt, ai, inputs, pinned);
+    }
+
+    /// One frame of an OMSI Classic AI vehicle knocked off its route (`KA-6`): its rigid body,
+    /// off the throttle and fully braked, runs into what it meets; its scripts run with the
+    /// `AI_*` variables of `ai` (the hazard lights on).
+    pub fn update_loose(&mut self, dt: f32, ai: &AiFrame) {
+        self.host.clock.advance(dt);
+        self.set_engine_var("schedule_active", self.host.schedule_active);
+        self.set_controls(crate::physics::Controls {
+            throttle: 0.0,
+            brake: 1.0,
+            ..Default::default()
+        });
+        self.step_physics(dt);
+        self.update_ground_probe();
+        if std::mem::take(&mut self.collided) {
+            self.trigger("collision");
+            self.host.coll_energy = 0.0;
+        }
+        self.run_ai_scripts(dt, ai, &[], &[]);
+    }
+
+    /// The `AI_*` variables of `ai`, then `inputs` and `pinned` (see `update_ai_with`), the
+    /// scripts' `{frame_ai}` (or `{frame}`), and the animations.
+    fn run_ai_scripts(
+        &mut self,
+        dt: f32,
+        ai: &AiFrame,
+        inputs: &[(omsi_script::VarId, f32)],
+        pinned: &[(omsi_script::VarId, f32)],
+    ) {
         // `AI` is the engine's "this vehicle is driven by the AI" flag; the police and
         // ambulance script sounds the siren whenever `AI` is 0 and the car rolls, which is
         // why every spawn came with an ambulance nobody could see

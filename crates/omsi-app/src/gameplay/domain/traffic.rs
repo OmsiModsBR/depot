@@ -368,6 +368,12 @@ pub struct Traffic {
     pub viewer: Option<Viewer>,
     /// Buildings that hide what is behind them (the player's collision world).
     pub occluders: Option<Arc<omsi_sim::collision::CollisionWorld>>,
+    /// The cars the player's vehicle touched in its last step (their keys), and its box as
+    /// the cars knocked off their routes run into it (OMSI Classic, `KA-6`).
+    pub player_touching: Vec<u64>,
+    pub player_obb: Option<omsi_sim::collision::Obb>,
+    /// The cars put back on their routes since the session last looked (`take_cleared`).
+    pub cleared: Vec<u64>,
     /// Pedestrians on the footpaths: (lane, distance along it), for giving way at crossings
     /// and for the pedestrian lights' request buttons.
     pub walkers: Vec<(usize, f32)>,

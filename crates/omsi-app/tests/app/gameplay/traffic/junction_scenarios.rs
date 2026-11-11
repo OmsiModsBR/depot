@@ -206,7 +206,7 @@ impl Crossroads {
 /// emergency vehicles' scripts do; no model, nothing to draw.
 pub fn car_type() -> Arc<VehicleType> {
     static TYPE: std::sync::OnceLock<Arc<VehicleType>> = std::sync::OnceLock::new();
-    TYPE.get_or_init(|| scripted_type("plain", "TrafficPriority\n", "{init}\n{end}\n"))
+    TYPE.get_or_init(|| scripted_type("plain", "", "TrafficPriority\n", "{init}\n{end}\n"))
         .clone()
 }
 
@@ -217,6 +217,9 @@ pub fn engine_car_type() -> Arc<VehicleType> {
     TYPE.get_or_init(|| {
         scripted_type(
             "engine",
+            "[mass]\n1.2\n[boundingbox]\n1.8\n4.4\n1.5\n0\n0\n0.75\n[rot_pnt_long]\n-1.3\n\
+             [inv_min_turnradius]\n0.18\n[newachse]\n1.3\n1.5\n1.5\n0.6\n40\n30\n5\n0\n\
+             [newachse]\n-1.3\n1.5\n1.5\n0.6\n40\n30\n5\n1\n",
             "TrafficPriority\nThrottle\nBrake\nM_Wheel\nBrakeforce\n",
             "{init}\n{end}\n{frame}\n(L.L.Throttle) 300 * (S.L.M_Wheel)\n\
              (L.L.Brake) 3000 * (S.L.Brakeforce)\n{end}\n",
@@ -225,8 +228,9 @@ pub fn engine_car_type() -> Arc<VehicleType> {
     .clone()
 }
 
-/// A vehicle type with a varlist `vars` and a script `osc`, in a folder of its own (`name`).
-fn scripted_type(name: &str, vars: &str, osc: &str) -> Arc<VehicleType> {
+/// A vehicle type with the `.bus` keys `bus`, a varlist `vars` and a script `osc`, in a folder
+/// of its own (`name`).
+fn scripted_type(name: &str, bus: &str, vars: &str, osc: &str) -> Arc<VehicleType> {
     let dir = std::env::temp_dir().join(format!(
         "omsi-junction-scenarios-{}-{name}",
         std::process::id()
@@ -234,7 +238,7 @@ fn scripted_type(name: &str, vars: &str, osc: &str) -> Arc<VehicleType> {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("test.bus"),
-        "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
+        format!("[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n{bus}"),
     )
     .unwrap();
     std::fs::write(dir.join("model.cfg"), "").unwrap();
@@ -317,6 +321,9 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         no_timetable_buses: false,
         viewer: None,
         occluders: None,
+        player_touching: Vec::new(),
+        player_obb: None,
+        cleared: Vec::new(),
         walkers: Vec::new(),
         people: Vec::new(),
         initial: false,

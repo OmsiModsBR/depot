@@ -30,8 +30,8 @@ been run (the plan's clarification of 2026-11-09).
 | [KA-10](#ka-10-vehicle-serving-a-stop) | vehicle serving a stop | to validate |
 | [KA-11](#ka-11-automatic-clearing) | automatic clearing of a loose vehicle | to validate |
 
-The AI body is delivered in plan phase 8 (`feat/classic-ai`). Until then the AI of the code is the
-Depot AI of [depot-model.md](depot-model.md) in both engines.
+The AI body (`ai/classic/`) runs every road vehicle of the AI traffic in OMSI Classic. Rail
+vehicles and aircraft keep the Depot AI of [depot-model.md](depot-model.md) in both engines.
 
 ## K-1. Static load share about the model origin
 
@@ -185,8 +185,9 @@ Contact with any active body on any section releases the AI vehicle from its rou
 is `[fixed]`. A loose vehicle can release another (a chain). Loose, it runs the player's rigid body
 without a driver, fully braked with its hazard lights on, and never falls asleep for standing still.
 
-It goes back to its route, asking for a new path, when the player clears the crash from the Alt menu
-("Clear the accident") or by `KA-11`. An AI bus goes back empty and starts the next trip of its
+It goes back to its route when the player clears the crash from the Alt menu ("Clear the accident",
+enabled only while a vehicle is loose) or by `KA-11`. In this code it is put back, standing, where
+its driver left the route, and drives on from there. An AI bus goes back empty and starts the next trip of its
 timetable (maintainer, 2026-11-09). Crashes have no effect on the career.
 
 ## KA-6b. Release and return of the whole vehicle
@@ -220,6 +221,10 @@ On their routes, AI vehicles collide neither with each other nor with static sce
 buildings): they only avoid obstacles by the driver's checks. An AI vehicle on its route collides
 only with active bodies (`KA-6`). A loose AI vehicle is an ordinary body: it collides with everything
 and releases any AI vehicle it touches.
+
+In this code the player's vehicle meets the AI vehicles' boxes as moving obstacles, and an AI vehicle
+it touched is released at the next frame. A loose vehicle meets the scenery's solids, the player's
+vehicle and the boxes of the AI vehicles within 80 m, and releases those it touches the same way.
 
 ## KA-9. Speed beyond the detail radius
 

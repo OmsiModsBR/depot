@@ -136,6 +136,11 @@ impl App {
             },
             pumping: self.pumping.map(|p| p.0),
             route_arrows: crate::hud::lists::route_arrows_on(self),
+            loose_vehicles: self
+                .session
+                .traffic
+                .as_ref()
+                .is_some_and(|t| t.loose_count() > 0),
         }
     }
 
@@ -183,6 +188,7 @@ impl App {
             "swap" => self.switch_vehicle(),
             "remove" => self.remove_driven_vehicle(),
             "repair" => self.run_service(id),
+            "accident" => self.clear_accident(),
             "help" => {
                 crate::hud::lists::toggle_route_arrows(self);
             }

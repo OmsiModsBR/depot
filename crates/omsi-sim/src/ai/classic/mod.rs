@@ -34,6 +34,9 @@ pub struct AiClassic {
     /// Within the detail radius about the camera (`KA-9`): beyond it the rear sections keep
     /// the pose they have (`KA-5`).
     near: bool,
+    /// Knocked off its route (`KA-6`): the vehicle runs its rigid body, and this is the
+    /// kinematic state it goes back to.
+    loose: Option<crate::physics::PhysicsState>,
     /// World position of the rotation point.
     rear: DVec2,
     /// The path's heading at the rotation point (deg, clockwise from north), how far the
@@ -89,6 +92,7 @@ impl AiClassic {
             max_steer: spec.max_steer,
             started: false,
             near: true,
+            loose: None,
             rear: DVec2::ZERO,
             path_heading: 0.0,
             lag: 0.0,
@@ -217,6 +221,37 @@ impl AiClassic {
 
     pub fn pedals(&self) -> Pedals {
         self.pedals
+    }
+
+    /// Whether the vehicle is off its route, on its rigid body (`KA-6`).
+    pub fn is_loose(&self) -> bool {
+        self.loose.is_some()
+    }
+
+    /// Knock the vehicle off its route (`KA-6`, `KA-6b`): all its sections become the
+    /// player's rigid bodies where they stand, moving on at the speed they had. A `[fixed]`
+    /// vehicle stays on its route. True when it was released now.
+    pub fn release(&mut self, v: &mut VehicleInstance) -> bool {
+        if self.loose.is_some() || v.ty.def.fixed {
+            return false;
+        }
+        self.loose = Some(v.physics_state());
+        v.hold_coupled_parts(false);
+        v.enable_rigid_body();
+        v.set_speed(self.last_speed);
+        true
+    }
+
+    /// Put the vehicle back on its route (`KA-6`, `KA-11`): its sections leave their bodies
+    /// all together and the body is placed on the way again (`place`).
+    pub fn settle(&mut self, v: &mut VehicleInstance) {
+        if let Some(state) = self.loose.take() {
+            v.set_physics_state(state);
+            v.put_parts_down();
+            self.started = false;
+            self.last_speed = 0.0;
+            self.pedals = Pedals::default();
+        }
     }
 
     /// Whether the vehicle is within the detail radius about the camera (`KA-9`).

@@ -128,6 +128,11 @@ const PHANTOM_WAIT: f32 = 90.0;
 const BODY_LEVEL: f64 = 3.0;
 
 impl AiCar {
+    /// Knocked off its route, on its rigid body (OMSI Classic, `KA-6`).
+    pub fn is_loose(&self) -> bool {
+        matches!(&self.body, AiMotion::Classic(ai) if ai.is_loose())
+    }
+
     /// A timetable bus (in service or on its way off after its trip).
     pub fn is_bus(&self) -> bool {
         self.bus.is_some()
@@ -1205,6 +1210,9 @@ impl Traffic {
             no_timetable_buses: false,
             viewer: None,
             occluders: None,
+            player_touching: Vec::new(),
+            player_obb: None,
+            cleared: Vec::new(),
             walkers: Vec::new(),
             people: Vec::new(),
             initial: true,
@@ -5714,6 +5722,9 @@ impl Traffic {
         self.last_dt = dt;
         self.held_at_red = 0;
         self.player = player;
+        self.release_touched();
+        self.clear_far_crashes();
+        self.surround_loose();
         self.geo_prev = self.cars.iter_mut().map(|c| c.geo_block.take()).collect();
         self.index_of = self
             .cars
@@ -6790,6 +6801,11 @@ impl Traffic {
                 log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
             }
             let moved = match car.body.classic_mut() {
+                // off its route (`KA-6`): its driver stands where it left the way
+                Some(ai) if ai.is_loose() => {
+                    car.state.speed = 0.0;
+                    true
+                }
                 // OMSI Classic: the speed from the vehicle's own drive and brakes near the
                 // camera, while serving a stop or with `[noDistanceCheck]`, the driver's target
                 // speed elsewhere (`KA-2`, `KA-9`, `KA-10`)
@@ -6955,6 +6971,15 @@ impl Traffic {
                     let t0 = std::time::Instant::now();
                     let ground = vehicle.ground.clone();
                     let contact = vehicle.contact.clone();
+                    if matches!(body, AiMotion::Classic(ai) if ai.is_loose()) {
+                        // knocked off its route: fully braked, the hazard lights on (`KA-6`)
+                        frame.blinker = 3;
+                        frame.brake = true;
+                        frame.speed = vehicle.motion().speed;
+                        vehicle.update_loose(dt, frame);
+                        *secs = t0.elapsed().as_secs_f32();
+                        return;
+                    }
                     let rail = body.kind() == MotionKind::Rail;
                     if rail {
                         record_rail_trail(trail, state.odometer as f64, state.way_point(net, 0.0));
@@ -7625,9 +7650,14 @@ impl Traffic {
     /// Obstacle boxes of all AI vehicles (for the player's collisions), with the rear
     /// sections of articulated buses and the trailers.
     pub fn boxes(&self, near: DVec3, radius: f64) -> Vec<omsi_sim::collision::Obb> {
+        self.boxes_with(|c| (c.vehicle.position - near).length() < radius)
+    }
+
+    /// The boxes of the cars `keep` takes (see [`Traffic::boxes`]).
+    fn boxes_with(&self, keep: impl Fn(&AiCar) -> bool) -> Vec<omsi_sim::collision::Obb> {
         self.cars
             .iter()
-            .filter(|c| (c.vehicle.position - near).length() < radius)
+            .filter(|c| keep(c))
             .flat_map(|c| {
                 let bb = c
                     .vehicle
@@ -7638,7 +7668,13 @@ impl Traffic {
                 // moving, and with a mass of its own: a car that runs into the bus is no
                 // bulldozer
                 let h = c.vehicle.heading.to_radians();
-                let v = glam::DVec2::new(h.sin(), h.cos()) * c.state.speed as f64;
+                // (a loose car at its body's speed, a car on its route at its driver's)
+                let speed = if c.is_loose() {
+                    c.vehicle.motion().speed
+                } else {
+                    c.state.speed
+                };
+                let v = glam::DVec2::new(h.sin(), h.cos()) * speed as f64;
                 let (mass, id) = (c.vehicle.mass_kg(), c.id);
                 let rear = c.vehicle.trailers.iter().filter_map(move |t| {
                     t.ty.def.bounding_box.map(|bb| {
@@ -7686,6 +7722,117 @@ impl Traffic {
     /// Seconds until light `li` of controller `c` lets traffic go (0 while it does).
     pub fn light_until_go(&self, c: usize, li: usize) -> Option<f32> {
         self.lights.get(c)?.time_until_go(li)
+    }
+
+    /// What the player's vehicle did to the traffic in its last step: the cars it touched
+    /// (their keys, `Obb::moving`) and its own box for the cars it knocked loose.
+    pub fn touched_by_player(&mut self, keys: Vec<u64>, obb: Option<Obb>) {
+        self.player_touching = keys;
+        self.player_obb = obb;
+    }
+
+    /// How many cars are off their routes (the Alt menu's "Clear the accident").
+    pub fn loose_count(&self) -> usize {
+        self.cars.iter().filter(|c| c.is_loose()).count()
+    }
+
+    /// Put every car knocked off its route back on it (`KA-6`, `KA-11`); how many.
+    pub fn clear_crashes(&mut self) -> usize {
+        let loose: Vec<usize> = (0..self.cars.len())
+            .filter(|&i| self.cars[i].is_loose())
+            .collect();
+        for &i in &loose {
+            let c = &mut self.cars[i];
+            if let AiMotion::Classic(ai) = &mut c.body {
+                ai.settle(&mut c.vehicle);
+            }
+            // back on the way it was taken off, standing; a bus goes back empty and waits
+            // for the next trip of its timetable
+            c.state.speed = 0.0;
+            let kind = c.body.kind();
+            c.body = place_body(&self.net, &c.state, &mut c.vehicle, kind);
+            if let Some(b) = c.bus.as_mut() {
+                b.stops.clear();
+                b.phase = Phase::TripDone;
+                b.phase_t = 0.0;
+            }
+            log::info!(
+                "Crash cleared: car {} ({}) is back on its path",
+                c.id,
+                c.vehicle.ty.def.type_name
+            );
+            self.cleared.push(c.id);
+        }
+        loose.len()
+    }
+
+    /// The cars put back on their routes since the last call (their riders leave them).
+    pub fn take_cleared(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.cleared)
+    }
+
+    /// OMSI Classic (`KA-6`, `KA-8`): every car on its route that the player's vehicle or a
+    /// loose car touched leaves its route, all its sections at once.
+    fn release_touched(&mut self) {
+        let mut keys = std::mem::take(&mut self.player_touching);
+        for c in self.cars.iter().filter(|c| c.is_loose()) {
+            keys.extend(c.vehicle.touching_keys());
+        }
+        if keys.is_empty() {
+            return;
+        }
+        for c in &mut self.cars {
+            if !keys.contains(&c.id) {
+                continue;
+            }
+            if let AiMotion::Classic(ai) = &mut c.body {
+                if ai.release(&mut c.vehicle) {
+                    log::info!(
+                        "Crash: car {} ({}) left its path",
+                        c.id,
+                        c.vehicle.ty.def.type_name
+                    );
+                }
+            }
+        }
+    }
+
+    /// `KA-11`: once a loose car is beyond the detail radius about the camera, every loose
+    /// car goes back to its route.
+    fn clear_far_crashes(&mut self) {
+        let Some(cam) = self.camera else {
+            return;
+        };
+        let cam = omsi_map::world_to_tile_local(cam.x, cam.y).0;
+        let far = self.cars.iter().any(|c| {
+            let p = c.vehicle.position;
+            c.is_loose()
+                && !c.vehicle.ty.model.no_distance_check
+                && !within_detail_radius(omsi_map::world_to_tile_local(p.x, p.y).0, cam)
+        });
+        if far {
+            self.clear_crashes();
+        }
+    }
+
+    /// What a loose car runs into (`KA-8`): the scenery's solids, the player's vehicle and
+    /// every other car about it.
+    fn surround_loose(&mut self) {
+        if !self.cars.iter().any(|c| c.is_loose()) {
+            return;
+        }
+        let mut others = self.boxes_with(|_| true);
+        others.extend(self.player_obb);
+        for c in self.cars.iter_mut().filter(|c| c.is_loose()) {
+            let me = c.vehicle.position;
+            let own = -2 - c.id as i64;
+            c.vehicle.collision = self.occluders.clone();
+            c.vehicle.dynamic_boxes = others
+                .iter()
+                .filter(|o| o.id != own && (o.center - me.truncate()).length() < 80.0)
+                .copied()
+                .collect();
+        }
     }
 
     /// The mass of the people aboard each car (kg, by id; none for a car left out).

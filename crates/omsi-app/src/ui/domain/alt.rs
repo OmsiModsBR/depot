@@ -52,6 +52,8 @@ pub struct AltCtx {
     pub pumping: Option<&'static str>,
     /// The route arrows over the road are on (the help marker button is drawn pressed).
     pub route_arrows: bool,
+    /// AI vehicles are off their routes after an accident (OMSI Classic physics).
+    pub loose_vehicles: bool,
 }
 
 /// Why a button for something the game does not have yet cannot be used.
@@ -149,7 +151,7 @@ pub fn buttons(ctx: &AltCtx) -> Vec<OwnedButton> {
             "accident",
             Icon("alt-accident"),
             "Clear the accident",
-            Some(NOT_YET),
+            need(ctx.loose_vehicles, "No accident to clear"),
         ),
         b(
             "repair",
