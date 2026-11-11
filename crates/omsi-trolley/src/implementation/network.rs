@@ -283,6 +283,13 @@ impl WireNetwork {
         self.tiles.is_empty()
     }
 
+    /// Is a switch or crossing object within `radius` metres (along the ground) of `p`?
+    pub fn special_near(&self, p: DVec3, radius: f64) -> bool {
+        self.objects().any(|o| {
+            o.kind != WireObjectKind::SoundMarker && (o.position - p).truncate().length() <= radius
+        })
+    }
+
     /// The loaded tiles' wire.
     pub fn tiles(&self) -> impl Iterator<Item = ((i32, i32), &TileWires)> {
         self.tiles.iter().map(|(k, t)| (*k, t))

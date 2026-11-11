@@ -72,6 +72,7 @@ impl VehicleInstance {
                 reset: flag(self, "shtanga_wire_reset"),
                 retract: flag(self, "shtanga_recolher_cmd"),
                 switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
+                speed_kmh: self.motion().velocity_kmh() as f64,
             };
             let out = {
                 let net = t.network.lock();
@@ -112,6 +113,14 @@ impl VehicleInstance {
         self.set_engine_var("shtanga_wire_segment", out.spline_id as f32);
         self.set_engine_var("shtanga_wire_progress", out.progress as f32);
         self.set_engine_var("shtanga_plugin_heartbeat", heartbeat);
+        self.set_engine_var(
+            "shtanga_speed_limit_active",
+            f32::from(u8::from(out.speed_limit_active)),
+        );
+        self.set_engine_var(
+            "shtanga_complex_overspeed",
+            f32::from(u8::from(out.overspeed)),
+        );
     }
 }
 

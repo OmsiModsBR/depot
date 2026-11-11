@@ -119,6 +119,8 @@ pub fn declaration_from(
             catcher_delay: global("physics", "dewire_catcher_delay")?,
             catcher_lower_rate: global("physics", "dewire_catcher_lower_deg_s")?,
             switch_threshold: global("global", "switch_throttle_threshold")?,
+            complex_speed_limit: global("physics", "complex_speed_limit_kmh")?,
+            complex_overspeed_grace: global("physics", "complex_overspeed_grace")?,
         },
     })
 }

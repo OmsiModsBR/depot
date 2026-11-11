@@ -35,6 +35,8 @@ pub enum DewireReason {
     SideAngle,
     /// The wire ended under the shoe.
     Gap,
+    /// Through a switch or crossing faster than its speed limit.
+    Overspeed,
 }
 
 /// A place on one wire: span, which of its two wires, the piece of it (points `seg` and
@@ -60,7 +62,7 @@ pub struct PoleState {
     /// Why it left the wire (while dewired).
     pub dewire: Option<DewireReason>,
     /// Seconds each dewirement condition has held without a break: reach, force, side force.
-    pub held: [f64; 3],
+    pub held: [f64; 4],
     /// How much longer than the pole the way from its foot to the wire is (metres; 0 when
     /// the pole reaches it).
     pub reach_error: f64,
@@ -74,7 +76,7 @@ impl Default for PoleState {
             timer: 0.0,
             lowered_from: (0.0, 0.0),
             dewire: None,
-            held: [0.0; 3],
+            held: [0.0; 4],
             reach_error: 0.0,
         }
     }
@@ -100,6 +102,8 @@ pub struct PoleInputs {
     /// What the vehicle asks of the next switch (the convention feeds the throttle in):
     /// above the parameter file's `switch_throttle_threshold` the switch turns.
     pub switch_demand: f64,
+    /// The vehicle's speed, km/h.
+    pub speed_kmh: f64,
 }
 
 /// What one pole shows.
@@ -117,6 +121,8 @@ pub struct PoleOutput {
     pub on_wire: bool,
     /// Off the wire by a dewirement, until the pole is back on its hook.
     pub dewired: bool,
+    /// The shoe is in a switch or crossing (its speed limit applies).
+    pub in_special: bool,
 }
 
 /// What the poles show this frame.
@@ -128,6 +134,10 @@ pub struct PoleOutputs {
     /// The map id of the spline the left shoe is on and how far along it (metres), or -1.
     pub spline_id: i64,
     pub progress: f64,
+    /// A shoe on the wire is in a switch or crossing (its speed limit applies), and the
+    /// vehicle is faster than that limit.
+    pub speed_limit_active: bool,
+    pub overspeed: bool,
 }
 
 /// Something worth a line in the detailed log.
@@ -183,6 +193,7 @@ pub struct PoleSim {
     /// so both shoes take the same branch.
     pub(crate) forks: Vec<((SpanId, usize), SpanId, f64)>,
     pub(crate) demand: bool,
+    pub(crate) speed_kmh: f64,
     /// What happened in the last step.
     pub events: Vec<PoleEvent>,
 }

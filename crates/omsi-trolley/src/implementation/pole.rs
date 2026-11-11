@@ -18,11 +18,15 @@ const SEARCH_RADIUS: f64 = 2.5;
 /// gap), seconds.
 const FORK_MEMORY: f64 = 10.0;
 
+/// How near a switch or crossing object (metres, along the ground) a shoe is inside it, for
+/// its speed limit.
+const SPECIAL_ZONE: f64 = 4.0;
+
 /// The way on at a fork, and the kind of object it is: a switch sets itself by the
-/// vehicle's demand - with demand a Y turns left and a branch switch takes its branch,
-/// without demand a Y turns right and a branch switch runs straight; a crossing runs
-/// straight; where the content has no object the shoe keeps to the closest, straightest
-/// wire.
+/// vehicle's demand - with demand the shoes take its left way, without it its right way
+/// (on a Y the left and right branches, on a 20 degree switch the branch or the straight,
+/// whichever lies on that side); a crossing runs straight; where the content has no object
+/// the shoe keeps to the closest, straightest wire.
 fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObjectKind>) {
     let rank = |k: &WireObjectKind| match k {
         WireObjectKind::SwitchY
@@ -43,12 +47,17 @@ fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObj
             .min_by(|a, b| f(&ways[*a]).total_cmp(&f(&ways[*b])))
             .unwrap_or(0)
     };
+    let switch = matches!(
+        kind,
+        Some(
+            WireObjectKind::SwitchY
+                | WireObjectKind::SwitchBranchLeft
+                | WireObjectKind::SwitchBranchRight
+        )
+    );
     let k = match (kind, demand) {
-        (Some(WireObjectKind::SwitchY), true) => by(&|w| -turn(w)),
-        (Some(WireObjectKind::SwitchY), false) => by(&|w| turn(w)),
-        (Some(WireObjectKind::SwitchBranchLeft | WireObjectKind::SwitchBranchRight), true) => {
-            by(&|w| -turn(w).abs())
-        }
+        (_, true) if switch => by(&|w| -turn(w)),
+        (_, false) if switch => by(&|w| turn(w)),
         (Some(_), _) => by(&|w| turn(w).abs()),
         (None, _) => by(&|w| w.gap + turn(w).abs() / 20.0),
     };
@@ -92,6 +101,7 @@ impl PoleSim {
             f.2 += dt;
         }
         self.forks.retain(|f| f.2 < FORK_MEMORY);
+        self.speed_kmh = inputs.speed_kmh.abs();
         let retract = inputs.retract && !self.retract_before;
         self.retract_before = inputs.retract;
         let mut out = PoleOutputs {
@@ -107,6 +117,8 @@ impl PoleSim {
             out.poles[i] = self.step_pole(i, decl, net, body, pressed, dt);
         }
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
+        out.speed_limit_active = out.poles.iter().any(|p| p.on_wire && p.in_special);
+        out.overspeed = out.speed_limit_active && self.speed_kmh > decl.params.complex_speed_limit;
         if let Some(c) = self.poles[0].cursor.filter(|_| out.poles[0].on_wire) {
             if let Some(span) = net.span(c.span) {
                 out.spline_id = span.spline_id;
@@ -189,7 +201,7 @@ impl PoleSim {
         let state = &mut self.poles[i];
         match state.phase {
             PolePhase::OnWire => {
-                if let Some(reason) = dewirement(state, &p, &o, &contact, dt) {
+                if let Some(reason) = dewirement(state, &p, &o, &contact, self.speed_kmh, dt) {
                     self.events.push(PoleEvent::Dewired { pole: i, reason });
                     *state = PoleState {
                         phase: PolePhase::Dewired,
@@ -282,8 +294,9 @@ impl PoleSim {
         let up = body.rotation * DVec3::Z;
         let end = point + up * decl.params.shoe_height_offset;
         let wire_dir = walk::tangent(net, &cursor).unwrap_or(DVec3::Y);
-        let (o, mut contact) = on_wire(decl, i, body, end, wire_dir);
+        let (mut o, mut contact) = on_wire(decl, i, body, end, wire_dir);
         contact.wire_ended = wire_ended;
+        o.in_special = net.special_near(point, SPECIAL_ZONE);
         Some((o, contact))
     }
 
@@ -326,6 +339,7 @@ fn dewirement(
     p: &PoleParams,
     o: &PoleOutput,
     c: &Contact,
+    speed_kmh: f64,
     dt: f64,
 ) -> Option<DewireReason> {
     if c.wire_ended {
@@ -352,6 +366,11 @@ fn dewirement(
             side_force > p.side_force_dewire,
             p.side_force_time,
             DewireReason::SideForce,
+        ),
+        (
+            o.in_special && speed_kmh > p.complex_speed_limit,
+            p.complex_overspeed_grace,
+            DewireReason::Overspeed,
         ),
     ];
     for (k, (holds, time, reason)) in conditions.into_iter().enumerate() {
@@ -544,6 +563,7 @@ fn on_wire(
             force,
             on_wire: true,
             dewired: false,
+            in_special: false,
         },
         Contact {
             side_angle: az_v,

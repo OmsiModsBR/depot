@@ -27,6 +27,8 @@ spring_nominal_force_n=82
 spring_reference_elevation_deg=25
 spring_gain_n_per_deg=1.15
 contact_force_max_n=160
+complex_speed_limit_kmh=25
+complex_overspeed_grace=0.16
 contact_force_dewire_n=12
 contact_force_dewire_time=0.18
 contact_reach_release_error_m=0.10
@@ -119,6 +121,7 @@ fn grab(sim: &mut PoleSim, d: &TrolleyDeclaration, net: &WireNetwork, at: &BodyP
             reset: false,
             retract: false,
             switch_demand: 0.0,
+            speed_kmh: 0.0,
         },
         1.0 / 60.0,
     );
@@ -189,6 +192,7 @@ fn no_wire_in_reach_leaves_the_poles_down() {
             reset: false,
             retract: false,
             switch_demand: 0.0,
+            speed_kmh: 0.0,
         },
         0.016,
     );
@@ -351,6 +355,7 @@ fn raising_takes_the_same_time_at_any_frame_rate() {
                 reset: false,
                 retract: false,
                 switch_demand: 0.0,
+                speed_kmh: 0.0,
             },
             1.0 / fps,
         );
@@ -380,6 +385,7 @@ fn a_second_press_lowers_the_pole_to_its_hook() {
             reset: false,
             retract: false,
             switch_demand: 0.0,
+            speed_kmh: 0.0,
         },
         0.016,
     );

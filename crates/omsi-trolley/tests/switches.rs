@@ -31,6 +31,8 @@ spring_nominal_force_n=82
 spring_reference_elevation_deg=25
 spring_gain_n_per_deg=1.15
 contact_force_max_n=160
+complex_speed_limit_kmh=25
+complex_overspeed_grace=0.16
 contact_force_dewire_n=12
 contact_force_dewire_time=0.18
 contact_reach_release_error_m=0.10
@@ -170,22 +172,73 @@ fn without_demand_a_y_turns_right_and_with_demand_left() {
     let _ = sim;
 }
 
-#[test]
-fn a_branch_switch_runs_straight_without_demand_and_takes_its_branch_with_it() {
-    // the line ends at y = 50, the straight goes on at y = 54 and the branch leaves at
-    // y = 54, 0.72 m to the right, 20 degrees off
-    let n = net(
+/// A right branch switch at y = 52: the line ends at y = 50, the straight goes on at
+/// y = 54 and the branch leaves at y = 54, 0.72 m to the right, 20 degrees off.
+fn right_branch_switch() -> WireNetwork {
+    net(
         vec![
             spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 50.0, 0.0),
             spline(2, WIRE, [0.0, 54.0, 0.0], 0.0, 40.0, 0.0),
             spline(3, WIRE, [0.72, 54.0, 0.0], 20.0, 40.0, 0.0),
         ],
         vec![object(9, RIGHT, [0.0, 52.0, 0.0], 0.0)],
-    );
-    let (_, straight) = drive_north(&n, 0.0, 20.0, 62.0, 0.0);
-    assert_eq!(straight, [2, 2]);
-    let (_, branch) = drive_north(&n, 0.0, 20.0, 62.0, 1.0);
-    assert_eq!(branch, [3, 3]);
+    )
+}
+
+#[test]
+fn every_switch_takes_its_left_way_with_demand_and_its_right_way_without() {
+    // on a right branch switch the left way is the straight one, the right way the branch
+    let n = right_branch_switch();
+    let (_, powered) = drive_north(&n, 0.0, 20.0, 62.0, 1.0);
+    assert_eq!(powered, [2, 2]);
+    let (_, coasting) = drive_north(&n, 0.0, 20.0, 62.0, 0.0);
+    assert_eq!(coasting, [3, 3]);
+}
+
+#[test]
+fn faster_than_the_limit_through_a_switch_the_poles_leave_the_wire() {
+    let n = right_branch_switch();
+    let d = decl();
+    for (kmh, dewires) in [(20.0, false), (40.0, true)] {
+        let mut sim = PoleSim::default();
+        let at = body(0.0, 20.0, 0.0);
+        sim.step(
+            &d,
+            &n,
+            &at,
+            PoleInputs {
+                grab: [true, true],
+                ..Default::default()
+            },
+            1.0 / 60.0,
+        );
+        for _ in 0..100 {
+            sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+        }
+        let (mut y, mut limited, mut left) = (20.0, false, None);
+        while y < 70.0 && left.is_none() {
+            y += kmh / 3.6 / 60.0;
+            let o = sim.step(
+                &d,
+                &n,
+                &body(0.0, y, 0.0),
+                // (with demand: the straight way, which the bus follows)
+                PoleInputs {
+                    speed_kmh: kmh,
+                    switch_demand: 1.0,
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+            );
+            limited |= o.speed_limit_active;
+            left = sim.poles.iter().find_map(|p| p.dewire);
+        }
+        assert!(limited, "the limit applied in the switch");
+        assert_eq!(left.is_some(), dewires, "{kmh} km/h");
+        if dewires {
+            assert_eq!(left, Some(omsi_trolley::DewireReason::Overspeed));
+        }
+    }
 }
 
 #[test]

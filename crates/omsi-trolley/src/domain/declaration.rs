@@ -65,6 +65,10 @@ pub struct PoleParams {
     pub catcher_lower_rate: f64,
     /// The switch demand above which a switch turns.
     pub switch_threshold: f64,
+    /// Through a switch or crossing faster than this (km/h) for longer than the grace time
+    /// (seconds), the pole leaves the wire.
+    pub complex_speed_limit: f64,
+    pub complex_overspeed_grace: f64,
 }
 
 /// One registry entry that applies to the player's vehicle.
