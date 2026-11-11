@@ -177,7 +177,7 @@ pub(crate) fn follow_id(args: &Args, traffic: Option<&traffic::Traffic>) -> Opti
             .cars
             .iter()
             .filter(|c| c.state.speed > 1.0 && !c.is_bus())
-            .max_by(|a, b| a.body.steer.abs().total_cmp(&b.body.steer.abs()))
+            .max_by(|a, b| a.body.steer().abs().total_cmp(&b.body.steer().abs()))
             .map(|c| c.id),
         v if v.starts_with("type:") => {
             let want = v[5..].to_ascii_lowercase();

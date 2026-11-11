@@ -156,20 +156,21 @@ pub fn wheel_rest_loads(def: &Vehicle, engine: Engine) -> Vec<f32> {
     }
 }
 
-/// [`wheel_rest_loads`] (Classic) as the kinematic model (the AI's copies and their parts) reads them:
-/// with its mass ([`kinematic_mass_kg`]), each wheel taking at least a share of an even split
-/// (`MIN_LOAD_SHARE`).
-pub fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
-    let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
-    rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, cog_y)
+/// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them,
+/// by the rule of `engine`.
+pub fn kinematic_wheel_rest_loads(def: &Vehicle, engine: Engine) -> Vec<f32> {
+    match engine {
+        Engine::Classic => classic::load_share::kinematic_wheel_rest_loads(def),
+        Engine::Depot => depot::load_share::kinematic_wheel_rest_loads(def),
+    }
 }
 
 /// How far each axle's spring sits down under the vehicle's weight and how far its tyre
 /// reaches below the hub (m), as the kinematic model (the AI's copies) stands on them: with
 /// its mass and the springs a file without them once had (`AxleSpec::sag_spring`), from the
 /// unloaded hub heights `hubs` (`VehicleType::hub_heights`).
-pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>]) -> Vec<(f32, f32)> {
-    let loads = kinematic_wheel_rest_loads(def);
+pub fn kinematic_rest_sag(def: &Vehicle, hubs: &[Option<f32>], engine: Engine) -> Vec<(f32, f32)> {
+    let loads = kinematic_wheel_rest_loads(def, engine);
     def.axles
         .iter()
         .enumerate()

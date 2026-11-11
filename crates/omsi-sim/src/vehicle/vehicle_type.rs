@@ -591,8 +591,12 @@ impl VehicleType {
     /// A model that does not move an axle's wheels with `Axle_Suspension` (a railway car, a
     /// plane) cannot show them sitting up in their arches: that axle hangs its wheels as much
     /// lower as the load compresses the spring, and the body keeps its unloaded height.
-    pub fn hub_heights(&self, first_axle: usize) -> Vec<Option<f32>> {
-        let loads = crate::physics::kinematic_wheel_rest_loads(&self.def);
+    pub fn hub_heights(
+        &self,
+        first_axle: usize,
+        engine: crate::physics::Engine,
+    ) -> Vec<Option<f32>> {
+        let loads = crate::physics::kinematic_wheel_rest_loads(&self.def, engine);
         self.def
             .axles
             .iter()
