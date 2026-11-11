@@ -135,7 +135,9 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                     continue;
                 }
                 runs += 1;
-                let step = 10.0 / 3.6 / 60.0;
+                // (slowly: a shoe stands in each gap for a while)
+                let step = 1.0 / 3.6 / 60.0;
+                let mut crossings = [0usize; 2];
                 let mut swapped = None;
                 let mut driven = 0.0;
                 'drive: for w in path.windows(2) {
@@ -159,11 +161,38 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                             },
                             1.0 / 60.0,
                         );
+                        for e in &sim.events {
+                            if let omsi_trolley::PoleEvent::Joint { pole, .. } = e {
+                                crossings[*pole] += 1;
+                            }
+                        }
                         if o.wire_present && o.poles[0].shoe_pos.x >= o.poles[1].shoe_pos.x {
+                            let on = sim.poles.map(|q| {
+                                q.cursor.map(|c| {
+                                    (net.span(c.span).unwrap().spline_id, c.side, c.seg, c.t)
+                                })
+                            });
+                            eprintln!(
+                            "    shoes {:?} / {:?}, shoe x {:.2} / {:.2}, yaw {:.1} / {:.1}, events {:?}",
+                            on[0],
+                            on[1],
+                            o.poles[0].shoe_pos.x,
+                            o.poles[1].shoe_pos.x,
+                            o.poles[0].yaw,
+                            o.poles[1].yaw,
+                            sim.events
+                        );
                             swapped = Some(p);
                             break 'drive;
                         }
                     }
+                }
+                if crossings.iter().any(|c| *c > 20) {
+                    swaps += 1;
+                    eprintln!(
+                        "  BACK AND FORTH: spline {} -> {} via {:?}: joints crossed {crossings:?}",
+                        ids.0, ids.1, j.via
+                    );
                 }
                 if let Some(p) = swapped {
                     swaps += 1;
@@ -177,4 +206,84 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
     }
     eprintln!("{runs} drives, {swaps} with the shoes swapped");
     assert_eq!(swaps, 0);
+}
+
+#[test]
+fn dump_spans() {
+    let (Some(root), Ok(map), Some(plugins), Ok(ids)) = (
+        std::env::var_os("OMSI_ROOT").map(PathBuf::from),
+        std::env::var("OMSI_TROLLEY_MAP"),
+        std::env::var_os("OMSI_TROLLEY_PLUGINS").map(PathBuf::from),
+        std::env::var("OMSI_TROLLEY_DUMP"),
+    ) else {
+        return;
+    };
+    let ids: Vec<i64> = ids
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    let text = |p: PathBuf| omsi_cfg::decode_text(&std::fs::read(p).expect("readable"));
+    let params = parse_params(&text(plugins.join("TrolleyWirePlugin.cfg"))).expect("params");
+    let map_dir = root.join("maps").join(map);
+    let global = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg")).expect("global.cfg");
+    omsi_map::configure_grid(&global);
+    let size = omsi_map::tile_size();
+    let mut net = WireNetwork::default();
+    for t in &global.tiles {
+        let Ok(mut tile) = omsi_map::tile::Tile::load(&map_dir.join(&t.file)) else {
+            continue;
+        };
+        tile.fit_to_world_grid(t.y);
+        let origin = DVec2::new(t.x as f64 * size, t.y as f64 * size);
+        net.insert_tile(build_tile_wires((t.x, t.y), origin, &tile, &params));
+    }
+    let o = net
+        .tiles()
+        .flat_map(|(_, t)| t.spans.iter())
+        .find(|s| ids.contains(&s.spline_id))
+        .map(|s| s.ends[0].point)
+        .unwrap();
+    let rel = |p: DVec3| format!("({:.2}, {:.2})", p.x - o.x, p.y - o.y);
+    for (k, (_, t)) in net.tiles().enumerate() {
+        for (i, s) in t.spans.iter().enumerate() {
+            if !ids.contains(&s.spline_id) {
+                continue;
+            }
+            eprintln!(
+                "spline {} ({}), {:.1} m: start {} out {:.2?}, end {} out {:.2?}; L {}..{} R {}..{}",
+                s.spline_id,
+                s.file,
+                s.length,
+                rel(s.ends[0].point),
+                s.ends[0].outward.truncate(),
+                rel(s.ends[1].point),
+                s.ends[1].outward.truncate(),
+                rel(s.wires[0][0]),
+                rel(*s.wires[0].last().unwrap()),
+                rel(s.wires[1][0]),
+                rel(*s.wires[1].last().unwrap()),
+            );
+            let _ = (k, i);
+        }
+    }
+    for j in net.joints() {
+        let a = net.span(j.a.0).unwrap().spline_id;
+        let b = net.span(j.b.0).unwrap().spline_id;
+        if ids.contains(&a) || ids.contains(&b) {
+            eprintln!(
+                "joint {a}:{} - {b}:{} gap {:.2} reversed {} via {:?}",
+                j.a.1, j.b.1, j.gap, j.reversed, j.via
+            );
+        }
+    }
+    for ob in net.objects() {
+        if (ob.position - o).truncate().length() < 40.0 {
+            eprintln!(
+                "object {:?} at {} heading {:.1}",
+                ob.kind,
+                rel(ob.position),
+                ob.heading_deg
+            );
+        }
+    }
 }

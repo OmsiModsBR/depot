@@ -429,3 +429,57 @@ fn whichever_way_the_splines_are_drawn_the_shoes_keep_their_sides_through_a_swit
         }
     }
 }
+
+#[test]
+fn a_shoe_standing_in_a_switch_gap_stays_on_its_way() {
+    use omsi_trolley::PoleEvent;
+    // into the Y from its left branch (a merge), then from the line (each way at a fork)
+    let t10 = 32.15 * 10f64.to_radians().tan();
+    let n = y_switch();
+    for path in [
+        vec![(-0.5 - t10, 85.0), (-0.5, 52.85), (0.0, 50.0), (0.0, 20.0)],
+        vec![(0.0, 20.0), (0.0, 50.0), (-0.5, 52.85), (-0.5 - t10, 85.0)],
+    ] {
+        let d = decl();
+        let heading = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0).atan2(b.1 - a.1).to_degrees();
+        let mut sim = PoleSim::default();
+        let at = body(path[0].0, path[0].1, heading(path[0], path[1]));
+        let press = PoleInputs {
+            grab: [true, true],
+            ..Default::default()
+        };
+        sim.step(&d, &n, &at, press, 1.0 / 60.0);
+        for _ in 0..100 {
+            sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+        }
+        // creep along; each time a shoe is in the gap, stand there a while
+        let mut joints = [0usize; 2];
+        for w in path.windows(2) {
+            let (a, b) = (DVec2::from(w[0]), DVec2::from(w[1]));
+            let len = a.distance(b);
+            let mut s = 0.0;
+            while s < len {
+                s = (s + 0.05).min(len);
+                let p = a.lerp(b, s / len);
+                let at = body(p.x, p.y, heading(w[0], w[1]));
+                for _ in 0..4 {
+                    let o = sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+                    for e in &sim.events {
+                        if let PoleEvent::Joint { pole, .. } = e {
+                            joints[*pole] += 1;
+                        }
+                    }
+                    assert!(
+                        !o.wire_present || o.poles[0].shoe_pos.x < o.poles[1].shoe_pos.x,
+                        "the shoes swapped at {p}"
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            joints,
+            [1, 1],
+            "each shoe crosses the switch once: {path:?}"
+        );
+    }
+}

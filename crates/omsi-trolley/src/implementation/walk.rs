@@ -8,6 +8,12 @@ use crate::domain::pole::WireCursor;
 /// How many pieces of wire one step may walk over.
 const MAX_PIECES: usize = 64;
 
+/// How far (metres) beside a span's end a plain joint may lead and still be a way on where
+/// the end has another: farther, it is the start of a neighbouring wire that happens to face
+/// the same way (a switch's branch beside a line's end), and taking it puts a shoe on the
+/// wrong wire. An end with no other way on keeps it.
+const SPLICE_MAX_BESIDE: f64 = 0.3;
+
 /// One way on from the end of a span: the joined span's wire on the same side, where it
 /// starts and which way it runs.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -228,6 +234,25 @@ pub(crate) fn reach(
             choose((c.span, end), &ways, travel).min(ways.len() - 1)
         };
         let w = ways[pick];
+        // the gap itself (a joint's looseness, or the wire a switch or crossing draws): the
+        // pole's length may fall in it. The shoe is still on the wire it came from until it
+        // is past the gap: put on the joined wire, the next step would walk back across the
+        // gap from there (and, at a switch's entry, choose a way again).
+        let in_gap = sphere_crossings(q, w.start, foot, len)
+            .into_iter()
+            .reduce(f64::min);
+        if let Some(u) = in_gap {
+            return Some(Reached {
+                cursor: WireCursor {
+                    t: f64::from(end as u8),
+                    ..c
+                },
+                point: q.lerp(w.start, u),
+                error: 0.0,
+                joints,
+                wire_ended: false,
+            });
+        }
         let merge_left = if ways.len() == 1 && w.via.is_some_and(WireObjectKind::is_switch) {
             merge_side(net, (c.span, end), &w)
         } else {
@@ -241,23 +266,9 @@ pub(crate) fn reach(
             at: w.start,
             merge_left,
         });
-        // the gap itself (a joint's looseness, or the wire a switch or crossing draws): the
-        // pole's length may fall in it
-        let in_gap = sphere_crossings(q, w.start, foot, len)
-            .into_iter()
-            .reduce(f64::min);
         c = w.cursor;
         dir = w.dir;
         p = w.start;
-        if let Some(u) = in_gap {
-            return Some(Reached {
-                cursor: c,
-                point: q.lerp(w.start, u),
-                error: 0.0,
-                joints,
-                wire_ended: false,
-            });
-        }
         // past the gap already: the shoe goes on from the joined wire's end
         if (start_error < 0.0) == (p.distance(foot) > len) {
             return Some(Reached {
@@ -299,6 +310,7 @@ pub(crate) fn ways_on(net: &WireNetwork, c: &WireCursor, end: usize) -> Option<V
     let side_of = |w: DVec3, p: DVec3, along: DVec3| along.cross(w - p).z.signum();
     let ours = side_of(own, partner, out);
     let mut ways = Vec::new();
+    let mut beside = Vec::new();
     for j in net.joints_at(c.span, end) {
         let (span_id, other_end) = if j.a == (c.span, end) { j.b } else { j.a };
         let span = net.span(span_id)?;
@@ -333,6 +345,17 @@ pub(crate) fn ways_on(net: &WireNetwork, c: &WireCursor, end: usize) -> Option<V
             heading,
             gap: start.distance(own),
             via: j.via,
+        });
+        let d = span.ends[other_end].point - here.ends[end].point;
+        beside.push((d - out * d.dot(out)).truncate().length());
+    }
+    let true_way = |k: usize| ways[k].via.is_some() || beside[k] <= SPLICE_MAX_BESIDE;
+    if (0..ways.len()).any(true_way) {
+        let keep: Vec<bool> = (0..ways.len()).map(true_way).collect();
+        let mut k = 0;
+        ways.retain(|_| {
+            k += 1;
+            keep[k - 1]
         });
     }
     Some(ways)
