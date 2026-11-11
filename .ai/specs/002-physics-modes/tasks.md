@@ -87,7 +87,7 @@ changes here: every player, AI and traffic trace stays bit-identical.
 ### Traces per engine `feat/physics-traces-per-engine`
 
 - [X] T026 [ph 4] Run each scenario per engine with the engine in the trace file name, in `crates/omsi-sim/tests/physics_traces.rs`, `crates/omsi-sim/tests/ai_traces.rs`, `crates/omsi-sim/tests/traffic_traces.rs`
-- [ ] T027 [ph 4] Invariant I1 per engine (the static share differs) in `crates/omsi-sim/tests/physics_invariants.rs`
+- [X] T027 [ph 4] Invariant I1 per engine (the static share differs) in `crates/omsi-sim/tests/physics_invariants.rs`
 - [X] T028 [ph 4] Both engines in `scripts/physics-trace-diff.sh` and in the `physics-traces` job of `.github/workflows/depot-ci.yml`
 
 ### Engine split `feat/physics-engine-split`
@@ -100,7 +100,7 @@ changes here: every player, AI and traffic trace stays bit-identical.
 - [X] T031 [ph 6] Move `AiBody` and `road.rs` unchanged to `crates/omsi-sim/src/ai/depot/`; add `AiMotion` with only the Depot arm built, in `crates/omsi-sim/src/ai/mod.rs`
 - [X] T032 [ph 6] Build the AI body from the vehicle's resolved mode in `crates/omsi-app/src/gameplay/implementation/traffic.rs` (Depot arm for both modes until phase 8)
 - [X] T033 [ph 6] AI static pose by engine (both still today's) in `crates/omsi-sim/src/vehicle/vehicle_type.rs`, `crates/omsi-sim/src/vehicle/visuals.rs`, `crates/omsi-sim/src/vehicle/coupled/trailer.rs`
-- [ ] T034 [ph 3-6] Each structural pull request shows the physics benchmark scenes' frame time before and after, within noise (Principle VII, quickstart Q7)
+- [X] T034 [ph 3-6] Each structural pull request shows the physics benchmark scenes' frame time before and after, within noise (Principle VII, quickstart Q7)
 
 **Checkpoint**: every trace identical in both engines; the mode is resolved and logged per vehicle;
 nothing a player can see has changed.
@@ -116,7 +116,7 @@ exactly as before.
 body, as in OMSI 2 (quickstart Q3).
 
 - [X] T035 [P] [US1] [ph 3] Test: a settings file without `physics` gives Classic for every vehicle, in `crates/omsi-app/tests/app/settings/physics.rs`
-- [ ] T036 [US1] [ph 4-7] Every Classic player trace identical to `origin/main` in each phase (SC-001), checked by `scripts/physics-trace-diff.sh` in each pull request
+- [X] T036 [US1] [ph 4-7] Every Classic player trace identical to `origin/main` in each phase (SC-001), checked by `scripts/physics-trace-diff.sh` in each pull request
 - [ ] T037 [US1] [ph 2] The Mi5 static sag within 1 cm of OMSI 2 (SC-003): the `OMSI_ROOT` test of T016 compared with T004's numbers
 
 **Checkpoint**: User Story 1 holds through every later phase.
