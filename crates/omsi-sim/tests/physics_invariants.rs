@@ -4,7 +4,7 @@
 mod support;
 
 use glam::{DVec3, Vec3};
-use omsi_sim::physics::{support_rest_loads, Joint, RigidBody};
+use omsi_sim::physics::{support_rest_loads, Engine, Joint, RigidBody};
 use omsi_vehicle::{Axle, Vehicle};
 use support::ground::flat;
 use support::vehicles::{bus, gn92};
@@ -54,33 +54,43 @@ fn reach(rb: &RigidBody) -> f32 {
         .fold(0.0, f32::max)
 }
 
-/// I1: standing, the static loads of the wheels carry the weight, Σ 2 L_e = m g, and
-/// balance about the model's origin, Σ 2 L_e y_e = 0, wherever `[cog]` puts the centre of
-/// gravity (OMSI 2's struts turn the body about the origin).
+/// I1, per engine: standing, the static loads of the wheels carry the weight, Σ 2 L_e = m g,
+/// and balance about the engine's reference wherever `[cog]` puts the centre of gravity: the
+/// model's origin in OMSI Classic (K-1, `Σ 2 L_e y_e = 0`), the centre of gravity in Project
+/// Depot Physics (D-1, `Σ 2 L_e y_e = m g cog_y`).
+/// Checks: K-1, D-1
 #[test]
 fn i1_the_static_loads_carry_and_balance_the_weight() {
-    for (name, def) in [
-        ("two axles", bus()),
-        ("three axles", three_axles()),
-        (
-            "centre of gravity forward",
-            Vehicle {
-                cog: Some([0.0, 0.9, 1.2]),
-                ..bus()
-            },
-        ),
-    ] {
-        let rb = RigidBody::from_definition(&def, &[]);
-        let weight = rb.mass() * G;
-        let (load, moment) = carried(&rb);
-        assert!(
-            (load - weight).abs() <= 1e-5 * weight,
-            "{name}: the wheels carry {load} N of {weight} N"
-        );
-        assert!(
-            moment.abs() <= 1e-5 * weight * reach(&rb),
-            "{name}: moment {moment} N m about the origin"
-        );
+    for engine in [Engine::Classic, Engine::Depot] {
+        for (name, def) in [
+            ("two axles", bus()),
+            ("three axles", three_axles()),
+            (
+                "centre of gravity forward",
+                Vehicle {
+                    cog: Some([0.0, 0.9, 1.2]),
+                    ..bus()
+                },
+            ),
+        ] {
+            let rb = RigidBody::for_engine(&def, &[], engine);
+            assert_eq!(rb.engine(), engine);
+            let weight = rb.mass() * G;
+            let (load, moment) = carried(&rb);
+            assert!(
+                (load - weight).abs() <= 1e-5 * weight,
+                "{engine:?}, {name}: the wheels carry {load} N of {weight} N"
+            );
+            let reference = match engine {
+                Engine::Classic => 0.0,
+                Engine::Depot => def.cog.map_or(0.0, |c| c[1]),
+            };
+            let want = weight * reference;
+            assert!(
+                (moment - want).abs() <= 1e-5 * weight * reach(&rb),
+                "{engine:?}, {name}: moment {moment} N m about the origin, want {want}"
+            );
+        }
     }
 }
 
