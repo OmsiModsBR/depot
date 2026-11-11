@@ -34,7 +34,7 @@ use omsi_vehicle::{Axle, Vehicle};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use support::trace::{check, dv3, list32, n32, n64, v3, Trace};
+use support::trace::{check_per_engine, dv3, list32, n32, n64, v3, Trace};
 
 // ---------------------------------------------------------------------------------------
 // Writing the state
@@ -111,7 +111,7 @@ macro_rules! scenarios {
         $(
             #[test]
             fn $name() {
-                check(stringify!($name), scenarios::$name);
+                check_per_engine(stringify!($name), scenarios::$name);
             }
         )*
     };

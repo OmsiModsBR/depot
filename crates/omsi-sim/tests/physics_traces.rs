@@ -3,7 +3,7 @@
 //! with its script variables through every branch of the model, and write out the whole
 //! state frame by frame.
 //!
-//! With `OMSI_PHYSICS_TRACE_DIR` set, each scenario writes `<dir>/<name>.trace`:
+//! With `OMSI_PHYSICS_TRACE_DIR` set, each scenario writes `<dir>/<name>.<engine>.trace` for each engine (`classic`, `depot`):
 //! `scripts/physics-trace-diff.sh` runs them on a base commit and on the change and
 //! compares the two. A change that only moves code leaves every trace as it was, to the
 //! bit. Without it, each scenario runs twice and both runs must write the same trace.
@@ -32,7 +32,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use support::ground::{flat, road, step_at};
-use support::trace::{check, dv3, n32, n64, quat, v3, Trace};
+use support::trace::{check_per_engine, dv3, n32, n64, quat, v3, Trace};
 use support::vehicles::{bus, gn92};
 
 type Probe<'a> = &'a dyn Fn(f64, f64, f64) -> GroundProbe;
@@ -191,7 +191,7 @@ macro_rules! scenarios {
         $(
             #[test]
             fn $name() {
-                check(stringify!($name), scenarios::$name);
+                check_per_engine(stringify!($name), scenarios::$name);
             }
         )*
     };
