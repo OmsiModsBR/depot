@@ -422,6 +422,7 @@ pub(crate) fn spawn_player(
     let render = world.add_vehicle(renderer, scene, &vt, scheme);
     // coupled rear sections / trailers
     let parts = load_coupled_parts(&args.root, &mut vehicle);
+    vehicle.trolley = trolley_of(world, &vt, &parts);
     let rear: Vec<&omsi_vehicle::Vehicle> = parts.iter().map(|t| &t.def).collect();
     vehicle.set_physics_mode(omsi_sim::resolve_physics_mode(
         &format!("{} {}", vt.def.manufacturer, vt.def.type_name),
@@ -846,4 +847,43 @@ pub(crate) fn recorded_entry_pos(
         .iter()
         .all(|v| v.is_finite())
         .then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
+}
+
+/// The poles of the player's vehicle when the trolleybus registry declares it (see
+/// `omsi_trolley::find_declaration`); a declaration that names it but cannot be used is
+/// reported, and the vehicle runs as an ordinary bus.
+fn trolley_of(
+    world: &World,
+    vt: &omsi_sim::VehicleType,
+    parts: &[Arc<omsi_sim::VehicleType>],
+) -> Option<Box<omsi_sim::Trolley>> {
+    let convention = world.trolley.as_ref()?;
+    let files: Vec<String> = parts
+        .iter()
+        .map(|p| p.def.path.to_string_lossy().into_owned())
+        .collect();
+    let refs: Vec<&str> = files.iter().map(String::as_str).collect();
+    match omsi_trolley::find_declaration(convention, &vt.def.path.to_string_lossy(), &refs)? {
+        Ok((declaration, carrier)) => {
+            log::info!(
+                "trolleybus: {} declared by [vehicle:{}], poles on {}",
+                vt.def.path.display(),
+                declaration.entry,
+                if carrier == 0 {
+                    "the vehicle".to_string()
+                } else {
+                    format!("coupled part {carrier}")
+                }
+            );
+            Some(Box::new(omsi_sim::Trolley::new(
+                declaration,
+                carrier,
+                world.wires.clone(),
+            )))
+        }
+        Err(e) => {
+            log::warn!("trolleybus: {e}; the vehicle runs without poles");
+            None
+        }
+    }
 }

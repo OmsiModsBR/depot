@@ -855,7 +855,7 @@ pub struct World {
     /// and no wire is looked for).
     pub(crate) trolley: Option<Arc<omsi_trolley::Convention>>,
     /// The overhead wire of the loaded tiles (empty on a map without wire).
-    pub wires: Mutex<omsi_trolley::WireNetwork>,
+    pub wires: Arc<Mutex<omsi_trolley::WireNetwork>>,
 }
 
 /// A placed object's particle systems (`[smoke]`, `[particle_emitter]`).

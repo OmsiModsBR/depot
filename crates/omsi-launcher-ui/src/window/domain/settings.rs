@@ -803,6 +803,13 @@ pub static OPTS: &[Opt] = &[
         "With people",
         "",
     ),
+    toggle(
+        SIMULATION,
+        "Trolleybus",
+        "trolleybus",
+        "Overhead wire and poles",
+        "For declared trolleybuses",
+    ),
     pick(
         SIMULATION,
         "Wear and saving",
