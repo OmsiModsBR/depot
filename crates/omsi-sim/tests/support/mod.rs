@@ -9,6 +9,7 @@
 
 pub mod closed_form;
 pub mod ground;
+pub mod model;
 pub mod scratch;
 pub mod trace;
 pub mod vehicles;

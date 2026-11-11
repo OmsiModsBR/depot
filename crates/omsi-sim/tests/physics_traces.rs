@@ -32,7 +32,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use support::ground::{flat, road, step_at};
-use support::trace::{check_per_engine, dv3, n32, n64, quat, v3, Trace};
+use support::trace::{check_per_engine, dv3, engine, n32, n64, quat, v3, Trace};
 use support::vehicles::{bus, gn92};
 
 type Probe<'a> = &'a dyn Fn(f64, f64, f64) -> GroundProbe;
@@ -217,6 +217,7 @@ scenarios!(
     t14_inputs_that_are_no_number,
     t15_spring_factor_varies,
     t16_wheels_of_two_sizes,
+    t17_cog_ahead_parks_pulls_away_and_brakes,
     b1_vehicle_with_script_variables,
     b2_articulated_vehicle,
     b3_vehicle_crash,
@@ -299,7 +300,7 @@ mod scenarios {
 
     /// The bus put down at the origin facing +y.
     fn placed(def: &Vehicle) -> RigidBody {
-        let mut rb = RigidBody::from_definition(def, &[]);
+        let mut rb = RigidBody::for_engine(def, &[], engine().into());
         rb.place(DVec3::ZERO, 0.0);
         rb
     }
@@ -324,6 +325,28 @@ mod scenarios {
     }
 
     // -- T1..T16: the rigid body and the train --
+
+    /// The bus with its centre of gravity 0.6 m ahead of the model origin: parked, then pulling
+    /// away and braking. The weight is shared about the origin in Classic and about `[cog]` in
+    /// Depot, so the two engines' traces differ here (every other scenario's bus has no `[cog]`).
+    pub fn t17_cog_ahead_parks_pulls_away_and_brakes() -> String {
+        let mut t = Trace::default();
+        let def = Vehicle {
+            cog: Some([0.0, 0.6, 1.2]),
+            ..bus()
+        };
+        let mut rb = placed(&def);
+        run(&mut t, &mut rb, 240, 1.0 / 60.0, &flat, |_| {
+            (0.0, 5000.0, 0.0)
+        });
+        run(&mut t, &mut rb, 420, 1.0 / 60.0, &flat, |_| {
+            (6000.0, 0.0, 0.0)
+        });
+        run(&mut t, &mut rb, 240, 1.0 / 60.0, &flat, |_| {
+            (0.0, 3000.0, 0.0)
+        });
+        t.text
+    }
 
     pub fn t01_parked_on_the_flat() -> String {
         let mut t = Trace::default();
@@ -574,8 +597,8 @@ mod scenarios {
     /// Two sections on one joint, put down at the origin facing +y.
     fn train(front: &Vehicle, rear: &Vehicle) -> (Vec<RigidBody>, Vec<Joint>) {
         let mut bodies = vec![
-            RigidBody::from_definition(front, &[]),
-            RigidBody::from_definition(rear, &[]),
+            RigidBody::for_engine(front, &[], engine().into()),
+            RigidBody::for_engine(rear, &[], engine().into()),
         ];
         let back = Vec3::from(front.coupling_back.as_ref().unwrap().pos);
         let at = Vec3::from(rear.coupling_front.as_ref().unwrap().pos);
@@ -865,7 +888,9 @@ mod scenarios {
         let mut host = VehicleHost::new(SimClock::default());
         host.street_cond = 0.0;
         host.temperature = 15.0;
-        VehicleInstance::new(ty, host)
+        let mut v = VehicleInstance::new(ty, host);
+        v.set_physics_mode(engine());
+        v
     }
 
     /// What a frame's script writes into the physics' variables.
