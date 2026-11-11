@@ -119,10 +119,11 @@ fn a_loose_car_passes_through_the_cars_on_their_routes() {
     assert_eq!(w.t.loose_count(), 1);
 }
 
-/// `KA-11`: a loose car beyond the detail radius about the camera goes back to its route.
+/// `KA-11`: a loose car beyond the detail radius about the camera stays where it lies (it
+/// goes only with its tile, and then the player is told they left the accident).
 /// Checks: KA-11
 #[test]
-fn a_loose_car_far_from_the_camera_is_cleared() {
+fn a_loose_car_far_from_the_camera_stays_loose() {
     let mut w = World::new(Layout::default(), Vec::new());
     let id = w.car_of(
         engine_car_type(),
@@ -137,8 +138,10 @@ fn a_loose_car_far_from_the_camera_is_cleared() {
     w.tick();
     assert!(w.of(id).is_loose());
     w.t.camera = Some(glam::DVec3::new(5000.0, 5000.0, 0.0));
-    w.tick();
-    assert!(!w.of(id).is_loose());
+    w.run(2.0, |_| {});
+    assert!(w.of(id).is_loose());
+    assert_eq!(w.t.take_cleared(), Vec::<u64>::new());
+    assert_eq!(w.t.take_fled(), 0);
 }
 
 /// In Project Depot Physics nothing leaves its route.

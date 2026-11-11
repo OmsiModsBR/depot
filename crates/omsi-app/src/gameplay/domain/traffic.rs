@@ -374,6 +374,9 @@ pub struct Traffic {
     pub player_obb: Option<omsi_sim::collision::Obb>,
     /// The cars put back on their routes since the session last looked (`take_cleared`).
     pub cleared: Vec<u64>,
+    /// The loose cars that went with their unloaded tiles since the session last looked
+    /// (`take_fled`, `KA-11`).
+    pub fled: usize,
     /// Pedestrians on the footpaths: (lane, distance along it), for giving way at crossings
     /// and for the pedestrian lights' request buttons.
     pub walkers: Vec<(usize, f32)>,

@@ -28,7 +28,7 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 | [KA-8](#ka-8-contacts) | no contacts between vehicles on their routes | confirmed (corrected) |
 | [KA-9](#ka-9-speed-beyond-the-detail-radius) | speed beyond the detail radius | confirmed |
 | [KA-10](#ka-10-vehicle-serving-a-stop) | vehicle serving a stop | confirmed |
-| [KA-11](#ka-11-automatic-clearing) | automatic clearing of a loose vehicle | not so: the loose vehicle disappears |
+| [KA-11](#ka-11-a-loose-vehicle-goes-with-its-tile) | a loose vehicle goes with its tile | confirmed (corrected) |
 
 The AI body (`ai/classic/`) runs every road vehicle of the AI traffic in OMSI Classic. Rail
 vehicles and aircraft keep the Depot AI of [depot-model.md](depot-model.md) in both engines.
@@ -77,7 +77,7 @@ The Depot engine replaces only this rule, with `D-1`.
 
 An AI road vehicle has two physical states, shared by all its sections: **on its route** and
 **loose** (after a crash). On its route it is not a rigid body. Loose, it is the player's rigid body
-(`K-1` and the `C-*`), without a driver, until it is cleared (`KA-6`, `KA-11`).
+(`K-1` and the `C-*`), without a driver, until it is cleared (`KA-6`) or goes with its tile (`KA-11`).
 
 The traffic planner, the AI driver's target-speed decisions and the rail and air followers are shared
 and unchanged. In the rules below, `L` is the length of the kinematic bicycle (from the point at
@@ -192,7 +192,7 @@ routes (`KA-8`). Loose, it runs the player's rigid body
 without a driver, fully braked with its hazard lights on, and never falls asleep for standing still.
 
 It goes back to its route when the player clears the crash from the Alt menu ("Clear the accident",
-enabled only while a vehicle is loose) or by `KA-11`. In this code it is put back, standing, where
+enabled only while a vehicle is loose); left loose, it goes with its tile (`KA-11`). In this code it is put back, standing, where
 its driver left the route, and drives on from there. An AI bus goes back empty and starts the next trip of its
 timetable (maintainer, 2026-11-09). Crashes have no effect on the career.
 
@@ -259,18 +259,21 @@ count as near in both engines.
 While the vehicle serves a stop (doors open until the scripts close them), its speed always comes
 from its drive and brakes (`KA-2`), even beyond the detail radius.
 
-## KA-11. Automatic clearing
+## KA-11. A loose vehicle goes with its tile
 
-- **Inputs**: the tile of a loose vehicle. **Outputs**: the state of every loose vehicle. **Module**:
-  `ai/classic/` (release, phase 8).
-- **Basis**: *OMSI*. **Status**: **not so** by the maintainer's in-game check (2026-11-11): when its
-  tile is unloaded the loose vehicle disappears, and the game warns that the player left the
-  accident without calling the police. Corrected by a `fix/` pull request. **Check**: knock an AI
-  car loose, drive away until it is out of the detail radius, come back; it drives on its route
-  again.
+- **Inputs**: the tile of a loose vehicle. **Outputs**: the vehicle removed; a warning to the
+  player. **Module**: the traffic's removal of vehicles over unloaded tiles (`omsi-app`).
+- **Basis**: *OMSI*. **Status**: **confirmed** as written here by the maintainer's in-game check
+  (2026-11-11), which found that the loose vehicle disappears when its tile is unloaded, with a
+  warning that the player left the accident without calling the police (the row first said it went
+  back to its route once beyond the detail radius). **Check**: knock an AI car loose and drive away
+  until its tile is unloaded; it disappears and the warning shows.
 
-A loose vehicle is cleared automatically once its tile is beyond the detail radius; every loose
-vehicle then goes back to its route (`KA-6`). There is no limit on the number of loose vehicles.
+A loose vehicle is never put back on its route by distance: it stays where it lies, still simulated,
+beyond the detail radius too, until the player clears the accident (`KA-6`) or its tile is unloaded.
+Then it disappears with the tile, as every vehicle over unloaded ground does, and the player is told
+"You left the scene of the accident without calling the police". A loose vehicle never goes to sleep
+out of range as a random car on its way does. There is no limit on the number of loose vehicles.
 
 ## Open items
 

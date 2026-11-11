@@ -164,7 +164,8 @@ sections like trailers, buses near the camera pull away and stop according to th
 brakes (farther away they simply hold their target speed, as OMSI 2's do), and AI vehicles on their
 routes never push each other or the scenery. When the player's vehicle hits an AI vehicle, it
 becomes a free body with no driver, fully braked with its hazard lights on, until the player clears the crash
-(a "clear crash" command) or the vehicle is out of the camera's surroundings; then it goes back to its route. An
+(a "clear crash" command), and then it goes back to its route, or until its tile is unloaded, and then it
+disappears and the player is told they left the accident without calling the police (T003). An
 articulated bus is knocked loose and put back as one vehicle, all its sections together.
 
 **Why this priority**: the request makes today's AI part of the Depot mode, so the default mode needs
@@ -181,8 +182,9 @@ Depot (OMSI Classic); then nudge an AI car with the player's bus in both.
 2. **Given** OMSI Classic, **When** the player's vehicle hits an AI vehicle, **Then** the AI vehicle
    becomes a free body without a driver, fully braked with its hazard lights on; if it is pushed into
    another AI vehicle, it passes through that one, which stays on its route (T003).
-3. **Given** a loose AI vehicle, **When** the player clears the crash or moves the camera far enough away that
-   the vehicle leaves the camera's surroundings, **Then** the vehicle goes back onto a route and drives on.
+3. **Given** a loose AI vehicle, **When** the player clears the crash, **Then** the vehicle goes back onto a
+   route and drives on; **When** instead its tile is unloaded, **Then** it disappears and the player is
+   told they left the accident without calling the police (T003).
 4. **Given** OMSI Classic, **When** an AI bus pulls away near the camera, **Then** it accelerates
    as its own engine and brakes allow; **When** it is far from the camera, **Then** it holds its
    target speed and its rear sections are not updated; **When** it serves a stop far from the camera,
@@ -227,7 +229,7 @@ directly.
   current setting and its file give; the log names it.
 - A session mixes vehicles of both engines (setting Classic, the player driving a bus with the key): each keeps its own
   engine, and they can still collide with each other.
-- A loose AI vehicle is cleared (by the player's command or by leaving the surroundings): it is not removed; it
+- A loose AI vehicle is cleared by the player's command: it is not removed; it
   goes back onto a route, and its engine stays the one it had. An AI bus goes back empty and starts
   the next trip of its timetable.
 - An AI vehicle whose type is marked `[fixed]`: a hit never knocks it loose.
@@ -295,7 +297,8 @@ directly.
 - **FR-016**: In OMSI Classic, an AI vehicle touched by the player's vehicle (a loose vehicle does
   not release it, T003) MUST become a free body without a driver, fully braked with its hazard lights
   on, unless its type is `[fixed]`; it MUST go back to its route when the player clears the crash with a
-  "clear crash" command or when it leaves the camera's surroundings (decision D3). The command is the
+  "clear crash" command (decision D3), and MUST disappear, with a warning that the player left the
+  accident without calling the police, when its tile is unloaded (T003). The command is the
   "Clear the accident" button of the in-game Alt menu (today shown but not yet in use); it MUST be
   enabled only while a loose AI vehicle exists (so never in Project Depot Physics) and clear every
   loose AI vehicle in the session at once. An AI bus that goes back to its route MUST go back empty
@@ -309,7 +312,7 @@ directly.
 - **FR-016c**: In OMSI Classic, an AI vehicle beyond the camera's surroundings MUST move at its
   driver's target speed without force integration and without updating its rear sections, except
   while it serves a stop, where its drive and brakes apply; a loose AI vehicle beyond the surroundings
-  MUST be cleared automatically and go back to its route (maintainer, 2026-11-08). A vehicle whose
+  stays loose until its tile is unloaded (FR-016, T003). A vehicle whose
   model has `[noDistanceCheck]` MUST always count as within the surroundings, in both engines (in
   Project Depot Physics this is already today's behaviour for every AI vehicle).
 - **FR-017**: The code of each engine MUST be kept apart wherever the engines differ, and shared

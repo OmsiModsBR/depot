@@ -1920,6 +1920,18 @@ impl ApplicationHandler for App {
                     if let Some(m) = h.take_message() {
                         self.service_msg = Some((m, 6.0));
                     }
+                    // a loose car went with its tile before the accident was cleared (`KA-11`)
+                    if self
+                        .session
+                        .traffic
+                        .as_mut()
+                        .is_some_and(|t| t.take_fled() > 0)
+                    {
+                        let m = omsi_ui::tr(
+                            "You left the scene of the accident without calling the police",
+                        );
+                        self.service_msg = Some((m.into_owned(), 6.0));
+                    }
                     if let Some(p) = self.player.as_mut() {
                         if took {
                             p.vehicle.set_var("GivenTicket", -1.0);
