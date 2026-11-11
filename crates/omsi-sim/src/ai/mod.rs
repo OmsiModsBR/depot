@@ -3,7 +3,8 @@
 //! engine a vehicle runs. `depot` is Project Depot Physics' body (`DA-1` to `DA-6`): a road
 //! vehicle is a bicycle model steered by pure pursuit and sitting on its springs, a rail
 //! vehicle rides on its two outer axles, an aircraft flies along its path and banks into its
-//! turns. The Classic AI (`KA-*`) is built in phase 8: until then both engines run `depot`.
+//! turns. `classic` is OMSI Classic's body for road vehicles (`KA-1` to `KA-11`); rail vehicles and
+//! aircraft keep the `depot` body in both engines.
 //!
 //! Placing the vehicle *on* the lane every frame, turned to the lane's heading, is what made
 //! the traffic look wrong: the heading jumped at every lane sample and joint (the steering
@@ -14,6 +15,7 @@
 
 mod classic;
 mod depot;
+mod sweep;
 
 pub use classic::{
     integrate, target_speed, within_detail_radius, AiClassic, DriveForces, Pedals, Regime,
@@ -45,47 +47,55 @@ pub use crate::physics::ai_rotation_point as rotation_point;
 /// The body of an AI vehicle, of the engine the vehicle runs.
 #[derive(Debug, Clone)]
 pub enum AiMotion {
-    /// Project Depot Physics' body (`DA-1` to `DA-6`).
+    /// Project Depot Physics' body (`DA-1` to `DA-6`), and every engine's rail and air body.
     Depot(AiBody),
+    /// OMSI Classic's body of a road vehicle (`KA-1` to `KA-11`).
+    Classic(AiClassic),
 }
 
 impl AiMotion {
-    /// The body of a vehicle `def` of `mode`. Both modes get the Depot body until the Classic
-    /// AI is built (phase 8 of spec 002).
+    /// The body of a vehicle `def` of `mode`: OMSI Classic's for a Classic road vehicle, the
+    /// Depot body otherwise.
     pub fn new(def: &Vehicle, kind: MotionKind, mode: PhysicsMode) -> AiMotion {
-        match mode {
-            PhysicsMode::Classic | PhysicsMode::Depot => AiMotion::Depot(AiBody::new(def, kind)),
+        match (mode, kind) {
+            (PhysicsMode::Classic, MotionKind::Road) => AiMotion::Classic(AiClassic::new(def)),
+            _ => AiMotion::Depot(AiBody::new(def, kind)),
         }
     }
 
-    fn body(&self) -> &AiBody {
+    /// The Classic body, when the vehicle runs one.
+    pub fn classic_mut(&mut self) -> Option<&mut AiClassic> {
         match self {
-            AiMotion::Depot(b) => b,
-        }
-    }
-
-    fn body_mut(&mut self) -> &mut AiBody {
-        match self {
-            AiMotion::Depot(b) => b,
+            AiMotion::Classic(b) => Some(b),
+            AiMotion::Depot(_) => None,
         }
     }
 
     /// What kind of way the vehicle follows.
     pub fn kind(&self) -> MotionKind {
-        self.body().kind
+        match self {
+            AiMotion::Depot(b) => b.kind,
+            AiMotion::Classic(_) => MotionKind::Road,
+        }
     }
 
     /// The front wheel angle (deg, + = right).
     pub fn steer(&self) -> f32 {
-        self.body().steer
+        match self {
+            AiMotion::Depot(b) => b.steer,
+            AiMotion::Classic(b) => b.steer,
+        }
     }
 
     /// The lateral acceleration (m/s², right positive).
     pub fn a_lat(&self) -> f32 {
-        self.body().a_lat
+        match self {
+            AiMotion::Depot(b) => b.a_lat,
+            AiMotion::Classic(b) => b.a_lat,
+        }
     }
 
-    /// See [`AiBody::place`].
+    /// Put the body onto its way, standing still and straight (see [`AiBody::place`]).
     pub fn place(
         &mut self,
         way: &dyn Fn(f32) -> DVec3,
@@ -93,10 +103,13 @@ impl AiMotion {
         contact: Option<&dyn crate::physics::Ground>,
         speed: f32,
     ) {
-        self.body_mut().place(way, ground, contact, speed)
+        match self {
+            AiMotion::Depot(b) => b.place(way, ground, contact, speed),
+            AiMotion::Classic(b) => b.place(way, ground, contact, speed),
+        }
     }
 
-    /// See [`AiBody::step`].
+    /// Follow the way for `dt` seconds at `speed` (see [`AiBody::step`]).
     pub fn step(
         &mut self,
         dt: f32,
@@ -105,15 +118,22 @@ impl AiMotion {
         ground: Option<&dyn Fn(f64, f64) -> Option<f64>>,
         contact: Option<&dyn crate::physics::Ground>,
     ) {
-        self.body_mut().step(dt, speed, way, ground, contact)
+        match self {
+            AiMotion::Depot(b) => b.step(dt, speed, way, ground, contact),
+            AiMotion::Classic(b) => b.step(dt, speed, way, ground, contact),
+        }
     }
 
-    /// See [`AiBody::apply`].
+    /// Hand the pose to the vehicle (see [`AiBody::apply`]).
     pub fn apply(&self, v: &mut VehicleInstance) {
-        self.body().apply(v)
+        match self {
+            AiMotion::Depot(b) => b.apply(v),
+            AiMotion::Classic(b) => b.apply(v),
+        }
     }
 
-    /// See [`AiBody::sweep_clearance`].
+    /// How close the body would come to `obstacles` on a way it has not taken yet (see
+    /// [`AiBody::sweep_clearance`]).
     #[allow(clippy::too_many_arguments)]
     pub fn sweep_clearance(
         &self,
@@ -126,7 +146,13 @@ impl AiMotion {
         extent: (f32, f32, f32),
         obstacles: &[crate::collision::Obb],
     ) -> f64 {
-        self.body()
-            .sweep_clearance(way, speed, wait, accel, v_max, distance, extent, obstacles)
+        match self {
+            AiMotion::Depot(b) => {
+                b.sweep_clearance(way, speed, wait, accel, v_max, distance, extent, obstacles)
+            }
+            AiMotion::Classic(b) => sweep::sweep_clearance(
+                b, way, speed, wait, accel, v_max, distance, extent, obstacles,
+            ),
+        }
     }
 }

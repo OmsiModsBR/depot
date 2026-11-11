@@ -75,6 +75,8 @@ pub struct AiCar {
     pub trailer_renders: Vec<VehicleRender>,
     /// The body following the way `state` lays out.
     pub body: AiMotion,
+    /// The mass of the people aboard (kg), for the OMSI Classic AI's speed (`KA-2`).
+    pub payload_kg: f32,
     /// Seconds this car has been standing still without a stop of its own: a red light or
     /// a queue is seconds, a jam that never clears grows without bound.
     pub stopped: f32,

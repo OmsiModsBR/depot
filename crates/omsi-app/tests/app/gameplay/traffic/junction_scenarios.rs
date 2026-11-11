@@ -11,6 +11,7 @@
 
 use glam::DVec3;
 use hashbrown::HashMap;
+pub use omsi_cfg::PhysicsMode;
 use omsi_sim::ai::MotionKind;
 use omsi_sim::traffic::{AiState, LaneKind, Network, TrafficLightController};
 use omsi_sim::traffic::{Lane, LaneBuilder, LaneKey};
@@ -203,23 +204,43 @@ impl Crossroads {
 
 /// A vehicle type with a script set that only declares `TrafficPriority`, as the stock
 /// emergency vehicles' scripts do; no model, nothing to draw.
-fn car_type() -> Arc<VehicleType> {
+pub fn car_type() -> Arc<VehicleType> {
+    static TYPE: std::sync::OnceLock<Arc<VehicleType>> = std::sync::OnceLock::new();
+    TYPE.get_or_init(|| scripted_type("plain", "TrafficPriority\n", "{init}\n{end}\n"))
+        .clone()
+}
+
+/// A car whose script drives it as an engine does: `M_Wheel` from `Throttle`, the brake force
+/// from `Brake` (an OMSI Classic AI moves by them).
+pub fn engine_car_type() -> Arc<VehicleType> {
     static TYPE: std::sync::OnceLock<Arc<VehicleType>> = std::sync::OnceLock::new();
     TYPE.get_or_init(|| {
-        let dir =
-            std::env::temp_dir().join(format!("omsi-junction-scenarios-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("test.bus"),
-            "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
+        scripted_type(
+            "engine",
+            "TrafficPriority\nThrottle\nBrake\nM_Wheel\nBrakeforce\n",
+            "{init}\n{end}\n{frame}\n(L.L.Throttle) 300 * (S.L.M_Wheel)\n\
+             (L.L.Brake) 3000 * (S.L.Brakeforce)\n{end}\n",
         )
-        .unwrap();
-        std::fs::write(dir.join("model.cfg"), "").unwrap();
-        std::fs::write(dir.join("vars.txt"), "TrafficPriority\n").unwrap();
-        std::fs::write(dir.join("main.osc"), "{init}\n{end}\n").unwrap();
-        Arc::new(VehicleType::load(&dir, &dir.join("test.bus")).unwrap())
     })
     .clone()
+}
+
+/// A vehicle type with a varlist `vars` and a script `osc`, in a folder of its own (`name`).
+fn scripted_type(name: &str, vars: &str, osc: &str) -> Arc<VehicleType> {
+    let dir = std::env::temp_dir().join(format!(
+        "omsi-junction-scenarios-{}-{name}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("test.bus"),
+        "[model]\nmodel.cfg\n[varnamelist]\n1\nvars.txt\n[script]\n1\nmain.osc\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("model.cfg"), "").unwrap();
+    std::fs::write(dir.join("vars.txt"), vars).unwrap();
+    std::fs::write(dir.join("main.osc"), osc).unwrap();
+    Arc::new(VehicleType::load(&dir, &dir.join("test.bus")).unwrap())
 }
 
 fn no_render() -> VehicleRender {
@@ -350,10 +371,35 @@ impl World {
     /// they did not make. `priority`: its script claims the right of way (`TrafficPriority`,
     /// the stock ambulance).
     pub fn car(&mut self, lane: usize, s: f32, speed: f32, seed: u64, priority: bool) -> u64 {
-        let ty = car_type();
+        // (the planner's scenarios: a car without scripts, which hand no drive torque to an
+        // OMSI Classic AI, drives at the planner's speed in Project Depot Physics)
+        self.car_of(
+            car_type(),
+            PhysicsMode::Depot,
+            lane,
+            s,
+            speed,
+            seed,
+            priority,
+        )
+    }
+
+    /// A car of type `ty` run by the AI of `mode`, otherwise as [`World::car`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn car_of(
+        &mut self,
+        ty: Arc<VehicleType>,
+        mode: PhysicsMode,
+        lane: usize,
+        s: f32,
+        speed: f32,
+        seed: u64,
+        priority: bool,
+    ) -> u64 {
         let mut host = omsi_sim::VehicleHost::new(omsi_sim::SimClock::default());
         host.paint_scheme = Some(None);
         let mut vehicle = VehicleInstance::new(ty.clone(), host);
+        vehicle.set_physics_mode(mode);
         if priority {
             assert!(vehicle.set_var("TrafficPriority", 1.0));
         }
@@ -377,6 +423,7 @@ impl World {
             render: no_render(),
             trailer_renders: Vec::new(),
             body,
+            payload_kg: 0.0,
             stopped: 0.0,
             lead_car: None,
             ignore_lead: None,

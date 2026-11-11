@@ -11,7 +11,6 @@ pub use speed::{
     integrate, target_speed, within_detail_radius, DriveForces, Pedals, Regime, TARGET_HORIZON,
 };
 
-use super::MotionKind;
 use crate::physics::AiSpec;
 use crate::vehicle::VehicleInstance;
 use glam::{DVec2, DVec3, Vec3};
@@ -22,7 +21,6 @@ const CURVATURE_SPAN: f32 = 2.0;
 
 #[derive(Debug, Clone)]
 pub struct AiClassic {
-    pub kind: MotionKind,
     /// The line the body turns about, `[rot_pnt_long]`, and `L`, the length of the kinematic
     /// bicycle from it to the front of the vehicle (m).
     rot_long: f32,
@@ -76,11 +74,12 @@ fn wrap(d: f64) -> f64 {
 }
 
 impl AiClassic {
-    pub fn new(def: &Vehicle, kind: MotionKind) -> AiClassic {
+    /// The body of a road vehicle `def` (rail vehicles and aircraft keep the Depot body in
+    /// both engines).
+    pub fn new(def: &Vehicle) -> AiClassic {
         let spec = AiSpec::from(def);
         let axle_long: Vec<f32> = def.axles.iter().map(|a| a.long).collect();
         AiClassic {
-            kind,
             rot_long: spec.rot_long,
             length: (spec.front_long - spec.rot_long).abs().max(0.8),
             front_long: spec.front_long,
@@ -148,10 +147,6 @@ impl AiClassic {
             self.a_long += (a - self.a_long) * (dt / 0.15).min(1.0);
         }
         self.last_speed = speed;
-        if self.kind != MotionKind::Road {
-            self.follow_without_bicycle(way);
-            return;
-        }
         // (KA-1) the rotation point is on the lane. The body's axis lags the path's tangent by
         // `ψ_r`: the path turns by `Δθ = Δs κ` and the axis follows it as a rod of length `L`
         // whose front end does not slip sideways, `Δψ_r = Δθ - (Δs / L) sin(ψ_r + Δθ / 2)`, so
@@ -189,16 +184,6 @@ impl AiClassic {
         self.pose(way);
     }
 
-    /// Rail and air vehicles follow the way's own heading at their origin.
-    fn follow_without_bicycle(&mut self, way: &dyn Fn(f32) -> DVec3) {
-        let origin = way(0.0);
-        let ahead = way(1.0);
-        self.rear = origin.truncate();
-        self.heading = heading_of(ahead.truncate() - origin.truncate()).unwrap_or(self.heading);
-        self.position = origin;
-        self.pitch_deg = ((ahead.z - origin.z) as f32).atan2(1.0).to_degrees();
-    }
-
     /// (KA-4) The pose from the path alone: the height of the origin, the pitch between the
     /// axles' heights and no roll.
     fn pose(&mut self, way: &dyn Fn(f32) -> DVec3) {
@@ -210,8 +195,6 @@ impl AiClassic {
         self.bank_deg = 0.0;
     }
 
-    /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
-    /// read and each wheel's travel.
     /// One frame of the speed (`KA-2`, `KA-9`, `KA-10`): from `speed` by the forces the
     /// scripts left in the physical regime, the driver's `target` otherwise; then the driver's
     /// pedals for the scripts' next frame. The grip `mu` bounds the change (`KA-3`).
@@ -245,16 +228,14 @@ impl AiClassic {
         self.near = near;
     }
 
+    /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
+    /// read, each wheel's travel and the driver's pedals.
     pub fn apply(&self, v: &mut VehicleInstance) {
         // `KA-5`: the rear sections follow as kinematic trailers (the part's turning axle
         // pulled along the line to its coupling), and not at all beyond the detail radius
         v.hold_coupled_parts(!self.near);
         v.set_ai_pedals(self.pedals);
-        let (lift, delta) = if self.kind == MotionKind::Road {
-            v.ai_rest_offset()
-        } else {
-            (0.0, 0.0)
-        };
+        let (lift, delta) = v.ai_rest_offset();
         v.position = self.position + DVec3::new(0.0, 0.0, lift as f64);
         v.heading = self.heading;
         v.pitch = self.pitch_deg;
@@ -264,5 +245,15 @@ impl AiClassic {
             axle[0].suspension = s[0] + delta;
             axle[1].suspension = s[1] + delta;
         }
+    }
+}
+
+impl super::sweep::Sweep for AiClassic {
+    fn advance(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3) {
+        self.step(dt, speed, way, None, None);
+    }
+
+    fn footprint(&self) -> (DVec2, f64) {
+        (self.position.truncate(), self.heading)
     }
 }

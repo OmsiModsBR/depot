@@ -41,7 +41,7 @@ fn bend(r: f64, grade: f64, s: f64) -> DVec3 {
 #[test]
 fn ka1_the_rotation_point_stays_on_the_lane() {
     let def = bus();
-    let mut body = AiClassic::new(&def, MotionKind::Road);
+    let mut body = AiClassic::new(&def);
     let (speed, dt, r) = (5.0f32, 1.0 / 30.0, 15.0);
     let mut s = 10.0f64;
     body.place(&|d| bend(r, 0.0, s + d as f64), None, None, speed);
@@ -64,7 +64,7 @@ fn ka1_the_rotation_point_stays_on_the_lane() {
 #[test]
 fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
     let def = bus();
-    let mut body = AiClassic::new(&def, MotionKind::Road);
+    let mut body = AiClassic::new(&def);
     let (speed, dt, r) = (5.0f32, 1.0 / 30.0, 25.0);
     let mut s = 30.0f64;
     body.place(&|d| bend(r, 0.0, s + d as f64), None, None, speed);
@@ -104,7 +104,7 @@ fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
 #[test]
 fn ka4_the_pose_comes_from_the_path() {
     let def = bus();
-    let mut body = AiClassic::new(&def, MotionKind::Road);
+    let mut body = AiClassic::new(&def);
     let (dt, r, grade) = (1.0 / 30.0, 12.0, 0.05);
     let mut s = 30.0f64;
     body.place(&|d| bend(r, grade, s + d as f64), None, None, 8.0);
@@ -184,7 +184,7 @@ fn ka9_the_target_speed_beyond_the_detail_radius() {
     assert_eq!(Regime::of(true, false), Regime::Physical);
     assert_eq!(Regime::of(false, true), Regime::Physical);
     assert_eq!(Regime::of(false, false), Regime::Target);
-    let mut ai = AiClassic::new(&bus(), MotionKind::Road);
+    let mut ai = AiClassic::new(&bus());
     let no_drive = DriveForces {
         drive: 0.0,
         resist: 0.0,

@@ -15,8 +15,8 @@ use hashbrown::HashMap;
 use omsi_geometry::util::wrap_deg;
 use omsi_render::{Renderer, Scene};
 use omsi_sim::ai::{
-    back_in_ramp, pull_out_ramps, AiMotion, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
-    PULL_OUT_CLEARANCE,
+    back_in_ramp, pull_out_ramps, within_detail_radius, AiMotion, MotionKind, Regime,
+    BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE,
 };
 use omsi_sim::collision::Obb;
 use omsi_sim::traffic::{
@@ -3109,6 +3109,7 @@ impl Traffic {
             render,
             trailer_renders,
             body,
+            payload_kg: 0.0,
             stopped: 0.0,
             lead_car: None,
             ignore_lead: None,
@@ -5970,6 +5971,10 @@ impl Traffic {
         self.way_users = users;
         let t_plan = std::time::Instant::now();
         let mut remove = Vec::new();
+        // the camera's tile, the centre of the detail radius (`KA-9`)
+        let camera_tile = self
+            .camera
+            .map(|c| omsi_map::world_to_tile_local(c.x, c.y).0);
         let mut frames: Vec<Option<AiFrame>> = vec![None; self.cars.len()];
         let feet = self.footprints();
         self.break_lead_pairs();
@@ -6784,7 +6789,40 @@ impl Traffic {
                 let up: Vec<usize> = car.state.upcoming().take(4).collect();
                 log::info!("t={:.2} car {}: v {:.2} lane {} s {:.1}/{:.1} upcoming {:?} bend {:.2} desired {:.2} lead {:?} stop {:?} why {:?}", self.time, car.id, car.state.speed, car.state.lane, car.state.s, self.net.lanes[car.state.lane].length(), up, car.state.curve_speed(&self.net), car.state.desired_accel(&self.net, lead_now, stop_at), lead_now.map(|l| l.gap), stop_at.map(|x| x - car.state.front), car.why);
             }
-            if !car.state.drive(&self.net, dt, lead_now, stop_at) {
+            let moved = match car.body.classic_mut() {
+                // OMSI Classic: the speed from the vehicle's own drive and brakes near the
+                // camera, while serving a stop or with `[noDistanceCheck]`, the driver's target
+                // speed elsewhere (`KA-2`, `KA-9`, `KA-10`)
+                Some(ai) => {
+                    let p = car.vehicle.position;
+                    let near = car.vehicle.ty.model.no_distance_check
+                        || camera_tile.is_none_or(|c| {
+                            within_detail_radius(omsi_map::world_to_tile_local(p.x, p.y).0, c)
+                        });
+                    ai.set_near(near);
+                    let serving = car.bus.as_ref().is_some_and(|b| b.at_station())
+                        || car
+                            .vehicle
+                            .var("AI_Scheduled_AtStation")
+                            .is_some_and(|v| v.abs() > 0.5);
+                    let regime = Regime::of(near, serving);
+                    let forces = car.vehicle.ai_drive_forces(car.payload_kg);
+                    let mu = omsi_sim::vehicle::road_grip(
+                        car.vehicle.host.street_cond,
+                        car.vehicle.host.temperature,
+                    );
+                    let v0 = car.state.speed;
+                    car.state.drive_with(
+                        &self.net,
+                        dt,
+                        lead_now,
+                        stop_at,
+                        Some(&mut |target| ai.speed_step(regime, v0, target, forces, mu, dt)),
+                    )
+                }
+                None => car.state.drive(&self.net, dt, lead_now, stop_at),
+            };
+            if !moved {
                 if debug {
                     log::info!(
                         "t={:.1}: car {} ran out of road at {:.1} m/s: taken off",
@@ -7648,6 +7686,13 @@ impl Traffic {
     /// Seconds until light `li` of controller `c` lets traffic go (0 while it does).
     pub fn light_until_go(&self, c: usize, li: usize) -> Option<f32> {
         self.lights.get(c)?.time_until_go(li)
+    }
+
+    /// The mass of the people aboard each car (kg, by id; none for a car left out).
+    pub fn set_payloads(&mut self, kg: &HashMap<u64, f32>) {
+        for c in &mut self.cars {
+            c.payload_kg = kg.get(&c.id).copied().unwrap_or(0.0);
+        }
     }
 
     /// Tell a scheduled bus's script who wants in or out (`PAX_Entry<i>_Req`,

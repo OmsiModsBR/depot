@@ -188,7 +188,7 @@ an AI car with the player's bus (quickstart Q9).
 - [X] T055 [P] [US4] [ph 8] Rear sections as kinematic trailers, not updated far away (KA-5) in `crates/omsi-sim/src/ai/classic/trailer.rs`
 - [ ] T056 [US4] [ph 8] Release and return of the whole vehicle (KA-6, KA-6b, KA-7, KA-11): the player's `RigidBody` (Classic) with throttle 0, brake 1 and hazard lights, from the route poses without a jump; back to a route when cleared, in `crates/omsi-sim/src/ai/classic/loose.rs`
 - [ ] T057 [US4] [ph 8] Contacts (KA-8): no AI-AI or AI-scenery contacts on the route, a loose vehicle against everything, in `crates/omsi-sim/src/physics/implementation/collide.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
-- [ ] T058 [US4] [ph 8] `AiMotion::Classic` built for Classic road vehicles; a cleared AI bus goes back empty and starts its next trip, in `crates/omsi-sim/src/ai/mod.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
+- [X] T058 [US4] [ph 8] `AiMotion::Classic` built for Classic road vehicles; a cleared AI bus goes back empty and starts its next trip, in `crates/omsi-sim/src/ai/mod.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
 - [ ] T059 [US4] [ph 8] Enable the "Clear the accident" button of the Alt menu in `crates/omsi-app/src/ui/domain/alt.rs` and its action in `crates/omsi-app/src/input/implementation/actions.rs`
 - [ ] T060 [US4] [ph 8] Cost (R-P, SC-007): AI step per vehicle and frame on 40 AI vehicles, Classic against `AiBody`, and the frame time with 10 loose AI vehicles, reported in the pull request
 - [ ] T061 [US4] [ph 8] Classic AI traces change (label `physics-delta`), Depot AI traces identical (SC-002)
