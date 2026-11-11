@@ -1203,6 +1203,7 @@ impl ApplicationHandler for App {
                     let world = self.world.as_deref();
                     let ground_here = ground_loaded_at(world, p.vehicle.position);
                     if !self.paused && ground_here {
+                        p.view_saloon = self.view == "pax";
                         p.tick(
                             dt,
                             self.audio.as_ref(),

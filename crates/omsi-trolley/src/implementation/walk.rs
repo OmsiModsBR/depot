@@ -28,6 +28,22 @@ pub(crate) struct Way {
 /// the way.
 pub(crate) type Chooser<'a> = dyn FnMut((SpanId, usize), &[Way], DVec3) -> usize + 'a;
 
+/// A joint a walk passed.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Passed {
+    /// The spline left and the one entered.
+    pub from: i64,
+    pub to: i64,
+    pub gap: f64,
+    /// The switch or crossing whose gap the joint bridges.
+    pub via: Option<WireObjectKind>,
+    /// Where the joined wire starts.
+    pub at: DVec3,
+    /// At a switch the shoe came in to from one of its two ways: whether that way is the
+    /// left one (None: no switch, or the shoe left the switch's entry).
+    pub merge_left: Option<bool>,
+}
+
 /// Where a walk ended.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Reached {
@@ -36,8 +52,8 @@ pub(crate) struct Reached {
     /// The distance from the foot to `point` minus the pole's length: 0 when the pole
     /// reaches the wire there, positive when the wire stays out of reach.
     pub error: f64,
-    /// Joints passed: (spline left, spline entered, gap).
-    pub joints: Vec<(i64, i64, f64)>,
+    /// Joints passed.
+    pub joints: Vec<Passed>,
     /// The wire ended before the pole reached it.
     pub wire_ended: bool,
 }
@@ -212,7 +228,19 @@ pub(crate) fn reach(
             choose((c.span, end), &ways, travel).min(ways.len() - 1)
         };
         let w = ways[pick];
-        joints.push((from_id, net.span(w.cursor.span)?.spline_id, w.gap));
+        let merge_left = if ways.len() == 1 && w.via.is_some_and(WireObjectKind::is_switch) {
+            merge_side(net, (c.span, end), &w)
+        } else {
+            None
+        };
+        joints.push(Passed {
+            from: from_id,
+            to: net.span(w.cursor.span)?.spline_id,
+            gap: w.gap,
+            via: w.via,
+            at: w.start,
+            merge_left,
+        });
         // the gap itself (a joint's looseness, or the wire a switch or crossing draws): the
         // pole's length may fall in it
         let in_gap = sphere_crossings(q, w.start, foot, len)
@@ -308,6 +336,21 @@ pub(crate) fn ways_on(net: &WireNetwork, c: &WireCursor, end: usize) -> Option<V
         });
     }
     Some(ways)
+}
+
+/// Coming from the span end `from` over the switch way `w` into the switch's entry: whether
+/// `from` is the left of the two ways that meet there, seen from the entry (None: no other
+/// way meets it).
+fn merge_side(net: &WireNetwork, from: (SpanId, usize), w: &Way) -> Option<bool> {
+    let into = (w.cursor.span, usize::from(w.dir < 0));
+    let ours = net.span(from.0)?.ends[from.1].point;
+    let theirs = net
+        .joints_at(into.0, into.1)
+        .map(|j| if j.a == into { j.b } else { j.a })
+        .filter(|o| *o != from)
+        .find_map(|(s, e)| net.span(s).map(|sp| sp.ends[e].point))?;
+    // (left as seen from the entry, looking along its ways)
+    Some(w.heading.cross(ours - theirs).z < 0.0)
 }
 
 fn other(s: WireSide) -> WireSide {

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use glam::Mat3;
 use omsi_trolley::{
     BodyPose, PoleEvent, PoleInputs, PoleOutputs, PoleSim, TrolleyDeclaration, WireNetwork,
+    WireWeather,
 };
 
 use super::VehicleInstance;
@@ -73,6 +74,7 @@ impl VehicleInstance {
                 retract: flag(self, "shtanga_recolher_cmd"),
                 switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
                 speed_kmh: self.motion().velocity_kmh() as f64,
+                weather: self.wire_weather(),
             };
             let out = {
                 let net = t.network.lock();
@@ -85,6 +87,20 @@ impl VehicleInstance {
             self.show_poles(&out, t.heartbeat);
         }
         self.trolley = Some(t);
+    }
+
+    /// The weather the wire is in: snowing, freezing on a wet street (ice), raining, or dry.
+    fn wire_weather(&self) -> WireWeather {
+        let h = &self.host;
+        if h.precip_rate > 0.0 && h.precip_type == 2.0 {
+            WireWeather::Snow
+        } else if h.temperature <= 0.0 && h.street_cond > 0.0 {
+            WireWeather::Ice
+        } else if h.precip_rate > 0.0 && h.precip_type == 1.0 {
+            WireWeather::Rain
+        } else {
+            WireWeather::Dry
+        }
     }
 
     fn show_poles(&mut self, out: &PoleOutputs, heartbeat: f32) {
@@ -103,8 +119,7 @@ impl VehicleInstance {
                 &format!("shtanga_dewired_{en}"),
                 f32::from(u8::from(p.dewired)),
             );
-            // (no sparks in this feature)
-            self.set_engine_var(&format!("shtanga_spark_{en}"), 0.0);
+            self.set_engine_var(&format!("shtanga_spark_{en}"), f32::from(u8::from(p.spark)));
         }
         self.set_engine_var(
             "shtanga_wire_present",
@@ -143,6 +158,7 @@ fn log_event(e: &PoleEvent) {
             from,
             to,
             gap,
+            ..
         } => log::debug!(
             "trolleybus: {} pole from spline {from} to {to} (gap {gap:.2} m)",
             side(pole)
@@ -159,6 +175,7 @@ fn log_event(e: &PoleEvent) {
             kind,
             spline_id,
             demand,
+            ..
         } => log::debug!(
             "trolleybus: {} pole at a {} took spline {spline_id}{}",
             side(pole),

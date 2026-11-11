@@ -104,6 +104,8 @@ pub struct PoleInputs {
     pub switch_demand: f64,
     /// The vehicle's speed, km/h.
     pub speed_kmh: f64,
+    /// The weather, for the sparks.
+    pub weather: super::sound::WireWeather,
 }
 
 /// What one pole shows.
@@ -123,6 +125,8 @@ pub struct PoleOutput {
     pub dewired: bool,
     /// The shoe is in a switch or crossing (its speed limit applies).
     pub in_special: bool,
+    /// A spark flashes under the shoe.
+    pub spark: bool,
 }
 
 /// What the poles show this frame.
@@ -156,6 +160,12 @@ pub enum PoleEvent {
         from: i64,
         to: i64,
         gap: f64,
+        /// The switch or crossing whose gap the joint bridges, where the joined wire starts,
+        /// and - coming in to a switch's entry from one of its ways - whether that way is
+        /// its left one.
+        via: Option<super::network::WireObjectKind>,
+        at: DVec3,
+        merge_left: Option<bool>,
     },
     WireEnds {
         pole: usize,
@@ -177,6 +187,9 @@ pub enum PoleEvent {
         kind: Option<super::network::WireObjectKind>,
         spline_id: i64,
         demand: bool,
+        /// The way taken is the leftmost, and where it starts.
+        left: bool,
+        at: DVec3,
     },
     StallReset {
         seconds: f64,
@@ -194,6 +207,20 @@ pub struct PoleSim {
     pub(crate) forks: Vec<((SpanId, usize), SpanId, f64)>,
     pub(crate) demand: bool,
     pub(crate) speed_kmh: f64,
+    pub(crate) throttle: f64,
+    pub(crate) weather: super::sound::WireWeather,
+    /// Each shoe's sparks: seconds to the next one (None: not drawn yet) and seconds the one
+    /// flashing now still lasts.
+    pub(crate) spark_next: [Option<f64>; 2],
+    pub(crate) spark_left: [f64; 2],
+    /// The switch sounds heard lately (where, seconds since), so the second shoe and a
+    /// shoe passing back do not repeat them; the wire object the shoes are near now.
+    pub(crate) heard: Vec<(DVec3, f64)>,
+    pub(crate) near_object: Option<DVec3>,
+    /// The random draws' state.
+    pub(crate) rng: u64,
     /// What happened in the last step.
     pub events: Vec<PoleEvent>,
+    /// The sounds to play from the last step.
+    pub sounds: Vec<super::sound::WireSound>,
 }

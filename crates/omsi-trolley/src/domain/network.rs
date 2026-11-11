@@ -84,6 +84,18 @@ pub enum WireObjectKind {
     SoundMarker,
 }
 
+impl WireObjectKind {
+    /// A switch of any kind.
+    pub fn is_switch(self) -> bool {
+        matches!(
+            self,
+            WireObjectKind::SwitchY
+                | WireObjectKind::SwitchBranchLeft
+                | WireObjectKind::SwitchBranchRight
+        )
+    }
+}
+
 /// The file-name markers that make a map object a wire object (matched case-insensitively
 /// against the object's whole path, so a folder name counts too).
 pub(crate) const OBJECT_MARKERS: &[(&str, WireObjectKind)] = &[

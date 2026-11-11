@@ -1829,6 +1829,23 @@ impl Player {
                 }
             }
         }
+        if let (Some(a), Some(t)) = (audio, self.vehicle.trolley.as_mut()) {
+            let sounds = std::mem::take(&mut t.sim.sounds);
+            if let (Some(params), false) = (t.declaration.sound, sounds.is_empty()) {
+                let carrier = match t.carrier {
+                    0 => Some(self.vehicle.world_transform()),
+                    n => self
+                        .vehicle
+                        .trailers
+                        .get(n - 1)
+                        .map(|p| p.world_transform()),
+                };
+                if let Some(xf) = carrier {
+                    self.wire_sounds
+                        .play(a, &params, &xf, &sounds, inside, self.view_saloon);
+                }
+            }
+        }
         let fired: Vec<String> = std::mem::take(&mut self.vehicle.host.fired_triggers);
         let fired_vars: Vec<(String, Vec<f32>)> =
             std::mem::take(&mut self.vehicle.host.fired_trigger_vars);

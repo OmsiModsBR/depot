@@ -27,7 +27,9 @@ const SPECIAL_ZONE: f64 = 4.0;
 /// (on a Y the left and right branches, on a 20 degree switch the branch or the straight,
 /// whichever lies on that side); a crossing runs straight; where the content has no object
 /// the shoe keeps to the closest, straightest wire.
-fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObjectKind>) {
+///
+/// Also whether the way taken is the leftmost.
+fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObjectKind>, bool) {
     let rank = |k: &WireObjectKind| match k {
         WireObjectKind::SwitchY
         | WireObjectKind::SwitchBranchLeft
@@ -47,21 +49,14 @@ fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObj
             .min_by(|a, b| f(&ways[*a]).total_cmp(&f(&ways[*b])))
             .unwrap_or(0)
     };
-    let switch = matches!(
-        kind,
-        Some(
-            WireObjectKind::SwitchY
-                | WireObjectKind::SwitchBranchLeft
-                | WireObjectKind::SwitchBranchRight
-        )
-    );
+    let switch = kind.is_some_and(WireObjectKind::is_switch);
     let k = match (kind, demand) {
         (_, true) if switch => by(&|w| -turn(w)),
         (_, false) if switch => by(&|w| turn(w)),
         (Some(_), _) => by(&|w| turn(w).abs()),
         (None, _) => by(&|w| w.gap + turn(w).abs() / 20.0),
     };
-    (k, kind)
+    (k, kind, k == by(&|w| -turn(w)))
 }
 
 /// How the shoe sits on the wire this frame, for the dewirement rules.
@@ -102,6 +97,8 @@ impl PoleSim {
         }
         self.forks.retain(|f| f.2 < FORK_MEMORY);
         self.speed_kmh = inputs.speed_kmh.abs();
+        self.throttle = inputs.switch_demand;
+        self.weather = inputs.weather;
         let retract = inputs.retract && !self.retract_before;
         self.retract_before = inputs.retract;
         let mut out = PoleOutputs {
@@ -119,6 +116,7 @@ impl PoleSim {
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
         out.speed_limit_active = out.poles.iter().any(|p| p.on_wire && p.in_special);
         out.overspeed = out.speed_limit_active && self.speed_kmh > decl.params.complex_speed_limit;
+        self.wire_sounds(decl, net, body, &mut out, dt);
         if let Some(c) = self.poles[0].cursor.filter(|_| out.poles[0].on_wire) {
             if let Some(span) = net.span(c.span) {
                 out.spline_id = span.spline_id;
@@ -257,13 +255,15 @@ impl PoleSim {
                 {
                     return k;
                 }
-                let (k, kind) = fork_way(ways, travel, demand);
+                let (k, kind, left) = fork_way(ways, travel, demand);
                 forks.push((at, ways[k].cursor.span, 0.0));
                 events.push(PoleEvent::Fork {
                     pole: i,
                     kind,
                     spline_id: net.span(ways[k].cursor.span).map_or(-1, |s| s.spline_id),
                     demand,
+                    left,
+                    at: ways[k].start,
                 });
                 k
             };
@@ -276,12 +276,15 @@ impl PoleSim {
                 &mut choose,
             )?
         };
-        for (from, to, gap) in joints {
+        for j in joints {
             self.events.push(PoleEvent::Joint {
                 pole: i,
-                from,
-                to,
-                gap,
+                from: j.from,
+                to: j.to,
+                gap: j.gap,
+                via: j.via,
+                at: j.at,
+                merge_left: j.merge_left,
             });
         }
         if wire_ended {
@@ -564,6 +567,7 @@ fn on_wire(
             on_wire: true,
             dewired: false,
             in_special: false,
+            spark: false,
         },
         Contact {
             side_angle: az_v,
