@@ -54,7 +54,6 @@ interior_cab_gain_db=-8
 interior_salon_gain_db=-2
 spark_volume_db=-3
 dewire_volume_db=-3
-spark_sample_gain=8
 [sparks]
 enabled=1
 min_speed_kmh=1

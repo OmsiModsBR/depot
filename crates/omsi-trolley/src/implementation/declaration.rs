@@ -177,7 +177,6 @@ pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, Co
         interior_salon_gain_db: v("interior_salon_gain_db")?,
         spark_volume_db: v("spark_volume_db")?,
         dewire_volume_db: v("dewire_volume_db")?,
-        spark_sample_gain: v("spark_sample_gain")?,
     }))
 }
 

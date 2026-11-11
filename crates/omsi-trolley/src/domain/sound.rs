@@ -25,11 +25,10 @@ pub struct SoundParams {
     pub interior_source: DVec3,
     pub interior_cab_gain_db: f64,
     pub interior_salon_gain_db: f64,
-    /// dB of a spark, and of the spark of a pole leaving the wire.
+    /// dB of a spark, and of the spark of a pole leaving the wire (the spark recording is
+    /// brought up to full scale first: the parameter file's `spark_sample_gain` is not read).
     pub spark_volume_db: f64,
     pub dewire_volume_db: f64,
-    /// The spark recording's own amplification (times).
-    pub spark_sample_gain: f64,
 }
 
 /// The `[sparks]` section: when a shoe on the wire sparks.

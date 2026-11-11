@@ -14,6 +14,29 @@ use crate::gameplay::domain::wire_sounds::WireSounds;
 /// A spark heard from inside comes through the bodywork (Hz).
 const THROUGH_THE_BODY_HZ: f32 = 2500.0;
 
+/// `clip` with its loudest sample at full scale.
+fn full_scale(clip: &Arc<Clip>) -> Arc<Clip> {
+    let peak = clip
+        .samples
+        .iter()
+        .map(|s| i32::from(*s).unsigned_abs())
+        .max()
+        .unwrap_or(0);
+    if peak == 0 {
+        return clip.clone();
+    }
+    let k = f32::from(i16::MAX) / peak as f32;
+    Arc::new(Clip {
+        sample_rate: clip.sample_rate,
+        channels: clip.channels,
+        samples: clip
+            .samples
+            .iter()
+            .map(|s| (f32::from(*s) * k).round().clamp(-32768.0, 32767.0) as i16)
+            .collect(),
+    })
+}
+
 fn gain(db: f64) -> f32 {
     10f64.powf(db / 20.0) as f32
 }
@@ -28,7 +51,13 @@ impl WireSounds {
                 if found.is_none() {
                     log::warn!("trolleybus: no sound {rel}");
                 }
-                found
+                // the spark recording is very quiet (its peak some 30 dB under full scale):
+                // brought up to full scale, as loud as the switches' recordings
+                if name == WireSoundKind::Spark.file_stem() {
+                    found.map(|c| full_scale(&c))
+                } else {
+                    found
+                }
             })
             .clone()
     }
@@ -50,17 +79,12 @@ impl WireSounds {
         let listener = audio.listener_position();
         for s in sounds {
             let at = s.position.as_vec3();
-            let spark = matches!(s.kind, WireSoundKind::Spark | WireSoundKind::DewireSpark);
             let db = match s.kind {
                 WireSoundKind::Spark => params.spark_volume_db,
                 WireSoundKind::DewireSpark => params.dewire_volume_db,
                 _ => params.volume_db,
             };
-            let level = if spark {
-                gain(db) * params.spark_sample_gain as f32
-            } else {
-                gain(db)
-            };
+            let level = gain(db);
             let stem = s.kind.file_stem();
             let distance = at.distance(listener);
             if inside {
