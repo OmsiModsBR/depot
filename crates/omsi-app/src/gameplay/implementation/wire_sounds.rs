@@ -62,40 +62,61 @@ impl WireSounds {
                 gain(db)
             };
             let stem = s.kind.file_stem();
-            if inside && s.kind.has_interior() {
+            let distance = at.distance(listener);
+            if inside {
+                // from the interior source, as loud as the cab or the saloon hears it: the
+                // `_int` recording, or the outside one through the bodywork
                 let room = if saloon {
                     params.interior_salon_gain_db
                 } else {
                     params.interior_cab_gain_db
                 };
-                if let Some(clip) = self.clip(audio, &format!("{stem}_int")) {
-                    let source = carrier.transform_point3(params.interior_source.as_vec3());
-                    audio.play(
-                        clip,
-                        VoiceParams {
-                            gain: level * gain(room),
-                            position: Some(source),
-                            doppler: false,
-                            range: (source - listener).length().max(1.0),
-                            ..Default::default()
-                        },
-                    );
+                let int = s
+                    .kind
+                    .has_interior()
+                    .then(|| self.clip(audio, &format!("{stem}_int")))
+                    .flatten();
+                let (clip, lowpass_hz, name) = match int {
+                    Some(c) => (Some(c), 0.0, format!("{stem}_int")),
+                    None => (
+                        self.clip(audio, stem),
+                        THROUGH_THE_BODY_HZ,
+                        stem.to_string(),
+                    ),
+                };
+                let Some(clip) = clip else {
                     continue;
-                }
+                };
+                let source = carrier.transform_point3(params.interior_source.as_vec3());
+                let g = level * gain(room);
+                log::info!("trolleybus: sound {name} inside (gain {g:.2})");
+                audio.play(
+                    clip,
+                    VoiceParams {
+                        gain: g,
+                        position: Some(source),
+                        doppler: false,
+                        range: (source - listener).length().max(1.0),
+                        lowpass_hz,
+                        ..Default::default()
+                    },
+                );
+                continue;
             }
-            if !inside && at.distance(listener) > params.max_distance as f32 {
+            if distance > params.max_distance as f32 {
+                log::info!("trolleybus: sound {stem} not heard ({distance:.0} m away)");
                 continue;
             }
             let Some(clip) = self.clip(audio, stem) else {
                 continue;
             };
+            log::info!("trolleybus: sound {stem} outside, {distance:.1} m away (gain {level:.2})");
             audio.play(
                 clip,
                 VoiceParams {
                     gain: level,
                     position: Some(at),
                     range: params.min_distance as f32,
-                    lowpass_hz: if inside { THROUGH_THE_BODY_HZ } else { 0.0 },
                     ..Default::default()
                 },
             );

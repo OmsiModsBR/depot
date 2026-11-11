@@ -76,6 +76,8 @@ impl PoleSim {
                 self.heard.push((at, 0.0));
                 if self.draw() < chance {
                     self.sounds.push(WireSound { kind, position: at });
+                } else {
+                    log::info!("trolleybus: {kind:?} left silent by its chance ({chance})");
                 }
             }
             self.events = events;
