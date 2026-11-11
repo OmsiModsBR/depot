@@ -162,7 +162,7 @@ In OMSI Classic the AI traffic moves as OMSI 2's AI does: each vehicle's turning
 lane path while the body swings through bends as a vehicle does, articulated buses trail their rear
 sections like trailers, buses near the camera pull away and stop according to their own engines and
 brakes (farther away they simply hold their target speed, as OMSI 2's do), and AI vehicles on their
-routes never push each other or the scenery. When the player's vehicle, or any vehicle already knocked loose, hits an AI vehicle, it
+routes never push each other or the scenery. When the player's vehicle hits an AI vehicle, it
 becomes a free body with no driver, fully braked with its hazard lights on, until the player clears the crash
 (a "clear crash" command) or the vehicle is out of the camera's surroundings; then it goes back to its route. An
 articulated bus is knocked loose and put back as one vehicle, all its sections together.
@@ -180,7 +180,7 @@ Depot (OMSI Classic); then nudge an AI car with the player's bus in both.
    OMSI 2.
 2. **Given** OMSI Classic, **When** the player's vehicle hits an AI vehicle, **Then** the AI vehicle
    becomes a free body without a driver, fully braked with its hazard lights on; if it is pushed into
-   another AI vehicle, that one is knocked loose too.
+   another AI vehicle, it passes through that one, which stays on its route (T003).
 3. **Given** a loose AI vehicle, **When** the player clears the crash or moves the camera far enough away that
    the vehicle leaves the camera's surroundings, **Then** the vehicle goes back onto a route and drives on.
 4. **Given** OMSI Classic, **When** an AI bus pulls away near the camera, **Then** it accelerates
@@ -301,8 +301,9 @@ directly.
   loose AI vehicle in the session at once. An AI bus that goes back to its route MUST go back empty
   and start the next trip of its timetable.
 - **FR-016a**: In OMSI Classic, AI vehicles on their routes MUST NOT collide physically with each
-  other or with static scenery; they collide only with active bodies. A loose AI vehicle MUST collide
-  with everything and release any AI vehicle it touches.
+  other or with static scenery; they collide only with the player's vehicle. A loose AI vehicle MUST
+  collide with the scenery, the player's vehicle and the other loose AI vehicles, and MUST NOT touch
+  or release the AI vehicles on their routes (T003).
 - **FR-016b**: In OMSI Classic, release and return MUST act on the whole vehicle (every section) at
   once, without any section jumping.
 - **FR-016c**: In OMSI Classic, an AI vehicle beyond the camera's surroundings MUST move at its
