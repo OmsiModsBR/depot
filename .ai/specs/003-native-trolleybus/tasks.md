@@ -21,33 +21,33 @@ phase's pull request holds every task tagged with it.
 
 ## Phase 1: Setup
 
-- [ ] T001 [ph 1] Create `crates/omsi-trolley` (Cargo.toml with workspace deps `omsi-map`, `omsi-geometry`, `omsi-scenery`, `omsi-cfg`, `glam`; `test-support` feature; `src/lib.rs`, `domain/`, `interface/{input,output}.rs`, `implementation/`, `testing.rs`) and add it to `[workspace] members` before `crates/omsi-sim`
+- [X] T001 [ph 1] Create `crates/omsi-trolley` (Cargo.toml with workspace deps `omsi-map`, `omsi-geometry`, `omsi-scenery`, `omsi-cfg`, `glam`; `test-support` feature; `src/lib.rs`, `domain/`, `interface/{input,output}.rs`, `implementation/`, `testing.rs`) and add it to `[workspace] members` before `crates/omsi-sim`
 
 ## Phase 2: Foundational (wire network, convention reader) — `feat/trolley-wire-network`
 
-- [ ] T002 [P] [ph 1] `domain/convention.rs`: `ConventionParams` (global keys of [content-convention](contracts/content-convention.md) used by phases 1–2) and `RegistryEntry` (raw `[vehicle:*]` keys)
-- [ ] T003 [P] [ph 1] `implementation/convention.rs`: ini reader (sections, `key=value`, `;` comments, case-insensitive keys) returning per-entry errors; `read_convention(roots)` looks up Depot content `Plugins\` then OMSI `plugins\`
-- [ ] T004 [P] [ph 1] `domain/network.rs`: `WireSpan`, `SpanEnd`, `WireJoint`, `WireObject` (`Switch{Y,BranchLeft,BranchRight}`, `Crossing`, `Marker`), `TileWires`, `WireNetwork`
-- [ ] T005 [ph 1] `implementation/network.rs`: `build_tile_wires(tile, origin, params, sli_lookup)` → `TileWires` (keyword match, sampling with `SplineCurve::offset_point` at the wire offsets, mirror, object recognition)
-- [ ] T006 [ph 1] `implementation/network.rs`: `WireNetwork::insert/remove_tile`, joint search (distance and parallel/anti-parallel directions, Depot's join tolerance constant), uniform grid, `segments_near`
-- [ ] T007 [P] [ph 1] Tests `tests/convention.rs`: sample registry and cfg written by the test; missing file; broken entry named in the error; disabled entry
-- [ ] T008 [P] [ph 1] Tests `tests/network.rs`: straight and curved spans, mirror, reversed splice joins, gap above the tolerance does not join, tile insert/remove, `segments_near`, no wire → empty network
-- [ ] T009 [ph 1] `omsi-app`: build `TileWires` in tile staging on the loader thread (only when the convention was read and the setting is on); keep in the world, insert/remove with the tile; one log line per map load ("wire network: N spans, M switches")
-- [ ] T010 [ph 1] `omsi-app` settings: `trolleybus=1` (settings.cfg, launcher defaults and parse, round-trip test list)
-- [ ] T011 [ph 1] Content test (`OMSI_ROOT`): read the installed convention and one wired map tile; spans > 0
-- [ ] T012 [ph 1] Measure map load and frame time on a map without wire and a wired map, feature on/off; `omsi-check` before/after; CHANGELOG not touched (nothing the player notices)
+- [X] T002 [P] [ph 1] `domain/convention.rs`: `ConventionParams` (global keys of [content-convention](contracts/content-convention.md) used by phases 1–2) and `RegistryEntry` (raw `[vehicle:*]` keys)
+- [X] T003 [P] [ph 1] `implementation/convention.rs`: ini reader (sections, `key=value`, `;` comments, case-insensitive keys) returning per-entry errors; `read_convention(roots)` looks up Depot content `Plugins\` then OMSI `plugins\`
+- [X] T004 [P] [ph 1] `domain/network.rs`: `WireSpan`, `SpanEnd`, `WireJoint`, `WireObject` (`Switch{Y,BranchLeft,BranchRight}`, `Crossing`, `Marker`), `TileWires`, `WireNetwork`
+- [X] T005 [ph 1] `implementation/network.rs`: `build_tile_wires(tile, origin, params, sli_lookup)` → `TileWires` (keyword match, sampling with `SplineCurve::offset_point` at the wire offsets, mirror, object recognition)
+- [X] T006 [ph 1] `implementation/network.rs`: `WireNetwork::insert/remove_tile`, joint search (distance and parallel/anti-parallel directions, Depot's join tolerance constant), uniform grid, `segments_near`
+- [X] T007 [P] [ph 1] Tests `tests/convention.rs`: sample registry and cfg written by the test; missing file; broken entry named in the error; disabled entry
+- [X] T008 [P] [ph 1] Tests `tests/network.rs`: straight and curved spans, mirror, reversed splice joins, gap above the tolerance does not join, tile insert/remove, `segments_near`, no wire → empty network
+- [X] T009 [ph 1] `omsi-app`: build `TileWires` in tile staging on the loader thread (only when the convention was read and the setting is on); keep in the world, insert/remove with the tile; one log line per map load ("wire network: N spans, M switches")
+- [X] T010 [ph 2] `omsi-app` settings: `trolleybus=1` (settings.cfg, launcher defaults and parse, launcher toggle under Simulation > Trolleybus, round-trip test list). Moved from phase 1 on 2026-11-11: in phase 1 the switch had nothing to switch off
+- [X] T011 [ph 1] Content test (`OMSI_ROOT`): read the installed convention and one wired map tile; spans > 0
+- [ ] T012 [ph 1] (counts done: building the wire of a whole map takes 8-17 ms and joining it 7-8 ms on the maintainer's two maps; the in-game before/after of the load and frame time is still to do) Measure map load and frame time on a map without wire and a wired map, feature on/off; `omsi-check` before/after; CHANGELOG not touched (nothing the player notices)
 
 **Checkpoint**: wired maps log their network; every other trace identical.
 
 ## Phase 3: User Story 1 — poles on the wire (P1) — `feat/trolley-poles`
 
-- [ ] T013 [P] [US1] [ph 2] `domain/declaration.rs` + reader: `TrolleyDeclaration` from a `RegistryEntry` and `ConventionParams`, required keys per [content-convention](contracts/content-convention.md)
-- [ ] T014 [US1] [ph 2] `omsi-app` spawn: match `bus_file`/`pole_carrier_bus_file` to the player's parts; log the match or the rejection
-- [ ] T015 [P] [US1] [ph 2] `domain/pole.rs`: `PoleState`, phases, inputs, outputs ([data-model](data-model.md))
-- [ ] T016 [US1] [ph 2] `implementation/pole.rs`: kinematics from base to shoe in the body frame, raise/lower, capture within the capture distance, tracking along a wire and across joints, contact force, stall reset by time
-- [ ] T017 [US1] [ph 2] `omsi-sim/src/vehicle/trolley.rs`: step after the coupled parts are placed and before meshes animate; carrier pose; read inputs, write outputs with `set_engine_var` ([script-variables](contracts/script-variables.md))
-- [ ] T018 [P] [US1] [ph 2] Tests: capture on a straight wire, tracking through a curve with body roll, reversed splice, 1 m joint, short span, no wire on the map, same result at 20 and 200 steps per second, a vehicle without declaration untouched
-- [ ] T019 [US1] [ph 2] In-game validation with the four declared vehicles (quickstart phase 2), measurements, CHANGELOG line
+- [X] T013 [P] [US1] [ph 2] `domain/declaration.rs` + reader: `TrolleyDeclaration` from a `RegistryEntry` and `ConventionParams`, required keys per [content-convention](contracts/content-convention.md)
+- [X] T014 [US1] [ph 2] `omsi-app` spawn: match `bus_file`/`pole_carrier_bus_file` to the player's parts; log the match or the rejection
+- [X] T015 [P] [US1] [ph 2] `domain/pole.rs`: `PoleState`, phases, inputs, outputs ([data-model](data-model.md))
+- [X] T016 [US1] [ph 2] `implementation/pole.rs`: kinematics from base to shoe in the body frame, raise/lower, capture within the capture distance, tracking along a wire and across joints, contact force, stall reset by time
+- [X] T017 [US1] [ph 2] `omsi-sim/src/vehicle/trolley.rs`: step after the coupled parts are placed and before meshes animate; carrier pose; read inputs, write outputs with `set_engine_var` ([script-variables](contracts/script-variables.md))
+- [X] T018 [P] [US1] [ph 2] Tests: capture on a straight wire, tracking through a curve with body roll, reversed splice, 1 m joint, short span, no wire on the map, same result at 20 and 200 steps per second, a vehicle without declaration untouched
+- [ ] T019 [US1] [ph 2] (2026-11-11: poles shown, raised and lowered on the wire with one articulated vehicle on one map; the other three vehicles, the before/after measurements and the PR number in the changelog line are still to do) In-game validation with the four declared vehicles (quickstart phase 2), measurements, CHANGELOG line
 
 ## Phase 4: User Story 2 — dewirement and retriever (P2) — `feat/trolley-dewire`
 
