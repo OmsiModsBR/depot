@@ -307,6 +307,7 @@ fn the_shown_body_moves_on_evenly_between_substeps() {
 
 /// A frame shorter than a substep runs none, and the time it brought counts towards the next:
 /// at 300 frames a second the bus covers the distance it covers at 60.
+/// Checks: C-2
 #[test]
 fn short_frames_add_up_to_substeps() {
     let g = road(1e9, 0.0);
@@ -326,6 +327,7 @@ fn short_frames_add_up_to_substeps() {
 /// 40 km/h: the wheels ride over it without leaving the road for long, the body
 /// hardly lifts, and a wheel's travel changes smoothly from frame to frame instead of
 /// jumping into the arch and out to full droop.
+/// Checks: C-2
 #[test]
 fn a_long_frame_does_not_bounce_the_body() {
     // driving on flat road, one frame held up for 60 ms (loading): the body keeps still
@@ -942,6 +944,7 @@ fn inputs_that_are_no_number_leave_the_body_whole() {
     assert_eq!(rb.velocity(), Vec3::ZERO);
 }
 
+/// Checks: C-1
 #[test]
 fn the_mass_is_in_tonnes_whatever_the_number() {
     // as OMSI reads `[mass]`: a file that gives kilograms weighs a thousand times as much, a
@@ -968,6 +971,7 @@ fn the_mass_is_in_tonnes_whatever_the_number() {
     assert_eq!(kinematic_mass_kg(&Vehicle { mass: 0.2, ..bus() }), 500.0);
 }
 
+/// Checks: C-1
 #[test]
 fn the_moments_of_inertia_are_in_tonne_square_metres() {
     // no unit guess, no minimum: a file's 6000 is 6000 t m², its 0.05 is 50 kg m², and a file
@@ -1009,6 +1013,7 @@ fn an_axle_without_springs_carries_nothing() {
     assert!(rb.position().z.is_finite());
 }
 
+/// Checks: C-1
 #[test]
 fn rolling_resistance_is_the_files_force() {
     // `[rollwiderstand]` is a force spread over the wheels, whatever the weight; a file
@@ -1139,4 +1144,22 @@ fn a_wheel_far_from_the_weight_carries_nothing() {
     assert_eq!(loads[0], 0.0, "{loads:?}");
     // the kinematic model's parts keep their least share
     assert!(kinematic_wheel_rest_loads(&def, Engine::Classic)[0] > 0.0);
+}
+
+#[test]
+fn the_classic_kinematic_model_rests_about_the_origin() {
+    // `KA-4`: the AI's static sag shares the weight about the origin, as `K-1` does, so
+    // `[cog]` leaves it alone; the Depot engine shares it about `[cog]`
+    let ahead = Vehicle {
+        cog: Some([0.0, 1.5, 1.2]),
+        ..bus()
+    };
+    assert_eq!(
+        kinematic_wheel_rest_loads(&ahead, Engine::Classic),
+        kinematic_wheel_rest_loads(&bus(), Engine::Classic)
+    );
+    assert_ne!(
+        kinematic_wheel_rest_loads(&ahead, Engine::Depot),
+        kinematic_wheel_rest_loads(&bus(), Engine::Depot)
+    );
 }

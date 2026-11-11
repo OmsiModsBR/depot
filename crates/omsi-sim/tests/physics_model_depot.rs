@@ -179,3 +179,46 @@ fn release_v4_biarticulated() {
 fn release_v5_articulated_8x2() {
     release_by_speed(v5_articulated_8x2(), Engine::Depot, 0.6);
 }
+
+mod model_ai;
+
+/// The AI's rows (Project Depot Physics, today's body unchanged): `DA-1` to `DA-3` the rear
+/// axle led along the lane by pure pursuit, within about a metre in a 12 m bend; `DA-5` the
+/// sprung body leaning into the bend; `DA-6` the static sag shared about `[cog]`.
+fn depot_ai_follows_the_lane(defs: Vec<omsi_vehicle::Vehicle>) {
+    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Depot);
+    assert!(off < 1.05, "the rotation point {off} m off the lane");
+    assert!(roll > 0.3 && roll < 5.0, "roll {roll} deg");
+    assert!(gap < 0.02, "a joint {gap} m apart");
+    assert!(model_ai::static_loads_follow_cog(&defs, Engine::Depot));
+}
+
+/// Checks: DA-1, DA-2, DA-3, DA-5, DA-6
+#[test]
+fn ai_route_v1_solo_4x2() {
+    depot_ai_follows_the_lane(v1_solo_4x2());
+}
+
+/// Checks: DA-1, DA-2, DA-3, DA-5, DA-6
+#[test]
+fn ai_route_v2_rigid_6x2() {
+    depot_ai_follows_the_lane(v2_rigid_6x2());
+}
+
+/// Checks: DA-1, DA-2, DA-3, DA-5, DA-6
+#[test]
+fn ai_route_v3_articulated_6x2() {
+    depot_ai_follows_the_lane(v3_articulated_6x2());
+}
+
+/// Checks: DA-1, DA-2, DA-3, DA-5, DA-6
+#[test]
+fn ai_route_v4_biarticulated() {
+    depot_ai_follows_the_lane(v4_biarticulated());
+}
+
+/// Checks: DA-1, DA-2, DA-3, DA-5, DA-6
+#[test]
+fn ai_route_v5_articulated_8x2() {
+    depot_ai_follows_the_lane(v5_articulated_8x2());
+}

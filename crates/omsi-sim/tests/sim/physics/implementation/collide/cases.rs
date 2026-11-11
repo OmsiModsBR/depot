@@ -9,6 +9,7 @@ use omsi_sim::testing::physics::RigidBodyInternals;
 
 /// Straight into a wall at 40 km/h: the bus stops at the wall, bounces off a little, and
 /// drives away backwards straight after.
+/// Checks: C-10
 #[test]
 fn crash_bounces_and_releases() {
     let def = bus();
@@ -309,6 +310,7 @@ fn rear_ends_a_standing_car() {
 }
 
 /// A lamp post breaks off: the bus hardly slows down.
+/// Checks: C-10
 #[test]
 fn a_post_breaks_off() {
     let def = bus();

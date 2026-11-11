@@ -30,6 +30,24 @@ pub(crate) fn vehicle_outline(v: &omsi_sim::VehicleInstance, speed: f32) -> traf
     (centre, v.heading, bb[1] * 0.5, bb[0] * 0.5, speed)
 }
 
+/// The key the player's vehicle runs under among the cars' boxes (`Obb::moving`).
+pub(crate) const PLAYER_KEY: u64 = u32::MAX as u64;
+
+/// The player's vehicle as the cars knocked off their routes run into it: its box, moving
+/// with its speed and mass (none without a `[boundingbox]`).
+pub(crate) fn player_obb(v: &omsi_sim::VehicleInstance) -> Option<omsi_sim::collision::Obb> {
+    let bb = v.ty.def.bounding_box?;
+    let h = v.heading.to_radians();
+    let vel = glam::DVec2::new(h.sin(), h.cos()) * v.motion().speed as f64;
+    Some(
+        omsi_sim::collision::Obb::from_box(bb, v.position, v.body_heading()).moving(
+            vel,
+            v.mass_kg(),
+            PLAYER_KEY,
+        ),
+    )
+}
+
 /// Everything of the player's besides the bus's own box that the traffic has to keep out
 /// of: the rear sections of an articulated bus or a coupled trailer (the traffic saw only
 /// the front section and drove into the back of a turning GN92), and the vehicles placed

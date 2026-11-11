@@ -19,6 +19,7 @@ fn all_on() -> AltCtx {
         controls: "alt-wheel",
         pumping: None,
         route_arrows: false,
+        loose_vehicles: true,
     }
 }
 
@@ -89,6 +90,7 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
             "reposition",
             "tour",
             "destination",
+            "accident",
             "repair",
             "service",
             "help",
@@ -97,6 +99,15 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
             "controls",
             "driver",
         ]
+    );
+    // the accident can be cleared only while an AI vehicle is off its route
+    let bs = buttons(&AltCtx {
+        loose_vehicles: false,
+        ..all_on()
+    });
+    assert_eq!(
+        by_id(&bs, "accident").disabled.as_deref(),
+        Some("No accident to clear")
     );
     // one vehicle on the mouse at a time
     let placing = AltCtx {
@@ -145,9 +156,7 @@ fn what_the_game_can_do_is_enabled_and_the_rest_says_why() {
     assert!(by_id(&bs_on, "help").on);
     // what is not in the game yet stays dim whatever the state
     let bs = buttons(&all_on());
-    for id in ["ai", "accident"] {
-        assert_eq!(by_id(&bs, id).disabled.as_deref(), Some(NOT_YET), "{id}");
-    }
+    assert_eq!(by_id(&bs, "ai").disabled.as_deref(), Some(NOT_YET));
 }
 
 #[test]

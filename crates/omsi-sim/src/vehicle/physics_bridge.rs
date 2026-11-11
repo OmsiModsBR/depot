@@ -38,6 +38,12 @@ impl VehicleInstance {
         self.put(self.v_throttle, c.throttle);
         self.put(self.v_brake, c.brake);
         self.put(self.v_clutch, c.clutch);
+        self.take_script_drive()
+    }
+
+    /// `M_Wheel` and each wheel's brake force as the scripts left them (the brake forces
+    /// cleared once read).
+    pub(super) fn take_script_drive(&mut self) -> DriveInputs {
         let m_wheel = self.get(self.v_m_wheel);
         let n = (self.v_wheels.len() * 2).max(1) as f32;
         let shared = self.get(self.v_brakeforce).max(0.0) / n;

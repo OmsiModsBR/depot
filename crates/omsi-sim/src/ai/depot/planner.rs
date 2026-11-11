@@ -131,42 +131,18 @@ impl AiBody {
         extent: (f32, f32, f32),
         obstacles: &[crate::collision::Obb],
     ) -> f64 {
-        let mut body = self.clone();
-        let (front, rear, half_width) = extent;
-        let dt = 1.0 / 20.0;
-        let mut v = speed.max(0.0);
-        let mut x = 0.0f32;
-        let gap = |b: &AiBody| {
-            let me = crate::collision::Obb::vehicle(
-                b.position.truncate(),
-                b.heading,
-                front as f64,
-                rear as f64,
-                half_width as f64,
-            );
-            obstacles
-                .iter()
-                .map(|o| me.separation(o))
-                .fold(f64::MAX, f64::min)
-        };
-        let mut best = gap(&body);
-        if v < 0.05 {
-            for _ in 0..(wait / dt).round() as usize {
-                body.drive(dt, 0.0, way);
-            }
-        }
-        // (at most a minute of simulated time: a car that cannot move is not getting past)
-        for _ in 0..1200 {
-            if x >= distance {
-                break;
-            }
-            v = (v + accel.max(0.3) * dt).min(v_max.max(0.5));
-            let ds = v * dt;
-            x += ds;
-            let at = x;
-            body.drive(dt, v, &|d| way(at + d));
-            best = best.min(gap(&body));
-        }
-        best
+        super::super::sweep::sweep_clearance(
+            self, way, speed, wait, accel, v_max, distance, extent, obstacles,
+        )
+    }
+}
+
+impl super::super::sweep::Sweep for AiBody {
+    fn advance(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3) {
+        self.drive(dt, speed, way);
+    }
+
+    fn footprint(&self) -> (DVec2, f64) {
+        (self.position.truncate(), self.heading)
     }
 }

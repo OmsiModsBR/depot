@@ -108,6 +108,20 @@ impl AiState {
     /// Advance along the network with the car ahead (`lead`) and a stop point (`stop`,
     /// distance from the car's origin). False at a dead end.
     pub fn drive(&mut self, net: &Network, dt: f32, lead: Option<Lead>, stop: Option<f32>) -> bool {
+        self.drive_with(net, dt, lead, stop, None)
+    }
+
+    /// [`AiState::drive`], the speed after the step given by `speed` from the driver's
+    /// target speed (`crate::ai::target_speed`) when there is one (the Classic AI's own
+    /// speed), and taken from the planner's acceleration otherwise.
+    pub fn drive_with(
+        &mut self,
+        net: &Network,
+        dt: f32,
+        lead: Option<Lead>,
+        stop: Option<f32>,
+        speed: Option<&mut dyn FnMut(f32) -> f32>,
+    ) -> bool {
         self.count_down(dt);
         if net.lanes.get(self.lane).is_none() {
             return false;
@@ -117,7 +131,18 @@ impl AiState {
             acc = acc.min(cap);
         }
         let acc = self.hold_or_move_off(acc, dt);
-        let ds = self.move_on(acc, dt);
+        let ds = match speed {
+            Some(f) => {
+                let v1 = f(crate::ai::target_speed(self.speed, acc)).max(0.0);
+                let a = if dt > 0.0 {
+                    (v1 - self.speed) / dt
+                } else {
+                    0.0
+                };
+                self.move_to(v1, a, dt)
+            }
+            None => self.move_on(acc, dt),
+        };
         self.step_lane_change(net, ds, dt);
         self.follow_bay_offset(ds);
         if !self.enter_next_lanes(net) {
@@ -173,8 +198,14 @@ impl AiState {
 
     /// Speed, brake lights and distance after `dt` at `acc`; the distance covered.
     fn move_on(&mut self, acc: f32, dt: f32) -> f32 {
+        let v1 = (self.speed + acc * dt).max(0.0);
+        self.move_to(v1, acc, dt)
+    }
+
+    /// Speed `v1`, brake lights (for a driver at `acc`) and distance after `dt`; the distance
+    /// covered.
+    fn move_to(&mut self, v1: f32, acc: f32, dt: f32) -> f32 {
         let v0 = self.speed;
-        let v1 = (v0 + acc * dt).max(0.0);
         self.speed = v1;
         self.acc = if dt > 0.0 { (v1 - v0) / dt } else { 0.0 };
         // brake lights: braking, or holding the car on the brake

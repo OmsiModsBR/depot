@@ -793,6 +793,14 @@ impl ApplicationHandler for App {
                         } else {
                             Vec::new()
                         };
+                        // (OMSI Classic: what it touched leaves its route, and runs into it)
+                        t.touched_by_player(
+                            p.vehicle.touching_keys().collect(),
+                            self.settings
+                                .collision_vehicles
+                                .then(|| crate::gameplay::traffic_link::player_obb(&p.vehicle))
+                                .flatten(),
+                        );
                     }
                     let __t3 = Instant::now();
                     if let Some(a) = self.audio.as_ref() {
@@ -1904,6 +1912,10 @@ impl ApplicationHandler for App {
                     session::people_stamped(h, self.player.as_mut(), self.session.traffic.as_mut());
                     if let Some(t) = self.session.traffic.as_mut() {
                         session::people_to_traffic(h, t);
+                        // a bus put back on its route goes back empty
+                        for id in t.take_cleared() {
+                            h.evict(crate::gameplay::humans::BusId::Ai(id), w);
+                        }
                     }
                     if let Some(m) = h.take_message() {
                         self.service_msg = Some((m, 6.0));

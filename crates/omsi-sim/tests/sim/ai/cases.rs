@@ -283,6 +283,7 @@ fn pull_out_curves_run_gentle_to_steep() {
 /// AI car's (the highest face under a ray from 3 m over the wheel): a road drawn 8 cm
 /// over the lane and cambered across it carries each wheel at its own height, and a lane
 /// laid 0.9 m under its road has the car on the road, not inside it.
+/// Checks: DA-4
 #[test]
 fn each_wheel_stands_on_the_face_under_it() {
     let def = golf();
@@ -364,6 +365,7 @@ fn a_car_over_a_lower_road_comes_down_onto_it() {
     }
 }
 
+/// Checks: C-11
 #[test]
 fn aircraft_keep_their_height() {
     let mut def = golf();

@@ -15,8 +15,7 @@
 
 use super::{classic, depot};
 use crate::physics::domain::params::{
-    AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, MIN_LOAD_SHARE,
-    TRACK_SHARE,
+    AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, TRACK_SHARE,
 };
 use crate::physics::domain::{AiSpec, AiWheelSpec, AxleSpec, Engine, PhysicsSpec};
 use glam::Vec3;

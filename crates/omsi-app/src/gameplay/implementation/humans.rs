@@ -1883,6 +1883,17 @@ impl Humans {
         )
     }
 
+    /// The mass (kg) of the people aboard each AI bus, by the bus's id.
+    pub fn ai_payloads(&self) -> HashMap<u64, f32> {
+        let mut kg = HashMap::new();
+        for p in &self.people {
+            if let Place::Bus(BusId::Ai(id), _) = p.place {
+                *kg.entry(id).or_insert(0.0) += p.ty.def.mass * 1000.0;
+            }
+        }
+        kg
+    }
+
     /// People walking the footpaths of the traffic network: (lane, distance along it). The
     /// traffic gives way to them at crossings and presses the pedestrian lights' buttons
     /// for them.

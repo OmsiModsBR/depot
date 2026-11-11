@@ -1006,6 +1006,20 @@ impl App {
         }
     }
 
+    /// The Alt menu's "Clear the accident" (OMSI Classic physics): every AI vehicle knocked
+    /// off its route goes back to it.
+    pub(crate) fn clear_accident(&mut self) {
+        let cleared = self
+            .session
+            .traffic
+            .as_mut()
+            .map(|t| t.clear_crashes())
+            .unwrap_or(0);
+        if cleared > 0 {
+            self.service_msg = Some((omsi_ui::tr("Accident cleared").into_owned(), 4.0));
+        }
+    }
+
     /// One of the depot services of the game menu: "refuel", "wash" or "repair".
     pub(crate) fn run_service(&mut self, kind: &str) {
         let Some(w) = self.world.clone() else { return };

@@ -40,7 +40,7 @@ the Classic AI later by `fix/` (clarification 2026-11-09).
 
 - [X] T001 [ph 0] Q1: add `[depot_physics]` (alone, and with a stray line) to a copy of a stock bus, load and drive it in OMSI 2; record the result in #677 and in `.ai/specs/002-physics-modes/contracts/bus-key.md` ("Other readers")
 - [X] T002 [P] [ph 0] Q1 on openOMSI and each fork the maintainers name; record each result in `.ai/specs/002-physics-modes/contracts/bus-key.md`
-- [ ] T003 [P] [ph 0] Q2: run the check of each KA-1..KA-11 and KA-6b row on a stock map; fill the "Status" column of R-A in `.ai/specs/002-physics-modes/research.md` with "confirmed" or "not so" and what was seen
+- [X] T003 [P] [ph 0] Q2: run the check of each KA-1..KA-11 and KA-6b row on a stock map; fill the "Status" column of R-A in `.ai/specs/002-physics-modes/research.md` with "confirmed" or "not so" and what was seen
 - [X] T004 [P] [ph 0] Q3: the Mi5 at rest on a flat stop in OMSI 2 and in Depot (Classic), each axle's `Axle_Suspension` and a side screenshot from the same camera; record the result in #677
 
 **Checkpoint**: T001-T002 passed, or the `<name>.depot.cfg` fallback (T048) applies.
@@ -176,22 +176,22 @@ an AI car with the player's bus (quickstart Q9).
 
 ### Tests for User Story 4
 
-- [ ] T049 [P] [US4] [ph 8] AI rows of the matrix in Classic on V1-V5: KA-1 rotation point within 1 cm of the path on the test bends (SC-006); KA-2/3/9/10 speed regimes, with `[noDistanceCheck]`; KA-4/7 pose from the path and the static sag the scripts read; KA-5 articulation angle (V3-V5); KA-6/6b/11 release, chain and whole-vehicle return (V1, V3, V4); KA-8 no contacts on the route (V1); in `crates/omsi-sim/tests/physics_model_classic.rs`
-- [ ] T050 [P] [US4] [ph 8] DA-1..DA-6 rows on V1-V5 from today's `AiBody`, without a bit changed, in `crates/omsi-sim/tests/physics_model_depot.rs`
-- [ ] T051 [P] [US4] [ph 8] Tests: the "Clear the accident" button is enabled only while a loose AI vehicle exists and clears all of them; a cleared AI bus goes back empty to its next trip; in `crates/omsi-app/tests/app/gameplay/classic_ai_clear.rs`
+- [X] T049 [P] [US4] [ph 8] AI rows of the matrix in Classic on V1-V5: KA-1 rotation point within 1 cm of the path on the test bends (SC-006); KA-2/3/9/10 speed regimes, with `[noDistanceCheck]`; KA-4/7 pose from the path and the static sag the scripts read; KA-5 articulation angle (V3-V5); KA-6/6b/11 release, chain and whole-vehicle return (V1, V3, V4); KA-8 no contacts on the route (V1); in `crates/omsi-sim/tests/physics_model_classic.rs`
+- [X] T050 [P] [US4] [ph 8] DA-1..DA-6 rows on V1-V5 from today's `AiBody`, without a bit changed, in `crates/omsi-sim/tests/physics_model_depot.rs`
+- [X] T051 [P] [US4] [ph 8] Tests: the "Clear the accident" button is enabled only while a loose AI vehicle exists and clears all of them; a cleared AI bus goes back empty to its next trip; in `crates/omsi-app/tests/app/gameplay/classic_ai_clear.rs`
 
 ### Implementation for User Story 4
 
-- [ ] T052 [P] [US4] [ph 8] Route following (KA-1) and pose from the path (KA-4) in `crates/omsi-sim/src/ai/classic/path.rs`
-- [ ] T053 [P] [US4] [ph 8] Static sag the scripts read per axle, computed once at spawn about the origin (FR-015, KA-4), in `crates/omsi-sim/src/ai/classic/pose.rs`
-- [ ] T054 [P] [US4] [ph 8] Speed in two regimes by the detail radius about the camera, `[noDistanceCheck]`, the stop exception and grip (KA-2, KA-3, KA-9, KA-10) in `crates/omsi-sim/src/ai/classic/speed.rs`
-- [ ] T055 [P] [US4] [ph 8] Rear sections as kinematic trailers, not updated far away (KA-5) in `crates/omsi-sim/src/ai/classic/trailer.rs`
-- [ ] T056 [US4] [ph 8] Release and return of the whole vehicle (KA-6, KA-6b, KA-7, KA-11): the player's `RigidBody` (Classic) with throttle 0, brake 1 and hazard lights, from the route poses without a jump; back to a route when cleared, in `crates/omsi-sim/src/ai/classic/loose.rs`
-- [ ] T057 [US4] [ph 8] Contacts (KA-8): no AI-AI or AI-scenery contacts on the route, a loose vehicle against everything, in `crates/omsi-sim/src/physics/implementation/collide.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
-- [ ] T058 [US4] [ph 8] `AiMotion::Classic` built for Classic road vehicles; a cleared AI bus goes back empty and starts its next trip, in `crates/omsi-sim/src/ai/mod.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
-- [ ] T059 [US4] [ph 8] Enable the "Clear the accident" button of the Alt menu in `crates/omsi-app/src/ui/domain/alt.rs` and its action in `crates/omsi-app/src/input/implementation/actions.rs`
-- [ ] T060 [US4] [ph 8] Cost (R-P, SC-007): AI step per vehicle and frame on 40 AI vehicles, Classic against `AiBody`, and the frame time with 10 loose AI vehicles, reported in the pull request
-- [ ] T061 [US4] [ph 8] Classic AI traces change (label `physics-delta`), Depot AI traces identical (SC-002)
+- [X] T052 [P] [US4] [ph 8] Route following (KA-1) and pose from the path (KA-4) in `crates/omsi-sim/src/ai/classic/path.rs`
+- [X] T053 [P] [US4] [ph 8] Static sag the scripts read per axle, computed once at spawn about the origin (FR-015, KA-4), in `crates/omsi-sim/src/ai/classic/pose.rs`
+- [X] T054 [P] [US4] [ph 8] Speed in two regimes by the detail radius about the camera, `[noDistanceCheck]`, the stop exception and grip (KA-2, KA-3, KA-9, KA-10) in `crates/omsi-sim/src/ai/classic/speed.rs`
+- [X] T055 [P] [US4] [ph 8] Rear sections as kinematic trailers, not updated far away (KA-5) in `crates/omsi-sim/src/ai/classic/trailer.rs`
+- [X] T056 [US4] [ph 8] Release and return of the whole vehicle (KA-6, KA-6b, KA-7, KA-11): the player's `RigidBody` (Classic) with throttle 0, brake 1 and hazard lights, from the route poses without a jump; back to a route when cleared, in `crates/omsi-sim/src/ai/classic/loose.rs`
+- [X] T057 [US4] [ph 8] Contacts (KA-8): no AI-AI or AI-scenery contacts on the route, a loose vehicle against everything, in `crates/omsi-sim/src/physics/implementation/collide.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
+- [X] T058 [US4] [ph 8] `AiMotion::Classic` built for Classic road vehicles; a cleared AI bus goes back empty and starts its next trip, in `crates/omsi-sim/src/ai/mod.rs` and `crates/omsi-app/src/gameplay/implementation/traffic.rs`
+- [X] T059 [US4] [ph 8] Enable the "Clear the accident" button of the Alt menu in `crates/omsi-app/src/ui/domain/alt.rs` and its action in `crates/omsi-app/src/input/implementation/actions.rs`
+- [X] T060 [US4] [ph 8] Cost (R-P, SC-007): AI step per vehicle and frame on 40 AI vehicles, Classic against `AiBody`, and the frame time with 10 loose AI vehicles, reported in the pull request
+- [X] T061 [US4] [ph 8] Classic AI traces change (label `physics-delta`), Depot AI traces identical (SC-002)
 
 **Checkpoint**: Classic traffic as in OMSI 2 for every row built; Depot traffic as before.
 
@@ -204,7 +204,7 @@ an AI car with the player's bus (quickstart Q9).
 **Independent test**: pick an equation, find the tests that name it, run them.
 
 - [ ] T062 [US5] [ph 8] Coverage check: every C-*, K-*, KA-*, D-*, DA-* id in `docs/physics/` is named by at least one test, and every cell of the matrix in [contracts/test-vehicles.md](contracts/test-vehicles.md) has its test (SC-004), in `scripts/physics-model-coverage.sh`
-- [ ] T063 [US5] [ph 8] Update the status of each Classic rule in `docs/physics/classic-model.md` from T003's results; each "not so" row becomes a `fix/` pull request
+- [X] T063 [US5] [ph 8] Update the status of each Classic rule in `docs/physics/classic-model.md` from T003's results; each "not so" row becomes a `fix/` pull request
 
 ---
 

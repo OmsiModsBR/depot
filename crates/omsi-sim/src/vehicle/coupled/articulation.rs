@@ -301,7 +301,7 @@ impl TrailerPart {
         let sprung = main.rigid().is_some() && self.body.as_ref().is_some_and(|b| b.placed);
         if sprung {
             self.follow_body();
-        } else {
+        } else if !main.coupled_parts_held() {
             self.follow(main, dt, lead_pos, lead_rot, lead_heading);
         }
         // The joint's angles (degrees) for its plates and bellows and for the scripts: alpha

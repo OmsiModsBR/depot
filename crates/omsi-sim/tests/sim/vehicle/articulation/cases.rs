@@ -431,3 +431,29 @@ fn the_steering_comes_back_from_the_axle_angles() {
     }
     assert_eq!(v.steering_for_axle_angles(|_| None), None);
 }
+
+/// `KA-5`: a kinematic vehicle's rear section follows it as a trailer, and keeps the pose it
+/// has while its coupled parts are held (the Classic AI beyond the detail radius).
+/// Checks: KA-5, KA-9
+#[test]
+fn a_held_rear_section_keeps_its_pose() {
+    let (front, rear) = sections();
+    let mut v = VehicleInstance::new(front, VehicleHost::new(Default::default()));
+    v.contact = Some(flat());
+    v.attach_trailer(rear);
+    let step = |v: &mut VehicleInstance| {
+        let mut t = v.trailers.remove(0);
+        t.update(v, 1.0 / 60.0, None);
+        v.trailers.insert(0, t);
+    };
+    step(&mut v);
+    let at = v.trailers[0].position;
+    v.hold_coupled_parts(true);
+    v.position.y += 5.0;
+    step(&mut v);
+    assert_eq!(v.trailers[0].position, at);
+    v.hold_coupled_parts(false);
+    step(&mut v);
+    assert!((v.trailers[0].position.y - at.y - 5.0).abs() < 1e-6);
+    assert!(gap(&v) < 0.02, "{}", gap(&v));
+}

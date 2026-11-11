@@ -106,6 +106,38 @@ impl VehicleInstance {
             |w| w[0].rpm,
         ));
         self.show_a_trans(self.motion.accel);
+        self.run_ai_scripts(dt, ai, inputs, pinned);
+    }
+
+    /// One frame of an OMSI Classic AI vehicle knocked off its route (`KA-6`): its rigid body,
+    /// off the throttle and fully braked, runs into what it meets; its scripts run with the
+    /// `AI_*` variables of `ai` (the hazard lights on).
+    pub fn update_loose(&mut self, dt: f32, ai: &AiFrame) {
+        self.host.clock.advance(dt);
+        self.set_engine_var("schedule_active", self.host.schedule_active);
+        self.set_controls(crate::physics::Controls {
+            throttle: 0.0,
+            brake: 1.0,
+            ..Default::default()
+        });
+        self.step_physics(dt);
+        self.update_ground_probe();
+        if std::mem::take(&mut self.collided) {
+            self.trigger("collision");
+            self.host.coll_energy = 0.0;
+        }
+        self.run_ai_scripts(dt, ai, &[], &[]);
+    }
+
+    /// The `AI_*` variables of `ai`, then `inputs` and `pinned` (see `update_ai_with`), the
+    /// scripts' `{frame_ai}` (or `{frame}`), and the animations.
+    fn run_ai_scripts(
+        &mut self,
+        dt: f32,
+        ai: &AiFrame,
+        inputs: &[(omsi_script::VarId, f32)],
+        pinned: &[(omsi_script::VarId, f32)],
+    ) {
         // `AI` is the engine's "this vehicle is driven by the AI" flag; the police and
         // ambulance script sounds the siren whenever `AI` is 0 and the car rolls, which is
         // why every spawn came with an ambulance nobody could see
@@ -166,6 +198,52 @@ impl VehicleInstance {
             // the coupled parts follow all the same (other cars keep clear of them)
             self.update_trailers(dt);
             self.ai_visuals_missed = (self.ai_visuals_missed + dt).min(10.0);
+        }
+    }
+
+    /// The Classic AI driver's pedals (`KA-2`): `Throttle` and `Brake` for the scripts.
+    pub fn set_ai_pedals(&mut self, pedals: crate::ai::Pedals) {
+        self.put(self.v_throttle, pedals.throttle);
+        self.put(self.v_brake, pedals.brake);
+    }
+
+    /// What the scripts left for the Classic AI's speed (`KA-2`): twice `M_Wheel` over the
+    /// first axle's radius; the rolling resistance of every section and every wheel's brake
+    /// force (the vehicle's own cleared once read, as for the player's); the mass of all
+    /// sections and `payload_kg`.
+    pub fn ai_drive_forces(&mut self, payload_kg: f32) -> crate::ai::DriveForces {
+        let inputs = self.take_script_drive();
+        let radius = self
+            .motion
+            .wheels
+            .first()
+            .map(|w| w[0].radius)
+            .filter(|r| *r > 0.05)
+            .unwrap_or(0.5);
+        let parts_brakes: f32 = self
+            .trailers
+            .iter()
+            .map(|t| self.part_brakes(t).sum::<f32>())
+            .sum();
+        let parts_roll: f32 = self
+            .trailers
+            .iter()
+            .map(|t| crate::physics::coupled_rolling_resistance(&t.ty.def))
+            .sum();
+        let parts_kg: f32 = self
+            .trailers
+            .iter()
+            .map(|t| crate::physics::kinematic_mass_kg(&t.ty.def))
+            .sum();
+        crate::ai::DriveForces {
+            drive: 2.0 * inputs.m_wheel / radius,
+            resist: inputs.brakes.iter().sum::<f32>()
+                + crate::physics::coupled_rolling_resistance(&self.ty.def)
+                + parts_brakes
+                + parts_roll,
+            mass_kg: crate::physics::kinematic_mass_kg(&self.ty.def)
+                + parts_kg
+                + payload_kg.max(0.0),
         }
     }
 }
