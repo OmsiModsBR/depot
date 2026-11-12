@@ -829,6 +829,9 @@ pub struct AddVehicle<'a> {
     /// The player turned the live 3D view on (its button lit; the box shows `Preview::Live`,
     /// `Starting` or `Failed` then).
     pub live: bool,
+    /// The chosen vehicle runs Project Depot Physics when driven (its file's `[depot_physics]`
+    /// key): the badge beside the model's label and the notice under the mouse, translated.
+    pub physics: Option<(&'a str, &'a str)>,
 }
 
 /// What the picture box of the "Add vehicle" window shows.
@@ -1153,6 +1156,16 @@ pub fn add_vehicle(ui: &mut Ui, size: glam::Vec2, v: &AddVehicle) -> Option<AddV
     }
     if let Some(i) = drop(ui, 1, "Model", "add:vehicles", v.vehicles, v.vehicle) {
         event = Some(AddVehicleEvent::Vehicle(i));
+    }
+    // (a model that runs Project Depot Physics when driven says so at the right of its label)
+    if let Some((badge, notice)) = v.physics {
+        let cy = field(1) + 8.0;
+        text_right(ui, badge, x0 + lw, cy, 11.0, Weight::Bold, GOOD);
+        let w = ui.width(badge, 11.0 * TS, Weight::Bold);
+        ui.tooltip(
+            Rect::new(x0 + lw - w - 2.0, cy - 10.0, w + 2.0, 20.0),
+            notice,
+        );
     }
     if let Some(i) = drop(ui, 2, "Paint", "add:liveries", v.liveries, v.livery) {
         event = Some(AddVehicleEvent::Livery(i));
@@ -1600,6 +1613,7 @@ mod tests {
             description: "Example bus\nBuilt from 1990 to 1999.",
             preview: Preview::Missing,
             live: false,
+            physics: None,
         };
         let frame = |ui: &mut Ui| {
             ui.begin(size, 1.0, 0.016);
@@ -1687,6 +1701,7 @@ mod tests {
             description: "",
             preview: Preview::Live { tex: 1 },
             live: true,
+            physics: None,
         };
         let mut frame = |ui: &mut Ui, view: &AddVehicle| {
             ui.begin(size, 1.0, 0.016);
