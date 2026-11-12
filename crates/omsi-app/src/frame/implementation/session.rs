@@ -257,3 +257,58 @@ pub(crate) fn people_to_traffic(h: &mut Humans, t: &mut Traffic) {
     }
     t.set_payloads(&h.ai_payloads());
 }
+
+/// The people's step of a frame after their tick, the same in the window and the offscreen
+/// run: the player's bus weighs the people aboard on the section they are in, the people
+/// stamp the validators' sound, and the traffic takes what the people want of it.
+pub(crate) fn people_after_tick(
+    h: &mut Humans,
+    player: Option<&mut Player>,
+    traffic: Option<&mut Traffic>,
+) {
+    let mut player = player;
+    let mut traffic = traffic;
+    if let Some(p) = player.as_deref_mut() {
+        p.vehicle.set_payload(&h.player_payload());
+    }
+    people_stamped(h, player.as_deref_mut(), traffic.as_deref_mut());
+    if let Some(t) = traffic.as_deref_mut() {
+        people_to_traffic(h, t);
+    }
+}
+
+/// The people's step of a frame, the hand-over to the player's bus, the same in the window and
+/// the offscreen run: the ticket, the change and the stop the player asks for by the keys reach
+/// the passengers, the bus learns who rides it, and the money shows the change due.
+pub(crate) fn people_handover(
+    h: &mut Humans,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    player: Option<&mut Player>,
+    took: bool,
+) {
+    let stop = std::mem::take(&mut h.stop_request);
+    if let Some(p) = player {
+        if took {
+            p.vehicle.set_var("GivenTicket", -1.0);
+        }
+        h.give_ticket = std::mem::take(&mut p.give_ticket);
+        h.give_change_all = std::mem::take(&mut p.give_change);
+        if std::mem::take(&mut p.take_change) {
+            h.take_change_tray();
+        }
+        if stop {
+            // a passenger's request is the vehicle trigger OMSI fires,
+            // not the cab's stop button `door_haltewunsch`,
+            // whose switch and brake sounds some buses play
+            p.vehicle.trigger("int_haltewunsch");
+        }
+        h.write_pax_vars(&mut p.vehicle);
+        p.vehicle.host.humans_on_path_link = h.path_link_counts();
+        p.vehicle.host.humans_on_seat = h.seat_counts();
+        let coins: Vec<usize> = std::mem::take(&mut p.vehicle.host.change_coins);
+        h.give_change(world, renderer, scene, &coins);
+        h.sync_money(world, renderer, scene, &p.vehicle);
+    }
+}

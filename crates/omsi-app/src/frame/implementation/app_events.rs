@@ -1905,13 +1905,12 @@ impl ApplicationHandler for App {
                         r,
                         scene,
                     );
-                    // the people aboard weigh on the section of the bus they are in
-                    if let Some(p) = self.player.as_mut() {
-                        p.vehicle.set_payload(&h.player_payload());
-                    }
-                    session::people_stamped(h, self.player.as_mut(), self.session.traffic.as_mut());
+                    session::people_after_tick(
+                        h,
+                        self.player.as_mut(),
+                        self.session.traffic.as_mut(),
+                    );
                     if let Some(t) = self.session.traffic.as_mut() {
-                        session::people_to_traffic(h, t);
                         // a bus put back on its route goes back empty
                         for id in t.take_cleared() {
                             h.evict(crate::gameplay::humans::BusId::Ai(id), w);
@@ -1932,28 +1931,7 @@ impl ApplicationHandler for App {
                         );
                         self.service_msg = Some((m.into_owned(), 6.0));
                     }
-                    if let Some(p) = self.player.as_mut() {
-                        if took {
-                            p.vehicle.set_var("GivenTicket", -1.0);
-                        }
-                        h.give_ticket = std::mem::take(&mut p.give_ticket);
-                        h.give_change_all = std::mem::take(&mut p.give_change);
-                        if std::mem::take(&mut p.take_change) {
-                            h.take_change_tray();
-                        }
-                        if std::mem::take(&mut h.stop_request) {
-                            // a passenger's request is the vehicle trigger OMSI fires,
-                            // not the cab's stop button `door_haltewunsch`,
-                            // whose switch and brake sounds some buses play
-                            p.vehicle.trigger("int_haltewunsch");
-                        }
-                        h.write_pax_vars(&mut p.vehicle);
-                        p.vehicle.host.humans_on_path_link = h.path_link_counts();
-                        p.vehicle.host.humans_on_seat = h.seat_counts();
-                        let coins: Vec<usize> = std::mem::take(&mut p.vehicle.host.change_coins);
-                        h.give_change(w, r, scene, &coins);
-                        h.sync_money(w, r, scene, &p.vehicle);
-                    }
+                    session::people_handover(h, w, r, scene, self.player.as_mut(), took);
                     h.sync(r, scene, center);
                 }
                 *self.profile.entry("humans").or_default() += __t.elapsed().as_secs_f64();
