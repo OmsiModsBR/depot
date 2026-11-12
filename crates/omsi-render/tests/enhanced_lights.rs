@@ -153,11 +153,33 @@ fn an_amber_lamp_lights_the_ground_amber() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn a_far_lamp_glows_round_not_square() {
+    far_lamp_is_round(None);
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_far_lamp_with_its_own_bitmap_glows_round_not_square() {
+    // a light's own bitmap as its last mip levels show it on a small sprite: the glow
+    // averaged over the whole square, flat to the corners
+    far_lamp_is_round(Some(&Image {
+        width: 16,
+        height: 16,
+        rgba: [255u8; 16 * 16 * 4].to_vec(),
+        has_alpha: false,
+    }));
+}
+
+/// A lamp 300 m ahead, seen through a long lens (its sprite a few pixels across), with the
+/// standard glow or with `bitmap`, glows as a round point.
+fn far_lamp_is_round(bitmap: Option<&Image>) {
     const SIZE: u32 = 96;
     let mut renderer = renderer();
+    if let Some(img) = bitmap {
+        renderer.set_corona_texture(1, img);
+    }
     let mut scene = renderer.new_scene();
-    // a lamp 300 m ahead, seen through a long lens: its sprite a few pixels across
     scene.coronas.push(Corona {
+        texture: u16::from(bitmap.is_some()),
         position: DVec3::new(0.0, 300.0, 0.0),
         size: 0.5,
         color: [1.0, 1.0, 1.0],

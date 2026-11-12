@@ -335,6 +335,11 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         let w = clamp(px * 1.5, 0.1, 0.5);
         let disc = clamp((1.0 - r) / max(px, 1e-3), 0.0, 1.0);
         let core = (exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35) * disc;
+        // The bitmap itself is cut to the disc as well. On a sprite a few pixels wide it is
+        // read from one of its last mip levels, where its round glow is averaged over the
+        // whole square: a flat value up to the corners, which the lamp's brightness took
+        // past white - every far lamp a solid little square.
+        shape = shape * disc;
         shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
     }
     // (the light's colour in the picture's linear terms: see `light_colour`)
