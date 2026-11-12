@@ -383,6 +383,57 @@ fn other(s: WireSide) -> WireSide {
     }
 }
 
+/// Points of the wire across a gap (the straight from a span's end to the way on: what a
+/// switch or crossing draws, or a loose splice), near `p`, that lie at `len` from `foot`: the cursor stands at the end
+/// the gap starts from, as a shoe in a gap does.
+pub(crate) fn gap_crossings_near(
+    net: &WireNetwork,
+    p: DVec3,
+    radius: f64,
+    foot: DVec3,
+    len: f64,
+) -> Vec<(WireCursor, DVec3)> {
+    let mut ends: Vec<(SpanId, usize)> = Vec::new();
+    for (r, _) in net.segments_near(p, radius + 6.0) {
+        for e in 0..2 {
+            if !ends.contains(&(r.span, e)) {
+                ends.push((r.span, e));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (span, e) in ends {
+        let Some(s) = net.span(span) else {
+            continue;
+        };
+        if (s.ends[e].point - p).truncate().length() > radius + 6.0 {
+            continue;
+        }
+        for side in WireSide::BOTH {
+            let pts = &s.wires[side.index()];
+            if pts.len() < 2 {
+                continue;
+            }
+            let c = WireCursor {
+                span,
+                side,
+                seg: if e == 0 { 0 } else { pts.len() - 2 },
+                t: f64::from(e as u8),
+            };
+            let tip = if e == 0 { pts[0] } else { pts[pts.len() - 1] };
+            for w in ways_on(net, &c, e).unwrap_or_default() {
+                for u in sphere_crossings(tip, w.start, foot, len) {
+                    let at = tip.lerp(w.start, u);
+                    if (at - p).length() <= radius {
+                        out.push((c, at));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Points of the wire pieces near `p` that lie at `len` from `foot`, with their cursor.
 pub(crate) fn crossings_near(
     net: &WireNetwork,

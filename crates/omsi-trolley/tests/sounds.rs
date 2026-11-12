@@ -483,3 +483,39 @@ fn a_shoe_standing_in_a_switch_gap_stays_on_its_way() {
         );
     }
 }
+
+#[test]
+fn a_pole_resting_under_the_end_of_a_wire_takes_it_across_the_switch_gap() {
+    let n = y_switch();
+    let d = decl();
+    // the line ends at y = 50; the resting shoes stand just short of that end, so the
+    // poles, rising, reach the wire in the switch's gap
+    for shoe_y in [49.9, 49.8, 49.6, 50.3] {
+        let mut sim = PoleSim::default();
+        let at = body(0.0, shoe_y + 3.93, 0.0);
+        sim.step(
+            &d,
+            &n,
+            &at,
+            PoleInputs {
+                grab: [true, true],
+                ..Default::default()
+            },
+            1.0 / 60.0,
+        );
+        assert!(
+            !sim.events
+                .iter()
+                .any(|e| matches!(e, omsi_trolley::PoleEvent::NoWire { .. })),
+            "shoes resting at y = {shoe_y}: {:?}",
+            sim.events
+        );
+        for _ in 0..120 {
+            sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+        }
+        assert!(
+            sim.poles.iter().all(|p| p.phase == PolePhase::OnWire),
+            "on the wire, shoes resting at y = {shoe_y}"
+        );
+    }
+}

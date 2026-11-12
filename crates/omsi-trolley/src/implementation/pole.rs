@@ -499,6 +499,15 @@ fn capture(
     let shoe = body.position + body.rotation * geo.rest_shoe;
     walk::crossings_near(net, shoe, SEARCH_RADIUS, foot_to_wire, len)
         .into_iter()
+        // (or across the gap of a switch or crossing: a shoe resting under a wire that ends
+        // just ahead reaches into the gap)
+        .chain(walk::gap_crossings_near(
+            net,
+            shoe,
+            SEARCH_RADIUS,
+            foot_to_wire,
+            len,
+        ))
         .filter(|(c, p)| {
             // behind the foot, as a trailing pole stands
             let b = in_body(*p);

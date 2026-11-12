@@ -125,12 +125,15 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                     ..Default::default()
                 };
                 sim.step(&decl, &net, &at, press, 1.0 / 60.0);
+                let first_events = sim.events.clone();
                 for _ in 0..150 {
                     sim.step(&decl, &net, &at, PoleInputs::default(), 1.0 / 60.0);
                 }
                 if !sim.poles.iter().all(|p| p.phase == PolePhase::OnWire) {
                     if offset == 0.0 {
-                        eprintln!("  {ids:?}: the poles did not take the wire at the start");
+                        eprintln!(
+                            "  {ids:?}: the poles did not take the wire at the start: {first_events:?}"
+                        );
                     }
                     continue;
                 }
