@@ -9,6 +9,9 @@ use super::network::{SpanId, WireSide};
 pub enum PolePhase {
     /// Down on its hook.
     Hooked,
+    /// Off its hook in the player's hand: it points where the mouse leads it, and takes the
+    /// wire its shoe is let go at (or goes back down to its hook).
+    InHand,
     /// Going up onto a wire it has found.
     Rising,
     /// On the wire.
@@ -66,6 +69,8 @@ pub struct PoleState {
     /// How much longer than the pole the way from its foot to the wire is (metres; 0 when
     /// the pole reaches it).
     pub reach_error: f64,
+    /// Where the player holds the shoe (body frame; in the hand, once the mouse moved it).
+    pub hand: Option<DVec3>,
 }
 
 impl Default for PoleState {
@@ -78,6 +83,7 @@ impl Default for PoleState {
             dewire: None,
             held: [0.0; 4],
             reach_error: 0.0,
+            hand: None,
         }
     }
 }
@@ -106,6 +112,9 @@ pub struct PoleInputs {
     pub speed_kmh: f64,
     /// The weather, for the sparks.
     pub weather: super::sound::WireWeather,
+    /// The ray under the mouse pointer (world origin and direction): a pole in the hand
+    /// points where it leads. None: the pole stays where it was.
+    pub aim: Option<(DVec3, DVec3)>,
 }
 
 /// What one pole shows.
