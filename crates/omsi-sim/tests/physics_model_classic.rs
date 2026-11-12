@@ -148,7 +148,7 @@ fn articulation_angles_v4_biarticulated() {
     articulation_angles(v4_biarticulated(), Engine::Classic);
 }
 
-/// Checks: C-9, K-2
+/// Checks: C-9
 #[test]
 fn articulation_angles_v5_articulated_8x2() {
     articulation_angles(v5_articulated_8x2(), Engine::Classic);
@@ -245,8 +245,8 @@ fn ai_release_v4_biarticulated() {
     assert!(model_ai::release_and_return(&v4_biarticulated()) < 4.0);
 }
 
-/// Checks: K-2
+/// Checks: C-9
 #[test]
 fn follower_axle_steering_v5_articulated_8x2() {
-    follower_axle_steering(v5_articulated_8x2(), Engine::Classic, false);
+    follower_axle_steering(v5_articulated_8x2(), Engine::Classic);
 }

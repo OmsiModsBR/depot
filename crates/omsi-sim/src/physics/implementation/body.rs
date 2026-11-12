@@ -4,7 +4,6 @@
 
 use super::train::step_train;
 use super::tyre::Substep;
-use super::{classic, depot};
 use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
@@ -289,15 +288,10 @@ impl RigidBody {
             .iter()
             .map(|w| w.attach.y)
             .fold(f32::MIN, f32::max);
-        // a section behind a joint: its axles show the bend (`axle_steer`), its tyres steer by
-        // the engine's rule (`K-2`, `D-2`)
-        let tyres = !follower
-            || match self.engine {
-                Engine::Classic => classic::follower::TYRES_STEER,
-                Engine::Depot => depot::follower::TYRES_STEER,
-            };
         for w in self.wheels.iter_mut() {
-            if !tyres {
+            // a section behind a joint: its axles show the bend (`axle_steer`), its tyres stay
+            // square to the body (`C-9`)
+            if follower {
                 w.steer = 0.0;
                 w.steered = false;
                 continue;

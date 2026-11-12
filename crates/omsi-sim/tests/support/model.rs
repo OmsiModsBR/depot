@@ -276,9 +276,7 @@ pub fn pull_away(defs: Vec<Vehicle>, engine: Engine) {
 /// `alpha` satisfies `R sin(alpha) + D cos(alpha) = d` and the next section turns on
 /// `R cos(alpha) - D sin(alpha)`, where `R` is the radius the lead turns on, `D` the distance
 /// of its ball from its turning line and `d` the distance of the follower's ball from its own.
-/// A section behind a joint turns about its turning line whatever axles it has in OMSI
-/// Classic (`K-2`); Project Depot Physics steers its tyres instead (`D-2`), which holds a section
-/// with two axles short of it.
+/// A section behind a joint turns about its turning line whatever axles it has.
 pub fn articulation_angles(defs: Vec<Vehicle>, engine: Engine) {
     let steer = 0.5_f32;
     let (bodies, joints) = steady_bend(&defs, engine, steer);
@@ -300,10 +298,10 @@ pub fn articulation_angles(defs: Vec<Vehicle>, engine: Engine) {
     }
 }
 
-/// `K-2` and `D-2`: in a steady turn every axle of a section behind a joint that lies off its
-/// turning line shows the steering (`axle_steer`, what the scripts animate), and its tyres
-/// steer on the road only when `tyres_steer`.
-pub fn follower_axle_steering(defs: Vec<Vehicle>, engine: Engine, tyres_steer: bool) {
+/// `C-9`: in a steady turn every axle of a section behind a joint that lies off its turning
+/// line shows the steering (`axle_steer`, what the scripts animate), and its tyres do not steer
+/// on the road.
+pub fn follower_axle_steering(defs: Vec<Vehicle>, engine: Engine) {
     let (bodies, _) = steady_bend(&defs, engine, 0.5);
     for b in &bodies[1..] {
         let shown: Vec<usize> = (0..b.wheels().len())
@@ -314,9 +312,8 @@ pub fn follower_axle_steering(defs: Vec<Vehicle>, engine: Engine, tyres_steer: b
             "no axle of the section shows the steering"
         );
         for i in shown {
-            assert_eq!(
-                b.wheels()[i].steered(),
-                tyres_steer,
+            assert!(
+                !b.wheels()[i].steered(),
                 "wheel {i} at {} m (axle steering {} deg)",
                 b.wheels()[i].attach().y,
                 b.axle_steer(i).to_degrees()

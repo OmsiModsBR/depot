@@ -148,6 +148,12 @@ fn articulation_angles_v4_biarticulated() {
     articulation_angles(v4_biarticulated(), Engine::Depot);
 }
 
+/// Checks: C-9
+#[test]
+fn articulation_angles_v5_articulated_8x2() {
+    articulation_angles(v5_articulated_8x2(), Engine::Depot);
+}
+
 /// Checks: C-7
 #[test]
 fn release_v1_solo_4x2() {
@@ -223,8 +229,8 @@ fn ai_route_v5_articulated_8x2() {
     depot_ai_follows_the_lane(v5_articulated_8x2());
 }
 
-/// Checks: D-2
+/// Checks: C-9
 #[test]
 fn follower_axle_steering_v5_articulated_8x2() {
-    follower_axle_steering(v5_articulated_8x2(), Engine::Depot, true);
+    follower_axle_steering(v5_articulated_8x2(), Engine::Depot);
 }

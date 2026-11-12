@@ -68,9 +68,9 @@ changes here: every player, AI and traffic trace stays bit-identical.
 - [X] T012 [P] [ph 2] Static sag per axle and pitch at rest, Classic (C-3, K-1), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [X] T013 [P] [ph 2] Pull-away and braking below the grip, stop distance (C-4, C-5, C-8), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
 - [X] T014 [P] [ph 2] Steady turn at full lock: turning radius and each steered axle's angle, tag axle opposite (C-6, C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs`
-- [X] T015 [P] [ph 2] Steady articulation angles (C-9), V3-V5, and release when the bend asks more than the grip (C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs` (V5 settled with T017: rule `K-2`)
+- [X] T015 [P] [ph 2] Steady articulation angles (C-9), V3-V5, and release when the bend asks more than the grip (C-7), V1-V5, in `crates/omsi-sim/tests/physics_model_classic.rs` (V5 settled with T017: `C-9`, a section behind a joint turns about its turning line)
 - [ ] T016 [ph 2] Optional static-sag check on installed buses (the Mi5 first), skipped without `OMSI_ROOT`, in `crates/omsi-sim/tests/physics_model_classic.rs`
-- [ ] T017 [ph 2] Each failing row of T012-T016 becomes a `fix/` pull request with that test failing first, or a correction of `docs/physics/` (decided in the pull request) (T015 V5 done: rule `K-2`; T016 left)
+- [ ] T017 [ph 2] Each failing row of T012-T016 becomes a `fix/` pull request with that test failing first, or a correction of `docs/physics/` (decided in the pull request) (T015 V5 done in `C-9`; T016 left)
 - [X] T017a [ph 2] Record X-1 (joint load, articulated vehicles) as a known divergence of OMSI Classic in `docs/physics/classic-model.md`; resolve it with a `fix/` pull request after phases 5 and 6 (maintainer, 2026-11-10)
 
 ### Mode type, settings key and `.bus` key `feat/physics-mode-type`

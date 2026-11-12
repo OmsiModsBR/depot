@@ -4,12 +4,11 @@
 
 use super::ground::{track_walls, tyre_line};
 use super::wheel::{sign, TyreFrame};
-use super::{classic, depot};
 use crate::physics::domain::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
     GRIPPED_ALONG, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
-use crate::physics::domain::{Engine, GroundProbe, Impact, RigidBody};
+use crate::physics::domain::{GroundProbe, Impact, RigidBody};
 use glam::{Quat, Vec2, Vec3};
 
 /// A wheel on the ground in one substep, before its tyre forces are settled.
@@ -353,8 +352,9 @@ impl RigidBody {
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS
             && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
-        // where each tyre is held across: at the tyre, or for a section behind a joint by
-        // the engine's rule (`K-2`, `D-2`)
+        // where each tyre is held across: at the tyre, or for a section behind a joint on its
+        // turning line, level with the tyre, so that it turns about that line whatever axles
+        // it has (`C-9`)
         let line = self.rot_pnt_long - self.cog.y;
         let at = &mut l.at;
         at.clear();
@@ -363,10 +363,8 @@ impl RigidBody {
             if steered {
                 return r;
             }
-            match self.engine {
-                Engine::Classic => classic::follower::hold_at(r, rot, line),
-                Engine::Depot => depot::follower::hold_at(r, rot, line),
-            }
+            let tyre = rot.inverse().mul_vec3(r);
+            rot.mul_vec3(Vec3::new(tyre.x, line, tyre.z))
         }));
         let arms = &mut l.arms;
         arms.clear();

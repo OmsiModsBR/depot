@@ -2,8 +2,8 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are two overrides,
-`D-1` (the plan's decision D2) and `D-2`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. For now there is one override,
+`D-1` (the plan's decision D2). The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
@@ -14,7 +14,6 @@ Module paths are under `crates/omsi-sim/src/`.
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
-| [D-2](#d-2-the-tyres-of-a-section-behind-a-joint-steer) | the tyres of a section behind a joint steer | physics |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -62,23 +61,6 @@ share, used to place the vehicle at rest, with a floor of 0.2 of an even split o
 changing the axles. Under Depot the axle loads follow it. A mod whose springs were sized for the
 origin rule stands differently here: this is the one visible difference between the engines on a
 vehicle at rest.
-
-## D-2. The tyres of a section behind a joint steer
-
-- **Inputs**: the section's `[rot_pnt_long]` (its turning line `y_turn`, `C-6`), `achse_long` (`y_i`),
-  the curvature its joint gives it (`κ_follow`, `C-9`). **Outputs**: each axle's angle for the scripts
-  and each tyre's own angle. **Module**: `physics/implementation/depot/follower.rs`, used by `body.rs`
-  (`steer_to`) and `tyre.rs` (`lateral_start`).
-- **Basis**: *physics*: an axle that steers towards the turning line, like the rear axle of an
-  articulated bus with a steered last axle, rolls without scrubbing. **Status**: the rule is checked
-  by the conformance tests; no claim is made here about OMSI 2 (the rule it replaces, `K-2`, is the
-  one Classic keeps).
-
-The tyres of a section behind a joint steer as its axles show it, each by the tyre angle of `C-6` with
-`κ = κ_follow`, and each tyre is held across where it touches the road. A section with two axles then
-settles short of the closed form of `C-9` in a steady turn (V5 of the conformance tests: 18.5° against
-21.7° at half lock), as its tyres turn on `κ_follow`, which does not count the ball's own sideways
-speed. A section with one axle on its turning line turns the same in both engines.
 
 ## The Depot AI
 

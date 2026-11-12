@@ -1,7 +1,7 @@
 # OMSI Classic: the player's weight sharing (`K-*`) and the AI (`KA-*`)
 
 OMSI Classic is the default engine. For the player's road vehicle it runs every shared rule of
-[common-model.md](common-model.md) with two rules of its own, `K-1` and `K-2`. Its AI road vehicles run a body
+[common-model.md](common-model.md) with one rule of its own, `K-1`. Its AI road vehicles run a body
 brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
@@ -17,7 +17,6 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
-| [K-2](#k-2-a-section-behind-a-joint-turns-about-its-turning-line) | a section behind a joint turns about its turning line | to validate |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |
 | [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
@@ -73,30 +72,6 @@ and the compression of axle `i` does not depend on `[cog]`. `[cog]` still sets t
 cornering.
 
 The Depot engine replaces only this rule, with `D-1`.
-
-## K-2. A section behind a joint turns about its turning line
-
-- **Inputs**: the section's `[rot_pnt_long]` (its turning line `y_turn`, `C-6`), `achse_long` (`y_i`),
-  the curvature its joint gives it (`κ_follow`, `C-9`). **Outputs**: each axle's angle for the
-  scripts (`Axle_Steering`) and where its tyres are held across. **Module**:
-  `physics/implementation/classic/follower.rs`, used by `body.rs` (`steer_to`) and `tyre.rs`
-  (`lateral_start`).
-- **Basis**: *OMSI*, from the maintainer's note (2026-11-10) that in OMSI 2 the steering of a rear
-  section's second axle is only animated by the vehicle's scripts and does not act on the turn.
-  **Status**: **to validate**: the steady articulation angle `α` of an articulated bus whose rear
-  section has two axles, in a steady turn in OMSI 2 and in the game.
-
-A section behind a joint has no steering of its own (`C-6`). Its axles still show the bend its joint
-makes it turn on, `δ_i = atan( (y_i − y_turn) · κ_follow )`, which the scripts animate. Its tyres stay
-square to the body, and the hold across of every tyre acts on the turning line, level with the tyre:
-
-```
-r_hold,i = ( x_i , y_turn , z_i )      the point where tyre i is held across (from the centre of gravity)
-```
-
-So the section turns about its turning line whatever axles it has, and its steady articulation angle is
-the closed form of `C-9` with `y_turn,follow` at that line. A section with one axle on its turning line
-turns the same in both engines. The Depot engine replaces this rule with `D-2`.
 
 ## The AI road vehicle
 
