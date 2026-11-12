@@ -421,6 +421,15 @@ fn drive_route() {
                     },
                     1.0 / 60.0,
                 );
+                for e in &sim.events {
+                    if matches!(
+                        e,
+                        omsi_trolley::PoleEvent::WireLost { .. }
+                            | omsi_trolley::PoleEvent::Dewired { .. }
+                    ) {
+                        eprintln!("  forward: {e:?}");
+                    }
+                }
                 let now = out.poles.map(|q| (q.yaw, q.pitch, q.shoe_rot));
                 if let Some(b) = before {
                     for i in 0..2 {
@@ -496,6 +505,44 @@ fn drive_route() {
                 }
             }
         }
+        // then back the way it came, 15 m (the poles trail ahead: as a bus reversing)
+        let mut back = 0.0;
+        'reverse: for w in path.windows(2).rev() {
+            let len = w[0].distance(w[1]);
+            if len < 1e-9 {
+                continue;
+            }
+            let mut s = len;
+            while s > 0.0 {
+                s = (s - step).max(0.0);
+                back += step;
+                if back > 15.0 {
+                    break 'reverse;
+                }
+                let p = w[0].lerp(w[1], s / len);
+                let body = pose(p, w[1] - w[0], offset);
+                let out = sim.step(
+                    &decl,
+                    &net,
+                    &body,
+                    PoleInputs {
+                        speed_kmh: -5.0,
+                        ..Default::default()
+                    },
+                    1.0 / 60.0,
+                );
+                for e in &sim.events {
+                    if !matches!(e, omsi_trolley::PoleEvent::Joint { .. }) {
+                        eprintln!("  reversing {back:.1} m: {e:?}");
+                    }
+                }
+                let _ = out;
+            }
+        }
+        eprintln!(
+            "offset {offset}: after reversing, {:?}",
+            sim.poles.map(|p| p.phase)
+        );
         for (i, j) in jump.iter().enumerate() {
             eprintln!(
                 "offset {offset}: {} pole's largest change in a frame {:.1} deg: {}",

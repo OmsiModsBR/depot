@@ -275,6 +275,51 @@ impl WireNetwork {
                 }
             }
         }
+        // A bridge between ends the drawn wire already joins is a shortcut across it: a
+        // switch made of short splines (the switch's own curved piece among them) has ends
+        // facing each other over that piece, and a shoe taking the bridge would leave the
+        // wire. Kept are the bridges whose ends no drawn wire joins - directly, or past a
+        // nearer bridge from the same end - within the bridge's reach.
+        let mut plain: std::collections::HashMap<(SpanId, usize), Vec<(SpanId, usize)>> =
+            std::collections::HashMap::new();
+        for j in &self.joints {
+            plain.entry(j.a).or_default().push(j.b);
+            plain.entry(j.b).or_default().push(j.a);
+        }
+        let len = |s: SpanId| self.span(s).map_or(f64::INFINITY, |s| s.length);
+        // from the end `from` (leaving it), along drawn wire, into the end `to`
+        fn reaches(
+            plain: &std::collections::HashMap<(SpanId, usize), Vec<(SpanId, usize)>>,
+            len: &dyn Fn(SpanId) -> f64,
+            from: (SpanId, usize),
+            to: (SpanId, usize),
+            budget: f64,
+            depth: usize,
+        ) -> bool {
+            plain.get(&from).into_iter().flatten().any(|&p| {
+                p == to
+                    || (depth > 0
+                        && len(p.0) <= budget
+                        && reaches(plain, len, (p.0, 1 - p.1), to, budget - len(p.0), depth - 1))
+            })
+        }
+        let candidates = bridges.clone();
+        let shortcut = |j: &WireJoint, a: (SpanId, usize), b: (SpanId, usize)| {
+            reaches(&plain, &len, a, b, BRIDGE_MAX_GAP, 4)
+                || candidates.iter().any(|k| {
+                    let c = if k.a == a {
+                        k.b
+                    } else if k.b == a {
+                        k.a
+                    } else {
+                        return false;
+                    };
+                    k.gap < j.gap
+                        && c != b
+                        && reaches(&plain, &len, (c.0, 1 - c.1), b, BRIDGE_MAX_GAP, 4)
+                })
+        };
+        bridges.retain(|j| !shortcut(j, j.a, j.b) && !shortcut(j, j.b, j.a));
         self.joints.extend(bridges);
         self.joints.sort_by_key(|j| (j.a, j.b));
     }

@@ -224,11 +224,22 @@ fn log_event(e: &PoleEvent) {
             if *demand { " (demand)" } else { "" }
         ),
         PoleEvent::Retracted { pole } => {
-            log::debug!("trolleybus: {} pole taken off the wire", side(pole))
+            log::info!("trolleybus: {} pole taken off the wire", side(pole))
         }
         PoleEvent::Lowered { pole } => {
-            log::debug!("trolleybus: {} pole down on its hook", side(pole))
+            log::info!("trolleybus: {} pole down on its hook", side(pole))
         }
+        PoleEvent::WireLost {
+            pole,
+            phase,
+            spline_id,
+            span_loaded,
+            joints_to_nothing,
+            cursor,
+        } => log::warn!(
+            "trolleybus: {} pole lost its wire and went back on its hook ({phase:?} on spline {spline_id}, tile loaded {span_loaded}, {joints_to_nothing} joints to unloaded wire, at {cursor:?})",
+            side(pole)
+        ),
         PoleEvent::StallReset { seconds } => log::info!(
             "trolleybus: poles put back on their hooks after a frame of {seconds:.1} s"
         ),

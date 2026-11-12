@@ -204,6 +204,23 @@ impl PoleSim {
         }
         // rising or on the wire: the shoe follows the wire
         let Some((mut o, contact)) = self.track(i, decl, net, body, foot_to_wire) else {
+            // (the wire the shoe was on is no longer known: say which and why)
+            let c = self.poles[i].cursor;
+            let span = c.and_then(|c| net.span(c.span));
+            let missing = c.map_or(0, |c| {
+                (0..2)
+                    .flat_map(|e| net.joints_at(c.span, e))
+                    .filter(|j| net.span(j.a.0).is_none() || net.span(j.b.0).is_none())
+                    .count()
+            });
+            self.events.push(PoleEvent::WireLost {
+                pole: i,
+                phase: self.poles[i].phase,
+                spline_id: span.map_or(-1, |s| s.spline_id),
+                span_loaded: span.is_some(),
+                joints_to_nothing: missing,
+                cursor: c,
+            });
             self.poles[i] = PoleState::default();
             return hooked(&geo);
         };

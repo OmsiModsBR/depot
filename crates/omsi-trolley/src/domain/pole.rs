@@ -197,6 +197,17 @@ pub enum PoleEvent {
     StallReset {
         seconds: f64,
     },
+    /// The wire a pole was on could not be followed this frame (the pole is put back on its
+    /// hook): the spline, whether its tile is still loaded, how many of its joints lead to a
+    /// span that is not, and where the shoe was.
+    WireLost {
+        pole: usize,
+        phase: PolePhase,
+        spline_id: i64,
+        span_loaded: bool,
+        joints_to_nothing: usize,
+        cursor: Option<WireCursor>,
+    },
 }
 
 /// The two poles of the player's trolleybus.
