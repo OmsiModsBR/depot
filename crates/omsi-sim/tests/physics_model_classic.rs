@@ -9,8 +9,8 @@ mod support;
 
 use omsi_sim::physics::Engine;
 use support::model::{
-    articulation_angles, braking_distance, pull_away, release_by_speed, static_balance_train,
-    static_sag_solo, steady_turn,
+    articulation_angles, braking_distance, follower_axle_steering, pull_away, release_by_speed,
+    static_balance_train, static_sag_solo, steady_turn,
 };
 use support::vehicles::{
     v1_solo_4x2, v2_rigid_6x2, v3_articulated_6x2, v4_biarticulated, v5_articulated_8x2,
@@ -148,6 +148,12 @@ fn articulation_angles_v4_biarticulated() {
     articulation_angles(v4_biarticulated(), Engine::Classic);
 }
 
+/// Checks: C-9
+#[test]
+fn articulation_angles_v5_articulated_8x2() {
+    articulation_angles(v5_articulated_8x2(), Engine::Classic);
+}
+
 /// Checks: C-7
 #[test]
 fn release_v1_solo_4x2() {
@@ -237,4 +243,10 @@ fn ai_release_v3_articulated_6x2() {
 #[test]
 fn ai_release_v4_biarticulated() {
     assert!(model_ai::release_and_return(&v4_biarticulated()) < 4.0);
+}
+
+/// Checks: C-9
+#[test]
+fn follower_axle_steering_v5_articulated_8x2() {
+    follower_axle_steering(v5_articulated_8x2(), Engine::Classic);
 }

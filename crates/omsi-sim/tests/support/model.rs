@@ -276,25 +276,10 @@ pub fn pull_away(defs: Vec<Vehicle>, engine: Engine) {
 /// `alpha` satisfies `R sin(alpha) + D cos(alpha) = d` and the next section turns on
 /// `R cos(alpha) - D sin(alpha)`, where `R` is the radius the lead turns on, `D` the distance
 /// of its ball from its turning line and `d` the distance of the follower's ball from its own.
-/// Sections with one axle only: a section with two holds its tyres on a line the joint cannot
-/// reach (the last row of the open items in `classic-model.md`).
+/// A section behind a joint turns about its turning line whatever axles it has.
 pub fn articulation_angles(defs: Vec<Vehicle>, engine: Engine) {
-    let (mut bodies, joints) = build(&defs, engine);
-    let (v, steer) = (3.0_f32, 0.5_f32);
-    launch(&mut bodies, v);
-    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
-    let radius = bodies
-        .iter()
-        .flat_map(|b| b.wheels())
-        .find(|w| w.driven())
-        .map(|w| w.radius())
-        .unwrap();
-    let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
-    let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
-    for _ in 0..1500 {
-        let torque = ((v - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
-        step(&mut bodies, &joints, &brakes, torque, steer);
-    }
+    let steer = 0.5_f32;
+    let (bodies, joints) = steady_bend(&defs, engine, steer);
     let line = |d: &Vehicle| d.cog.unwrap()[1] as f64 + d.rot_pnt_long as f64;
     let mut r = 1.0 / (steer as f64 * defs[0].inv_min_turn_radius as f64);
     for (k, joint) in joints.iter().enumerate() {
@@ -311,6 +296,51 @@ pub fn articulation_angles(defs: Vec<Vehicle>, engine: Engine) {
         );
         r = r * alpha.cos() - ball * alpha.sin();
     }
+}
+
+/// `C-9`: in a steady turn every axle of a section behind a joint that lies off its turning
+/// line shows the steering (`axle_steer`, what the scripts animate), and its tyres do not steer
+/// on the road.
+pub fn follower_axle_steering(defs: Vec<Vehicle>, engine: Engine) {
+    let (bodies, _) = steady_bend(&defs, engine, 0.5);
+    for b in &bodies[1..] {
+        let shown: Vec<usize> = (0..b.wheels().len())
+            .filter(|&i| b.axle_steer(i).abs() > 0.01)
+            .collect();
+        assert!(
+            !shown.is_empty(),
+            "no axle of the section shows the steering"
+        );
+        for i in shown {
+            assert!(
+                !b.wheels()[i].steered(),
+                "wheel {i} at {} m (axle steering {} deg)",
+                b.wheels()[i].attach().y,
+                b.axle_steer(i).to_degrees()
+            );
+        }
+    }
+}
+
+/// The train after 25 s at 3 m/s with the steering held at `steer`.
+fn steady_bend(defs: &[Vehicle], engine: Engine, steer: f32) -> (Vec<RigidBody>, Vec<Joint>) {
+    let (mut bodies, joints) = build(defs, engine);
+    let v = 3.0_f32;
+    launch(&mut bodies, v);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let radius = bodies
+        .iter()
+        .flat_map(|b| b.wheels())
+        .find(|w| w.driven())
+        .map(|w| w.radius())
+        .unwrap();
+    let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+    let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+    for _ in 0..1500 {
+        let torque = ((v - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
+        step(&mut bodies, &joints, &brakes, torque, steer);
+    }
+    (bodies, joints)
 }
 
 /// C-7: the body follows its wheels while the bend asks less than the grip and slides when it

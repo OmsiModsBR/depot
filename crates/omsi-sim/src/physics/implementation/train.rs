@@ -115,8 +115,7 @@ impl Joint {
 
     /// The curvature (1/m, positive to the right) the joint, bent by `alpha`, makes the
     /// follower turn on about its `[rot_pnt_long]` line: sin alpha over the distance from the
-    /// ball to that line. An axle steered towards that line (the AG300's rear one, #322)
-    /// follows it.
+    /// ball to that line. The follower's axles show it (`axle_steer`); its tyres do not steer.
     fn kappa(&self, bodies: &[RigidBody]) -> f32 {
         let (alpha, _) = self.angles(bodies);
         let f = &bodies[self.follow];
@@ -600,8 +599,8 @@ fn slice(
                     .map_or(0.0, |j| j.kappa(bodies)),
             })
             .collect();
-        for (b, k) in bodies.iter_mut().zip(kappas) {
-            b.steer_to(k);
+        for ((b, k), s) in bodies.iter_mut().zip(kappas).zip(steers.iter()) {
+            b.steer_to(k, s.is_none());
         }
         let SolverScratch {
             subs,

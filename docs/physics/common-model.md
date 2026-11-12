@@ -186,7 +186,8 @@ lock    = atan( [inv_min_turnradius] · |y_front − y_turn| )
 ```
 
 An axle behind the line (`y_i < y_turn`) points the other way, and so does a tag axle. A section behind
-a joint has no steering of its own: its curvature comes from the joint (`C-9`).
+a joint has no steering of its own: its curvature comes from the joint, and its tyres do not steer
+(`C-9`).
 
 **Status**: the turning line counted from `[cog]` is **validated**: with a `[cog]` of `0 / 3 / 1.2` on a
 copy of a stock bus, driven at about 5 km/h at full lock, OMSI 2's pivot moves forward and the rear
@@ -264,7 +265,8 @@ drag the term moves to the Depot engine).
   about the vertical axis `α_max`, and its range `β_min … β_max` about the transverse axis),
   `[coupling_pitch_offset]` (Depot's own, a pusher's hinge). **Outputs**: the articulation angles `α`
   (vertical) and `β` (transverse) the scripts read, and the curvature the section behind turns on.
-  **Module**: `physics/implementation/train.rs` (`Joint`, `step_train`), types in
+  **Module**: `physics/implementation/train.rs` (`Joint`, `step_train`), `body.rs` (`steer_to`) and
+  `tyre.rs` (`lateral_start`) for the section behind, types in
   `physics/domain/train.rs`; the angles for the scripts in `vehicle/articulation.rs`.
 - **Basis**: *tuned* for the solver; the angles' definition follows what OMSI 2's scripts read
   (#384, #407).
@@ -279,8 +281,29 @@ a turntable (any other type) lets the sections not roll against each other and s
 κ_follow = sin α / max( | y_ball − y_turn,follow | , 0.5 m )       y_turn,follow: its own turning line
 ```
 
+Its axles show the bend, `δ_i = atan( (y_i − y_turn,follow) · κ_follow )`, which the scripts animate
+(`Axle_Steering`), but its tyres stay square to the body, and the hold across of every tyre (`C-7`)
+acts on the section's turning line, level with the tyre:
+
+```
+r_hold,i = ( x_i , y_turn,follow , z_i )      where tyre i is held across (from the centre of gravity)
+```
+
+So a section behind a joint turns about its turning line whatever axles it has, and its steady
+articulation angle in a turn of radius `R` of the section ahead is
+
+```
+R · sin α + D · cos α = d
+```
+
+with `D` the distance of the ball from the turning line of the section ahead and `d` its distance from
+the follower's own. The steering of the tyres of a rear axle (an articulated bus with a steered last
+axle) is not modelled in either engine for now (maintainer, 2026-11-12).
+
 **Status**: **to validate**: the steady articulation angle of an articulated bus in a steady turn
-(radius and `α`), in OMSI 2 and in the game. The pitch about the hinge of a pusher is Depot's own. Known
+(radius and `α`), in OMSI 2 and in the game, also with a rear section of two axles (the maintainer's
+note of 2026-11-10: in OMSI 2 the steering of such a rear axle is only animated by the vehicle's
+scripts). The pitch about the hinge of a pusher is Depot's own. Known
 and left as it is (maintainer, 2026-10-23): after a hard stop the sections of an articulated bus rock in
 a pitch wave in the game, which OMSI 2 does not show.
 

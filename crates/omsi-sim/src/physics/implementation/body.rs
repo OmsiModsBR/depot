@@ -274,8 +274,9 @@ impl RigidBody {
         );
     }
 
-    /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right).
-    pub(super) fn steer_to(&mut self, kappa: f32) {
+    /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right),
+    /// set by the steering or, for a section behind a joint (`follower`), by the joint's bend.
+    pub(super) fn steer_to(&mut self, kappa: f32, follower: bool) {
         // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
         // `[inv_min_turnradius]`) and every axle points at the centre of that turn on the
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
@@ -288,6 +289,13 @@ impl RigidBody {
             .map(|w| w.attach.y)
             .fold(f32::MIN, f32::max);
         for w in self.wheels.iter_mut() {
+            // a section behind a joint: its axles show the bend (`axle_steer`), its tyres stay
+            // square to the body (`C-9`)
+            if follower {
+                w.steer = 0.0;
+                w.steered = false;
+                continue;
+            }
             // each tyre square to the line from the centre of the turn to itself - the inner
             // one turned further than the outer (Ackermann). With both at the axle's angle the
             // tyres of an axle pulled against each other through the side constraint: the
