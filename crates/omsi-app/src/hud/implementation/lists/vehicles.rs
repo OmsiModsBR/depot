@@ -175,6 +175,12 @@ pub(crate) fn place_description(app: &App, bus: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Whether a vehicle's file has the `[depot_physics]` key: it runs Project Depot Physics when
+/// the player drives it (the "Add vehicle" window marks it).
+pub(crate) fn place_depot_physics(app: &App, bus: &str) -> bool {
+    bus_def(app, bus).is_some_and(|d| d.depot_physics)
+}
+
 /// A vehicle's depot files as (label, file name), alphabetical (the place list puts the
 /// map's depot file first).
 pub(crate) fn place_depots(app: &App, bus: &str) -> Vec<(String, String)> {

@@ -6,6 +6,7 @@
 use crate::kit::{self, card, clipped, right, shorten, subheading, text, Status};
 use crate::look::*;
 use crate::shell::BODY_TOP;
+use crate::window::domain::drive::depot_physics_notice;
 use omsi_launcher_lib::VehicleInfo;
 use omsi_ui::paint::Align;
 use omsi_ui::widgets::{matches, ButtonKind, Ui};
@@ -619,7 +620,13 @@ impl VehiclesView {
                 // is on the dot of the details card)
                 let name = model_label(v);
                 let (px, lh) = (LIB_PX * TEXT_SCALE, LIB_LH);
-                let name_w = view.w - 8.0 - 40.0;
+                // (a bus that runs Project Depot Physics when driven says so beside its name)
+                let physics = depot_physics_notice(v.depot_physics)
+                    .map(|(badge, notice)| (omsi_ui::tr(badge), notice));
+                let badge_w = physics.as_ref().map_or(0.0, |(badge, _)| {
+                    ui.width(badge, BADGE_PX * TEXT_SCALE, Weight::Bold) + 12.0
+                });
+                let name_w = view.w - 8.0 - 40.0 - badge_w;
                 let lines = ui.lines_as_is(&name, name_w, px, Weight::Bold, 2).0.len();
                 let row_h = ROW_H + LIB_LH * (lines as f32 - 1.0);
                 let row = Rect::new(view.x, y, view.w - 8.0, row_h);
@@ -639,6 +646,12 @@ impl VehiclesView {
                         2,
                         lh,
                     );
+                    if let Some((badge, notice)) = &physics {
+                        let x = row.right() - 32.0;
+                        right(ui, badge, x, row.center().y, BADGE_PX, Weight::Bold, OK);
+                        let tip = Rect::new(x - badge_w, row.y, badge_w, row.h);
+                        ui.tooltip(tip, &omsi_ui::tr(notice));
+                    }
                     ui.icon(
                         "o-chevron",
                         glam::Vec2::new(row.right() - 16.0, row.center().y),
@@ -812,6 +825,18 @@ impl VehiclesView {
                 top,
                 &[("Missing packs", v.missing_packs.join(", "))],
             );
+        }
+        // (a bus that runs Project Depot Physics when driven, whatever the setting says)
+        if let Some((_, notice)) = depot_physics_notice(v.depot_physics) {
+            let row = Rect::new(r.x, top, r.w, ROW);
+            top = detail_rows(
+                ui,
+                r.x,
+                r.w,
+                top,
+                &[("Physics", omsi_ui::tr("Project Depot Physics").into_owned())],
+            );
+            ui.tooltip(row, &omsi_ui::tr(notice));
         }
         // the author's description is what the card is for: the rest of it, whole, scrolling
         let desc = v.description.trim();
@@ -1117,6 +1142,8 @@ const ROW_H: f32 = 44.0;
 const GROUP_H: f32 = 36.0;
 /// The size of a name in the library, and the step between its two lines when it needs them.
 const LIB_PX: f32 = 13.5;
+/// The size of the DEPOT PHYSICS badge of a library row.
+const BADGE_PX: f32 = 10.5;
 const LIB_LH: f32 = 18.0;
 /// The step between the two lines of a long model name over the details card.
 const TITLE_LH: f32 = 22.0;

@@ -38,6 +38,8 @@ pub struct AddFrame {
     pub(in crate::ui) plate: String,
     pub plate_focused: bool,
     pub description: String,
+    /// The chosen vehicle's file has the `[depot_physics]` key.
+    pub depot_physics: bool,
     /// Which picture the window shows (see [`picture_key`]).
     pub picture: Option<u64>,
     /// The live 3D view, while it is on: the vehicle and paint it should show
@@ -109,6 +111,9 @@ pub struct AddWindow {
     pub(in crate::ui) plate_focused: bool,
     /// The chosen vehicle's description, as its author wrote it.
     description: String,
+    /// The chosen vehicle's file has the `[depot_physics]` key (it runs Project Depot Physics
+    /// when driven).
+    depot_physics: bool,
     /// The picture asked for (see [`picture_key`]).
     picture: Option<u64>,
     /// The map's entry points, while "Place" lists them.
@@ -174,6 +179,7 @@ impl AddWindow {
             plate: self.plate.clone(),
             plate_focused: self.plate_focused,
             description: self.description.clone(),
+            depot_physics: self.depot_physics,
             picture: self.picture,
             live: None,
             entry_points: self.entry_points.clone(),
@@ -287,6 +293,11 @@ impl AddWindow {
         if i < self.liveries.len() {
             self.livery = i;
         }
+    }
+
+    /// Whether the chosen vehicle runs Project Depot Physics when driven (`[depot_physics]`).
+    pub fn set_depot_physics(&mut self, on: bool) {
+        self.depot_physics = on;
     }
 
     pub fn set_depot(&mut self, i: usize) {

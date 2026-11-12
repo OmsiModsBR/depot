@@ -22,7 +22,8 @@ fn bus(name: &str, maker: &str, kind: &str, installed: bool, paints: &[&str]) ->
     }
 }
 
-/// A few vehicles, the last one missing a pack it borrows from.
+/// A few vehicles, the last one missing a pack it borrows from and running Project Depot
+/// Physics when driven.
 pub fn vehicles() -> Vec<VehicleInfo> {
     let mut last = bus(
         "Example bus C",
@@ -32,6 +33,8 @@ pub fn vehicles() -> Vec<VehicleInfo> {
         &["Default paint"],
     );
     last.missing_packs = vec!["Example pack".into()];
+    // (its file has the `[depot_physics]` key: the page marks it)
+    last.depot_physics = true;
     last.hofs.clear();
     vec![
         bus(

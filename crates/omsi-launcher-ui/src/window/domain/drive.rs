@@ -216,7 +216,14 @@ pub fn liveries_text(repaints: usize) -> String {
 /// The badge and the notice the bus list shows for a type whose file has the `[depot_physics]`
 /// key (spec 002, FR-008a): it runs Project Depot Physics when the player drives it.
 pub fn physics_notice(variant: &BusVariant) -> Option<(&'static str, &'static str)> {
-    variant.depot_physics.then_some((
+    depot_physics_notice(variant.depot_physics)
+}
+
+/// The badge and the notice for a bus whose file has the `[depot_physics]` key
+/// (`depot_physics`), wherever the launcher lists it: the Drive page's bus list (the phone
+/// launcher) and the Vehicles page (a computer's).
+pub fn depot_physics_notice(depot_physics: bool) -> Option<(&'static str, &'static str)> {
+    depot_physics.then_some((
         "DEPOT PHYSICS",
         "Runs Project Depot Physics when you drive it ([depot_physics] in its file), whatever the Physics setting says",
     ))

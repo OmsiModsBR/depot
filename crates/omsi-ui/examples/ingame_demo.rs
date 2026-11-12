@@ -278,6 +278,11 @@ fn main() {
                     description file.\n\nPermissions: example text about how the vehicle may be used.",
                 preview,
                 live,
+                physics: Some((
+                    "DEPOT PHYSICS",
+                    "Runs Project Depot Physics when you drive it ([depot_physics] in its file), \
+                    whatever the Physics setting says",
+                )),
             },
         );
     });

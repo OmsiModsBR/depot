@@ -207,3 +207,14 @@ fn a_map_without_entry_points_lists_none() {
     w.choose_entry_point(0);
     assert_eq!(w.entry_point(), None);
 }
+
+#[test]
+fn a_model_with_the_depot_physics_key_is_marked() {
+    // (the window draws the DEPOT PHYSICS badge beside the model's label when this is set)
+    let mut w = window();
+    assert!(!w.frame().depot_physics);
+    w.set_depot_physics(true);
+    assert!(w.frame().depot_physics);
+    w.set_depot_physics(false);
+    assert!(!w.frame().depot_physics);
+}
