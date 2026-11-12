@@ -271,13 +271,17 @@ fn dump_spans() {
     ) else {
         return;
     };
-    let ids: Vec<i64> = ids
+    let mut ids: Vec<i64> = ids
         .split(',')
         .filter_map(|s| s.trim().parse().ok())
         .collect();
     let text = |p: PathBuf| omsi_cfg::decode_text(&std::fs::read(p).expect("readable"));
     let params = parse_params(&text(plugins.join("TrolleyWirePlugin.cfg"))).expect("params");
     let map_dir = root.join("maps").join(map);
+    // (`OMSI_TROLLEY_DUMP_RADIUS`: also every span with an end that near the first's ends)
+    let radius: Option<f64> = std::env::var("OMSI_TROLLEY_DUMP_RADIUS")
+        .ok()
+        .and_then(|s| s.parse().ok());
     let global = omsi_map::GlobalCfg::load(&map_dir.join("global.cfg")).expect("global.cfg");
     omsi_map::configure_grid(&global);
     let size = omsi_map::tile_size();
@@ -290,12 +294,28 @@ fn dump_spans() {
         let origin = DVec2::new(t.x as f64 * size, t.y as f64 * size);
         net.insert_tile(build_tile_wires((t.x, t.y), origin, &tile, &params));
     }
-    let o = net
+    let first = net
         .tiles()
         .flat_map(|(_, t)| t.spans.iter())
-        .find(|s| ids.contains(&s.spline_id))
-        .map(|s| s.ends[0].point)
+        .find(|s| s.spline_id == ids[0])
+        .map(|s| s.ends)
         .unwrap();
+    let o = first[0].point;
+    if let Some(r) = radius {
+        let more: Vec<i64> = net
+            .tiles()
+            .flat_map(|(_, t)| t.spans.iter())
+            .filter(|s| {
+                s.ends.iter().any(|e| {
+                    first
+                        .iter()
+                        .any(|f| (e.point - f.point).truncate().length() <= r)
+                })
+            })
+            .map(|s| s.spline_id)
+            .collect();
+        ids.extend(more);
+    }
     let rel = |p: DVec3| format!("({:.2}, {:.2})", p.x - o.x, p.y - o.y);
     for (k, (_, t)) in net.tiles().enumerate() {
         for (i, s) in t.spans.iter().enumerate() {

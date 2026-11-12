@@ -376,3 +376,36 @@ fn across_a_20_degree_switch_the_branch_wire_runs_as_the_switch_draws_it() {
         2
     );
 }
+
+/// A left branch switch whose straight goes on as a short piece (0.7 m) and whose branch
+/// starts beside it, the two ends near enough (1.1 m) to count as a joint although they
+/// stand side by side - as a map's switch made of short splines lays them.
+fn left_switch_with_a_short_straight() -> WireNetwork {
+    net(
+        vec![
+            spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 50.0, 0.0),
+            spline(2, WIRE, [0.0, 54.0, 0.0], 0.0, 0.7, 0.0),
+            spline(4, WIRE, [0.0, 54.7, 0.0], 0.0, 40.0, 0.0),
+            spline(3, WIRE, [-0.9, 54.0, 0.0], -20.0, 40.0, 0.0),
+        ],
+        vec![object(9, LEFT, [0.0, 52.0, 0.0], 0.0)],
+    )
+}
+
+#[test]
+fn a_branch_starting_beside_the_straight_is_still_bridged() {
+    let n = left_switch_with_a_short_straight();
+    let ways: Vec<i64> = n
+        .joints_at(((0, 0), 0), 1)
+        .filter(|j| j.via.is_some())
+        .map(|j| {
+            let other = if j.a == (((0, 0), 0), 1) { j.b } else { j.a };
+            n.span(other.0).unwrap().spline_id
+        })
+        .collect();
+    assert_eq!(ways.len(), 2, "the straight and the branch: {ways:?}");
+    let (_, powered) = drive_north(&n, 0.0, 20.0, 66.0, 1.0);
+    assert_eq!(powered, [3, 3], "with demand the left branch");
+    let (_, coasting) = drive_north(&n, 0.0, 20.0, 66.0, 0.0);
+    assert_eq!(coasting, [4, 4], "without it straight on");
+}

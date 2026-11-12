@@ -232,6 +232,8 @@ impl WireNetwork {
             .collect();
         let reach = (BRIDGE_RADIUS / JOIN_TOLERANCE).ceil() as i64;
         let mut bridges: Vec<WireJoint> = Vec::new();
+        let mut via_off: std::collections::HashMap<((SpanId, usize), (SpanId, usize)), f64> =
+            std::collections::HashMap::new();
         for o in &objects {
             let (cx, cy) = cell_of(o.position, JOIN_TOLERANCE);
             let mut near: Vec<(SpanId, usize, SpanEnd)> = Vec::new();
@@ -263,14 +265,30 @@ impl WireNetwork {
                         && d.dot(a.outward) >= BRIDGE_MIN_ALIGNMENT
                         && (-d).dot(b.outward) >= BRIDGE_MIN_ALIGNMENT;
                     let pair = ((*sa, *ea), (*sb, *eb));
-                    if facing && !bridges.iter().any(|j| (j.a, j.b) == pair) {
-                        bridges.push(WireJoint {
-                            a: pair.0,
-                            b: pair.1,
-                            gap,
-                            reversed: ea == eb,
-                            via: Some(o.kind),
-                        });
+                    if !facing {
+                        continue;
+                    }
+                    // (two objects in reach of one gap - a merge and a split a few metres
+                    // apart: the gap is the one of the object nearest its middle)
+                    let middle = (a.point + b.point) * 0.5;
+                    let off = (o.position - middle).truncate().length();
+                    match bridges.iter_mut().find(|j| (j.a, j.b) == pair) {
+                        Some(j) => {
+                            if off < via_off[&pair] {
+                                j.via = Some(o.kind);
+                                via_off.insert(pair, off);
+                            }
+                        }
+                        None => {
+                            bridges.push(WireJoint {
+                                a: pair.0,
+                                b: pair.1,
+                                gap,
+                                reversed: ea == eb,
+                                via: Some(o.kind),
+                            });
+                            via_off.insert(pair, off);
+                        }
                     }
                 }
             }
@@ -282,7 +300,17 @@ impl WireNetwork {
         // nearer bridge from the same end - within the bridge's reach.
         let mut plain: std::collections::HashMap<(SpanId, usize), Vec<(SpanId, usize)>> =
             std::collections::HashMap::new();
-        for j in &self.joints {
+        // (end to end only: an end that merely stands beside another - a switch's branch
+        // starting next to the line's end - is no drawn wire between them)
+        let end_to_end = |j: &WireJoint| {
+            let (Some(a), Some(b)) = (self.span(j.a.0), self.span(j.b.0)) else {
+                return false;
+            };
+            let (a, b) = (a.ends[j.a.1], b.ends[j.b.1]);
+            let d = b.point - a.point;
+            (d - a.outward * d.dot(a.outward)).truncate().length() <= super::walk::SPLICE_MAX_BESIDE
+        };
+        for j in self.joints.iter().filter(|j| end_to_end(j)) {
             plain.entry(j.a).or_default().push(j.b);
             plain.entry(j.b).or_default().push(j.a);
         }

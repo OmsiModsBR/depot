@@ -87,7 +87,7 @@ const MAX_PIECES: usize = 64;
 /// the end has another: farther, it is the start of a neighbouring wire that happens to face
 /// the same way (a switch's branch beside a line's end), and taking it puts a shoe on the
 /// wrong wire. An end with no other way on keeps it.
-const SPLICE_MAX_BESIDE: f64 = 0.3;
+pub(crate) const SPLICE_MAX_BESIDE: f64 = 0.3;
 
 /// One way on from the end of a span: the joined span's wire on the same side, where it
 /// starts and which way it runs.
