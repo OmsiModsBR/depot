@@ -113,6 +113,11 @@ it buys something and is measured.
 
 - NOTHING from an OMSI 2 installation enters the repository: textures, models, sounds, maps,
   scripts.
+- One exception: files of a community add-on whose authors gave the maintainer permission to
+  redistribute them with Depot. They may enter only under `assets/content/`, each file under
+  1 MB, each listed in `THIRD_PARTY.md` with its author, its source and the terms of that
+  permission, and only through a pull request the maintainer approves. Files made by Aerosoft or
+  shipped with OMSI 2 itself never qualify.
 - Public text (code, comments, commits, pull requests, issues, `CHANGELOG.md` and documentation)
   MUST NOT carry addresses, internal API names or thresholds derived from the reference executable.
   Static-analysis findings may guide the work, but public text describes only the observed
@@ -195,4 +200,4 @@ every reader and every refactor and is rarely reused as it was.
 - Compliance review: every pull request and review checks the principles above; complexity that
   goes against them has to be justified in the pull request.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-06 | **Last Amended**: 2026-11-06
+**Version**: 1.1.0 | **Ratified**: 2026-11-06 | **Last Amended**: 2026-11-12

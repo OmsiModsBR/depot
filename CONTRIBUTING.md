@@ -5,6 +5,9 @@ Thanks for helping! A few rules keep the project healthy:
 * **No original code or assets.** Never copy anything from an OMSI 2 installation into the
   repository - no textures, models, sounds, maps, scripts. Tests that need
   content read it from a local installation (`OMSI_ROOT`) and skip themselves without one.
+  The one exception is a community add-on whose authors let the maintainer redistribute it: it
+  goes under `assets/content/` and into `THIRD_PARTY.md`, as the constitution (Principle VIII)
+  sets out.
 * **Compatibility first.** A change must not break a stock map or a mod that worked. Run
   `cargo run --release -p omsi-check -- "/path/to/OMSI 2"` before and after larger changes.
 * **One change per pull request**, with a message that says what the player notices.
