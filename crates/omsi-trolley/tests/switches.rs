@@ -335,3 +335,44 @@ fn a_crossing_is_passed_straight_on() {
     let (_, ids) = drive_north(&n, 0.0, 20.0, 70.0, 1.0);
     assert_eq!(ids, [2, 2]);
 }
+
+#[test]
+fn across_a_20_degree_switch_the_branch_wire_runs_as_the_switch_draws_it() {
+    use omsi_trolley::testing::gap_path;
+    // the line ends at x = -1; the branch goes on at (3, 0.72), 20 degrees off: the switch
+    // draws it on along the line, round a turn of 5 m and on at 20 degrees
+    let a20 = 20f64.to_radians();
+    let path = gap_path(
+        DVec3::new(-1.0, 0.0, 5.8),
+        DVec3::X,
+        DVec3::new(3.0, 0.72, 5.8),
+        DVec3::new(a20.cos(), a20.sin(), 0.0),
+    );
+    let drawn = |x: f64| {
+        let x0 = 3.0 - (0.72 - 5.0 * (1.0 - a20.cos())) / a20.tan() - 5.0 * a20.sin();
+        if x <= x0 {
+            0.0
+        } else if x <= x0 + 5.0 * a20.sin() {
+            5.0 - (25.0 - (x - x0).powi(2)).sqrt()
+        } else {
+            5.0 * (1.0 - a20.cos()) + (x - x0 - 5.0 * a20.sin()) * a20.tan()
+        }
+    };
+    for p in &path {
+        assert!(
+            (p.y - drawn(p.x)).abs() < 0.01,
+            "at x = {:.2}: {:.3} against {:.3}",
+            p.x,
+            p.y,
+            drawn(p.x)
+        );
+        assert!((p.z - 5.8).abs() < 1e-9);
+    }
+    assert!(path.first().unwrap().distance(DVec3::new(-1.0, 0.0, 5.8)) < 1e-9);
+    assert!(path.last().unwrap().distance(DVec3::new(3.0, 0.72, 5.8)) < 1e-9);
+    // a way in line stays straight
+    assert_eq!(
+        gap_path(DVec3::ZERO, DVec3::X, DVec3::new(4.0, 0.0, 0.0), DVec3::X).len(),
+        2
+    );
+}

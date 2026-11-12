@@ -1,9 +1,84 @@
 //! Moving along a wire: the point of a wire at a given distance from a pole's foot.
 
-use glam::DVec3;
+use glam::{DVec2, DVec3};
 
 use crate::domain::network::{SegmentRef, SpanId, WireNetwork, WireObjectKind, WireSide};
 use crate::domain::pole::WireCursor;
+
+/// The radius (metres) the wire a switch draws across its gap turns with, from the way it
+/// comes in to the way it goes on (the turn a 20 degree switch's branch makes; a shorter
+/// turn where the gap leaves no room for it).
+const GAP_TURN_RADIUS: f64 = 5.0;
+
+/// How many pieces the turn across a gap is drawn in.
+const GAP_TURN_PIECES: usize = 8;
+
+/// The wire across a gap from `a` (coming in along `ta`) to `b` (going on along `tb`): on
+/// along `ta`, a turn of [`GAP_TURN_RADIUS`] that meets both ways, and on along `tb` - as a
+/// switch's branch leaves the line; straight across where the two ways are in line (or do
+/// not meet between the ends).
+pub(crate) fn gap_path(a: DVec3, ta: DVec3, b: DVec3, tb: DVec3) -> Vec<DVec3> {
+    let (a2, b2) = (a.truncate(), b.truncate());
+    let (u, v) = (
+        ta.truncate().normalize_or_zero(),
+        tb.truncate().normalize_or_zero(),
+    );
+    let turn = u.perp_dot(v).atan2(u.dot(v));
+    let cross = u.perp_dot(v);
+    if turn.abs() < 1f64.to_radians() || cross.abs() < 1e-9 {
+        return vec![a, b];
+    }
+    // where the two ways meet: a + s u = b - r v
+    let ab = b2 - a2;
+    let s = ab.perp_dot(v) / cross;
+    let r = -ab.perp_dot(u) / cross;
+    if s <= 0.0 || r <= 0.0 {
+        return vec![a, b];
+    }
+    let half = (turn.abs() / 2.0).tan();
+    let d = (GAP_TURN_RADIUS * half).min(s).min(r);
+    let radius = d / half;
+    let meet = a2 + u * s;
+    let t1 = meet - u * d;
+    let normal = if turn > 0.0 { u.perp() } else { -u.perp() };
+    let centre = t1 + normal * radius;
+    let mut flat = vec![a2];
+    if t1.distance(a2) > 1e-6 {
+        flat.push(t1);
+    }
+    for k in 1..=GAP_TURN_PIECES {
+        let ang = turn * k as f64 / GAP_TURN_PIECES as f64;
+        flat.push(centre + DVec2::from_angle(ang).rotate(t1 - centre));
+    }
+    if flat.last().is_some_and(|l| l.distance(b2) > 1e-6) {
+        flat.push(b2);
+    }
+    // (height along the way, from one end's to the other's)
+    let total: f64 = flat
+        .windows(2)
+        .map(|w| w[0].distance(w[1]))
+        .sum::<f64>()
+        .max(1e-9);
+    let mut run = 0.0;
+    let mut out = Vec::with_capacity(flat.len());
+    for (k, p) in flat.iter().enumerate() {
+        if k > 0 {
+            run += flat[k - 1].distance(*p);
+        }
+        out.push(p.extend(a.z + (b.z - a.z) * run / total));
+    }
+    out
+}
+
+/// The first point of `path` (from its start) at `len` from `foot`.
+pub(crate) fn first_crossing(path: &[DVec3], foot: DVec3, len: f64) -> Option<DVec3> {
+    path.windows(2).find_map(|w| {
+        sphere_crossings(w[0], w[1], foot, len)
+            .into_iter()
+            .reduce(f64::min)
+            .map(|u| w[0].lerp(w[1], u))
+    })
+}
 
 /// How many pieces of wire one step may walk over.
 const MAX_PIECES: usize = 64;
@@ -238,16 +313,14 @@ pub(crate) fn reach(
         // pole's length may fall in it. The shoe is still on the wire it came from until it
         // is past the gap: put on the joined wire, the next step would walk back across the
         // gap from there (and, at a switch's entry, choose a way again).
-        let in_gap = sphere_crossings(q, w.start, foot, len)
-            .into_iter()
-            .reduce(f64::min);
-        if let Some(u) = in_gap {
+        let in_gap = first_crossing(&gap_path(q, travel, w.start, w.heading), foot, len);
+        if let Some(at) = in_gap {
             return Some(Reached {
                 cursor: WireCursor {
                     t: f64::from(end as u8),
                     ..c
                 },
-                point: q.lerp(w.start, u),
+                point: at,
                 error: 0.0,
                 joints,
                 wire_ended: false,
@@ -385,14 +458,14 @@ fn other(s: WireSide) -> WireSide {
 
 /// Points of the wire across a gap (the straight from a span's end to the way on: what a
 /// switch or crossing draws, or a loose splice), near `p`, that lie at `len` from `foot`: the cursor stands at the end
-/// the gap starts from, as a shoe in a gap does.
+/// the gap starts from, as a shoe in a gap does; with the span of the way the gap leads to.
 pub(crate) fn gap_crossings_near(
     net: &WireNetwork,
     p: DVec3,
     radius: f64,
     foot: DVec3,
     len: f64,
-) -> Vec<(WireCursor, DVec3)> {
+) -> Vec<(WireCursor, DVec3, SpanId)> {
     let mut ends: Vec<(SpanId, usize)> = Vec::new();
     for (r, _) in net.segments_near(p, radius + 6.0) {
         for e in 0..2 {
@@ -420,12 +493,19 @@ pub(crate) fn gap_crossings_near(
                 seg: if e == 0 { 0 } else { pts.len() - 2 },
                 t: f64::from(e as u8),
             };
-            let tip = if e == 0 { pts[0] } else { pts[pts.len() - 1] };
+            let (tip, inner) = if e == 0 {
+                (pts[0], pts[1])
+            } else {
+                (pts[pts.len() - 1], pts[pts.len() - 2])
+            };
             for w in ways_on(net, &c, e).unwrap_or_default() {
-                for u in sphere_crossings(tip, w.start, foot, len) {
-                    let at = tip.lerp(w.start, u);
-                    if (at - p).length() <= radius {
-                        out.push((c, at));
+                let path = gap_path(tip, tip - inner, w.start, w.heading);
+                for piece in path.windows(2) {
+                    for u in sphere_crossings(piece[0], piece[1], foot, len) {
+                        let at = piece[0].lerp(piece[1], u);
+                        if (at - p).length() <= radius {
+                            out.push((c, at, w.cursor.span));
+                        }
                     }
                 }
             }

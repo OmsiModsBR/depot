@@ -141,6 +141,7 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                 // (slowly: a shoe stands in each gap for a while)
                 let step = 1.0 / 3.6 / 60.0;
                 let mut crossings = [0usize; 2];
+                let mut forks_seen: Vec<String> = Vec::new();
                 let mut swapped = None;
                 let mut driven = 0.0;
                 'drive: for w in path.windows(2) {
@@ -168,6 +169,9 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                             if let omsi_trolley::PoleEvent::Joint { pole, .. } = e {
                                 crossings[*pole] += 1;
                             }
+                            if matches!(e, omsi_trolley::PoleEvent::Fork { .. }) {
+                                forks_seen.push(format!("{e:?}"));
+                            }
                         }
                         if o.wire_present && o.poles[0].shoe_pos.x >= o.poles[1].shoe_pos.x {
                             let on = sim.poles.map(|q| {
@@ -185,6 +189,52 @@ fn every_switch_of_the_map_keeps_the_shoes_on_their_sides() {
                             o.poles[1].yaw,
                             sim.events
                         );
+                            eprintln!("      start: {first_events:?}");
+                            for f in &forks_seen {
+                                eprintln!("      fork: {}", &f[..f.len().min(220)]);
+                            }
+                            let bp = pose(p, w[1] - w[0], offset * (driven / 6.0).min(1.0));
+                            for k in 0..2 {
+                                let wpt = bp.position + bp.rotation * o.poles[k].shoe_pos;
+                                eprintln!(
+                                    "      shoe {k} world ({:.2}, {:.2}) body ({:.2}, {:.2})",
+                                    wpt.x.rem_euclid(1000.0),
+                                    wpt.y.rem_euclid(1000.0),
+                                    bp.position.x.rem_euclid(1000.0),
+                                    bp.position.y.rem_euclid(1000.0)
+                                );
+                            }
+                            for id in [35534i64, 35539, 35537] {
+                                if let Some(sp) = net
+                                    .tiles()
+                                    .flat_map(|(_, t)| t.spans.iter())
+                                    .find(|s| s.spline_id == id)
+                                {
+                                    eprintln!(
+                                        "      {id}: L {:.2?}..{:.2?} R {:.2?}..{:.2?}",
+                                        sp.wires[0][0]
+                                            .truncate()
+                                            .to_array()
+                                            .map(|v| v.rem_euclid(1000.0)),
+                                        sp.wires[0]
+                                            .last()
+                                            .unwrap()
+                                            .truncate()
+                                            .to_array()
+                                            .map(|v| v.rem_euclid(1000.0)),
+                                        sp.wires[1][0]
+                                            .truncate()
+                                            .to_array()
+                                            .map(|v| v.rem_euclid(1000.0)),
+                                        sp.wires[1]
+                                            .last()
+                                            .unwrap()
+                                            .truncate()
+                                            .to_array()
+                                            .map(|v| v.rem_euclid(1000.0)),
+                                    );
+                                }
+                            }
                             swapped = Some(p);
                             break 'drive;
                         }

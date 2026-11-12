@@ -95,7 +95,16 @@ impl PoleSim {
         for f in self.forks.iter_mut() {
             f.2 += dt;
         }
-        self.forks.retain(|f| f.2 < FORK_MEMORY);
+        // (kept while a shoe is still on the span the fork leaves: the bus may stand between
+        // the two shoes passing it)
+        let on: Vec<SpanId> = self
+            .poles
+            .iter()
+            .filter_map(|p| p.cursor)
+            .map(|c| c.span)
+            .collect();
+        self.forks
+            .retain(|f| f.2 < FORK_MEMORY || on.contains(&f.0 .0));
         self.speed_kmh = inputs.speed_kmh.abs();
         self.throttle = inputs.switch_demand;
         self.weather = inputs.weather;
@@ -144,6 +153,31 @@ impl PoleSim {
                 if !pressed {
                     return hooked(&geo);
                 }
+                // a pole rising into a switch's gap takes the way the other pole is on, or
+                // the one already set there; and sets it for the other
+                let other = self.poles[1 - i]
+                    .cursor
+                    .filter(|_| {
+                        matches!(
+                            self.poles[1 - i].phase,
+                            PolePhase::Rising | PolePhase::OnWire
+                        )
+                    })
+                    .map(|c| c.span);
+                let forks = &self.forks;
+                let keep = |at: (SpanId, usize), way: SpanId| {
+                    if let Some(f) = forks.iter().find(|f| f.0 == at) {
+                        return f.1 == way;
+                    }
+                    match other {
+                        Some(o) if o != at.0 => {
+                            let joined =
+                                net.joints_at(at.0, at.1).any(|j| j.a.0 == o || j.b.0 == o);
+                            !joined || o == way
+                        }
+                        _ => true,
+                    }
+                };
                 let found = capture(
                     net,
                     body,
@@ -152,8 +186,9 @@ impl PoleSim {
                     foot_to_wire,
                     geo.length(),
                     p.capture_distance,
+                    &keep,
                 );
-                let Some((cursor, sideways)) = found else {
+                let Some((cursor, sideways, way)) = found else {
                     let shoe = body.position + body.rotation * geo.rest_shoe;
                     let nearest = net.segments_near(shoe, 30.0).first().and_then(|(r, _)| {
                         let (a, b) = net.segment(*r)?;
@@ -168,6 +203,24 @@ impl PoleSim {
                     self.events.push(PoleEvent::NoWire { pole: i, nearest });
                     return hooked(&geo);
                 };
+                if let Some((at, way)) = way {
+                    if !self.forks.iter().any(|f| f.0 == at) {
+                        self.forks.push((at, way, 0.0));
+                    }
+                }
+                // the two shoes on either side of a switch: the one before it goes the way
+                // the other is on
+                if let Some(o) = other.filter(|o| *o != cursor.span) {
+                    for j in net.joints().iter().filter(|j| {
+                        (j.a.0 == o && j.b.0 == cursor.span) || (j.b.0 == o && j.a.0 == cursor.span)
+                    }) {
+                        for (at, way) in [(j.a, j.b.0), (j.b, j.a.0)] {
+                            if !self.forks.iter().any(|f| f.0 == at) {
+                                self.forks.push((at, way, 0.0));
+                            }
+                        }
+                    }
+                }
                 let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
                 self.events.push(PoleEvent::Captured {
                     pole: i,
@@ -493,22 +546,23 @@ fn capture(
     foot_to_wire: DVec3,
     len: f64,
     capture: f64,
-) -> Option<(WireCursor, f64)> {
+    keep: &dyn Fn((SpanId, usize), SpanId) -> bool,
+) -> Option<(WireCursor, f64, Option<((SpanId, usize), SpanId)>)> {
     let to_body = body.rotation.transpose();
     let in_body = |w: DVec3| to_body * (w - body.position);
     let shoe = body.position + body.rotation * geo.rest_shoe;
     walk::crossings_near(net, shoe, SEARCH_RADIUS, foot_to_wire, len)
         .into_iter()
+        .map(|(c, p)| (c, p, None))
         // (or across the gap of a switch or crossing: a shoe resting under a wire that ends
         // just ahead reaches into the gap)
-        .chain(walk::gap_crossings_near(
-            net,
-            shoe,
-            SEARCH_RADIUS,
-            foot_to_wire,
-            len,
-        ))
-        .filter(|(c, p)| {
+        .chain(
+            walk::gap_crossings_near(net, shoe, SEARCH_RADIUS, foot_to_wire, len)
+                .into_iter()
+                .map(|(c, p, way)| (c, p, Some(((c.span, usize::from(c.t > 0.5)), way))))
+                .filter(|(_, _, way)| way.is_none_or(|(at, w)| keep(at, w))),
+        )
+        .filter(|(c, p, _)| {
             // behind the foot, as a trailing pole stands
             let b = in_body(*p);
             if b.y > geo.base.y {
@@ -525,8 +579,8 @@ fn capture(
                 None => true,
             }
         })
-        .map(|(c, p)| (c, (in_body(p).x - geo.rest_shoe.x).abs()))
-        .filter(|(_, sideways)| *sideways <= capture)
+        .map(|(c, p, way)| (c, (in_body(p).x - geo.rest_shoe.x).abs(), way))
+        .filter(|(_, sideways, _)| *sideways <= capture)
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
