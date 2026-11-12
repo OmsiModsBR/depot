@@ -151,13 +151,24 @@ pub(crate) fn traffic_step(
 }
 
 /// The duty's step of a frame, part 1: a stop the timetable window asked for
-/// (`html_next_stop`) becomes the next one, and the IBIS is set to it.
-pub(crate) fn duty_skip_asked(d: &mut PlayerDuty, p: &mut Player) {
+/// (`html_next_stop`) becomes the next one, the IBIS is set to it, the loaded stops are
+/// learned, and the stops marked in the timetable window are skipped once they are next.
+pub(crate) fn duty_begin(d: &mut PlayerDuty, p: &mut Player, world: &World) {
     if let Some(stop) = p.html_next_stop.take() {
         if d.skip_to(stop) {
             let (trip, k) = d.trip_for_ibis();
             p.ibis_to_stop(trip, k);
         }
+    }
+    d.learn_loaded(&world.object_positions.lock());
+    // (a stop marked in the timetable window is skipped once it is the next)
+    while let Some(name) = d.skip_marked_next() {
+        log::info!(
+            "duty: stop '{name}' skipped as marked, next stop {}",
+            d.next_stop
+        );
+        let (trip, k) = d.trip_for_ibis();
+        p.ibis_to_stop(trip, k);
     }
 }
 

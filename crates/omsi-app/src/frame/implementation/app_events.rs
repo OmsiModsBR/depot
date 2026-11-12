@@ -1946,17 +1946,7 @@ impl ApplicationHandler for App {
                     self.world.as_ref(),
                     self.paused,
                 ) {
-                    session::duty_skip_asked(d, p);
-                    d.learn_loaded(&w.object_positions.lock());
-                    // (a stop marked in the timetable window is skipped once it is the next)
-                    while let Some(name) = d.skip_marked_next() {
-                        log::info!(
-                            "duty: stop '{name}' skipped as marked, next stop {}",
-                            d.next_stop
-                        );
-                        let (trip, k) = d.trip_for_ibis();
-                        p.ibis_to_stop(trip, k);
-                    }
+                    session::duty_begin(d, p, w);
                     session::duty_update(
                         d,
                         p,
