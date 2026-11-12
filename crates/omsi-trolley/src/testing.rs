@@ -58,3 +58,13 @@ pub fn tile(splines: Vec<MapSpline>, objects: Vec<MapObject>) -> Tile {
         ..Tile::default()
     }
 }
+
+/// The wire across a switch's gap (see `walk::gap_path`).
+pub fn gap_path(
+    a: glam::DVec3,
+    ta: glam::DVec3,
+    b: glam::DVec3,
+    tb: glam::DVec3,
+) -> Vec<glam::DVec3> {
+    crate::implementation::walk::gap_path(a, ta, b, tb)
+}

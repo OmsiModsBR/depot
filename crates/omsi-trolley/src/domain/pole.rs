@@ -9,6 +9,9 @@ use super::network::{SpanId, WireSide};
 pub enum PolePhase {
     /// Down on its hook.
     Hooked,
+    /// Off its hook in the player's hand: it points where the mouse leads it, and takes the
+    /// wire its shoe is let go at (or goes back down to its hook).
+    InHand,
     /// Going up onto a wire it has found.
     Rising,
     /// On the wire.
@@ -66,6 +69,8 @@ pub struct PoleState {
     /// How much longer than the pole the way from its foot to the wire is (metres; 0 when
     /// the pole reaches it).
     pub reach_error: f64,
+    /// Where the player holds the shoe (body frame; in the hand, once the mouse moved it).
+    pub hand: Option<DVec3>,
 }
 
 impl Default for PoleState {
@@ -78,6 +83,7 @@ impl Default for PoleState {
             dewire: None,
             held: [0.0; 4],
             reach_error: 0.0,
+            hand: None,
         }
     }
 }
@@ -104,6 +110,11 @@ pub struct PoleInputs {
     pub switch_demand: f64,
     /// The vehicle's speed, km/h.
     pub speed_kmh: f64,
+    /// The weather, for the sparks.
+    pub weather: super::sound::WireWeather,
+    /// The ray under the mouse pointer (world origin and direction): a pole in the hand
+    /// points where it leads. None: the pole stays where it was.
+    pub aim: Option<(DVec3, DVec3)>,
 }
 
 /// What one pole shows.
@@ -123,6 +134,8 @@ pub struct PoleOutput {
     pub dewired: bool,
     /// The shoe is in a switch or crossing (its speed limit applies).
     pub in_special: bool,
+    /// A spark flashes under the shoe.
+    pub spark: bool,
 }
 
 /// What the poles show this frame.
@@ -150,12 +163,21 @@ pub enum PoleEvent {
     },
     NoWire {
         pole: usize,
+        /// The nearest wire within 30 m, from where the shoe rests (body frame: x right,
+        /// y forward, z up).
+        nearest: Option<DVec3>,
     },
     Joint {
         pole: usize,
         from: i64,
         to: i64,
         gap: f64,
+        /// The switch or crossing whose gap the joint bridges, where the joined wire starts,
+        /// and - coming in to a switch's entry from one of its ways - whether that way is
+        /// its left one.
+        via: Option<super::network::WireObjectKind>,
+        at: DVec3,
+        merge_left: Option<bool>,
     },
     WireEnds {
         pole: usize,
@@ -177,9 +199,23 @@ pub enum PoleEvent {
         kind: Option<super::network::WireObjectKind>,
         spline_id: i64,
         demand: bool,
+        /// The way taken is the leftmost, and where it starts.
+        left: bool,
+        at: DVec3,
     },
     StallReset {
         seconds: f64,
+    },
+    /// The wire a pole was on could not be followed this frame (the pole is put back on its
+    /// hook): the spline, whether its tile is still loaded, how many of its joints lead to a
+    /// span that is not, and where the shoe was.
+    WireLost {
+        pole: usize,
+        phase: PolePhase,
+        spline_id: i64,
+        span_loaded: bool,
+        joints_to_nothing: usize,
+        cursor: Option<WireCursor>,
     },
 }
 
@@ -194,6 +230,24 @@ pub struct PoleSim {
     pub(crate) forks: Vec<((SpanId, usize), SpanId, f64)>,
     pub(crate) demand: bool,
     pub(crate) speed_kmh: f64,
+    pub(crate) throttle: f64,
+    pub(crate) weather: super::sound::WireWeather,
+    /// Each shoe's sparks: seconds to the next one (None: not drawn yet) and seconds the one
+    /// flashing now still lasts.
+    pub(crate) spark_next: [Option<f64>; 2],
+    pub(crate) spark_left: [f64; 2],
+    /// The switches whose sound waits for a shoe to touch them: the object, the sound the
+    /// way taken through it calls for, and the nearest a shoe on the wire has come to it
+    /// (metres; it sounds where the shoe comes nearest if it never touches).
+    pub(crate) switch_waiting: Vec<(DVec3, super::sound::WireSoundKind, f64)>,
+    /// The switches a shoe touches now (each sounds once as it is touched, whichever way
+    /// it is passed); the crossing or marker the shoes are near now.
+    pub(crate) switch_touched: Vec<DVec3>,
+    pub(crate) near_object: Option<DVec3>,
+    /// The random draws' state.
+    pub(crate) rng: u64,
     /// What happened in the last step.
     pub events: Vec<PoleEvent>,
+    /// The sounds to play from the last step.
+    pub sounds: Vec<super::sound::WireSound>,
 }

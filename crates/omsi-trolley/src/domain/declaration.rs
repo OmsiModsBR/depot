@@ -6,6 +6,8 @@
 
 use glam::DVec3;
 
+use super::sound::{SoundParams, SparkParams};
+
 /// One pole: its pivot and its shoe as the model draws it at rest.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PoleGeometry {
@@ -82,4 +84,8 @@ pub struct TrolleyDeclaration {
     /// Left (index 0) and right pole.
     pub poles: [PoleGeometry; 2],
     pub params: PoleParams,
+    /// The wire's sounds and sparks (None: the parameter file has no usable `[sound]` or
+    /// `[sparks]` section, and the wire stays silent or does not spark).
+    pub sound: Option<SoundParams>,
+    pub sparks: Option<SparkParams>,
 }
