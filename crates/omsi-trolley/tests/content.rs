@@ -51,6 +51,27 @@ fn an_installed_wired_map_gives_a_joined_network() {
         build.as_secs_f64() * 1e3,
         insert.as_secs_f64() * 1e3
     );
+    // how many switch and crossing objects got a way across their gap, and how many span
+    // ends have a choice of ways on (the switches' entries)
+    let bridged: std::collections::BTreeMap<String, usize> = net
+        .joints()
+        .iter()
+        .filter_map(|j| j.via)
+        .fold(Default::default(), |mut m, k| {
+            *m.entry(format!("{k:?}")).or_default() += 1;
+            m
+        });
+    let mut forks = 0;
+    for (tile, t) in net.tiles() {
+        for i in 0..t.spans.len() {
+            for e in 0..2 {
+                if net.joints_at((tile, i), e).count() > 1 {
+                    forks += 1;
+                }
+            }
+        }
+    }
+    eprintln!("bridges {bridged:?}; span ends with more than one way on: {forks}");
     assert!(net.span_count() > 0, "the map has wire splines");
     assert!(!net.joints().is_empty(), "its spans join");
 }

@@ -2249,7 +2249,7 @@ impl World {
             staged: Mutex::new(HashMap::new()),
             layout: Mutex::new(None),
             trolley: load_trolley_convention(),
-            wires: Mutex::new(Default::default()),
+            wires: Arc::new(Mutex::new(Default::default())),
             sound_cfgs: Mutex::new(HashMap::new()),
             timetable_boards: Mutex::new(StopBoards::default()),
             calendar: std::sync::OnceLock::new(),
@@ -13868,6 +13868,10 @@ pub(crate) static SPLINE_ENDS: std::sync::LazyLock<
 /// `omsi_trolley::load_convention`); a broken parameter file is reported and leaves the
 /// session without wire.
 fn load_trolley_convention() -> Option<Arc<omsi_trolley::Convention>> {
+    if !crate::settings::Settings::load().trolleybus {
+        log::info!("trolleybus: support switched off in the settings");
+        return None;
+    }
     match omsi_trolley::load_convention() {
         Ok(Some(c)) => {
             log::info!(

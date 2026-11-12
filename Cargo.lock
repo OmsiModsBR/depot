@@ -2988,6 +2988,7 @@ dependencies = [
  "omsi-script",
  "omsi-sim",
  "omsi-texture",
+ "omsi-trolley",
  "omsi-vehicle",
  "parking_lot",
 ]
