@@ -4,6 +4,7 @@ use glam::DVec3;
 
 use crate::domain::convention::{Convention, ConventionError, ConventionParams, RegistryEntry};
 use crate::domain::declaration::{PoleGeometry, PoleParams, TrolleyDeclaration};
+use crate::domain::sound::{SoundParams, SparkParams};
 
 /// Frames per second the parameter file's frame counts are read at (see the plan's R8).
 const FRAMES_PER_SECOND: f64 = 60.0;
@@ -45,6 +46,13 @@ pub fn declaration_from(
         match entry.get(key) {
             Some(_) => num(key),
             None => global("global", key),
+        }
+    };
+    // the entry's own key, else the parameter file's [physics] one
+    let own_or_physics = |key: &str| -> Result<f64, ConventionError> {
+        match entry.get(key) {
+            Some(_) => num(key),
+            None => global("physics", key),
         }
     };
     // the entry's own scale or offset, else none (1 or 0: the value passes unchanged)
@@ -100,8 +108,100 @@ pub fn declaration_from(
             spring_gain_per_deg: global("physics", "spring_gain_n_per_deg")?,
             contact_force_max: global("physics", "contact_force_max_n")?,
             stall_reset: global("global", "lost_reset_frames")? / FRAMES_PER_SECOND,
+            reach_release_error: own_or_physics("contact_reach_release_error_m")?,
+            reach_release_time: own_or_physics("contact_reach_release_time")?,
+            force_dewire: global("physics", "contact_force_dewire_n")?,
+            force_dewire_time: global("physics", "contact_force_dewire_time")?,
+            side_force_dewire: global("physics", "dewire_lateral_force_n")?,
+            side_force_time: global("physics", "dewire_lateral_force_time")?,
+            yaw_limit: global("physics", "dewire_yaw_limit_deg")?,
+            free_rise_rate: global("physics", "dewire_free_rise_deg_s")?,
+            max_pitch: global("global", "max_pitch")?,
+            catcher_delay: global("physics", "dewire_catcher_delay")?,
+            catcher_lower_rate: global("physics", "dewire_catcher_lower_deg_s")?,
+            switch_threshold: global("global", "switch_throttle_threshold")?,
+            complex_speed_limit: global("physics", "complex_speed_limit_kmh")?,
+            complex_overspeed_grace: global("physics", "complex_overspeed_grace")?,
         },
+        sound: optional(sound_params(params)),
+        sparks: optional(spark_params(params)),
     })
+}
+
+/// A section that is not there is none; one that cannot be read is none too, with a
+/// warning (the poles work without it).
+fn optional<T>(r: Result<Option<T>, ConventionError>) -> Option<T> {
+    r.unwrap_or_else(|e| {
+        log::warn!("trolleybus: {e}");
+        None
+    })
+}
+
+/// A value of `section` the parameter file must give once the section is there.
+fn value(params: &ConventionParams, section: &str, key: &str) -> Result<f64, ConventionError> {
+    let v = params
+        .get(section, key)
+        .ok_or_else(|| ConventionError::Missing {
+            section: section.into(),
+            key: key.into(),
+        })?;
+    number(v).ok_or_else(|| ConventionError::NotANumber {
+        section: section.into(),
+        key: key.into(),
+        value: v.into(),
+    })
+}
+
+fn has_section(params: &ConventionParams, section: &str) -> bool {
+    let prefix = format!("{section}.");
+    params.values.keys().any(|k| k.starts_with(&prefix))
+}
+
+/// The `[sound]` section (None when the file has none).
+pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, ConventionError> {
+    if !has_section(params, "sound") {
+        return Ok(None);
+    }
+    let v = |k: &str| value(params, "sound", k);
+    Ok(Some(SoundParams {
+        cross_trigger_radius: v("cross_trigger_radius")?,
+        min_distance: v("min_distance")?,
+        max_distance: v("max_distance")?,
+        volume_db: v("volume_db")?,
+        interior_source: DVec3::new(
+            v("interior_source_x")?,
+            v("interior_source_y")?,
+            v("interior_source_z")?,
+        ),
+        interior_cab_gain_db: v("interior_cab_gain_db")?,
+        interior_salon_gain_db: v("interior_salon_gain_db")?,
+        spark_volume_db: v("spark_volume_db")?,
+        dewire_volume_db: v("dewire_volume_db")?,
+    }))
+}
+
+/// The `[sparks]` section (None when the file has none).
+pub fn spark_params(params: &ConventionParams) -> Result<Option<SparkParams>, ConventionError> {
+    if !has_section(params, "sparks") {
+        return Ok(None);
+    }
+    let v = |k: &str| value(params, "sparks", k);
+    Ok(Some(SparkParams {
+        enabled: v("enabled")? > 0.5,
+        min_speed_kmh: v("min_speed_kmh")?,
+        min_throttle: v("min_throttle")?,
+        interval: [
+            v("interval_min_ms")? / 1000.0,
+            v("interval_max_ms")? / 1000.0,
+        ],
+        duration: [
+            v("duration_min_ms")? / 1000.0,
+            v("duration_max_ms")? / 1000.0,
+        ],
+        rain_gain: v("rain_frequency_gain")?,
+        snow_gain: v("snow_frequency_gain")?,
+        ice_gain: v("ice_frequency_gain")?,
+    }))
 }
 
 fn number(v: &str) -> Option<f64> {
