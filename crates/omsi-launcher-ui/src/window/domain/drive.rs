@@ -220,8 +220,8 @@ pub fn physics_notice(variant: &BusVariant) -> Option<(&'static str, &'static st
 }
 
 /// The badge and the notice for a bus whose file has the `[depot_physics]` key
-/// (`depot_physics`), wherever the launcher lists it: the Drive page's bus list (the phone launcher) and the
-/// Vehicles page (a computer's).
+/// (`depot_physics`), wherever the launcher lists it: the Drive page's bus list (the phone
+/// launcher) and the Vehicles page (a computer's).
 pub fn depot_physics_notice(depot_physics: bool) -> Option<(&'static str, &'static str)> {
     depot_physics.then_some((
         "DEPOT PHYSICS",
