@@ -48,6 +48,16 @@ impl AddFrame {
         if let Some(e) = &self.entry_points {
             return ingame::entry_points(ui, size, &e.labels, e.chosen);
         }
+        // (the same badge and notice as the launcher's for a bus with `[depot_physics]`)
+        let physics = self.depot_physics.then(|| {
+            (
+                omsi_ui::tr("DEPOT PHYSICS"),
+                omsi_ui::tr(
+                    "Runs Project Depot Physics when you drive it ([depot_physics] in its file), \
+                     whatever the Physics setting says",
+                ),
+            )
+        });
         ingame::add_vehicle(
             ui,
             size,
@@ -68,6 +78,7 @@ impl AddFrame {
                 description: &self.description,
                 preview,
                 live: self.live.is_some(),
+                physics: physics.as_ref().map(|(b, n)| (b.as_ref(), n.as_ref())),
             },
         )
     }
@@ -155,8 +166,10 @@ impl App {
         let depots = crate::hud::lists::place_depots(self, &file);
         let numbers = crate::hud::lists::place_numbers(self, &file);
         let description = crate::hud::lists::place_description(self, &file);
+        let depot_physics = crate::hud::lists::place_depot_physics(self, &file);
         if let Some(win) = self.new_ui.add.as_mut() {
             win.choose(i, liveries, depots, numbers, description);
+            win.set_depot_physics(depot_physics);
             self.new_ui.add_last = win.chosen();
         }
         self.add_picture();
