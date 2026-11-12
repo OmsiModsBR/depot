@@ -6,6 +6,8 @@
 
 use glam::DVec3;
 
+use super::sound::{SoundParams, SparkParams};
+
 /// One pole: its pivot and its shoe as the model draws it at rest.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PoleGeometry {
@@ -63,6 +65,12 @@ pub struct PoleParams {
     pub max_pitch: f64,
     pub catcher_delay: f64,
     pub catcher_lower_rate: f64,
+    /// The switch demand above which a switch turns.
+    pub switch_threshold: f64,
+    /// Through a switch or crossing faster than this (km/h) for longer than the grace time
+    /// (seconds), the pole leaves the wire.
+    pub complex_speed_limit: f64,
+    pub complex_overspeed_grace: f64,
 }
 
 /// One registry entry that applies to the player's vehicle.
@@ -76,4 +84,8 @@ pub struct TrolleyDeclaration {
     /// Left (index 0) and right pole.
     pub poles: [PoleGeometry; 2],
     pub params: PoleParams,
+    /// The wire's sounds and sparks (None: the parameter file has no usable `[sound]` or
+    /// `[sparks]` section, and the wire stays silent or does not spark).
+    pub sound: Option<SoundParams>,
+    pub sparks: Option<SparkParams>,
 }

@@ -10,10 +10,13 @@ pub use crate::domain::pole::{
     BodyPose, DewireReason, PoleEvent, PoleInputs, PoleOutput, PoleOutputs, PolePhase, PoleSim,
     PoleState, WireCursor,
 };
+pub use crate::domain::sound::{
+    SoundParams, SparkParams, WireSound, WireSoundKind, WireWeather, SOUND_DIR,
+};
 pub use crate::implementation::convention::{
     load_convention, parse_params, parse_registry, PARAMS_FILE, REGISTRY_FILE,
 };
 pub use crate::implementation::declaration::{
-    declaration_from, find_declaration, same_vehicle_file,
+    declaration_from, find_declaration, same_vehicle_file, sound_params, spark_params,
 };
 pub use crate::implementation::network::build_tile_wires;

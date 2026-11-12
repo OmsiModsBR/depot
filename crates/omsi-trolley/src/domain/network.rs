@@ -18,6 +18,15 @@ pub(crate) const JOIN_MIN_ALIGNMENT: f64 = 0.9;
 /// Side of the grid's square cells, metres.
 pub(crate) const GRID_CELL: f64 = 20.0;
 
+/// A switch or crossing object draws the wire across a gap: span ends within this many
+/// metres of it that face each other across at most [`BRIDGE_MAX_GAP`] metres are joined
+/// through it. Depot's own choice, from the gaps the content leaves (about 3 to 4 m).
+pub(crate) const BRIDGE_RADIUS: f64 = 8.0;
+pub(crate) const BRIDGE_MAX_GAP: f64 = 6.0;
+/// How well two ends must face each other across the gap (cosine of 25 degrees): each
+/// end's way out points at the other end, and the two ways out are opposite.
+pub(crate) const BRIDGE_MIN_ALIGNMENT: f64 = 0.906;
+
 /// Which of the two wires of a span.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WireSide {
@@ -75,9 +84,24 @@ pub enum WireObjectKind {
     SoundMarker,
 }
 
+impl WireObjectKind {
+    /// A switch of any kind.
+    pub fn is_switch(self) -> bool {
+        matches!(
+            self,
+            WireObjectKind::SwitchY
+                | WireObjectKind::SwitchBranchLeft
+                | WireObjectKind::SwitchBranchRight
+        )
+    }
+}
+
 /// The file-name markers that make a map object a wire object (matched case-insensitively
 /// against the object's whole path, so a folder name counts too).
 pub(crate) const OBJECT_MARKERS: &[(&str, WireObjectKind)] = &[
+    // (20 degree branch switches made from the Y's object, named after their side)
+    ("desvio20_dir", WireObjectKind::SwitchBranchRight),
+    ("desvio20_esq", WireObjectKind::SwitchBranchLeft),
     ("troll_strelka_out_02", WireObjectKind::SwitchY),
     ("troll_strelka_out_03", WireObjectKind::SwitchY),
     (
@@ -130,6 +154,9 @@ pub struct WireJoint {
     pub gap: f64,
     /// The two spans run in opposite senses (end meets end, or start meets start).
     pub reversed: bool,
+    /// The wire object whose gap the joint bridges (a switch or a crossing draws the wire
+    /// between the two ends); None for ends that meet.
+    pub via: Option<WireObjectKind>,
 }
 
 /// One straight piece of one wire: points `index` and `index + 1` of the wire.
