@@ -14,6 +14,12 @@ use crate::domain::pole::{
 /// How far around the modelled shoe a rising pole looks for wire, metres.
 const SEARCH_RADIUS: f64 = 2.5;
 
+/// How near the wire (metres) a shoe let go from the hand takes it.
+const HAND_REACH: f64 = 0.75;
+
+/// The highest a pole in the hand goes, degrees above the horizontal.
+const HAND_MAX_ELEVATION: f64 = 80.0;
+
 /// How long a fork stays set for the second shoe (and a shoe that steps back across the
 /// gap), seconds.
 const FORK_MEMORY: f64 = 10.0;
@@ -120,7 +126,12 @@ impl PoleSim {
             if retract {
                 self.retract(i, decl, net, body);
             }
-            out.poles[i] = self.step_pole(i, decl, net, body, pressed, dt);
+            let hand = Hand {
+                pressed,
+                holding: inputs.grab[i],
+                aim: inputs.aim,
+            };
+            out.poles[i] = self.step_pole(i, decl, net, body, hand, dt);
         }
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
         out.speed_limit_active = out.poles.iter().any(|p| p.on_wire && p.in_special);
@@ -141,97 +152,25 @@ impl PoleSim {
         decl: &TrolleyDeclaration,
         net: &WireNetwork,
         body: &BodyPose,
-        pressed: bool,
+        hand: Hand,
         dt: f64,
     ) -> PoleOutput {
         let geo = decl.poles[i];
         let p = decl.params;
         let foot_to_wire = foot_to_wire(decl, i, body);
         self.poles[i].timer += dt;
+        // a click on a pole on its hook takes it in the hand
+        if self.poles[i].phase == PolePhase::Hooked && hand.pressed {
+            self.poles[i] = PoleState {
+                phase: PolePhase::InHand,
+                ..Default::default()
+            };
+        }
+        let pressed = hand.pressed;
         match self.poles[i].phase {
-            PolePhase::Hooked => {
-                if !pressed {
-                    return hooked(&geo);
-                }
-                // a pole rising into a switch's gap takes the way the other pole is on, or
-                // the one already set there; and sets it for the other
-                let other = self.poles[1 - i]
-                    .cursor
-                    .filter(|_| {
-                        matches!(
-                            self.poles[1 - i].phase,
-                            PolePhase::Rising | PolePhase::OnWire
-                        )
-                    })
-                    .map(|c| c.span);
-                let forks = &self.forks;
-                let keep = |at: (SpanId, usize), way: SpanId| {
-                    if let Some(f) = forks.iter().find(|f| f.0 == at) {
-                        return f.1 == way;
-                    }
-                    match other {
-                        Some(o) if o != at.0 => {
-                            let joined =
-                                net.joints_at(at.0, at.1).any(|j| j.a.0 == o || j.b.0 == o);
-                            !joined || o == way
-                        }
-                        _ => true,
-                    }
-                };
-                let found = capture(
-                    net,
-                    body,
-                    &geo,
-                    i == 0,
-                    foot_to_wire,
-                    geo.length(),
-                    p.capture_distance,
-                    &keep,
-                );
-                let Some((cursor, sideways, way)) = found else {
-                    let shoe = body.position + body.rotation * geo.rest_shoe;
-                    let nearest = net.segments_near(shoe, 30.0).first().and_then(|(r, _)| {
-                        let (a, b) = net.segment(*r)?;
-                        let ab = b - a;
-                        let u = if ab.length_squared() > 0.0 {
-                            ((shoe - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
-                        } else {
-                            0.0
-                        };
-                        Some(body.rotation.transpose() * (a.lerp(b, u) - shoe))
-                    });
-                    self.events.push(PoleEvent::NoWire { pole: i, nearest });
-                    return hooked(&geo);
-                };
-                if let Some((at, way)) = way {
-                    if !self.forks.iter().any(|f| f.0 == at) {
-                        self.forks.push((at, way, 0.0));
-                    }
-                }
-                // the two shoes on either side of a switch: the one before it goes the way
-                // the other is on
-                if let Some(o) = other.filter(|o| *o != cursor.span) {
-                    for j in net.joints().iter().filter(|j| {
-                        (j.a.0 == o && j.b.0 == cursor.span) || (j.b.0 == o && j.a.0 == cursor.span)
-                    }) {
-                        for (at, way) in [(j.a, j.b.0), (j.b, j.a.0)] {
-                            if !self.forks.iter().any(|f| f.0 == at) {
-                                self.forks.push((at, way, 0.0));
-                            }
-                        }
-                    }
-                }
-                let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
-                self.events.push(PoleEvent::Captured {
-                    pole: i,
-                    spline_id,
-                    sideways,
-                });
-                self.poles[i] = PoleState {
-                    phase: PolePhase::Rising,
-                    cursor: Some(cursor),
-                    ..Default::default()
-                };
+            PolePhase::Hooked => return hooked(&geo),
+            PolePhase::InHand => {
+                return self.in_hand(i, decl, net, body, hand, foot_to_wire);
             }
             PolePhase::OnWire if pressed => {
                 let from = self
@@ -538,6 +477,204 @@ fn retracting(
 /// A rising pole's wire: of the wires near the modelled shoe that the pole can reach, the
 /// one that lies on the pole's side of its pair, nearest sideways (body frame) to where the
 /// model draws the shoe; None when none is within `capture` metres of it.
+/// What the player does with a pole's rope this frame.
+#[derive(Debug, Clone, Copy)]
+struct Hand {
+    /// The control was pressed this frame.
+    pressed: bool,
+    /// The control is held.
+    holding: bool,
+    /// The ray under the mouse pointer (world).
+    aim: Option<(DVec3, DVec3)>,
+}
+
+impl PoleSim {
+    /// A pole in the player's hand: it points where the mouse leads it while the control is
+    /// held; let go, its shoe takes the wire it is at, or the pole goes back to its hook.
+    fn in_hand(
+        &mut self,
+        i: usize,
+        decl: &TrolleyDeclaration,
+        net: &WireNetwork,
+        body: &BodyPose,
+        hand: Hand,
+        foot_to_wire: DVec3,
+    ) -> PoleOutput {
+        let geo = decl.poles[i];
+        if hand.holding {
+            if let Some((o, d)) = hand.aim {
+                self.poles[i].hand = Some(aimed(decl, i, body, o, d));
+            }
+            return hand_pose(decl, i, self.poles[i].hand.unwrap_or(geo.rest_shoe));
+        }
+        // let go: never moved, the pole looks for the wire over its hook and rises to it
+        // (as a click did before); moved, the shoe takes the wire where it is
+        let moved = self.poles[i].hand;
+        let around = moved.map(|h| body.position + body.rotation * h);
+        let Some(cursor) = self.take_wire(i, decl, net, body, foot_to_wire, around) else {
+            let Some(h) = moved else {
+                self.poles[i] = PoleState::default();
+                return hooked(&geo);
+            };
+            let o = hand_pose(decl, i, h);
+            self.poles[i] = PoleState {
+                phase: PolePhase::Lowering,
+                lowered_from: (o.yaw, o.pitch),
+                ..Default::default()
+            };
+            return o;
+        };
+        self.poles[i] = PoleState {
+            phase: if moved.is_some() {
+                PolePhase::OnWire
+            } else {
+                PolePhase::Rising
+            },
+            cursor: Some(cursor),
+            ..Default::default()
+        };
+        hand_pose(decl, i, moved.unwrap_or(geo.rest_shoe))
+    }
+
+    /// The wire pole `i`'s shoe takes: over its hook (`around` None) or near the point
+    /// `around` (world) where the player let it go. Logged either way.
+    fn take_wire(
+        &mut self,
+        i: usize,
+        decl: &TrolleyDeclaration,
+        net: &WireNetwork,
+        body: &BodyPose,
+        foot_to_wire: DVec3,
+        around: Option<DVec3>,
+    ) -> Option<WireCursor> {
+        let geo = decl.poles[i];
+        // a pole taking the wire in a switch's gap takes the way the other pole is on, or
+        // the one already set there; and sets it for the other
+        let other = self.poles[1 - i]
+            .cursor
+            .filter(|_| {
+                matches!(
+                    self.poles[1 - i].phase,
+                    PolePhase::Rising | PolePhase::OnWire
+                )
+            })
+            .map(|c| c.span);
+        let forks = &self.forks;
+        let keep = |at: (SpanId, usize), way: SpanId| {
+            if let Some(f) = forks.iter().find(|f| f.0 == at) {
+                return f.1 == way;
+            }
+            match other {
+                Some(o) if o != at.0 => {
+                    let joined = net.joints_at(at.0, at.1).any(|j| j.a.0 == o || j.b.0 == o);
+                    !joined || o == way
+                }
+                _ => true,
+            }
+        };
+        let found = capture(
+            net,
+            body,
+            &geo,
+            i == 0,
+            foot_to_wire,
+            geo.length(),
+            decl.params.capture_distance,
+            around,
+            &keep,
+        );
+        let Some((cursor, sideways, way)) = found else {
+            let shoe = around.unwrap_or(body.position + body.rotation * geo.rest_shoe);
+            let nearest = net.segments_near(shoe, 30.0).first().and_then(|(r, _)| {
+                let (a, b) = net.segment(*r)?;
+                let ab = b - a;
+                let u = if ab.length_squared() > 0.0 {
+                    ((shoe - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                Some(body.rotation.transpose() * (a.lerp(b, u) - shoe))
+            });
+            self.events.push(PoleEvent::NoWire { pole: i, nearest });
+            return None;
+        };
+        if let Some((at, way)) = way {
+            if !self.forks.iter().any(|f| f.0 == at) {
+                self.forks.push((at, way, 0.0));
+            }
+        }
+        // the two shoes on either side of a switch: the one before it goes the way the
+        // other is on
+        if let Some(o) = other.filter(|o| *o != cursor.span) {
+            for j in net.joints().iter().filter(|j| {
+                (j.a.0 == o && j.b.0 == cursor.span) || (j.b.0 == o && j.a.0 == cursor.span)
+            }) {
+                for (at, way) in [(j.a, j.b.0), (j.b, j.a.0)] {
+                    if !self.forks.iter().any(|f| f.0 == at) {
+                        self.forks.push((at, way, 0.0));
+                    }
+                }
+            }
+        }
+        let spline_id = net.span(cursor.span).map_or(-1, |s| s.spline_id);
+        self.events.push(PoleEvent::Captured {
+            pole: i,
+            spline_id,
+            sideways,
+        });
+        Some(cursor)
+    }
+}
+
+/// Where the mouse leads pole `i`'s shoe (body frame): where the ray from `o` along `d`
+/// (world) meets the sphere of the pole's length around its foot (the near side), else
+/// towards the ray's point nearest the foot; never below its hook nor past its side limit.
+fn aimed(decl: &TrolleyDeclaration, i: usize, body: &BodyPose, o: DVec3, d: DVec3) -> DVec3 {
+    let geo = decl.poles[i];
+    let len = geo.length();
+    let foot = body.position + body.rotation * geo.base;
+    let d = d.normalize_or_zero();
+    let m = o - foot;
+    let b = m.dot(d);
+    let disc = b * b - (m.length_squared() - len * len);
+    let t = if disc >= 0.0 {
+        let (near, far) = (-b - disc.sqrt(), -b + disc.sqrt());
+        if near > 0.0 {
+            near
+        } else {
+            far.max(0.0)
+        }
+    } else {
+        (-b).max(0.0)
+    };
+    let v = body.rotation.transpose() * (o + d * t - foot);
+    let rest = geo.rest_shoe - geo.base;
+    let limit = decl.params.yaw_limit;
+    let az = azimuth(v).clamp(-limit, limit).to_radians();
+    let el = elevation(v)
+        .clamp(elevation(rest), HAND_MAX_ELEVATION.max(elevation(rest)))
+        .to_radians();
+    geo.base + DVec3::new(el.cos() * az.sin(), -el.cos() * az.cos(), el.sin()) * len
+}
+
+/// Pole `i` with its shoe at `shoe` (body frame), off the wire.
+fn hand_pose(decl: &TrolleyDeclaration, i: usize, shoe: DVec3) -> PoleOutput {
+    let geo = decl.poles[i];
+    let p = decl.params;
+    let v = shoe - geo.base;
+    let r = geo.rest_shoe - geo.base;
+    PoleOutput {
+        yaw: -(azimuth(v) - azimuth(r)) * p.yaw_factor[i],
+        pitch: (elevation(v) - elevation(r)) * p.pitch_factor,
+        shoe_pos: shoe,
+        ..Default::default()
+    }
+}
+
+/// The wire a pole's shoe takes: near its hook (`around` None: as far sideways as
+/// `capture` from where the modelled shoe stands), or within [`HAND_REACH`] of the point
+/// `around` (world) where the player let it go.
+#[allow(clippy::too_many_arguments)]
 fn capture(
     net: &WireNetwork,
     body: &BodyPose,
@@ -546,11 +683,22 @@ fn capture(
     foot_to_wire: DVec3,
     len: f64,
     capture: f64,
+    around: Option<DVec3>,
     keep: &dyn Fn((SpanId, usize), SpanId) -> bool,
 ) -> Option<(WireCursor, f64, Option<((SpanId, usize), SpanId)>)> {
     let to_body = body.rotation.transpose();
     let in_body = |w: DVec3| to_body * (w - body.position);
-    let shoe = body.position + body.rotation * geo.rest_shoe;
+    let shoe = around.unwrap_or(body.position + body.rotation * geo.rest_shoe);
+    // how far off the shoe a wire is, and how far off it may be
+    let miss = |p: DVec3| match around {
+        Some(a) => p.distance(a),
+        None => (in_body(p).x - geo.rest_shoe.x).abs(),
+    };
+    let reach = if around.is_some() {
+        HAND_REACH
+    } else {
+        capture
+    };
     walk::crossings_near(net, shoe, SEARCH_RADIUS, foot_to_wire, len)
         .into_iter()
         .map(|(c, p)| (c, p, None))
@@ -579,8 +727,8 @@ fn capture(
                 None => true,
             }
         })
-        .map(|(c, p, way)| (c, (in_body(p).x - geo.rest_shoe.x).abs(), way))
-        .filter(|(_, sideways, _)| *sideways <= capture)
+        .map(|(c, p, way)| (c, miss(p), way))
+        .filter(|(_, off, _)| *off <= reach)
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 

@@ -23,6 +23,9 @@ pub struct Trolley {
     /// The overhead wire of the loaded tiles (the world's).
     pub network: Arc<parking_lot::Mutex<WireNetwork>>,
     pub sim: PoleSim,
+    /// The ray under the mouse pointer (world origin and direction), for a pole held in the
+    /// hand; set by the game each frame.
+    pub aim: Option<(glam::DVec3, glam::DVec3)>,
     heartbeat: f32,
     /// The left shoe was right of the right one the last frame (logged once as it happens).
     crossed: bool,
@@ -39,6 +42,7 @@ impl Trolley {
             carrier,
             network,
             sim: PoleSim::default(),
+            aim: None,
             heartbeat: 0.0,
             crossed: false,
         }
@@ -78,6 +82,7 @@ impl VehicleInstance {
                 switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
                 speed_kmh: self.motion().velocity_kmh() as f64,
                 weather: self.wire_weather(),
+                aim: t.aim,
             };
             let (out, wires) = {
                 let net = t.network.lock();
