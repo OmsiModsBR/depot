@@ -640,9 +640,14 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         n = -n;
         geo_n = n;
     }
+    // [matl_bumpmap]: the height map's slope bends the normal the reflection is taken
+    // about, and only that one (tangent frame from the screen-space derivatives of position
+    // and texture coordinate), as the bump map moves only the envmap's lookup in the vanilla
+    // picture. Bending the shading normal as well lit the height map's noise as relief, and
+    // the specular antialiasing below read that noise as curvature: the roughness rose past
+    // 0.6 and the envmap of a bump-mapped material all but vanished into a dull sheen.
+    var bump_d = vec3<f32>(0.0);
     if (reflective_env && material.bump.y > 0.5) {
-        // [matl_bumpmap]: the height map's slope bends the normal (tangent frame from the
-        // screen-space derivatives of position and texture coordinate)
         let slope = bump_offset(duv);
         let dp1 = dpdx(in.world);
         let dp2 = dpdy(in.world);
@@ -653,7 +658,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let t = dp2p * du1.x + dp1p * du2.x;
         let b = dp2p * du1.y + dp1p * du2.y;
         let inv = inverseSqrt(max(max(dot(t, t), dot(b, b)), 1e-12));
-        n = normalize(n - (t * inv * slope.x + b * inv * slope.y) * 0.6);
+        bump_d = -(t * inv * slope.x + b * inv * slope.y) * 0.6;
     }
     var albedo = tex.rgb * material.color.rgb;
     // OMSI materials have separate diffuse and ambient colours. Some interiors have
@@ -960,7 +965,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough));
     // --- reflections: the sky probe, as sharp as the surface is smooth
-    var r = reflect(-v, n);
+    var r = reflect(-v, safe_normal(n + bump_d));
     // a reflection pointing into the surface would show the probe's ground: bend it up
     let below = dot(r, geo_n);
     if (below < 0.0) {
@@ -1136,7 +1141,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // it shows at night) went past the tone curve's knee and bleached its colours -
             // the Procity's red and blue gauges pink and lavender (#827). (An LED panel's
             // light map stays as it was: its dots are meant to burn above their colour.)
-            emit = emit + max(display_level(tex.rgb) * display_dim(enh.exposure.y) - rgb, vec3<f32>(0.0)) * w;
+            // (not dimmed with the night as a screen's own glow is, `display_dim`: what the
+            // light map lights is switched on, and at night it is the brightest thing in
+            // the cab - dimmed to 15 %, a lit destination sign or a lit dashboard text
+            // stood far darker than in the vanilla picture; only the metering's lift is
+            // held at its own colour in the dark)
+            let lit_level = mix(enh.exposure.y, min(enh.exposure.y, 1.0), night);
+            emit = emit + max(display_level(tex.rgb) * lit_level - rgb, vec3<f32>(0.0)) * w;
         }
     }
     if (material.emissive.w < -1.5) {

@@ -905,13 +905,13 @@ fn each_path_gets_its_own_headlights() {
         true
     ));
     // a map light reads as before in the vanilla shader (position, radius, colour)
-    let g = gpu_light(&lamp, Vec3::new(1.0, 2.0, 3.0));
+    let g = gpu_light(&lamp, Vec3::new(1.0, 2.0, 3.0), false);
     assert_eq!(g.pos, [1.0, 2.0, 3.0, 30.0]);
     assert_eq!(g.color, [1.0, 0.78, 0.46, 1.0]);
     assert_eq!(g.dir[3], -2.0);
     assert_eq!(g.extra[1..], [5.0, 0.0, 30.0]);
     // a spot: no radius for the vanilla shader, the cone and the range for the enhanced
-    let g = gpu_light(&spot, Vec3::ZERO);
+    let g = gpu_light(&spot, Vec3::ZERO, false);
     assert_eq!(g.pos[3], 0.0);
     assert_eq!(g.extra[3], 60.0);
     assert!(
@@ -921,7 +921,7 @@ fn each_path_gets_its_own_headlights() {
     );
     // a headlight's beam gain rides along; a plain lamp has none
     assert_eq!(g.extra[2], 24.0);
-    assert_eq!(gpu_light(&lamp, Vec3::ZERO).extra[2], 0.0);
+    assert_eq!(gpu_light(&lamp, Vec3::ZERO, false).extra[2], 0.0);
 }
 
 #[test]

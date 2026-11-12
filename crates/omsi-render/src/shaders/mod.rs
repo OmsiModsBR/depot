@@ -280,6 +280,7 @@ pub(crate) fn corona_shader_source() -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
+        include_str!("common/colour.wgsl"),
         include_str!("lights/corona.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,

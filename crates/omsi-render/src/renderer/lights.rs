@@ -215,7 +215,7 @@ impl Renderer {
         // the vehicles' interior lamps first, at the indices their meshes name (they are in
         // no grid cell: only those meshes look them up)
         for l in &scene.interior_lights {
-            gpu_lights.push(gpu_light(l, (l.position - ro).as_vec3()));
+            gpu_lights.push(gpu_light(l, (l.position - ro).as_vec3(), enhanced));
         }
         let mut grid = vec![u32::MAX; side * side * LIGHT_CELL_CAP];
         for l in &scene.lights {
@@ -231,7 +231,7 @@ impl Renderer {
                 continue;
             }
             let idx = gpu_lights.len() as u32;
-            gpu_lights.push(gpu_light(l, p));
+            gpu_lights.push(gpu_light(l, p, enhanced));
             if lamp_shadows && enhanced && l.housed && l.intensity > 0.0 {
                 let d = (p - cam_rel).length();
                 if d < l.radius + LAMP_SHADOW_REACH {

@@ -329,11 +329,16 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // (the core never narrower than a pixel and a half: a far lamp stays a point of
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
-        let w = max(0.1, px * 1.5);
-        let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
+        // ... and never wider than half the sprite, and inside its disc: on a far lamp's
+        // sprite of a few pixels the pixel-wide core had grown past the sprite's edge, and
+        // lit by the bitmap's centre colour it filled the whole square to its corners
+        let w = clamp(px * 1.5, 0.1, 0.5);
+        let disc = clamp((1.0 - r) / max(px, 1e-3), 0.0, 1.0);
+        let core = (exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35) * disc;
         shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
     }
-    return vec4<f32>(in.color.rgb * shape * in.color.a * scale, 1.0);
+    // (the light's colour in the picture's linear terms: see `light_colour`)
+    return vec4<f32>(light_colour(in.color.rgb) * shape * in.color.a * scale, 1.0);
 }
 
 // Smoke ([smoke] particles): the smoke texture tinted with the particle's colour, lit by the
