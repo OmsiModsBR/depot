@@ -227,9 +227,13 @@ pub struct PoleSim {
     /// flashing now still lasts.
     pub(crate) spark_next: [Option<f64>; 2],
     pub(crate) spark_left: [f64; 2],
-    /// The switch sounds heard lately (where, seconds since), so the second shoe and a
-    /// shoe passing back do not repeat them; the wire object the shoes are near now.
-    pub(crate) heard: Vec<(DVec3, f64)>,
+    /// The switches whose sound waits for a shoe to touch them: the object, the sound the
+    /// way taken through it calls for, and the nearest a shoe on the wire has come to it
+    /// (metres; it sounds where the shoe comes nearest if it never touches).
+    pub(crate) switch_waiting: Vec<(DVec3, super::sound::WireSoundKind, f64)>,
+    /// The switches a shoe touches now (each sounds once as it is touched, whichever way
+    /// it is passed); the crossing or marker the shoes are near now.
+    pub(crate) switch_touched: Vec<DVec3>,
     pub(crate) near_object: Option<DVec3>,
     /// The random draws' state.
     pub(crate) rng: u64,

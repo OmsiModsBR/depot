@@ -216,10 +216,11 @@ fn a_switch_left_for_a_way_sounds_once_on_that_side() {
         kinds(&coasting),
         [WireSoundKind::SwitchSeparate { left: false }]
     );
+    // (from the switch's object, as a shoe touches it)
     let at = coasting.sounds[0].position;
     assert!(
-        (at.y - 52.85).abs() < 0.5 && at.z > 5.0,
-        "at the switch: {at}"
+        (at.y - 51.4).abs() < 1e-9 && at.z > 5.0,
+        "at the switch, up at the wire: {at}"
     );
 }
 
@@ -518,4 +519,35 @@ fn a_pole_resting_under_the_end_of_a_wire_takes_it_across_the_switch_gap() {
             "on the wire, shoes resting at y = {shoe_y}"
         );
     }
+}
+
+#[test]
+fn a_switch_sounds_as_a_shoe_touches_it_each_time_it_is_passed_either_way() {
+    let n = y_switch();
+    // up the line into the right branch and back down it: one sound each way, both from
+    // the switch's object, the way back as a merge from the right
+    let off = 12.0 * 10f64.to_radians().tan();
+    let d = drive(
+        &n,
+        &[
+            (0.0, 30.0),
+            (0.0, 50.0),
+            (0.5, 52.85),
+            (0.5 + off, 64.85),
+            (0.5, 52.85),
+            (0.0, 50.0),
+            (0.0, 30.0),
+        ],
+        0.0,
+        10.0,
+        WireWeather::Dry,
+    );
+    assert_eq!(
+        kinds(&d),
+        [
+            WireSoundKind::SwitchSeparate { left: false },
+            WireSoundKind::SwitchMerge { left: false }
+        ]
+    );
+    assert!(d.sounds.iter().all(|s| (s.position.y - 51.4).abs() < 1e-9));
 }
