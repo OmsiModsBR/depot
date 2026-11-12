@@ -943,39 +943,14 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 &renderer,
                 &mut scene,
             );
-            // the people aboard weigh on the section of the bus they are in, as the window does
-            if let Some(p) = player.as_mut() {
-                p.vehicle.set_payload(&h.player_payload());
-            }
-            session::people_stamped(h, player.as_mut(), traffic.as_mut());
-            if let Some(t) = traffic.as_mut() {
-                session::people_to_traffic(h, t);
-            }
-            if let Some(p) = player.as_mut() {
-                if took {
-                    p.vehicle.set_var("GivenTicket", -1.0);
-                }
-                // the ticket and change the player asks for by the keys (as the window hands them over)
-                h.give_ticket = std::mem::take(&mut p.give_ticket);
-                h.give_change_all = std::mem::take(&mut p.give_change);
-                if std::mem::take(&mut p.take_change) {
-                    h.take_change_tray();
-                }
-                p.vehicle.host.humans_on_path_link = h.path_link_counts();
-                p.vehicle.host.humans_on_seat = h.seat_counts();
-                let coins: Vec<usize> = std::mem::take(&mut p.vehicle.host.change_coins);
-                h.give_change(&world, &renderer, &mut scene, &coins);
-                h.sync_money(&world, &renderer, &mut scene, &p.vehicle);
-            }
-            if h.tracing() {
-                // OMSI_TRACE_PAX wants every frame as a window would draw it
-                h.sync(&renderer, &mut scene, eye_cam.position);
-            }
+            session::people_after_tick(h, player.as_mut(), traffic.as_mut());
             if let Some(m) = h.take_message() {
                 log::info!("HUD: {m}");
             }
-            if let Some(p) = player.as_mut() {
-                h.write_pax_vars(&mut p.vehicle);
+            session::people_handover(h, &world, &renderer, &mut scene, player.as_mut(), took);
+            if h.tracing() {
+                // OMSI_TRACE_PAX wants every frame as a window would draw it
+                h.sync(&renderer, &mut scene, eye_cam.position);
             }
             career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
             career.boarded = h.boarded as i32;
