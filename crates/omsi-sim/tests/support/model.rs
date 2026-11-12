@@ -379,3 +379,28 @@ pub fn release_by_speed(defs: Vec<Vehicle>, engine: Engine, holds_at_fraction: f
     assert!(holds_at(slow), "must hold at {slow} m/s");
     assert!(!holds_at(1.4 * limit), "must slide at {} m/s", 1.4 * limit);
 }
+
+/// The static sag of an installed vehicle (T016): the vehicle in `front` and every section
+/// coupled behind it (`[couple_back]`), settled at rest. Each axle's mean compression (cm), in
+/// order: the sections from the front, each one's axles as its file lists them.
+pub fn installed_sag(front: &std::path::Path, engine: Engine) -> Vec<f64> {
+    let mut defs =
+        vec![Vehicle::load(front).unwrap_or_else(|e| panic!("{}: {e}", front.display()))];
+    while let Some(next) = defs.last().unwrap().couple_back_path() {
+        defs.push(Vehicle::load(&next).unwrap_or_else(|e| panic!("{}: {e}", next.display())));
+    }
+    let bodies = settled(&defs, engine);
+    let mut sag = Vec::new();
+    for (def, body) in defs.iter().zip(&bodies) {
+        for axle in &def.axles {
+            let on: Vec<f64> = body
+                .wheels()
+                .iter()
+                .filter(|w| (w.attach().y - axle.long).abs() < 1e-3)
+                .map(|w| w.compression() as f64 * 100.0)
+                .collect();
+            sag.push(on.iter().sum::<f64>() / on.len().max(1) as f64);
+        }
+    }
+    sag
+}
