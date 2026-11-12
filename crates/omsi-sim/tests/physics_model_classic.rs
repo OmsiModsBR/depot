@@ -9,8 +9,8 @@ mod support;
 
 use omsi_sim::physics::Engine;
 use support::model::{
-    articulation_angles, braking_distance, follower_axle_steering, pull_away, release_by_speed,
-    static_balance_train, static_sag_solo, steady_turn,
+    articulation_angles, braking_distance, follower_axle_steering, installed_sag, pull_away,
+    release_by_speed, static_balance_train, static_sag_solo, steady_turn,
 };
 use support::vehicles::{
     v1_solo_4x2, v2_rigid_6x2, v3_articulated_6x2, v4_biarticulated, v5_articulated_8x2,
@@ -249,4 +249,48 @@ fn ai_release_v4_biarticulated() {
 #[test]
 fn follower_axle_steering_v5_articulated_8x2() {
     follower_axle_steering(v5_articulated_8x2(), Engine::Classic);
+}
+
+/// T016: the static sag of an installed bus against what OMSI 2 shows for it, each axle within
+/// 1 cm (SC-003). `OMSI_ROOT` is the OMSI 2 folder; `OMSI_SAG_BUS` the front section's `.bus`
+/// file under it (by default the Mi5 articulated bus of T004); `OMSI_SAG_CM` the sag of each
+/// axle in OMSI 2, in cm, front to back (by default T004's 9.1 9.8 9.1). Skipped without
+/// `OMSI_ROOT`.
+///
+/// Checks: C-3, K-1
+#[test]
+fn static_sag_installed_bus() {
+    let Some(root) = std::env::var_os("OMSI_ROOT") else {
+        eprintln!("skipped: OMSI_ROOT is not set");
+        return;
+    };
+    let bus = std::env::var("OMSI_SAG_BUS")
+        .unwrap_or_else(|_| "Vehicles/Caio Millennium V byZane/_Mi5_O500UA-e6_F_ZF.bus".into());
+    let want: Vec<f64> = std::env::var("OMSI_SAG_CM")
+        .unwrap_or_else(|_| "9.1 9.8 9.1".into())
+        .split_whitespace()
+        .map(|v| {
+            v.replace(',', ".")
+                .parse()
+                .expect("OMSI_SAG_CM: numbers in cm")
+        })
+        .collect();
+    let path = std::path::Path::new(&root).join(bus.replace('\\', "/"));
+    let got = installed_sag(&path, Engine::Classic);
+    let shown: Vec<String> = got.iter().map(|g| format!("{g:.1}")).collect();
+    eprintln!("{}: sag per axle {} cm", path.display(), shown.join(" / "));
+    assert_eq!(
+        got.len(),
+        want.len(),
+        "axles: game {}, OMSI_SAG_CM {}",
+        got.len(),
+        want.len()
+    );
+    for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+        assert!(
+            (g - w).abs() <= 1.0,
+            "axle {}: {g:.2} cm, OMSI 2 {w} cm",
+            i + 1
+        );
+    }
 }
