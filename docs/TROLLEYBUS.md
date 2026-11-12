@@ -110,8 +110,13 @@ The map needs nothing new:
 
 ## Driving
 
-- **Raise and lower.** Click a pole to raise it onto the wire on its side. Click it again to
-  lower it. The vehicle's retract control takes both poles down.
+- **Put a pole on the wire.** Click a pole on its hook and hold the button: the pole is in
+  your hand and follows the mouse pointer. Bring its end to the wire of its own side and let
+  go: within 0.75 m of the wire the shoe takes it at once, however far the bus stands from
+  the wire's line. Let go away from the wire and the pole goes back down to its hook. A click
+  let go without moving the mouse raises the pole onto the wire over its hook.
+- **Lower a pole.** Click a pole on the wire to lower it. The vehicle's retract control takes
+  both poles down.
 - **Switches.** The throttle chooses the way. Pressed through the switch, the shoes take its left
   way; coasting, they take the right way. A crossing is always passed straight on.
 - **Leaving the wire.** Too fast through a switch or crossing, too far from the wire's line, or
