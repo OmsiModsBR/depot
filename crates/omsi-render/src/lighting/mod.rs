@@ -28,4 +28,4 @@ pub(crate) use lamps::LIGHT_GRID_SIDE;
 pub(crate) use lamps::{lamp_sky_glow, view_lamp_light, LampShadow, FAR_MAP_ASPECT, LAMP_SHADOWS};
 pub(crate) use light_map::LightMapAtlas;
 pub(crate) use model::{debug_view, smoothstep, GpuCorona, CABIN_E, LAMP_E, WINDOW_RADIANCE};
-pub(crate) use model::{drawn_by, gpu_light, GpuPointLight};
+pub(crate) use model::{drawn_by, gpu_light, linear_light_colour, GpuPointLight};
