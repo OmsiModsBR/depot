@@ -23,7 +23,12 @@ pub struct Trolley {
     /// The overhead wire of the loaded tiles (the world's).
     pub network: Arc<parking_lot::Mutex<WireNetwork>>,
     pub sim: PoleSim,
+    /// The ray under the mouse pointer (world origin and direction), for a pole held in the
+    /// hand; set by the game each frame.
+    pub aim: Option<(glam::DVec3, glam::DVec3)>,
     heartbeat: f32,
+    /// The left shoe was right of the right one the last frame (logged once as it happens).
+    crossed: bool,
 }
 
 impl Trolley {
@@ -37,7 +42,9 @@ impl Trolley {
             carrier,
             network,
             sim: PoleSim::default(),
+            aim: None,
             heartbeat: 0.0,
+            crossed: false,
         }
     }
 }
@@ -75,14 +82,30 @@ impl VehicleInstance {
                 switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
                 speed_kmh: self.motion().velocity_kmh() as f64,
                 weather: self.wire_weather(),
+                aim: t.aim,
             };
-            let out = {
+            let (out, wires) = {
                 let net = t.network.lock();
-                t.sim.step(&t.declaration, &net, &body, inputs, dt as f64)
+                let out = t.sim.step(&t.declaration, &net, &body, inputs, dt as f64);
+                // (which spline and which of its wires each shoe is on)
+                let wires = t.sim.poles.map(|p| {
+                    p.cursor
+                        .map(|c| (net.span(c.span).map_or(-1, |s| s.spline_id), c.side))
+                });
+                (out, wires)
             };
             for e in &t.sim.events {
                 log_event(e);
             }
+            let crossed = out.wire_present && out.poles[0].shoe_pos.x >= out.poles[1].shoe_pos.x;
+            if crossed && !t.crossed {
+                log::warn!(
+                    "trolleybus: the shoes crossed: left on {:?}, right on {:?} (spline, wire)",
+                    wires[0],
+                    wires[1]
+                );
+            }
+            t.crossed = crossed;
             t.heartbeat += 1.0;
             self.show_poles(&out, t.heartbeat);
         }
@@ -150,19 +173,42 @@ fn log_event(e: &PoleEvent) {
             "trolleybus: {} pole took the wire of spline {spline_id} ({sideways:.2} m from its shoe)",
             side(pole)
         ),
-        PoleEvent::NoWire { pole } => {
-            log::info!("trolleybus: {} pole found no wire within reach", side(pole))
-        }
+        PoleEvent::NoWire { pole, nearest } => match nearest {
+            Some(d) => log::info!(
+                "trolleybus: {} pole found no wire within reach: the nearest is {:.2} m {}, {:.2} m {}, {:.2} m {} of its resting shoe",
+                side(pole),
+                d.x.abs(),
+                if d.x < 0.0 { "left" } else { "right" },
+                d.y.abs(),
+                if d.y < 0.0 { "behind" } else { "ahead" },
+                d.z.abs(),
+                if d.z < 0.0 { "below" } else { "above" },
+            ),
+            None => log::info!(
+                "trolleybus: {} pole found no wire within reach (none within 30 m)",
+                side(pole)
+            ),
+        },
         PoleEvent::Joint {
             pole,
             from,
             to,
             gap,
+            via,
             ..
-        } => log::debug!(
-            "trolleybus: {} pole from spline {from} to {to} (gap {gap:.2} m)",
-            side(pole)
-        ),
+        } => {
+            let line = format!(
+                "trolleybus: {} pole from spline {from} to {to} (gap {gap:.2} m{})",
+                side(pole),
+                via.map_or(String::new(), |k| format!(", {k:?}"))
+            );
+            // (through a switch or crossing: worth a line in the ordinary log)
+            if via.is_some() {
+                log::info!("{line}");
+            } else {
+                log::debug!("{line}");
+            }
+        }
         PoleEvent::WireEnds { pole, spline_id } => log::debug!(
             "trolleybus: {} pole at the end of the wire of spline {spline_id}",
             side(pole)
@@ -176,18 +222,29 @@ fn log_event(e: &PoleEvent) {
             spline_id,
             demand,
             ..
-        } => log::debug!(
+        } => log::info!(
             "trolleybus: {} pole at a {} took spline {spline_id}{}",
             side(pole),
             kind.map_or("fork".to_string(), |k| format!("{k:?}")),
             if *demand { " (demand)" } else { "" }
         ),
         PoleEvent::Retracted { pole } => {
-            log::debug!("trolleybus: {} pole taken off the wire", side(pole))
+            log::info!("trolleybus: {} pole taken off the wire", side(pole))
         }
         PoleEvent::Lowered { pole } => {
-            log::debug!("trolleybus: {} pole down on its hook", side(pole))
+            log::info!("trolleybus: {} pole down on its hook", side(pole))
         }
+        PoleEvent::WireLost {
+            pole,
+            phase,
+            spline_id,
+            span_loaded,
+            joints_to_nothing,
+            cursor,
+        } => log::warn!(
+            "trolleybus: {} pole lost its wire and went back on its hook ({phase:?} on spline {spline_id}, tile loaded {span_loaded}, {joints_to_nothing} joints to unloaded wire, at {cursor:?})",
+            side(pole)
+        ),
         PoleEvent::StallReset { seconds } => log::info!(
             "trolleybus: poles put back on their hooks after a frame of {seconds:.1} s"
         ),

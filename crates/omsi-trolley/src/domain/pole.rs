@@ -9,6 +9,9 @@ use super::network::{SpanId, WireSide};
 pub enum PolePhase {
     /// Down on its hook.
     Hooked,
+    /// Off its hook in the player's hand: it points where the mouse leads it, and takes the
+    /// wire its shoe is let go at (or goes back down to its hook).
+    InHand,
     /// Going up onto a wire it has found.
     Rising,
     /// On the wire.
@@ -66,6 +69,8 @@ pub struct PoleState {
     /// How much longer than the pole the way from its foot to the wire is (metres; 0 when
     /// the pole reaches it).
     pub reach_error: f64,
+    /// Where the player holds the shoe (body frame; in the hand, once the mouse moved it).
+    pub hand: Option<DVec3>,
 }
 
 impl Default for PoleState {
@@ -78,6 +83,7 @@ impl Default for PoleState {
             dewire: None,
             held: [0.0; 4],
             reach_error: 0.0,
+            hand: None,
         }
     }
 }
@@ -106,6 +112,9 @@ pub struct PoleInputs {
     pub speed_kmh: f64,
     /// The weather, for the sparks.
     pub weather: super::sound::WireWeather,
+    /// The ray under the mouse pointer (world origin and direction): a pole in the hand
+    /// points where it leads. None: the pole stays where it was.
+    pub aim: Option<(DVec3, DVec3)>,
 }
 
 /// What one pole shows.
@@ -154,6 +163,9 @@ pub enum PoleEvent {
     },
     NoWire {
         pole: usize,
+        /// The nearest wire within 30 m, from where the shoe rests (body frame: x right,
+        /// y forward, z up).
+        nearest: Option<DVec3>,
     },
     Joint {
         pole: usize,
@@ -194,6 +206,17 @@ pub enum PoleEvent {
     StallReset {
         seconds: f64,
     },
+    /// The wire a pole was on could not be followed this frame (the pole is put back on its
+    /// hook): the spline, whether its tile is still loaded, how many of its joints lead to a
+    /// span that is not, and where the shoe was.
+    WireLost {
+        pole: usize,
+        phase: PolePhase,
+        spline_id: i64,
+        span_loaded: bool,
+        joints_to_nothing: usize,
+        cursor: Option<WireCursor>,
+    },
 }
 
 /// The two poles of the player's trolleybus.
@@ -213,9 +236,13 @@ pub struct PoleSim {
     /// flashing now still lasts.
     pub(crate) spark_next: [Option<f64>; 2],
     pub(crate) spark_left: [f64; 2],
-    /// The switch sounds heard lately (where, seconds since), so the second shoe and a
-    /// shoe passing back do not repeat them; the wire object the shoes are near now.
-    pub(crate) heard: Vec<(DVec3, f64)>,
+    /// The switches whose sound waits for a shoe to touch them: the object, the sound the
+    /// way taken through it calls for, and the nearest a shoe on the wire has come to it
+    /// (metres; it sounds where the shoe comes nearest if it never touches).
+    pub(crate) switch_waiting: Vec<(DVec3, super::sound::WireSoundKind, f64)>,
+    /// The switches a shoe touches now (each sounds once as it is touched, whichever way
+    /// it is passed); the crossing or marker the shoes are near now.
+    pub(crate) switch_touched: Vec<DVec3>,
     pub(crate) near_object: Option<DVec3>,
     /// The random draws' state.
     pub(crate) rng: u64,

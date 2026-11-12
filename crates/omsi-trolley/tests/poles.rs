@@ -123,6 +123,7 @@ fn grab(sim: &mut PoleSim, d: &TrolleyDeclaration, net: &WireNetwork, at: &BodyP
             switch_demand: 0.0,
             speed_kmh: 0.0,
             weather: Default::default(),
+            aim: None,
         },
         1.0 / 60.0,
     );
@@ -195,10 +196,16 @@ fn no_wire_in_reach_leaves_the_poles_down() {
             switch_demand: 0.0,
             speed_kmh: 0.0,
             weather: Default::default(),
+            aim: None,
         },
         0.016,
     );
-    assert!(sim.events.contains(&PoleEvent::NoWire { pole: 0 }));
+    // (it looks for the wire as its rope is let go)
+    sim.step(&d, &net, &at, PoleInputs::default(), 0.016);
+    assert!(sim
+        .events
+        .iter()
+        .any(|e| matches!(e, PoleEvent::NoWire { pole: 0, .. })));
 }
 
 #[test]
@@ -359,10 +366,12 @@ fn raising_takes_the_same_time_at_any_frame_rate() {
                 switch_demand: 0.0,
                 speed_kmh: 0.0,
                 weather: Default::default(),
+                aim: None,
             },
             1.0 / fps,
         );
-        let mut t = 0.0;
+        // (the pole rises from the frame its rope is let go)
+        let mut t = -1.0 / fps;
         while sim.poles[0].phase != PolePhase::OnWire {
             sim.step(&d, &net, &at, PoleInputs::default(), 1.0 / fps);
             t += 1.0 / fps;
@@ -390,6 +399,7 @@ fn a_second_press_lowers_the_pole_to_its_hook() {
             switch_demand: 0.0,
             speed_kmh: 0.0,
             weather: Default::default(),
+            aim: None,
         },
         0.016,
     );
@@ -600,4 +610,111 @@ fn the_retract_control_takes_both_poles_down_halfway_pauses_and_hooks_them() {
         s.poles.iter().all(|p| p.phase == PolePhase::Hooked)
     });
     assert!(t < 0.8, "down {t:.2} s after the pause");
+}
+
+/// The point of the wire on `side` (-1 left, 1 right) at pole `i`'s length from its foot,
+/// behind it, for a body at `at` heading north.
+fn wire_in_reach(d: &TrolleyDeclaration, at: &BodyPose, i: usize, side: f64) -> DVec3 {
+    let foot = at.position + at.rotation * d.poles[i].base;
+    let wire = DVec3::new(0.255 * side, 0.0, 5.8);
+    let (dx, dz) = (wire.x - foot.x, wire.z - foot.z);
+    let len = d.poles[i].length();
+    DVec3::new(
+        wire.x,
+        foot.y - (len * len - dx * dx - dz * dz).sqrt(),
+        wire.z,
+    )
+}
+
+/// Pole `i` held (or let go) with the mouse pointing at `target` from behind and above.
+fn hand(i: usize, holding: bool, target: DVec3) -> PoleInputs {
+    let eye = target + DVec3::new(0.3, -12.0, 1.5);
+    let mut grab = [false, false];
+    grab[i] = holding;
+    PoleInputs {
+        grab,
+        aim: Some((eye, target - eye)),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_pole_in_the_hand_follows_the_mouse_and_takes_the_wire_it_is_let_go_at() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    // a metre and a half beside the wire: a click alone finds none
+    let at = body(1.5, 20.0, 0.0);
+    let target = wire_in_reach(&d, &at, 0, -1.0);
+    let mut sim = PoleSim::default();
+    // far from the wire first, then onto it
+    let away = target + DVec3::new(1.5, 0.0, 0.0);
+    sim.step(&d, &net, &at, hand(0, true, away), 1.0 / 60.0);
+    assert_eq!(sim.poles[0].phase, PolePhase::InHand);
+    let mut o = sim.step(&d, &net, &at, hand(0, true, target), 1.0 / 60.0);
+    for _ in 0..30 {
+        o = sim.step(&d, &net, &at, hand(0, true, target), 1.0 / 60.0);
+    }
+    assert_eq!(sim.poles[0].phase, PolePhase::InHand, "held, not taken");
+    assert!(!o.poles[0].on_wire);
+    let shoe = at.position + at.rotation * o.poles[0].shoe_pos;
+    assert!(
+        shoe.distance(target) < 0.01,
+        "the shoe is where the mouse leads it"
+    );
+    assert!(o.poles[0].pitch > 0.0 && o.poles[1].pitch == 0.0);
+    // let go on the wire: on it at once, on its own (left) wire
+    sim.step(&d, &net, &at, hand(0, false, target), 1.0 / 60.0);
+    assert_eq!(sim.poles[0].phase, PolePhase::OnWire);
+    assert!(sim
+        .events
+        .iter()
+        .any(|e| matches!(e, PoleEvent::Captured { pole: 0, .. })));
+    let o = sim.step(&d, &net, &at, PoleInputs::default(), 1.0 / 60.0);
+    assert!(o.poles[0].on_wire);
+    let shoe = at.position + at.rotation * o.poles[0].shoe_pos;
+    assert!((shoe.x + 0.255).abs() < 1e-6 && (shoe.z - 5.8).abs() < 1e-6);
+}
+
+#[test]
+fn a_pole_let_go_away_from_the_wire_goes_back_to_its_hook() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    let at = body(0.0, 20.0, 0.0);
+    let away = wire_in_reach(&d, &at, 1, 1.0) + DVec3::new(2.0, 0.0, 0.0);
+    let mut sim = PoleSim::default();
+    for _ in 0..10 {
+        sim.step(&d, &net, &at, hand(1, true, away), 1.0 / 60.0);
+    }
+    let held = sim.step(&d, &net, &at, hand(1, true, away), 1.0 / 60.0);
+    assert!(held.poles[1].yaw != 0.0, "turned off the wire's line");
+    sim.step(&d, &net, &at, hand(1, false, away), 1.0 / 60.0);
+    assert!(sim
+        .events
+        .iter()
+        .any(|e| matches!(e, PoleEvent::NoWire { pole: 1, .. })));
+    assert_eq!(sim.poles[1].phase, PolePhase::Lowering);
+    for _ in 0..90 {
+        sim.step(&d, &net, &at, PoleInputs::default(), 1.0 / 60.0);
+    }
+    assert_eq!(sim.poles[1].phase, PolePhase::Hooked);
+}
+
+#[test]
+fn a_pole_in_the_hand_stays_above_its_hook_and_within_its_side_limit() {
+    let d = decl();
+    let net = straight(100.0, 50.0);
+    let at = body(0.0, 20.0, 0.0);
+    let foot = at.position + at.rotation * d.poles[0].base;
+    let mut sim = PoleSim::default();
+    // the mouse down by the wheels, then far out to the side
+    for target in [
+        foot + DVec3::new(0.0, -3.0, -4.0),
+        foot + DVec3::new(-20.0, 1.0, 0.0),
+    ] {
+        let o = sim.step(&d, &net, &at, hand(0, true, target), 1.0 / 60.0);
+        assert!(o.poles[0].pitch >= -1e-9, "not below the hook");
+        let v = o.poles[0].shoe_pos - d.poles[0].base;
+        assert!((v.length() - d.poles[0].length()).abs() < 1e-9);
+        assert!(v.x.atan2(-v.y).to_degrees().abs() <= 87.0 + 1e-9);
+    }
 }

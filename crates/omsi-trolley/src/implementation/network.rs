@@ -232,6 +232,8 @@ impl WireNetwork {
             .collect();
         let reach = (BRIDGE_RADIUS / JOIN_TOLERANCE).ceil() as i64;
         let mut bridges: Vec<WireJoint> = Vec::new();
+        let mut via_off: std::collections::HashMap<((SpanId, usize), (SpanId, usize)), f64> =
+            std::collections::HashMap::new();
         for o in &objects {
             let (cx, cy) = cell_of(o.position, JOIN_TOLERANCE);
             let mut near: Vec<(SpanId, usize, SpanEnd)> = Vec::new();
@@ -263,18 +265,89 @@ impl WireNetwork {
                         && d.dot(a.outward) >= BRIDGE_MIN_ALIGNMENT
                         && (-d).dot(b.outward) >= BRIDGE_MIN_ALIGNMENT;
                     let pair = ((*sa, *ea), (*sb, *eb));
-                    if facing && !bridges.iter().any(|j| (j.a, j.b) == pair) {
-                        bridges.push(WireJoint {
-                            a: pair.0,
-                            b: pair.1,
-                            gap,
-                            reversed: ea == eb,
-                            via: Some(o.kind),
-                        });
+                    if !facing {
+                        continue;
+                    }
+                    // (two objects in reach of one gap - a merge and a split a few metres
+                    // apart: the gap is the one of the object nearest its middle)
+                    let middle = (a.point + b.point) * 0.5;
+                    let off = (o.position - middle).truncate().length();
+                    match bridges.iter_mut().find(|j| (j.a, j.b) == pair) {
+                        Some(j) => {
+                            if off < via_off[&pair] {
+                                j.via = Some(o.kind);
+                                via_off.insert(pair, off);
+                            }
+                        }
+                        None => {
+                            bridges.push(WireJoint {
+                                a: pair.0,
+                                b: pair.1,
+                                gap,
+                                reversed: ea == eb,
+                                via: Some(o.kind),
+                            });
+                            via_off.insert(pair, off);
+                        }
                     }
                 }
             }
         }
+        // A bridge between ends the drawn wire already joins is a shortcut across it: a
+        // switch made of short splines (the switch's own curved piece among them) has ends
+        // facing each other over that piece, and a shoe taking the bridge would leave the
+        // wire. Kept are the bridges whose ends no drawn wire joins - directly, or past a
+        // nearer bridge from the same end - within the bridge's reach.
+        let mut plain: std::collections::HashMap<(SpanId, usize), Vec<(SpanId, usize)>> =
+            std::collections::HashMap::new();
+        // (end to end only: an end that merely stands beside another - a switch's branch
+        // starting next to the line's end - is no drawn wire between them)
+        let end_to_end = |j: &WireJoint| {
+            let (Some(a), Some(b)) = (self.span(j.a.0), self.span(j.b.0)) else {
+                return false;
+            };
+            let (a, b) = (a.ends[j.a.1], b.ends[j.b.1]);
+            let d = b.point - a.point;
+            (d - a.outward * d.dot(a.outward)).truncate().length() <= super::walk::SPLICE_MAX_BESIDE
+        };
+        for j in self.joints.iter().filter(|j| end_to_end(j)) {
+            plain.entry(j.a).or_default().push(j.b);
+            plain.entry(j.b).or_default().push(j.a);
+        }
+        let len = |s: SpanId| self.span(s).map_or(f64::INFINITY, |s| s.length);
+        // from the end `from` (leaving it), along drawn wire, into the end `to`
+        fn reaches(
+            plain: &std::collections::HashMap<(SpanId, usize), Vec<(SpanId, usize)>>,
+            len: &dyn Fn(SpanId) -> f64,
+            from: (SpanId, usize),
+            to: (SpanId, usize),
+            budget: f64,
+            depth: usize,
+        ) -> bool {
+            plain.get(&from).into_iter().flatten().any(|&p| {
+                p == to
+                    || (depth > 0
+                        && len(p.0) <= budget
+                        && reaches(plain, len, (p.0, 1 - p.1), to, budget - len(p.0), depth - 1))
+            })
+        }
+        let candidates = bridges.clone();
+        let shortcut = |j: &WireJoint, a: (SpanId, usize), b: (SpanId, usize)| {
+            reaches(&plain, &len, a, b, BRIDGE_MAX_GAP, 4)
+                || candidates.iter().any(|k| {
+                    let c = if k.a == a {
+                        k.b
+                    } else if k.b == a {
+                        k.a
+                    } else {
+                        return false;
+                    };
+                    k.gap < j.gap
+                        && c != b
+                        && reaches(&plain, &len, (c.0, 1 - c.1), b, BRIDGE_MAX_GAP, 4)
+                })
+        };
+        bridges.retain(|j| !shortcut(j, j.a, j.b) && !shortcut(j, j.b, j.a));
         self.joints.extend(bridges);
         self.joints.sort_by_key(|j| (j.a, j.b));
     }

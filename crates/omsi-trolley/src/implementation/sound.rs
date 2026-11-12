@@ -5,14 +5,47 @@
 use glam::DVec3;
 
 use crate::domain::declaration::TrolleyDeclaration;
-use crate::domain::network::{WireNetwork, WireObjectKind};
+use crate::domain::network::{SpanId, WireNetwork, WireObjectKind};
 use crate::domain::pole::{BodyPose, PoleEvent, PoleOutputs, PoleSim};
 use crate::domain::sound::{SparkParams, WireSound, WireSoundKind, WireWeather};
 
-/// How long a switch sound is remembered (seconds), and how near (metres, along the ground)
-/// another one is the same switch: the second shoe passes it too.
-const HEARD_MEMORY: f64 = 10.0;
-const SAME_SWITCH: f64 = 5.0;
+/// How far (metres, along the ground) from where the way through a switch was set its
+/// object may stand, to be that switch's.
+const SWITCH_REACH: f64 = 6.0;
+
+/// How far (metres) past touching it both shoes must be before a switch can sound again.
+const SWITCH_RELEASE: f64 = 1.0;
+
+/// A shoe on span `span` at `shoe` (world), in a switch's gap: if the end it is at crosses
+/// the gap into an entry where another way meets too, whether it comes in from the left of
+/// the two, seen from the entry (None: it is not coming in to a switch's entry).
+fn merging(net: &WireNetwork, span: SpanId, shoe: DVec3) -> Option<bool> {
+    let here = net.span(span)?;
+    let end = usize::from(here.ends[1].point.distance(shoe) < here.ends[0].point.distance(shoe));
+    let from = (span, end);
+    let other_end = |j: &crate::domain::network::WireJoint, e: (SpanId, usize)| {
+        if j.a == e {
+            j.b
+        } else {
+            j.a
+        }
+    };
+    net.joints_at(span, end)
+        .filter(|j| j.via.is_some_and(|k| k.is_switch()))
+        .find_map(|j| {
+            let into = other_end(j, from);
+            let theirs = net
+                .joints_at(into.0, into.1)
+                .filter(|k| k.via.is_some())
+                .map(|k| other_end(k, into))
+                .find(|o| *o != from)?;
+            let ours = here.ends[end].point;
+            let theirs = net.span(theirs.0)?.ends[theirs.1].point;
+            // (left as seen from the entry, looking along its ways)
+            let heading = -net.span(into.0)?.ends[into.1].outward;
+            Some(heading.cross(ours - theirs).z < 0.0)
+        })
+}
 
 /// The draws' state before the first one.
 const SEED: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -28,12 +61,17 @@ impl PoleSim {
         dt: f64,
     ) {
         self.sounds.clear();
-        for h in self.heard.iter_mut() {
-            h.1 += dt;
-        }
-        self.heard.retain(|h| h.1 < HEARD_MEMORY);
         let world = |p: DVec3| body.position + body.rotation * p;
         if let Some(s) = decl.sound {
+            // a switch sounds as a shoe touches its object, whichever way it is passed; the
+            // way taken through it (left or right, leaving its entry or coming in to it)
+            // picks the recording
+            let switches: Vec<(DVec3, WireObjectKind)> = net
+                .objects()
+                .filter(|o| o.kind.is_switch())
+                .map(|o| (o.position, o.kind))
+                .collect();
+            let flat = |a: DVec3, b: DVec3| (a - b).truncate().length();
             let events = std::mem::take(&mut self.events);
             for e in &events {
                 let (kind, at) = match *e {
@@ -50,16 +88,84 @@ impl PoleSim {
                     } => (WireSoundKind::SwitchMerge { left }, at),
                     _ => continue,
                 };
-                if self
-                    .heard
+                let Some(&(object, _)) = switches
                     .iter()
-                    .any(|h| (h.0 - at).truncate().length() < SAME_SWITCH)
+                    .filter(|(p, _)| flat(*p, at) <= SWITCH_REACH)
+                    .min_by(|a, b| flat(a.0, at).total_cmp(&flat(b.0, at)))
+                else {
+                    continue;
+                };
+                if self.switch_touched.contains(&object)
+                    || self.switch_waiting.iter().any(|w| w.0 == object)
                 {
                     continue;
                 }
-                self.heard.push((at, 0.0));
-                self.sounds.push(WireSound { kind, position: at });
+                self.switch_waiting.push((object, kind, f64::INFINITY));
             }
+            let shoes: Vec<(usize, DVec3)> = (0..2)
+                .filter(|i| out.poles[*i].on_wire)
+                .map(|i| (i, world(out.poles[i].shoe_pos)))
+                .collect();
+            let nearest = |p: DVec3| {
+                shoes
+                    .iter()
+                    .map(|(_, s)| flat(*s, p))
+                    .fold(f64::INFINITY, f64::min)
+            };
+            // touched now: the switch sounds - with the way's recording; a shoe coming in
+            // from one of its ways (whose way is known only past the object) with that one's
+            // merge; else with its own side's
+            for &(p, k) in &switches {
+                if self.switch_touched.contains(&p) {
+                    continue;
+                }
+                let Some(&(i, shoe)) = shoes
+                    .iter()
+                    .find(|(_, sh)| flat(*sh, p) <= s.cross_trigger_radius)
+                else {
+                    continue;
+                };
+                let waiting = self.switch_waiting.iter().position(|w| w.0 == p);
+                let kind = match waiting {
+                    Some(w) => self.switch_waiting.swap_remove(w).1,
+                    None => match self.poles[i]
+                        .cursor
+                        .and_then(|c| merging(net, c.span, shoe))
+                    {
+                        Some(left) => WireSoundKind::SwitchMerge { left },
+                        None => WireSoundKind::SwitchSeparate {
+                            left: k == WireObjectKind::SwitchBranchLeft,
+                        },
+                    },
+                };
+                self.switch_touched.push(p);
+                // (heard from the wire above the object)
+                self.sounds.push(WireSound {
+                    kind,
+                    position: p.truncate().extend(shoe.z),
+                });
+            }
+            // passed by without touching: it sounds where a shoe came nearest
+            let mut passed = Vec::new();
+            self.switch_waiting.retain_mut(|w| {
+                let d = nearest(w.0);
+                if d.is_finite() && d > w.2 + 0.05 {
+                    passed.push((w.0, w.1));
+                    return false;
+                }
+                w.2 = w.2.min(d);
+                w.2 <= SWITCH_REACH * 2.0 || !d.is_finite()
+            });
+            let wire_z = shoes.first().map(|(_, sh)| sh.z);
+            for (p, kind) in passed {
+                self.switch_touched.push(p);
+                self.sounds.push(WireSound {
+                    kind,
+                    position: p.truncate().extend(wire_z.unwrap_or(p.z)),
+                });
+            }
+            let release = s.cross_trigger_radius + SWITCH_RELEASE;
+            self.switch_touched.retain(|p| nearest(*p) <= release);
             self.events = events;
             // crossings and sound markers: the middle of the two shoes on the wire passing one
             let near = if out.poles.iter().all(|p| p.on_wire) {
