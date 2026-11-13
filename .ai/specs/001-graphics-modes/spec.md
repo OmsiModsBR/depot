@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-13
 
-**Status**: Draft
+**Status**: Clarified (one `/speckit-clarify` round, 2026-11-13)
 
 **Input**: User description: issue #703, the maintainer's direction of 2026-11-08 and the request of
 2026-11-13: "Revise spec 001 (simplification of the graphics modes). The specification must cover a
@@ -50,6 +50,8 @@ After this feature there are **three modes**, each with one role:
   renderer only after a new measurement shows it is not slower.
 - Q: What does Enhanced inherit from Enhanced+? → A: Only the sunlight dimmed by glass. Enhanced+'s
   colour grade, vignette and sharpening are removed with it.
+- Q: What happens when the computer cannot open Vanilla's renderer? → A: A clear error that tells
+  the player to choose Vanilla+, and the game closes. The mode is never switched on its own.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -256,6 +258,9 @@ floor lit through the windows are darker than in the open, and the frame time is
   as in User Story 1, with one log line saying what was replaced.
 - **FR-011**: An unknown mode value MUST open Vanilla+ and be reported in the log; it MUST NOT stop
   the game.
+- **FR-011a**: When the computer cannot open Vanilla's renderer, the game MUST show an error that
+  names the cause and tells the player to choose Vanilla+ in the launcher, and MUST close. It MUST
+  NOT open another mode on its own and MUST NOT change the saved mode.
 - **FR-012**: The settings file MUST NOT be rewritten just because it was read: the migrated value
   is written only when the player saves.
 
@@ -429,10 +434,7 @@ Rules of the structure:
   brightness and LED glow act only in Enhanced but are offered in Vanilla+ today; shadows, ambient
   occlusion and detail textures are improvements Vanilla does not have; the "DirectX9" effort-saving
   options act only in Vanilla; the anti-aliasing after the picture differs per mode.
-- Decisions still open from the earlier plan, taken here as their recommended answers until the
-  maintainer says otherwise (`/speckit-clarify`):
-  - A computer that cannot open Vanilla's renderer: a clear error pointing to Vanilla+ (no silent
-    switch).
+- Still open from the earlier plan:
   - Which side of each difference between the two Vanilla implementations matches OMSI 2 is decided
     by the maintainer in the game (FR-007); the feature does not guess.
 - Making every graphics option take effect without a restart is out of scope: only the small set of

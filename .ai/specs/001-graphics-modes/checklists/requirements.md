@@ -37,10 +37,8 @@
   to the plan.
 - "DirectX9", "Direct3D 9Ex", "VR" and "triple screen" are names the player reads in the settings
   today, not implementation choices of this feature.
-- Four decisions left open by the earlier plan (Vanilla with VR or triple screen, a computer that
-  cannot open Vanilla's renderer, Enhanced+'s colour grade, which Vanilla implementation matches
-  OMSI 2 per difference) are recorded in Assumptions with their recommended answers instead of
-  `[NEEDS CLARIFICATION]` markers; `/speckit-clarify` can settle them.
+- One decision of the earlier plan stays open by nature: which Vanilla implementation matches
+  OMSI 2 in each difference is checked by the maintainer in the game (FR-007).
 - The plan and its companion documents predate this spec and must be regenerated with
   `/speckit-plan`; `plan.md` carries a notice saying so.
 - `.ai/.specify/extensions.yml` does not exist, so no hooks ran before or after.
@@ -51,3 +49,8 @@
   option that needs a restart (FR-020c, FR-020d, the "takes effect" column of FR-013, scenarios
   12-14 of User Story 2, SC-001 and SC-003): the mode and the graphics API are launcher-only. Every
   item still passes.
+- Re-validated after `/speckit-clarify` (session 2026-11-13, five questions): a small set of options
+  is made to apply in the running session (FR-020e), VR and triple screen are not offered in Vanilla
+  (FR-018a), a slower Vanilla renderer is fixed before the switch (FR-008), Enhanced inherits only
+  the sunlight through glass (FR-005), and a computer that cannot open Vanilla gets a clear error
+  with no mode switch (FR-011a). 16/16 items passing before and after.
