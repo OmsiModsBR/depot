@@ -44,3 +44,6 @@
 - The plan and its companion documents predate this spec and must be regenerated with
   `/speckit-plan`; `plan.md` carries a notice saying so.
 - `.ai/.specify/extensions.yml` does not exist, so no hooks ran before or after.
+- Re-validated on 2026-11-13 after the maintainer added the launcher page layout (the mode choice in
+  the top section, the graphics API inside "Image" for Vanilla+ and Enhanced only): FR-020a..FR-020c
+  and acceptance scenarios 9-11 of User Story 2. Every item still passes.

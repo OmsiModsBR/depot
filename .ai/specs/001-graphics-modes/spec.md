@@ -13,7 +13,10 @@ Enhanced+ and Vanilla, with the DX9 mode taking Vanilla's place. Structure this 
 with the simplification, so that there are directories for each graphics mode and for their shared
 interfaces." Follow-up of the same day, after the directory structure was approved: "Include in the
 scope the clean-up of the configuration options, in the launcher and in the in-game menu, because
-there are settings that do not apply to one or more modes."
+there are settings that do not apply to one or more modes." And: "In the launcher's graphics
+settings page, the 'Graphics API' section is to be reworked to hold the choice of the graphics mode.
+The choice of the graphics API, available only in Vanilla+ and Enhanced, goes where 'Graphics' is
+today, inside the 'Image' section."
 
 ## Context
 
@@ -102,6 +105,14 @@ mode.
    changes only options that apply to Vanilla, or presets are not offered there.
 8. **Given** an option is fixed by the mode, **When** the player reads its line, **Then** it shows
    the fixed value and why, and it cannot be changed.
+9. **Given** the launcher's graphics settings page, **When** the player opens it, **Then** the
+   highlighted section at the top holds the choice of the graphics mode, with one line per mode
+   saying what it is, and says that the mode decides which other graphics options are offered.
+10. **Given** the mode is Vanilla+ or Enhanced, **When** the player looks at the "Image" section,
+    **Then** the graphics API choice is in the place the mode choice had, with Automatic, Vulkan,
+    DirectX 12 and OpenGL.
+11. **Given** the mode is Vanilla, **When** the player looks at the "Image" section, **Then** the
+    graphics API choice is not there.
 
 ---
 
@@ -231,6 +242,14 @@ floor lit through the windows are darker than in the open, and the frame time is
   in Vanilla only, and described by what they do, not by the API.
 - **FR-019**: An option that the audit shows to act in none of the three modes MUST be removed
   together with the code that reads it.
+- **FR-020a**: In the launcher's graphics settings page, the highlighted section at the top (today
+  "Graphics API") MUST hold the choice of the graphics mode, named after it, with a short
+  description of each of the three modes and the statement that the mode decides what the other
+  graphics options can do. Its text MUST no longer say that the API limits the options.
+- **FR-020b**: In the same page, the choice of the graphics API MUST sit inside the "Image" section,
+  in the place the mode choice has today, and MUST be offered only in Vanilla+ and Enhanced.
+- **FR-020c**: The in-game menu MUST follow the same order: the mode first, and the graphics API
+  among the picture options, in Vanilla+ and Enhanced only.
 - **FR-020**: An automated test MUST fail when a graphics option exists without a row in the
   applicability table, or when the launcher and the in-game menu disagree about an option in any
   mode.
