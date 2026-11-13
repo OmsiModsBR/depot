@@ -79,7 +79,7 @@ shadows, no SSAO, no procedural detail texture, no snow cover, no moonlight.
 |---|---|---|
 | V1, V2, V4, V5, V7, V8 | as DirectX9 draws it | **keep** DirectX9's behaviour; no fix needed |
 | V6 | no wind in the trees | **keep** DirectX9's (static trees); `windy_trees` stays fixed "Off" in Vanilla |
-| V14 | has dynamic shadows, switched on by a setting; meshes marked `[shadow]` are shadows that are always on | neither implementation draws them in Vanilla, so this does not decide between the two (FR-007) and does not hold phase A5. It is a **gap of Vanilla against OMSI 2**. The text "an improvement OMSI 2 does not have" for the shadow options is wrong and is corrected when the option table is built (phase B1): in Vanilla they are "not drawn by Vanilla yet". Drawing them is a feature of its own, outside this plan unless the maintainer brings it in |
+| V14 | has dynamic shadows, switched on by a setting; meshes marked `[shadow]` are shadows that are always on | neither implementation draws them in Vanilla, so this does not decide between the two (FR-007) and does not hold phase A5. It is a **gap of Vanilla against OMSI 2**. The text "an improvement OMSI 2 does not have" for the shadow options is wrong and is corrected when the option table is built (phase B1): in Vanilla they are "not drawn by Vanilla yet". Drawing them is a feature of its own, **outside this feature** (decided by the maintainer on 2026-11-13): it gets its own issue and specification |
 | V3, V9, V10, V11, V12, V13 | not checked yet | still open; V10, V11, V12 decide the `fix/dx9-*` pull requests of phase A4 |
 
 **Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V6, V7 and V8 (checked), and likely V3 and V9. wgpu is

@@ -439,6 +439,10 @@ Rules of the structure:
     by the maintainer in the game (FR-007); the feature does not guess.
 - Making every graphics option take effect without a restart is out of scope: only the small set of
   FR-020e is.
+- Dynamic shadows in Vanilla are out of scope (maintainer, 2026-11-13). OMSI 2 has them, and neither
+  of today's Vanilla implementations draws them, so the change of renderer loses nothing; they get an
+  issue and a specification of their own. This feature only stops the shadow options' text from
+  saying OMSI 2 lacks them.
 - New advanced features for Enhanced (for example screen-space reflections or a new ambient
   occlusion) are out of scope: this feature prepares the place for them.
 - [plan.md](plan.md) and its companion documents were regenerated from this spec on 2026-11-13.
