@@ -236,10 +236,9 @@ import each other) without a pixel or a millisecond changing (FR-030).
 - Vanilla+ owns the plain shading and Enhanced imports it: rejected, it breaks rule 1 of the
   structure.
 
-**For the maintainer (D5)**: this makes `modes/vanilla_plus/` smaller than the tree in the spec
-suggests ("its shaders" there are the sky, the FXAA step, the puddles' pass and the sprite entries,
-not the scene's fragment shader). If Vanilla+ should own its surface shading instead, Enhanced's
-mirrors need one of the rejected alternatives.
+**Agreed by the maintainer on 2026-11-13 (D5)**: `modes/vanilla_plus/` is therefore smaller than the
+tree in the spec suggests ("its shaders" there are the sky, the FXAA step, the puddles' pass and the
+sprite entries, not the scene's fragment shader).
 
 ## R-9. The mode interface
 
@@ -347,7 +346,8 @@ rejected, the game would keep depending on the launcher's UI crate for a rule ab
 
 ## R-12. Which options are made to apply at once (FR-020e)
 
-**Decision**: three on/off effects: `ssao`, `reflections`, `clouds`. One pull request each.
+**Decision** (agreed by the maintainer on 2026-11-13, D6): three on/off effects: `ssao`,
+`reflections`, `clouds`. One pull request each.
 
 | Key | Why it needs a start today | What "at once" takes |
 |---|---|---|

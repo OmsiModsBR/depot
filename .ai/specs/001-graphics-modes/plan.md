@@ -93,8 +93,7 @@ removal, about 12 by the wgpu Vanilla removal; about 30 files moved or split by 
 | IX. Small, traceable changes | ✓ | One pull request per phase (some phases are several, marked); each with its changelog line where the player notices |
 | X. Lean, clean code | ✓ | Removal first (YAGNI: nothing of Enhanced+ or wgpu Vanilla kept behind a switch); one copy of the mode rule, of the options rule and of the material classification; the long mixed functions are split as they move (FR-030); `ARCHITECTURE.md` rule 8 ("unused code is not deleted") contradicts this principle and is corrected in C10 |
 
-Result: **pass**, with the conditions above as tasks. Re-checked after design: unchanged. One design
-finding is put to the maintainer (D5 below): it does not violate a principle either way.
+Result: **pass**, with the conditions above as tasks. Re-checked after design: unchanged.
 
 ## Project Structure
 
@@ -107,6 +106,7 @@ finding is put to the maintainer (D5 below): it does not violate a principle eit
 ├── research.md          # R-V, R-E, R-1..R-6 (2026-11-08, re-checked), R-7..R-12 (structure, options)
 ├── data-model.md        # GraphicsMode, option table, mode interface, frame plan, Vanilla crate
 ├── quickstart.md        # how each phase is validated
+├── tasks.md             # /speckit-tasks: 79 tasks by user story, each tagged with its phase
 ├── checklists/requirements.md
 └── contracts/
     ├── settings-cfg.md        # saved keys and their migration
@@ -253,14 +253,12 @@ Vanilla (clear error), options made live (a small set).
 
 - **D1** (phase A0, open by nature): for each R-V difference, which side matches OMSI 2. A4 and A5
   wait on it.
-- **D5** (new, phase C5): the base surface shading stays in the shared core, because Enhanced draws
-  its mirrors with it (0.6 ms against 12.7 ms per mirror with the enhanced shading). So
-  `modes/vanilla_plus/` holds the sky, FXAA without MSAA, the puddles' own pass and the sprite
-  entries, not the scene's fragment shader. The plan follows this reading of FR-021 ("the code that
-  only one mode runs"). The alternatives (research R-8) each cost a regression, a second copy of the
-  shading or a broken import rule; say so before C5 if Vanilla+ should own its shading anyway.
-- **D6** (new, phase B4): the set made live is `ssao`, `reflections`, `clouds` (research R-12). Add
-  or drop a key before B4 starts.
+- **D5** (decided 2026-11-13: agreed): the base surface shading stays in the shared core, because
+  Enhanced draws its mirrors with it (0.6 ms against 12.7 ms per mirror with the enhanced shading).
+  So `modes/vanilla_plus/` holds the sky, FXAA without MSAA, the puddles' own pass and the sprite
+  entries, not the scene's fragment shader (research R-8).
+- **D6** (decided 2026-11-13: agreed): the set made live is `ssao`, `reflections`, `clouds`
+  (research R-12).
 
 ## Complexity Tracking
 
