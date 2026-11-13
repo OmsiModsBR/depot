@@ -16,7 +16,8 @@ scope the clean-up of the configuration options, in the launcher and in the in-g
 there are settings that do not apply to one or more modes." And: "In the launcher's graphics
 settings page, the 'Graphics API' section is to be reworked to hold the choice of the graphics mode.
 The choice of the graphics API, available only in Vanilla+ and Enhanced, goes where 'Graphics' is
-today, inside the 'Image' section."
+today, inside the 'Image' section." And: "Graphics options whose change only shows after the game
+is restarted must not be displayed in the in-game menu."
 
 ## Context
 
@@ -52,8 +53,8 @@ show.
 
 **Acceptance Scenarios**:
 
-1. **Given** a fresh installation, **When** the player opens the graphics settings in the launcher
-   or in the game, **Then** the mode list has exactly Vanilla, Vanilla+ and Enhanced.
+1. **Given** a fresh installation, **When** the player opens the graphics settings in the
+   launcher, **Then** the mode list has exactly Vanilla, Vanilla+ and Enhanced.
 2. **Given** saved settings with Enhanced+, **When** the game starts, **Then** it runs in Enhanced
    and the log says the saved mode was replaced.
 3. **Given** saved settings with the old Vanilla on any modern API, **When** the game starts,
@@ -74,8 +75,10 @@ show.
 
 A player chooses a mode and sees, in the launcher and in the in-game menu, only the options that
 change the picture or the performance in that mode. An option that does nothing there is not
-offered; an option whose value the mode fixes is shown as a fixed line with the reason. Both places
-agree, because they read the same description of what applies to each mode.
+offered; an option whose value the mode fixes is shown as a fixed line with the reason. The in-game
+menu goes one step further: it offers only the graphics options whose change shows at once, so
+nothing the player moves there waits for a restart. Both places agree, because they read the same
+description of what applies to each mode and of when a change takes effect.
 
 **Why this priority**: today a player can move a slider that does nothing in their mode (for example
 the night brightness and LED glow options, which act only in Enhanced, are offered in Vanilla+), and
@@ -85,7 +88,7 @@ most often.
 **Independent Test**: for each of the three modes, open the launcher's settings and the in-game
 menu, list the graphics options offered, and compare both lists with the applicability table this
 feature produces; then change every offered option and confirm each has an observable effect in that
-mode.
+mode, and that every option offered in the in-game menu shows its effect without a restart.
 
 **Acceptance Scenarios**:
 
@@ -95,8 +98,9 @@ mode.
    option that acts only in Vanilla+ or only in Vanilla is offered.
 3. **Given** the mode is Vanilla, **When** the player opens the graphics options, **Then** the
    improvements the mode does not have are not offered, and Vanilla's own options are.
-4. **Given** any mode, **When** the player compares the launcher with the in-game menu, **Then** the
-   same graphics options are offered, fixed or hidden in both.
+4. **Given** any mode, **When** the player compares the launcher with the in-game menu, **Then**
+   the in-game menu offers exactly the launcher's graphics options for that mode that take effect
+   without a restart, and no other.
 5. **Given** the player changes the mode in the launcher, **When** the list redraws, **Then** it
    shows the new mode's options at once, before the game is started.
 6. **Given** the player set an Enhanced-only option, switched to Vanilla+ and later back to
@@ -113,6 +117,13 @@ mode.
     DirectX 12 and OpenGL.
 11. **Given** the mode is Vanilla, **When** the player looks at the "Image" section, **Then** the
     graphics API choice is not there.
+12. **Given** the game is running, **When** the player opens the in-game graphics options, **Then**
+    the graphics mode, the graphics API and every other option that needs a restart are not
+    offered.
+13. **Given** the game is running, **When** the player changes any graphics option the in-game menu
+    offers, **Then** the picture changes in the same session.
+14. **Given** an option that needs a restart, **When** the player looks for it, **Then** it is in
+    the launcher, with the line saying the change takes effect on the next start.
 
 ---
 
@@ -178,8 +189,12 @@ floor lit through the windows are darker than in the open, and the frame time is
   hand opens Vanilla without them and logs why.
 - The mode forced from outside the settings (command line or environment): the options shown follow
   the mode the game is actually running.
-- The player changes the mode in the in-game menu: the new mode takes effect on the next start; the
-  menu says so and keeps showing the options of the mode that is running.
+- The player wants to change the mode while the game is running: the in-game menu does not offer
+  it (it needs a restart); the mode is changed in the launcher.
+- An option that takes effect at once in one mode and only after a restart in another: the in-game
+  menu offers it only in the mode in which it takes effect at once.
+- A graphics section of the in-game menu left with no option in the current mode: the section is
+  not shown.
 - A value saved for an option that the current mode fixes or hides: the saved value is kept in the
   file and not applied; it comes back when the mode changes.
 - The launcher's vehicle preview while the game is set to Vanilla: it is drawn as Vanilla+ (the
@@ -229,8 +244,9 @@ floor lit through the windows are darker than in the open, and the frame time is
 
 - **FR-013**: Every graphics option MUST be audited and classified, for each of the three modes, as:
   applies (offered), fixed by the mode (shown as a fixed line with its value and the reason), or
-  does not apply (not offered). The result is one applicability table, kept with this feature's
-  documents and in the user guide.
+  does not apply (not offered). For each mode in which it applies, the audit also records when a
+  change takes effect: at once, or on the next start. The result is one applicability table, kept
+  with this feature's documents and in the user guide.
 - **FR-014**: The launcher and the in-game menu MUST decide what to offer from that one table. No
   screen may carry its own rule for a mode.
 - **FR-015**: An option that does not apply to the current mode MUST NOT be offered in either place.
@@ -248,11 +264,16 @@ floor lit through the windows are darker than in the open, and the frame time is
   graphics options can do. Its text MUST no longer say that the API limits the options.
 - **FR-020b**: In the same page, the choice of the graphics API MUST sit inside the "Image" section,
   in the place the mode choice has today, and MUST be offered only in Vanilla+ and Enhanced.
-- **FR-020c**: The in-game menu MUST follow the same order: the mode first, and the graphics API
-  among the picture options, in Vanilla+ and Enhanced only.
+- **FR-020c**: The in-game menu MUST NOT offer a graphics option whose change takes effect only
+  after the game is restarted. This includes the graphics mode and the graphics API. Such options
+  are offered in the launcher only, where their line says the change takes effect on the next
+  start.
+- **FR-020d**: Every graphics option the in-game menu offers MUST show its effect in the running
+  session.
 - **FR-020**: An automated test MUST fail when a graphics option exists without a row in the
-  applicability table, or when the launcher and the in-game menu disagree about an option in any
-  mode.
+  applicability table, when the in-game menu offers an option the table marks as needing a restart
+  or as not applying to the running mode, or when it leaves out one the table marks as applying at
+  once.
 
 **Code structure**
 
@@ -332,8 +353,8 @@ Rules of the structure:
 - **Graphics mode**: one of Vanilla, Vanilla+, Enhanced. Decides the renderer, what is prepared at
   start-up and which options are offered. Resolved once per start.
 - **Applicability table**: for every graphics option and every mode, whether the option applies, is
-  fixed (with value and reason) or does not apply. The single source for the launcher and the
-  in-game menu.
+  fixed (with value and reason) or does not apply, and whether a change takes effect at once or
+  on the next start. The single source for the launcher and the in-game menu.
 - **Mode interface**: the contract a modern-API mode fulfils for the shared core (what it prepares,
   what it decides for a frame, what it draws).
 - **Frame plan**: the description of a frame the shared core produces once (visible objects, draw
@@ -345,11 +366,12 @@ Rules of the structure:
 
 ### Measurable Outcomes
 
-- **SC-001**: The mode list shows exactly three entries in the launcher and in the in-game menu.
+- **SC-001**: The mode list shows exactly three entries in the launcher.
 - **SC-002**: 100 % of the old saved choices (five modes, with and without the DirectX9 API, and
   the old spellings) open a valid mode on first start with no player action and no error.
 - **SC-003**: In each mode, 100 % of the graphics options offered have an observable effect in that
-  mode, and the launcher and the in-game menu offer the same set (zero differences).
+  mode. The in-game menu offers exactly the subset that takes effect without a restart: zero
+  options there need one.
 - **SC-004**: Zero references between the two modern-API modes and zero from the shared core to a
   mode, checked automatically on every pull request.
 - **SC-005**: The reference pictures of Vanilla+ and Enhanced are identical before and after every

@@ -47,3 +47,7 @@
 - Re-validated on 2026-11-13 after the maintainer added the launcher page layout (the mode choice in
   the top section, the graphics API inside "Image" for Vanilla+ and Enhanced only): FR-020a..FR-020c
   and acceptance scenarios 9-11 of User Story 2. Every item still passes.
+- Re-validated on 2026-11-13 after the maintainer ruled that the in-game menu offers no graphics
+  option that needs a restart (FR-020c, FR-020d, the "takes effect" column of FR-013, scenarios
+  12-14 of User Story 2, SC-001 and SC-003): the mode and the graphics API are launcher-only. Every
+  item still passes.
