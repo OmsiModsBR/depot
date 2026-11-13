@@ -3,6 +3,12 @@
 **Branch**: one per delivery phase (see "Delivery phases") | **Date**: 2026-11-08 |
 **Spec**: issue #703 (no `spec.md`: the maintainer's request below is the specification)
 
+> **Out of date (2026-11-13)**: [spec.md](spec.md) now exists and widens the scope: one directory
+> per graphics mode with shared interfaces, the `omsi-render-d3d9` crate renamed after the Vanilla
+> mode, and the graphics options offered per mode in the launcher and in the in-game menu. This plan
+> and its companion documents predate it and are to be regenerated with `/speckit-plan`. Where they
+> differ, the spec wins.
+
 **Input**: the maintainer's request:
 
 > - Remove the Vanilla mode: DirectX9 takes its place. Map the differences between Vanilla and
