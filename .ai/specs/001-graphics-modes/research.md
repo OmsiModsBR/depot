@@ -33,6 +33,29 @@ Two observations matter for the plan:
 - On a computer every mode builds Enhanced's pipelines too (`renderer/build.rs`,
   `leave_out_enhanced`): on lavapipe opening the renderer takes about 37 s in any mode. Phase C6.
 
+### DirectX9 against wgpu Vanilla on a graphics card (T002, first attempt, 2026-11-13)
+
+One run of 5 minutes each on the maintainer's computer (GeForce RTX 4070 Ti, 3440x1440, MSAA 4,
+Berlin-Spandau at noon, clear weather, traffic 120 %, build `edd692eb`), `OMSI_PROFILE=1`. Medians
+of the nine `profile window:` lines after the loading one, in ms per frame:
+
+| | DirectX9 | wgpu Vanilla (DirectX 12) |
+|---|---:|---:|
+| frame | 9.5 | 9.3 |
+| of which the frame limiter waits | 1.4 | 3.2 |
+| frame without the limiter's wait | 8.2 | 6.1 |
+| render | 2.94 | 1.92 |
+| mirrors | 0.59 | 0.21 |
+| present | 0.44 | 0.20 |
+
+**This attempt does not decide FR-008**, for three reasons: the frame limit was on (`max_fps` 120),
+so both runs show the same frame time and the difference hides in the limiter's wait; two settings
+differed (`mirror_refresh` full against eco, `post_aa` off against FXAA, which DirectX9 fixes at
+those values); and the traffic seed differed. What it does show: with the limiter's wait taken out,
+DirectX9 spent about 2 ms more per frame, about 1 ms of it in `render`. The measurement is repeated
+with the frame limit off, the same two settings in both runs and the same `OMSI_SEED`, three runs
+each (FR-008).
+
 ## R-V. wgpu Vanilla x DirectX9: what each draws
 
 wgpu Vanilla is `shader.wgsl` with its `classic` branch on (`camera.sky_color.w = 1`). DirectX9 is
