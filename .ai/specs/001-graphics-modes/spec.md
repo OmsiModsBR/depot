@@ -48,6 +48,8 @@ After this feature there are **three modes**, each with one role:
 - Q: What happens if Vanilla's remaining renderer measures slower than the implementation it
   replaces? → A: It is fixed first. The difference becomes a fix of its own, and Vanilla changes
   renderer only after a new measurement shows it is not slower.
+- Q: What does Enhanced inherit from Enhanced+? → A: Only the sunlight dimmed by glass. Enhanced+'s
+  colour grade, vignette and sharpening are removed with it.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -232,7 +234,8 @@ floor lit through the windows are darker than in the open, and the frame time is
 - **FR-004**: Vanilla+ MUST draw the same picture after this feature as before it.
 - **FR-005**: Enhanced MUST draw the same picture after this feature as before it, except for the
   sunlight through glass of User Story 4, which is delivered as its own change with before/after
-  pictures and measurements.
+  pictures and measurements. Nothing else of Enhanced+ is carried over: its colour grade, vignette
+  and sharpening are removed with it.
 - **FR-006**: The graphics API choice MUST apply to Vanilla+ and Enhanced only, and MUST no longer
   list DirectX9.
 - **FR-007**: Before Vanilla changes renderer, the differences between today's two Vanilla
@@ -430,8 +433,6 @@ Rules of the structure:
   maintainer says otherwise (`/speckit-clarify`):
   - A computer that cannot open Vanilla's renderer: a clear error pointing to Vanilla+ (no silent
     switch).
-  - Enhanced+'s colour grade, vignette and sharpening are an aesthetic choice and are not carried
-    over to Enhanced; only the sunlight through glass is.
   - Which side of each difference between the two Vanilla implementations matches OMSI 2 is decided
     by the maintainer in the game (FR-007); the feature does not guess.
 - Making every graphics option take effect without a restart is out of scope: only the small set of
