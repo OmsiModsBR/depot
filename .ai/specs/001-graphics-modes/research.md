@@ -1,6 +1,9 @@
 # Research: Simplify the graphics modes
 
-Phase 0 of the [plan](plan.md). Code read at `19290ac` (2026-11-08). "OMSI 2" on this page is what
+Research for the [plan](plan.md), which implements the [spec](spec.md). Sections R-V to R-6 were written at
+`19290ac` (2026-11-08) and re-checked at `cbeda16` (2026-11-13): nothing of the plan had been built
+yet, so their findings stand; line counts are those of `19290ac`. Sections R-7 to R-12 were added at
+`cbeda16` for the revised scope (one directory per mode, the options per mode). "OMSI 2" on this page is what
 the original game is expected to show and **still has to be checked in the game** (Principle II,
 #49).
 
@@ -26,9 +29,9 @@ compare the modes with each other only. DirectX9 could not be measured (Windows 
 Two observations matter for the plan:
 
 - wgpu Vanilla was slower than Vanilla+ in every run. Its `classic` branch decodes, re-encodes and
-  decodes sRGB per pixel to work in gamma space, which DirectX9 does natively. Phase 6 removes it.
+  decodes sRGB per pixel to work in gamma space, which DirectX9 does natively. Phase A6 removes it.
 - On a computer every mode builds Enhanced's pipelines too (`renderer/build.rs`,
-  `leave_out_enhanced`): on lavapipe opening the renderer takes about 37 s in any mode. Phase 7.
+  `leave_out_enhanced`): on lavapipe opening the renderer takes about 37 s in any mode. Phase C6.
 
 ## R-V. wgpu Vanilla x DirectX9: what each draws
 
@@ -66,13 +69,13 @@ shadows, no SSAO, no procedural detail texture, no snow cover, no moonlight.
 | V13 | Falling snow | its own pass | `dx9_snow` option, drawn as coronas | to check | keep if approved |
 | V14 | Real-time shadows of `[shadow]` meshes | — (off in Vanilla) | — (README: later phases) | **neither**, if OMSI 2 has them: `RenderOptions::omsi_shadow_casters` says "as in OMSI 2" while `api_limits` calls shadows "an improvement OMSI 2 does not have"; the two texts contradict each other | validate; if OMSI 2 has them, a DirectX9 gap outside this plan |
 | V15 | Interface on an sRGB target | as `omsi-ui` | the same where the device converts after blending; in gamma elsewhere (edges differ) | no difference | keep |
-| V16 | VR and triple screen | ✓ | — | — | decision D3 |
+| V16 | VR and triple screen | ✓ | — | — | not offered in Vanilla (clarified 2026-11-13, FR-018a) |
 | V17 | Effort-saving options (`fewer_night_lights`, texture limit, stars, cloud picture) | — | ✓ | Depot additions | keep (options, off by default) |
-| V18 | The launcher's showroom preview | drawn as Vanilla when the game is in Vanilla (`launcher_statics` sets `CLASSIC`) | the preview is always wgpu | — | after phase 6 the preview uses Vanilla+; accept it, or draw the preview with DirectX9 (costly) |
+| V18 | The launcher's showroom preview | drawn as Vanilla when the game is in Vanilla (`launcher_statics` sets `CLASSIC`) | the preview is always wgpu | — | after phase A6 the preview uses Vanilla+; accept it, or draw the preview with DirectX9 (costly) |
 
 **Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V7 and likely V3, V6 and V9. wgpu is
 ahead only in V10, V11 and maybe V12, which are gaps of the port and become `fix/dx9-*` pull requests
-(phase 4) if validation shows a visible difference. V14 is an open question for both.
+(phase A4) if validation shows a visible difference. V14 is an open question for both.
 
 **Rationale**: DirectX9 was built under the rule "draw only what OMSI 2 has", and the latest parity
 fixes (#686, #691, #697) were made there first. wgpu Vanilla inherited Vanilla+ additions (puddles,
@@ -97,10 +100,10 @@ a transmap); any other blend = glass (or a decal, dirt, a rain film).
 | E3 | Solid shadows | cascaded shadow map (PCF edges) | a ray per pixel up to 420 m (an edge that softens with the distance to the caster), the map beyond | no (ray tracing) |
 | E4 | Ambient occlusion | SSAO from the prepass depth: cut-outs occlude by their exact texels; glass and blended layers do not occlude and take the AO of the surface under them (`tests/decal_ao.rs`) | rays against the structures: cut-outs occlude stochastically by the texture's **mean** alpha; glass is not seen | nothing: for transparent surfaces SSAO is already the more faithful one |
 | E5 | Reflections | sky probe + `[matl_envmap]` maps + screen-space puddles | traced: on screen the picture itself; off screen the hit mesh's **mean colour**; glass not reflected | optional: screen-space reflections over the probe give the "on screen" part without rays. A new feature with its own cost (Principle VII), outside this plan |
-| E6 | Post processing | tone mapping and contrast | + colour grade, vignette and sharpening (`passes/post.rs`) | decision D2 (aesthetic) |
+| E6 | Post processing | tone mapping and contrast | + colour grade, vignette and sharpening (`passes/post.rs`) | nothing: removed with Enhanced+ (clarified 2026-11-13) |
 | E7 | Glass lit by the sun (specular glint) | `sun_shadow_hard` (one compare) | the same | nothing |
 
-**Decision**: bring E1 to Enhanced (phase 2). E6 waits on decision D2. E5 stays a candidate for a
+**Decision**: bring E1 to Enhanced (phase A2). E6 is not carried over (clarified 2026-11-13: only the glass is). E5 stays a candidate for a
 later Enhanced feature. The rest of Enhanced+ is removed.
 
 **Rationale**: E1 is the one transparency difference where Enhanced+ is right and Enhanced is
@@ -125,7 +128,7 @@ this alone); in `omsi-render` (the renderer must not know about backends or Dire
 ## R-2. What the wgpu renderer needs to know
 
 **Decision**: `Lighting` and the camera uniform take a `ShadingPath { Linear, Hdr }` (Vanilla+ and
-Enhanced). After phase 6 there is no "classic" path in wgpu. DirectX9 keeps taking `omsi-render`'s
+Enhanced). After phase A6 there is no "classic" path in wgpu. DirectX9 keeps taking `omsi-render`'s
 `FramePlan`, which runs on wgpu's noop device as today.
 
 **Rationale**: `omsi-render` does not need to know that a Vanilla mode exists; the gamma path then
@@ -143,10 +146,11 @@ longer exists.
 
 ## R-4. DirectX9 against wgpu Vanilla (NEEDS CLARIFICATION, resolved as a task)
 
-Not measurable without Windows. **Decision**: phase 0 measures on the maintainer's machine, same
+Not measurable without Windows. **Decision**: phase A0 measures on the maintainer's machine, same
 map and stretch, `OMSI_PROFILE=1`, one session with `graphics=vanilla` on DirectX 12 and one on
-DirectX9, comparing the `profile window:` lines (#683). Criterion: phase 5 goes in only if DirectX9 is
-not slower (Principle VII); if it is, the difference becomes a `fix/dx9-*` first.
+DirectX9, comparing the `profile window:` lines (#683). Criterion: phase A5 goes in only if DirectX9 is
+not slower (Principle VII); if it is, the difference becomes a `fix/dx9-*` first and is measured
+again, with no tolerance (clarified 2026-11-13, FR-008).
 
 ## R-5. DirectX9 in CI
 
@@ -160,26 +164,202 @@ The initial analysis of the modes (2026-11-07) listed seven points. How each is 
 
 | Point | Finding (at `a132fb0`) | Where it lands |
 |---|---|---|
-| R1. A type for the mode | the mode as a `String`, a redundant `bool`, three global `AtomicBool`s, bools in `Lighting`/`RenderOptions`, a bit in `camera.sky_color.w`; `graphics_mode` copied in two crates; six ways in | phase 3 ([data-model.md](data-model.md)) |
-| R2. Bools as parameters | `encode_main_pass` takes 22 parameters, 9 of them bools; `encode_main_pass`, `encode_enhanced_post` and `encode_glass` together take 28. `FrameFeatures` already exists but the passes get its fields one by one, and the decisions behind it sit inside `begin_frame` | phase 8 |
-| R3. Long functions | `begin_frame` 507 lines, `Renderer::build` 504, `encode_main_pass` 478, `open_on` 432, `visibility` 324, `encode_frame` 295, `draw_scene_inner` (DirectX9) 271, `add_material_inner` 247; `effects/rt.rs` `prepare` 285 and `new` 268 go with phase 1 | phases 10, 11, 12 (the rest noted for later) |
-| R4. Enhanced pipelines built in every mode | `leave_out_enhanced` true only on Android/OpenGL | phase 7, after phase 10 |
-| R5. Environment flags in the renderer | `omsi-render` reads 62 different `omsi_cfg::flags`, several on every frame; `omsi-render-d3d9` reads none; `OMSI_FAKE_GPU_ERROR` hooks in 22 places across 6 files | phase 9 (the mode flags already go in phases 1 and 3) |
-| R6. Vanilla x DirectX9 parity without a test | `scene.hlsl` is a hand port of the `classic` branch; fixes were made twice by hand (#686, #691, #697) | phase 6 removes the second copy; phase 12 tests the plan translation |
-| R7. Organisation and documents | tests in `src/` (3 large files, 30 files with `#[cfg(test)]` in the two crates); `omsi-render-d3d9/README.md` and the `d3d9.rs` header out of date | phases 13, 14 |
+| R1. A type for the mode | the mode as a `String`, a redundant `bool`, three global `AtomicBool`s, bools in `Lighting`/`RenderOptions`, a bit in `camera.sky_color.w`; `graphics_mode` copied in two crates; six ways in | phase A3 ([data-model.md](data-model.md)) |
+| R2. Bools as parameters | `encode_main_pass` takes 22 parameters, 9 of them bools; `encode_main_pass`, `encode_enhanced_post` and `encode_glass` together take 28. `FrameFeatures` already exists but the passes get its fields one by one, and the decisions behind it sit inside `begin_frame` | phase C1 |
+| R3. Long functions | `begin_frame` 507 lines, `Renderer::build` 504, `encode_main_pass` 478, `open_on` 432, `visibility` 324, `encode_frame` 295, `draw_scene_inner` (DirectX9) 271, `add_material_inner` 247; `effects/rt.rs` `prepare` 285 and `new` 268 go with phase A1 | phases C3, C7, C8 (the rest noted for later) |
+| R4. Enhanced pipelines built in every mode | `leave_out_enhanced` true only on Android/OpenGL | phase C6, after phase C3 |
+| R5. Environment flags in the renderer | `omsi-render` reads 62 different `omsi_cfg::flags`, several on every frame; `omsi-render-d3d9` reads none; `OMSI_FAKE_GPU_ERROR` hooks in 22 places across 6 files | phase C2 (the mode flags already go in phases A1 and A3) |
+| R6. Vanilla x DirectX9 parity without a test | `scene.hlsl` is a hand port of the `classic` branch; fixes were made twice by hand (#686, #691, #697) | phase A6 removes the second copy; phase C8 tests the plan translation |
+| R7. Organisation and documents | tests in `src/` (3 large files, 30 files with `#[cfg(test)]` in the two crates); `omsi-render-d3d9/README.md` and the `d3d9.rs` header out of date | phases C9, C10 |
 
 Also removed on the way, by Principle X: the never-taken `camera.flags.z` branch of `shader.wgsl`
-(kept only for a Metal compiler quirk; Windows is the only supported platform) in phase 6, and the
-second copy of the material classification rule in phase 1.
+(kept only for a Metal compiler quirk; Windows is the only supported platform) in phase A6, and the
+second copy of the material classification rule in phase A1.
 
-**Decision**: refactor after the removals, one concern per pull request, in the order 8 → 9 →
-10 → 7 → 11 → 12; 13 and 14 whenever convenient.
+**Decision**: refactor after the removals, one concern per pull request, in the order C1 → C2 →
+C3 → C4 → C5 → C6 → C7 → C8; C9 and C10 whenever convenient. C4 and C5 are the per-mode structure
+of R-7 to R-9.
 
-**Rationale**: refactoring code that phase 1 or 6 deletes is wasted work; phase 8 first because the
-pure `FrameFeatures::decide` makes the later splits checkable by unit tests; phase 10 before 7
+**Rationale**: refactoring code that phase A1 or A6 deletes is wasted work; phase C1 first because the
+pure `FrameFeatures::decide` makes the later splits checkable by unit tests; phase C3 before C6
 because leaving a shading path out is a one-line choice once each pass builds its own pipelines.
 
 **Alternatives considered**: one large "render cleanup" pull request: rejected (Principle IX, and a
 large diff makes a pixel change hard to find). A shared backend trait for wgpu and DirectX9:
 rejected, as in `docs/MACRO_REFACTOR_DRAFT.md` (only two implementations, and the plan hand-off
 already works).
+
+## R-7. Where the line between Vanilla+ and Enhanced runs today
+
+Read at `cbeda16`. Both modes are one `Renderer` on one device; the mode is the bool
+`Lighting::enhanced`, tested in 46 places of `renderer/frame.rs` alone.
+
+| What | Vanilla+ | Enhanced | Shared today |
+|---|---|---|---|
+| Surface shading | `fs_main` (`shader.wgsl`): linear, texture times light | `fs_enhanced` (`enhanced.wgsl`, `enhanced_common.wgsl`): GGX, spherical harmonics, probe, pre-exposed HDR | the vertex shader, the shadow, depth and transmap entry points, the structs and bindings (all in `shader.wgsl`) |
+| Sky | `sky.wgsl` (the `envir.cfg` pictures) | `sky_enhanced.wgsl`, `sky/atmosphere.rs`, `sky/air.rs`, `sky/clouds.rs`, `sky/probe.rs` | stars, sun and moon sprites, snow geometry |
+| Target | the window's format (plus a scale target) | `targets/hdr.rs` (HDR chain, glow levels) | depth, MSAA, AO targets, the cache |
+| After the scene | FXAA when there is no MSAA (`vanilla_fxaa`) | `passes/post.rs` (glow, metering, tone map, FXAA), `lighting/exposure.rs`, `passes/fog_lamps.rs` | upscale, overlay, HUD (`output`) |
+| Puddles | their own pass after the scene (`reflection_frame`, `fs_vanilla_reflections`) | inside the main pass (masked frame) | `effects/puddles.rs` (trace, blur, resolve), the vehicle capture |
+| Lights, sprites | `fs_main`, `fs_smoke`, `fs_snow`; `gpu_light(.., false)` | `fs_enhanced`, `fs_smoke_enhanced`, `fs_snow_enhanced`; `gpu_light(.., true)`, `linear_light_colour` | the light grid, lamp shadows, corona and smoke geometry |
+| Shadows, prepass, SSAO, glass, culling, level of detail, assets | — | — | all shared |
+
+Three files hold code of both modes in one unit: `shader.wgsl` (both fragment paths' helpers),
+`corona.wgsl` and `snow.wgsl` (one fragment entry per mode), and on the Rust side `renderer/build.rs`,
+`renderer/frame.rs`, `renderer/encode.rs`, `renderer/passes.rs`, `passes/main.rs`, `lighting/model.rs`
+and `effects/puddles.rs` (branches on `enhanced`).
+
+**One dependency crosses the line**: in Enhanced the mirrors' pictures are drawn with the plain
+shading (`fs_main`), not the enhanced one (`renderer/frame.rs`, `enhanced_frame`): 0.6 ms against
+12.7 ms for one 256-pixel mirror, by the comment's own measurement. So Enhanced runs the plain
+surface shading every frame a mirror is in view.
+
+## R-8. The plain shading is shared core, not Vanilla+'s
+
+**Decision**: the plain surface shading (`fs_main` and what it calls) stays in the shared core as the
+**base shading**. `modes/vanilla_plus/` holds what only Vanilla+ runs: its frame decisions, the sky
+from the `envir.cfg` pictures, FXAA without MSAA, the puddles' own pass and the non-HDR sprite
+entries. `modes/enhanced/` holds the HDR shading, the atmosphere, the probe, the post passes, the
+exposure, the lamps in fog and the HDR targets, and asks the core for the base shading when it draws
+a mirror.
+
+**Rationale**: FR-021 puts in a mode's directory the code that **only** that mode runs; the base
+shading is run by both, so by the spec's own rule it is core. It also keeps rule 1 (the modes never
+import each other) without a pixel or a millisecond changing (FR-030).
+
+**Alternatives considered**:
+
+- Enhanced draws its mirrors with the enhanced shading: rejected, a measured regression (Principle
+  VII).
+- Enhanced gets a small mirror shader of its own: rejected, a second copy of the plain shading to
+  keep in step (Principle X), and the mirrors' pixels would change.
+- Vanilla+ owns the plain shading and Enhanced imports it: rejected, it breaks rule 1 of the
+  structure.
+
+**For the maintainer (D5)**: this makes `modes/vanilla_plus/` smaller than the tree in the spec
+suggests ("its shaders" there are the sky, the FXAA step, the puddles' pass and the sprite entries,
+not the scene's fragment shader). If Vanilla+ should own its surface shading instead, Enhanced's
+mirrors need one of the rejected alternatives.
+
+## R-9. The mode interface
+
+**Decision**: `interface/mode.rs` declares a trait the two modes implement, and the data types the
+core hands them (the parts structs the passes already take: `MainParts`, `PostParts`, `GroupParts`).
+The renderer holds one boxed mode, built by the one function that names both
+(`renderer/build.rs`). What the trait asks of a mode:
+
+| Step | Vanilla+ | Enhanced |
+|---|---|---|
+| build | its pipelines and fixed resources | its pipelines, look-up tables, probe, noise |
+| features for a frame | adds FXAA-without-MSAA and the puddles' pass to the shared decisions | adds the HDR frame, the masked frame, the lead-view updates |
+| prepare | nothing | atmosphere, probe redraw, exposure |
+| light records | plain colours | linear colours, spot profiles |
+| scene target and pipelines for a view | window format | HDR for the window and headset, base shading for mirrors |
+| after the scene | puddles' pass, FXAA | fog lamps, glow, metering, tone map, FXAA |
+
+`interface/frame_plan.rs` takes `FramePlan` and its parts out of `renderer/mirror.rs`: it is data
+only (ids, matrices, lists), the contract with the Vanilla renderer.
+
+**Rationale**: Principle V allows a trait where there are two real implementations, and there are.
+A trait object costs one indirect call per step, about ten per frame and per view, against thousands
+of draw calls; phase C4 still carries a before/after frame-time measurement.
+
+**Alternatives considered**: an enum with a `match` per step: the renderer would then name both
+modes at every step instead of once at build. Generic `Renderer<M>`: the game would carry the type
+through `omsi-app`, for no measurable gain.
+
+**Layer order** (for `scripts/check-render-layers.sh`): `gpu < shaders < assets | lighting < sky <
+scene < targets < passes < effects < interface < modes < output < renderer < api`. `interface` names
+only lower layers; `modes/vanilla_plus` and `modes/enhanced` count as two domains of one layer, so the
+existing "same layer does not import each other" rule covers rule 1, and "imports point down" covers
+rule 2.
+
+## R-10. WGSL per mode
+
+Shaders are assembled by concatenating `include_str!` sources (`shaders/mod.rs`). **Decision**: the
+core keeps `shaders/scene/` (structs, bindings, vertex shader, shadow and depth entries, base
+shading); each mode keeps its sources under `modes/<mode>/shaders/` and assembles its module as core
+sources + its own. `corona.wgsl` and `snow.wgsl` are split into a common part (vertex stage, shape)
+and one fragment file per mode. `enhanced_common.wgsl`, `sky_enhanced.wgsl`, `post.wgsl` and
+`fog_lamps.wgsl` move whole to Enhanced; `sky.wgsl` to Vanilla+ if the move confirms Enhanced's
+mirrors do not use it (`sky_mirror_pipeline` suggests they use `fs_enhanced_mirror`).
+
+**Rationale**: text moved between files gives the same module text in the same order, so naga's
+output and the pixels do not change; `cargo test -p omsi-render` validates every assembled module.
+
+## R-11. The options per mode: what the code does today
+
+Read at `cbeda16`. The launcher lists its options in `omsi-launcher-ui/src/window/domain/settings.rs`
+(sections Graphics, Advanced graphics, Display and VR) and decides visibility in `shown()` from two
+sources: the `api_limits::D3D9` table (hidden, locked, fewer choices) and loose rules on `graphics`
+(`classic`, `traced`). The in-game menu builds a **separate, hand-written** list
+(`omsi-app/src/hud/implementation/lists/pages.rs`) with `limit_or` for the same table and its own
+`Backend::D3d9` tests. Nothing ties the two lists together, and no table says what Vanilla+ and
+Enhanced differ in.
+
+Applicability (✓ applies, — does not apply, `=x` fixed) and when a change takes effect in the game
+today (**live**: read every frame; **start**: read when the renderer or the world is built):
+
+| Key | Vanilla | Vanilla+ | Enhanced | Takes effect | Note |
+|---|---|---|---|---|---|
+| `graphics` | ✓ | ✓ | ✓ | start | launcher only (FR-020c) |
+| `graphics_api` | — | ✓ | ✓ | start | launcher only; loses `d3d9` |
+| `preset` | — | ✓ | ✓ | start | Vanilla: every key a preset sets is fixed or hidden there except a few; not offered (FR-017) |
+| `msaa` | ✓ | ✓ | ✓ | start | |
+| `render_scale` | ✓ (no automatic) | ✓ | ✓ | start | |
+| `dx9_upscale` | ✓ (scale below 100 %) | — | — | start | |
+| `anisotropy` | ✓ | ✓ | ✓ | start | |
+| `view_distance`, `max_obj_dist`, `min_obj_size` | ✓ | ✓ | ✓ | start | |
+| `shadows` | — | ✓ | ✓ | **live** | |
+| `shadow_size`, `shadow_casters` | — | ✓ | ✓ | start | |
+| `ssao` | — | ✓ | ✓ | start | candidate for FR-020e |
+| `shadow_blobs` | ✓ | ✓ | ✓ | start | to confirm in Vanilla |
+| `night_brightness` | — | — | ✓ | **live** | offered in Vanilla+ today, where it does nothing |
+| `led_glow`, `led_mips` | — | to confirm | ✓ | **live** | the 2026-11-07 survey found `led_glow` Enhanced-only; `led_mips` acts on the texture's mip bias and may act in Vanilla+ |
+| `detail_textures` | — | ✓ | ✓ | **live** | |
+| `reflections` | ✓ | ✓ | ✓ | start | candidate for FR-020e |
+| `mirror_size` | ✓ (OMSI 2's sizes) | ✓ | ✓ | start | |
+| `mirror_refresh` | ✓ (off, full) | ✓ | ✓ | **live** | |
+| `clouds` | `=As OMSI 2` | ✓ | ✓ | start | candidate for FR-020e |
+| `sun_glow` | ✓ | ✓ | ✓ | **live** | |
+| `windy_trees` | `=Off` | ✓ | ✓ | **live** | |
+| `smoke`, `smoke_user_only`, `smoke_max`, `smoke_in_mirrors` | ✓ | ✓ | ✓ | start | |
+| `dx9_snow`, `fewer_night_lights`, `dx9_glass_rain`, `dx9_coronas`, `dx9_stars`, `dx9_cloud_picture`, `dx9_texture_limit` | ✓ | — | — | to confirm (handed to the device on a settings change) | labels describe the effect, not the API (FR-018) |
+| `texture_memory`, `texture_compression` | ✓ | ✓ | ✓ | start | |
+| `fullscreen`, `vsync`, `max_fps`, `fov`, `outside_fov` | ✓ | ✓ | ✓ | **live** | Display section |
+| `vr`, `vr_*` | — | ✓ | ✓ | start | FR-018a |
+| `triple_screen`, `triple_*` | — | ✓ | ✓ | start | FR-018a |
+
+Every "to confirm" and every Vanilla cell is checked by the task that builds the table (phase B1);
+the table in the code, not this page, is then the reference, and the user guide is generated from
+it.
+
+**Decision**: one table, `GRAPHICS_OPTIONS`, next to `GraphicsMode` in `omsi-cfg`
+([data-model.md](data-model.md)); the launcher's `shown()` and the in-game list both ask it;
+`api_limits.rs` and the loose rules go. The in-game list is **generated** from the launcher's option
+list filtered by the table (mode, live), instead of being written by hand.
+
+**Rationale**: FR-014 (one source) and FR-020 (a test can walk the table). `omsi-cfg` is the one
+crate the game, the launcher core and the launcher UI all depend on.
+
+**Alternatives considered**: keep the table in `omsi-launcher-ui` (the game already reaches it):
+rejected, the game would keep depending on the launcher's UI crate for a rule about the renderer.
+
+## R-12. Which options are made to apply at once (FR-020e)
+
+**Decision**: three on/off effects: `ssao`, `reflections`, `clouds`. One pull request each.
+
+| Key | Why it needs a start today | What "at once" takes |
+|---|---|---|
+| `ssao` | `RenderOptions::ssao` is copied when the renderer is built | the frame already decides `ao_on` per frame; the option becomes a field the app may change, and the AO targets are made on first use |
+| `reflections` | `RenderOptions::reflections` likewise; also read by the puddles | the same: a per-frame read; materials keep their maps loaded either way |
+| `clouds` | `make.rs` decides once whether the cloud layer exists | the layer is kept and its drawing switched |
+
+**Rationale**: all three switch a pass or a term on and off without rebuilding pipelines, targets of
+another size or textures; the test of FR-020e (picture after the switch equals a fresh start) is a
+plain `render_to_image` comparison. `msaa`, `shadow_size`, `render_scale`, `anisotropy`, the
+distances and the texture options rebuild resources and stay launcher-only.
+
+**Alternatives considered**: `shadow_size` and `msaa` live: rejected for this feature (they rebuild
+targets and pipelines; FR-020e excludes that). If one of the three turns out to need a rebuild when
+its task starts, it is dropped from the set with a note here, not forced.

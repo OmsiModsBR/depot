@@ -39,8 +39,7 @@
   today, not implementation choices of this feature.
 - One decision of the earlier plan stays open by nature: which Vanilla implementation matches
   OMSI 2 in each difference is checked by the maintainer in the game (FR-007).
-- The plan and its companion documents predate this spec and must be regenerated with
-  `/speckit-plan`; `plan.md` carries a notice saying so.
+- The plan and its companion documents were regenerated with `/speckit-plan` on 2026-11-13.
 - `.ai/.specify/extensions.yml` does not exist, so no hooks ran before or after.
 - Re-validated on 2026-11-13 after the maintainer added the launcher page layout (the mode choice in
   the top section, the graphics API inside "Image" for Vanilla+ and Enhanced only): FR-020a..FR-020c

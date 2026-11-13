@@ -1,6 +1,6 @@
 # Feature Specification: Three graphics modes, each with its own code and its own options
 
-**Feature Branch**: one per delivery phase (see [plan.md](plan.md), to be regenerated from this spec)
+**Feature Branch**: one per delivery phase (see [plan.md](plan.md))
 
 **Created**: 2026-11-13
 
@@ -441,6 +441,4 @@ Rules of the structure:
   FR-020e is.
 - New advanced features for Enhanced (for example screen-space reflections or a new ambient
   occlusion) are out of scope: this feature prepares the place for them.
-- The existing [plan.md](plan.md), [research.md](research.md), [data-model.md](data-model.md),
-  [quickstart.md](quickstart.md) and contracts predate this spec. They stay as reference and are
-  regenerated with `/speckit-plan`; where they differ from this spec, the spec wins.
+- [plan.md](plan.md) and its companion documents were regenerated from this spec on 2026-11-13.
