@@ -1187,6 +1187,21 @@ impl ApplicationHandler for App {
                 }
                 // the on-screen wheel and pedals (a phone)
                 self.touch_frame(dt);
+                // (a trolleybus pole held with the mouse points where the pointer leads it)
+                let pole_aim = self
+                    .player
+                    .as_ref()
+                    .is_some_and(|p| p.vehicle.trolley.is_some())
+                    .then(|| self.cursor_ray_now())
+                    .flatten()
+                    .map(|(o, d, _)| (o, d.as_dvec3()));
+                if let Some(t) = self
+                    .player
+                    .as_mut()
+                    .and_then(|p| p.vehicle.trolley.as_mut())
+                {
+                    t.aim = pole_aim;
+                }
                 if let (Some(p), Some(r), Some(scene)) = (
                     self.player.as_mut(),
                     self.renderer.as_ref(),
@@ -1203,6 +1218,7 @@ impl ApplicationHandler for App {
                     let world = self.world.as_deref();
                     let ground_here = ground_loaded_at(world, p.vehicle.position);
                     if !self.paused && ground_here {
+                        p.view_saloon = self.view == "pax";
                         p.tick(
                             dt,
                             self.audio.as_ref(),

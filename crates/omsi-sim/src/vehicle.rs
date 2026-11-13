@@ -20,6 +20,7 @@ pub(crate) mod props;
 pub(crate) mod radio;
 pub(crate) mod scripts;
 mod skin;
+pub(crate) mod trolley;
 pub(crate) use coupled::{articulation, trailer};
 pub(crate) mod vehicle_type;
 pub(crate) mod visuals;
@@ -36,6 +37,7 @@ pub use trailer::{
     body_heading, body_reversed, body_rotation, coupling_offsets, coupling_placement,
     coupling_points, joint_angles, TrailerPart,
 };
+pub use trolley::Trolley;
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
 pub use weather::{relative_humidity, road_grip};
@@ -83,6 +85,8 @@ pub struct VehicleInstance {
     pub contact: Option<std::sync::Arc<dyn crate::physics::Ground>>,
     /// Vehicles coupled behind this one.
     pub trailers: Vec<TrailerPart>,
+    /// The poles, when the vehicle is declared as a trolleybus (see `trolley`).
+    pub trolley: Option<Box<Trolley>>,
     /// How many coupled parts the lead body's rest loads were worked out for (`step_bodies`).
     pub(crate) rest_loads_for: usize,
     /// The vehicle's `[smoke]` particle systems (see `crate::particles`).
@@ -479,6 +483,7 @@ impl VehicleInstance {
             html_textures,
             ground: None,
             trailers: Vec::new(),
+            trolley: None,
             rest_loads_for: 0,
             skin_rest: Vec::new(),
             collision: None,
@@ -612,6 +617,7 @@ impl VehicleInstance {
         self.show_radio_text();
         self.clear_pax_requests();
         self.update_visuals(dt);
+        self.step_trolley(dt);
     }
 
     /// The passengers' door requests are pulses: OMSI clears all eight of each kind

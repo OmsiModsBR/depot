@@ -3266,6 +3266,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["dx9_texture_limit"] = json!(0);
     // outside sounds heard from a cab go through a low-pass
     v["muffle_outside"] = json!(false);
+    // the overhead wire and the poles of declared trolleybuses
+    v["trolleybus"] = json!(true);
     // OMSI's own options
     for (k, d) in [
         ("maintenance", json!(0)),
@@ -4110,6 +4112,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 })
             }
             "muffle_outside" => v[&k] = json!(b(val)),
+            "trolleybus" => v[&k] = json!(b(val)),
             // (what is no finite number is the default, as the game reads it)
             "time_speed" => {
                 v[&k] = json!(val
@@ -4782,6 +4785,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         }
     ));
     text.push_str(&format!("muffle_outside={}\n", b("muffle_outside", false)));
+    text.push_str(&format!("trolleybus={}\n", b("trolleybus", true)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),

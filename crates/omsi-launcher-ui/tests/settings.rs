@@ -149,6 +149,7 @@ const BEFORE: &[&str] = &[
     "maintenance",
     "collision_vehicles",
     "collision_objects",
+    "trolleybus",
     "collision_pedestrians",
     "use_real_time",
     "use_real_date",

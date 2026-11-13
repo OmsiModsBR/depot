@@ -291,6 +291,9 @@ pub struct Settings {
     /// through a low-pass, as the game did before it mixed as OMSI 2 does. Off by default:
     /// OMSI 2 has no such filter.
     pub muffle_outside: bool,
+    /// Trolleybus support: the overhead wire of the map and the poles of a vehicle declared
+    /// as a trolleybus. Off, every vehicle runs as an ordinary bus (for comparison).
+    pub trolleybus: bool,
     /// How fast the clock runs (1 real time .. 30); in LAN play the host's decides.
     pub time_speed: f64,
     /// The game's date and time follow this device's clock (the host's in LAN play); the
@@ -585,6 +588,7 @@ impl Settings {
             doppler: true,
             physics: omsi_cfg::PhysicsMode::Classic,
             muffle_outside: false,
+            trolleybus: true,
             driver: true,
             maintenance: 0,
             ai_unsched_factor: 1.0,
@@ -996,6 +1000,7 @@ impl Settings {
                 "doppler" | "sound_doppler" => s.doppler = b(v),
                 "physics" => s.physics = omsi_cfg::PhysicsMode::parse(v),
                 "muffle_outside" => s.muffle_outside = b(v),
+                "trolleybus" => s.trolleybus = b(v),
                 "mirror_hud" => {
                     s.mirror_hud = v.parse::<u8>().map(|x| x.min(3)).unwrap_or(s.mirror_hud)
                 }

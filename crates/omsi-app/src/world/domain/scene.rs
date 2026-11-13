@@ -361,6 +361,8 @@ pub struct StagedTile {
     /// What reading the tile counted (missing types, empty car parks, rows, attachments).
     pub counts: LoadStats,
     pub resolved: std::sync::OnceLock<Arc<Resolved>>,
+    /// The tile's overhead wire (None: it has none).
+    pub wires: Option<omsi_trolley::TileWires>,
 }
 
 /// A staged tile's final ground and where its objects finally stand.
@@ -849,6 +851,11 @@ pub struct World {
     pub(crate) layout: Mutex<Option<Arc<TileLayout>>>,
     /// Scenery objects' sound configurations, read once per file.
     pub(crate) sound_cfgs: Mutex<HashMap<PathBuf, Option<Arc<omsi_vehicle::SoundCfg>>>>,
+    /// The trolleybus content convention of the installation (None: no trolleybus content,
+    /// and no wire is looked for).
+    pub(crate) trolley: Option<Arc<omsi_trolley::Convention>>,
+    /// The overhead wire of the loaded tiles (empty on a map without wire).
+    pub wires: Arc<Mutex<omsi_trolley::WireNetwork>>,
 }
 
 /// A placed object's particle systems (`[smoke]`, `[particle_emitter]`).
