@@ -35,6 +35,14 @@ After this feature there are **three modes**, each with one role:
 | **Vanilla+** | The OMSI 2 picture with conservative improvements, on modern graphics APIs. Its picture does not change with this feature |
 | **Enhanced** | Where the advanced graphics work goes. No ray tracing and no path tracing |
 
+## Clarifications
+
+### Session 2026-11-13
+
+- Q: Does making graphics options take effect at once (without a restart) belong to this feature? →
+  A: Yes, for a small set. The plan lists a few options that are cheap to apply in the running
+  session; every other option that needs a restart stays in the launcher only.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Three modes to choose from, and no player left in a mode that is gone (Priority: P1)
@@ -270,6 +278,13 @@ floor lit through the windows are darker than in the open, and the frame time is
   start.
 - **FR-020d**: Every graphics option the in-game menu offers MUST show its effect in the running
   session.
+- **FR-020e**: A small set of graphics options that need a restart today MUST be made to take
+  effect in the running session, so that the in-game menu keeps them. The plan names the set,
+  chosen among the options that are cheap and safe to apply at once (switching an effect on or off
+  is a candidate; anything that rebuilds the renderer's resources is not). Each one is delivered as
+  its own change, with a test that the picture after the in-session change equals the picture of a
+  fresh start with the same value, and with no frame-time cost while the option is not being
+  changed.
 - **FR-020**: An automated test MUST fail when a graphics option exists without a row in the
   applicability table, when the in-game menu offers an option the table marks as needing a restart
   or as not applying to the running mode, or when it leaves out one the table marks as applying at
@@ -410,6 +425,8 @@ Rules of the structure:
     over to Enhanced; only the sunlight through glass is.
   - Which side of each difference between the two Vanilla implementations matches OMSI 2 is decided
     by the maintainer in the game (FR-007); the feature does not guess.
+- Making every graphics option take effect without a restart is out of scope: only the small set of
+  FR-020e is.
 - New advanced features for Enhanced (for example screen-space reflections or a new ambient
   occlusion) are out of scope: this feature prepares the place for them.
 - The existing [plan.md](plan.md), [research.md](research.md), [data-model.md](data-model.md),
