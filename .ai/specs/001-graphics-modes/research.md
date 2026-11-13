@@ -85,7 +85,8 @@ shadows, no SSAO, no procedural detail texture, no snow cover, no moonlight.
 | V12 | **inconclusive**. The thickest fog the weather allows has a 50 m range, too thin over the length of a cab to tell from an inside camera. From an outside camera, with a door open, the fog appears to lie inside the vehicle as well | no `fix/dx9-*`: nothing seen says OMSI 2 keeps the fog out of the player's vehicle, and the outside view suggests it does not. DirectX9's behaviour (the fog falls on the vehicle's inside like on anything else at that distance) stays; the point remains "to validate" and no public text claims either way (FR-032) |
 | V9 | three screenshots of a cobbled yard compared (OMSI 2, DirectX9, DirectX 12), 2026-11-13. They do not share camera, weather or season, so the mip filtering cannot be told apart from the lighting: the cobbles' mean brightness reads 0.47-0.48 in OMSI 2, 0.53-0.55 in DirectX9 and 0.50-0.53 in DirectX 12. Between the two Depot pictures the difference is 1 to 2 % | **keep** DirectX9's: the two implementations are not visibly different here, so nothing is lost by the change of renderer, and no fix follows. Which of them matches OMSI 2 stays "to validate" (FR-032) |
 | V10 | neither OMSI 2 nor DirectX9 ever shows the vehicle behind through the side of the one in front | **keep** DirectX9; no `fix/dx9-transmap-depth`: the missing depth-only pass has no visible effect there |
-| V11 | not checked yet | still open; decides a further `fix/dx9-*` pull request of phase A4 |
+| V11 | the cobbled road and the terrain show the same texture layout in OMSI 2, DirectX 12 and DirectX9 | **keep** DirectX9; no `fix/dx9-surface-uv`: the uv of the depth-only surface draws has no visible effect |
+| V15 (new) | in the V11 screenshots the cobbles measure a mean brightness of 0.48 in OMSI 2, 0.49 in DirectX 12 and 0.41 in DirectX9; the grass hill is darker in DirectX9 too | DirectX9 draws the ground about 16 % darker than both. Candidate `fix/dx9-ground-brightness` (phase A4), after a pair taken with the same camera, time and weather confirms it and the cause is found |
 
 Seen in the same screenshots, outside the V rows and **not yet confirmed** (the cameras differ): the
 far hills and the grass are darker and browner in DirectX9 than in DirectX 12 at what looks like the
@@ -93,8 +94,8 @@ same hour; OMSI 2's cobbles close to the camera are sharper and show more colour
 Depot picture. Both need a same-camera, same-weather pair before they become rows of this table.
 
 **Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V6, V7 and V8 (checked), and likely V3 and V9. wgpu is
-ahead only in V11 and maybe V12, which are gaps of the port and become `fix/dx9-*` pull requests
-(phase A4) if validation shows a visible difference. V14 is a gap of both, outside this feature (#751).
+ahead in none of the checked rows (V12 stays to validate). The ground brightness (V15) is the one
+visible difference found against DirectX9 besides the wet road. V14 is a gap of both, outside this feature (#751).
 
 **Rationale**: DirectX9 was built under the rule "draw only what OMSI 2 has", and the latest parity
 fixes (#686, #691, #697) were made there first. wgpu Vanilla inherited Vanilla+ additions (puddles,
