@@ -73,7 +73,16 @@ shadows, no SSAO, no procedural detail texture, no snow cover, no moonlight.
 | V17 | Effort-saving options (`fewer_night_lights`, texture limit, stars, cloud picture) | — | ✓ | Depot additions | keep (options, off by default) |
 | V18 | The launcher's showroom preview | drawn as Vanilla when the game is in Vanilla (`launcher_statics` sets `CLASSIC`) | the preview is always wgpu | — | after phase A6 the preview uses Vanilla+; accept it, or draw the preview with DirectX9 (costly) |
 
-**Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V7 and likely V3, V6 and V9. wgpu is
+### Checked in the game by the maintainer (T001, 2026-11-13)
+
+| # | OMSI 2 | Outcome |
+|---|---|---|
+| V1, V2, V4, V5, V7, V8 | as DirectX9 draws it | **keep** DirectX9's behaviour; no fix needed |
+| V6 | no wind in the trees | **keep** DirectX9's (static trees); `windy_trees` stays fixed "Off" in Vanilla |
+| V14 | has dynamic shadows, switched on by a setting; meshes marked `[shadow]` are shadows that are always on | neither implementation draws them in Vanilla, so this does not decide between the two (FR-007) and does not hold phase A5. It is a **gap of Vanilla against OMSI 2**. The text "an improvement OMSI 2 does not have" for the shadow options is wrong and is corrected when the option table is built (phase B1): in Vanilla they are "not drawn by Vanilla yet". Drawing them is a feature of its own, outside this plan unless the maintainer brings it in |
+| V3, V9, V10, V11, V12, V13 | not checked yet | still open; V10, V11, V12 decide the `fix/dx9-*` pull requests of phase A4 |
+
+**Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V6, V7 and V8 (checked), and likely V3 and V9. wgpu is
 ahead only in V10, V11 and maybe V12, which are gaps of the port and become `fix/dx9-*` pull requests
 (phase A4) if validation shows a visible difference. V14 is an open question for both.
 
