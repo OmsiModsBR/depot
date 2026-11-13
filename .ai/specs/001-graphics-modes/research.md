@@ -88,14 +88,12 @@ shadows, no SSAO, no procedural detail texture, no snow cover, no moonlight.
 | V11 | the cobbled road and the terrain show the same texture layout in OMSI 2, DirectX 12 and DirectX9 | **keep** DirectX9; no `fix/dx9-surface-uv`: the uv of the depth-only surface draws has no visible effect |
 | V15 (new) | in the V11 screenshots the cobbles measure a mean brightness of 0.48 in OMSI 2, 0.49 in DirectX 12 and 0.41 in DirectX9; the grass hill is darker in DirectX9 too | DirectX9 draws the ground about 16 % darker than both. The three were taken at the same time and weather (maintainer, 2026-11-13), with the DirectX9 camera a little aside. **Fix**: `fix/dx9-ground-brightness` (phase A4), which finds the cause first; it holds phase A5 |
 
-Seen in the same screenshots, outside the V rows and **not yet confirmed** (the cameras differ): the
-far hills and the grass are darker and browner in DirectX9 than in DirectX 12 at what looks like the
-same hour; OMSI 2's cobbles close to the camera are sharper and show more colour grain than either
-Depot picture. Both need a same-camera, same-weather pair before they become rows of this table.
+One observation of the check is not a row: OMSI 2's cobbles close to the camera show a colour grain
+that neither Depot implementation draws. It is the same in both, so it does not decide between them.
 
-**Decision**: DirectX9 is closer to OMSI 2 in V1, V2, V4, V5, V6, V7 and V8 (checked), and likely V3 and V9. wgpu is
-ahead in none of the checked rows (V12 stays to validate). The ground brightness (V15) is the one
-visible difference found against DirectX9 besides the wet road. V14 is a gap of both, outside this feature (#751).
+**Decision**: DirectX9 is kept in every row (V1, V2, V4 to V11 and V13, checked in the game). It is
+fixed first in three: the wet road (V3), the snow on by default (V13) and the ground brightness
+(V15). V12 stays to validate. V14 is a gap of both, outside this feature (#751).
 
 **Rationale**: DirectX9 was built under the rule "draw only what OMSI 2 has", and the latest parity
 fixes (#686, #691, #697) were made there first. wgpu Vanilla inherited Vanilla+ additions (puddles,

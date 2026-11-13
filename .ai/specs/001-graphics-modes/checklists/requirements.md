@@ -53,3 +53,8 @@
   (FR-018a), a slower Vanilla renderer is fixed before the switch (FR-008), Enhanced inherits only
   the sunlight through glass (FR-005), and a computer that cannot open Vanilla gets a clear error
   with no mode switch (FR-011a). 16/16 items passing before and after.
+- Re-validated after `/speckit-analyze` (2026-11-13, twelve findings, none critical, all applied):
+  FR-008 names the number compared and when it is measured, FR-007 says what happens to a difference
+  the game cannot show, "Picture" replaces "Image" for the launcher section, FR-017 matches the
+  tasks, and the results of the in-game check (T001) are in the plan and the quickstart. Every item
+  still passes.

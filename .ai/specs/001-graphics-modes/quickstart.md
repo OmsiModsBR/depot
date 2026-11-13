@@ -22,19 +22,23 @@ Depot with `graphics=vanilla` on DirectX 12 (while it still exists), and Depot o
    `t=25 key F3; t=28 shot X; t=29 key F4; t=32 shot Y`).
 3. Result: an "OMSI 2 = ?" column filled in for each row by the maintainer (decision D1).
 
-Expected: V1, V2, V4, V5, V7 confirmed for DirectX9; V10, V11 and V12 decide whether `fix/dx9-*`
-pull requests are needed (phase A4).
+Done on 2026-11-13: the results are in [research.md](research.md), "Checked in the game by the
+maintainer". Three rows became `fix/dx9-*` pull requests of phase A4 (wet road, snow on by default,
+darker ground).
 
 ## Q2. Phases A0 and A5: DirectX9 against wgpu Vanilla (FR-008)
 
-Same machine, map, bus, stretch and traffic, `OMSI_PROFILE=1`, 5 minutes each:
+Same machine, map, bus, stretch and traffic, `OMSI_PROFILE=1`, three runs of 5 minutes each:
 
 1. `graphics=vanilla`, `graphics_api=dx12`;
 2. `graphics_api=d3d9`.
 
-Compare the `profile window:` lines (frame, GPU, stages) and the loading time. Phase A5 goes in only
-if (2) is not slower than (1). If it is, the difference becomes a `fix/dx9-*` and the measurement
-is repeated; there is no tolerance.
+The number compared is the median frame time of the three runs' `profile window:` lines; the GPU
+time, the stages and the loading time are recorded beside it. (2) passes when its median is less
+than or equal to (1)'s; there is no tolerance. The measurement is taken twice: in phase A0, as a
+first reading, and again after the `fix/dx9-*` pull requests of phase A4 are in, which is the one
+that lets phase A5 go in. If it fails, the difference becomes a `fix/dx9-*` and the measurement is
+repeated.
 
 ## Q3. Phase A1: Enhanced+ removed (FR-003)
 
@@ -124,6 +128,8 @@ Each pull request shows that nothing a player sees changed (FR-030):
   `modes/enhanced` (in a scratch copy, with its one `mod` line and build arm) still builds and draws
   Vanilla+, and the other way round (User Story 3, Independent Test);
 - C8: `cargo tree -p omsi-render-vanilla` has no `omsi-render`; the contract test runs the same
-  `FramePlan` through the translation on `NullBackend`;
+  `FramePlan` through the translation on `NullBackend`; the draws `NullBackend` records for the
+  crate's scene tests are identical before and after the layout and the split by pass, and one pair
+  of same-camera screenshots on Windows (`OMSI_INPUT` with `shot`) shows the same picture;
 - C9: the number of `#[cfg(test)]` modules in `src/` of each crate is zero, and the test count of
   `cargo test -p <crate>` stays the same (SC-010).

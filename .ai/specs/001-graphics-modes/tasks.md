@@ -48,8 +48,8 @@ Rust workspace: `crates/<crate>/src/` for code, `crates/<crate>/tests/` for test
 (quickstart Q1, Q2), and the reference numbers every later comparison uses.
 
 - [x] T001 [ph A0] Q1: three same-camera screenshots (OMSI 2, Depot `graphics=vanilla` on DirectX 12, Depot on DirectX9) for each row V1-V14; fill an "OMSI 2 = ?" column in R-V of `.ai/specs/001-graphics-modes/research.md` and list which rows become `fix/dx9-*` (decision D1, FR-007). **Done 2026-11-13**: V1, V2, V4, V5, V6, V7, V8 (keep DirectX9's behaviour), V13 (keep DirectX9's snow; on by default: `fix/dx9-snow-default`), V14 (OMSI 2 has dynamic shadows; a Vanilla gap outside this feature, issue #751). V12 (inconclusive in the game: no fix, stays "to validate"). V3 (OMSI 2 has the wet road and its puddle reflections: `fix/dx9-wet-road`). V9 (no visible difference between the two implementations: keep, no fix). V10 (neither OMSI 2 nor DirectX9 shows the vehicle behind through the one in front: keep, no fix). V11 (same texture layout in the three: keep, no fix). V15 (new: DirectX9 draws the ground about 16 % darker, cobbles 0.41 against 0.49 in DirectX 12 and 0.48 in OMSI 2, same time and weather: `fix/dx9-ground-brightness`). Every row is checked
-- [ ] T002 [P] [ph A0] Q2: `OMSI_PROFILE=1`, 5 minutes on the same map, bus and stretch, `graphics=vanilla` on DirectX 12 and then `graphics_api=d3d9`; record the `profile window:` lines and loading times under "Baseline measurements" in `.ai/specs/001-graphics-modes/research.md` and state pass or fail of FR-008
-- [ ] T003 [P] Record the reference numbers at the current `main` in `.ai/specs/001-graphics-modes/research.md`: the per-mode measurement (one process per mode, lavapipe), the renderer start-up time in Vanilla+ and Enhanced, and `wc -l` of `crates/omsi-render/src` and `crates/omsi-render-d3d9/src`
+- [ ] T002 [P] [ph A0] Q2, first reading: `OMSI_PROFILE=1`, three runs of 5 minutes on the same map, bus and stretch, `graphics=vanilla` on DirectX 12 and then `graphics_api=d3d9`; record the median frame time of the `profile window:` lines, the GPU time and the loading times under "Baseline measurements" in `.ai/specs/001-graphics-modes/research.md`. The reading that decides FR-008 is T017, after the fixes of T016
+- [ ] T003 [P] [ph A0] Record the reference numbers at the current `main` in `.ai/specs/001-graphics-modes/research.md`: the per-mode measurement (one process per mode, lavapipe), the renderer start-up time in Vanilla+ and Enhanced, and `wc -l` of `crates/omsi-render/src` and `crates/omsi-render-d3d9/src`
 
 **Checkpoint**: T001 and T002 decide the content of phase A4; T003 is the "before" of SC-006, SC-007 and SC-009.
 
@@ -92,8 +92,10 @@ the DirectX9 API) and check which mode opens and what the settings show (quickst
 
 ### Bring the missing pieces to Direct3D 9Ex `fix/dx9-*`
 
-- [ ] T016 [US1] [ph A4] One `fix/dx9-<item>` pull request per row T001 decides (decided: V3 wet road and puddle reflections, `fix/dx9-wet-road`, which holds T018; V15 darker ground, `fix/dx9-ground-brightness`, cause to be found first, which holds T018 too); also decided: V13 snow on by default, `fix/dx9-snow-default` (`crates/omsi-app/src/settings.rs`, with its settings test) in `crates/omsi-render-d3d9/src/d3d9/scene.rs` and `crates/omsi-render-d3d9/src/d3d9/shaders/scene.hlsl`, each with its failing test in `crates/omsi-render-d3d9/` on `NullBackend`
-- [ ] T017 [US1] [ph A4] If T002 failed: find and fix the difference in `crates/omsi-render-d3d9/src/d3d9/` as its own `fix/dx9-<cause>` pull request, then repeat T002; A5 does not start until it passes (FR-008, no tolerance)
+- [ ] T016 [US1] [ph A4] `fix/dx9-wet-road` (V3): the wet road and its puddle reflections, with the people in them following the menu setting, in `crates/omsi-render-d3d9/src/d3d9/scene.rs` and `crates/omsi-render-d3d9/src/d3d9/shaders/scene.hlsl`, with its failing test in `crates/omsi-render-d3d9/` on `NullBackend`
+- [ ] T016a [P] [US1] [ph A4] `fix/dx9-snow-default` (V13): the snowfall is on by default in `crates/omsi-app/src/settings.rs`, with its settings test in `crates/omsi-app/tests/app/settings/`
+- [ ] T016b [US1] [ph A4] `fix/dx9-ground-brightness` (V15): find why Direct3D 9Ex draws the ground about 16 % darker than DirectX 12 on the same scene, then fix it in `crates/omsi-render-d3d9/src/d3d9/`, with a failing test on `NullBackend` or on the shared constants, and a same-camera pair of screenshots in the pull request
+- [ ] T017 [US1] [ph A4] Q2, the deciding reading, after T016, T016a and T016b are in: repeat the measurement of T002 and state pass or fail of FR-008 (Direct3D 9Ex passes when its median frame time is less than or equal to wgpu Vanilla's). If it fails: find and fix the difference in `crates/omsi-render-d3d9/src/d3d9/` as its own `fix/dx9-<cause>` pull request and measure again; A5 does not start until it passes (no tolerance)
 
 ### Vanilla is the Direct3D 9Ex renderer `feat/vanilla-is-dx9`
 
@@ -124,7 +126,7 @@ observable effect; every in-game option acts in the session (quickstart Q7, Q8).
 
 ### The table `feat/graphics-option-table`
 
-- [ ] T027 [US2] [ph B1] Audit every row of R-11 in `.ai/specs/001-graphics-modes/research.md` against the code: settle each "to confirm" (`led_glow`, `led_mips` in Vanilla+; whether `dx9_snow` stays an option, since in OMSI 2 the snow follows the weather alone; `shadow_blobs` in Vanilla; whether the `dx9_*` options act live), and list any option that acts in no mode
+- [ ] T027 [US2] [ph B1] Audit every row of R-11 in `.ai/specs/001-graphics-modes/research.md` against the code: settle each "to confirm" (`led_glow`, `led_mips` in Vanilla+; whether the `dx9_*` options act live). Already decided by the maintainer's check of T001: `dx9_snow` is not an option any more, because in OMSI 2 the snow follows the weather alone (it is removed with FR-019); `shadow_blobs` is fixed on in Vanilla, because the `[isshadow]` shadow is always drawn in OMSI 2, and list any option that acts in no mode
 - [ ] T028 [US2] [ph B1] Create `crates/omsi-cfg/src/graphics_options.rs`: `GraphicsOption { key, per_mode: [Applies; 3], effect: Live | NextStart }`, `Applies = Offered | Choices(&[&str]) | Fixed { shown, reason } | NotOffered`, the `GRAPHICS_OPTIONS` table from T027 (in Vanilla the shadow options are `NotOffered` with the reason "not drawn by Vanilla yet", never "an improvement OMSI 2 does not have": OMSI 2 has dynamic shadows, research R-V V14), and `offered_in_launcher`, `offered_in_game` (offered **and** `Live`), `fit` ([data model](data-model.md)); reasons are message keys, no translated text
 - [ ] T029 [P] [US2] [ph B1] Tests in `crates/omsi-cfg/tests/graphics_options.rs`: `fit` for each `Applies` kind (nearest allowed value for `Choices`, never 0 for a positive one), `offered_in_game` implies `offered_in_launcher`, `graphics` and `graphics_api` are `NextStart`
 - [ ] T030 [US2] [ph B1] Make `shown()` and `api_limit()` in `crates/omsi-launcher-ui/src/window/domain/settings.rs` ask the table; delete `crates/omsi-launcher-ui/src/api_limits.rs` and the `classic` rules, and port `crates/omsi-launcher-ui/tests/api_limits.rs` to the table; presets apply only keys `Offered` or `Choices` in the current mode and are not offered where they would change fewer than two keys (FR-017)
@@ -207,7 +209,7 @@ the layer check passes; goldens and frame times unchanged (quickstart Q9, Q10).
 - [ ] T066 [US3] [ph C8] Lay the crate out: `scene.rs`, `ui.rs`, `caps.rs`, `render_scale.rs`, `glass_rain.rs` → `crates/omsi-render-vanilla/src/domain/`; the `RenderBackend` trait and its descriptors → `interface/input.rs`; `NullBackend` → `implementation/null.rs`; `d3d9/` → `implementation/d3d9/`; the crate's public names keep their spelling
 - [ ] T067 [US3] [ph C8] `crates/omsi-app/src/output/implementation/d3d9.rs` → `vanilla.rs`, with the `FramePlan` → `SceneFrame` translation as a function of its own; `Dx9Effects` → `VanillaEffects` in `crates/omsi-app/src/output/domain/backend.rs`
 - [ ] T068 [P] [US3] [ph C8] Contract test in `crates/omsi-app/tests/app/output/frame_plan_vanilla.rs`: the same `FramePlan` on `NullBackend` records the same batches, coronas, sky and lights; the constants shared by Rust and HLSL are checked there (FR-023)
-- [ ] T069 [US3] [ph C8] Split `draw_scene_inner` in `crates/omsi-render-vanilla/src/implementation/d3d9/scene.rs` by pass (sky, world, smoke, coronas, glass rain)
+- [ ] T069 [US3] [ph C8] Split `draw_scene_inner` in `crates/omsi-render-vanilla/src/implementation/d3d9/scene.rs` by pass (sky, world, smoke, coronas, glass rain); the draws `NullBackend` records for the crate's scene tests are identical before and after, and the pull request carries one pair of same-camera screenshots on Windows (FR-030, quickstart Q10)
 - [ ] T070 [P] [US3] [ph C8] Extend `scripts/check-render-layers.sh` with rule 5: neither rendering crate depends on the other (read from the two `Cargo.toml`); `cargo tree -p omsi-render-vanilla` has no `omsi-render`
 
 **Checkpoint**: User Story 3's independent test passes; SC-004 and SC-008 hold.
@@ -236,18 +238,18 @@ measured on both (quickstart Q4).
 - [ ] T074 [P] [ph C9] Move `crates/omsi-render/src/tests.rs`, `src/tests_units.rs` and the in-file `#[cfg(test)]` modules to `crates/omsi-render/tests/`, through `crates/omsi-render/src/testing.rs` behind `test-support`; remove the test-only globs from `crates/omsi-render/src/lib.rs`; the test count stays the same (SC-010). Best before T057 (smaller moves)
 - [ ] T075 [P] [ph C9] Move `scene_tests.rs`, `ui_tests.rs`, `upscale_tests.rs` and `tests.rs` of the Vanilla crate's `d3d9/` folder to its `tests/`
 - [ ] T076 [ph C10] Rewrite `crates/omsi-render/ARCHITECTURE.md`: the two new layers, the mode rules, where new code goes per mode; correct rule 8 ("unused code is not deleted") to Principle X, rule 7 (tests) to Principle VI, and the drift on `RenderOptions`
-- [ ] T077 [P] [ph C10] Update `crates/omsi-render-vanilla/README.md` (it says smoke and mirrors are not drawn; they are; the crate is the Vanilla mode), `README.md`, `docs/USER_GUIDE.md` (three modes, the option table), `docs/ENVIRONMENT.md`, and the references in `docs/MACRO_REFACTOR_DRAFT.md` and `docs/OMSI_APP_REFACTOR.md`
-- [ ] T078 Final measurements against T003: per-mode frame measurement (SC-006), Vanilla+ start-up (SC-007), `wc -l` of the rendering crates (SC-009); record them in `.ai/specs/001-graphics-modes/research.md`
-- [ ] T079 Run every section of `.ai/specs/001-graphics-modes/quickstart.md` once more on the final `main` and tick the spec's success criteria SC-001 to SC-010 in issue #703
+- [ ] T077 [P] [ph C10] Update `crates/omsi-render-vanilla/README.md` (it says smoke and mirrors are not drawn; they are; the crate is the Vanilla mode), `README.md`, `docs/USER_GUIDE.md` (three modes, the option table), `docs/ENVIRONMENT.md`, and the references in `docs/MACRO_REFACTOR_DRAFT.md` and `docs/OMSI_APP_REFACTOR.md`; the user guide says that the launcher's vehicle preview is drawn as Vanilla+ whatever the mode (spec, Edge Cases)
+- [ ] T078 [ph C10] Final measurements against T003: per-mode frame measurement (SC-006), Vanilla+ start-up (SC-007), `wc -l` of the rendering crates (SC-009); record them in `.ai/specs/001-graphics-modes/research.md`
+- [ ] T079 [ph C10] Run every section of `.ai/specs/001-graphics-modes/quickstart.md` once more on the final `main` and tick the spec's success criteria SC-001 to SC-010 in issue #703
 
 ---
 
 ## Dependencies
 
 ```text
-Setup:        T001 ─→ T016        T002 ─→ T017        T003 ─→ T063, T078
+Setup:        T001 ─→ T016, T016a, T016b ─→ T017        T002 ─→ T017        T003 ─→ T063, T078
 Foundational: T004..T010 (A1) ─→ T011..T015 (A3)
-US1:          T015 + T016 + T017 ─→ T018..T023 (A5) ─→ T024..T026 (A6)
+US1:          T015 + T017 ─→ T018..T023 (A5) ─→ T024..T026 (A6)
 US2:          T015 ─→ T027..T034 (B1) ─→ T035..T038 (B2)
                                     └──→ T039..T041 (B3) ─→ T042..T045 (B4; best after T049)
 US3:          T026 ─→ T046..T048 (C1) ─→ T051 (C3) ─→ T052..T056 (C4) ─→ T057..T061 (C5) ─→ T062, T063 (C6)
@@ -269,7 +271,7 @@ Polish:       T074, T075 any time (T074 best before T057); T076, T077 after T061
 T004..T010 (remove Enhanced+)        T074, T075 (tests out of src)
 
 # After T015 (the mode type):
-US1: T018..T023 (once T016, T017 are in)     US2: T027..T034     US4: T071..T073
+US1: T018..T023 (once T017 has passed)     US2: T027..T034     US4: T071..T073
 
 # Inside B4, three pull requests at once:
 T042 (ssao)      T043 (reflections)      T044 (clouds)

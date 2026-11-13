@@ -130,10 +130,10 @@ mode, and that every option offered in the in-game menu shows its effect without
 9. **Given** the launcher's graphics settings page, **When** the player opens it, **Then** the
    highlighted section at the top holds the choice of the graphics mode, with one line per mode
    saying what it is, and says that the mode decides which other graphics options are offered.
-10. **Given** the mode is Vanilla+ or Enhanced, **When** the player looks at the "Image" section,
+10. **Given** the mode is Vanilla+ or Enhanced, **When** the player looks at the "Picture" section,
     **Then** the graphics API choice is in the place the mode choice had, with Automatic, Vulkan,
     DirectX 12 and OpenGL.
-11. **Given** the mode is Vanilla, **When** the player looks at the "Image" section, **Then** the
+11. **Given** the mode is Vanilla, **When** the player looks at the "Picture" section, **Then** the
     graphics API choice is not there.
 12. **Given** the game is running, **When** the player opens the in-game graphics options, **Then**
     the graphics mode, the graphics API and every other option that needs a restart are not
@@ -243,9 +243,14 @@ floor lit through the windows are darker than in the open, and the frame time is
 - **FR-007**: Before Vanilla changes renderer, the differences between today's two Vanilla
   implementations MUST be listed, and for each one the maintainer decides which side is kept. A
   difference in which the removed implementation is the correct one MUST be fixed in the remaining
-  renderer first.
+  renderer first. A difference the game cannot show either way keeps the remaining renderer's
+  behaviour and stays marked "to validate" (FR-032); it does not hold the change of renderer.
 - **FR-008**: Before Vanilla changes renderer, the remaining renderer MUST be measured against the
-  removed one on the same machine and scene, and MUST NOT be slower. If it is, the difference is
+  removed one on the same machine and scene, and MUST NOT be slower. The number compared is the
+  median frame time of three runs of five minutes each per renderer; the remaining renderer passes
+  when its median is less than or equal to the other's. The measurement is the one taken after the
+  fixes of FR-007 are in, since they add work to the remaining renderer. If it is slower, the
+  difference is
   fixed in a change of its own and measured again; Vanilla does not change renderer, and the
   replaced implementation is not removed, until the measurement passes. No tolerance is granted.
 - **FR-009**: The mode MUST be resolved once at start-up into a single value that the game, the
@@ -277,7 +282,7 @@ floor lit through the windows are darker than in the open, and the frame time is
 - **FR-016**: A value saved for an option the current mode hides or fixes MUST be kept and MUST come
   back when a mode in which it applies is chosen.
 - **FR-017**: Quality presets MUST change only options that apply to the current mode; where a mode
-  has no option a preset would change, presets are not offered in it.
+  has fewer than two options a preset would change, presets are not offered in it.
 - **FR-018**: The options that exist only for Vanilla (today named after DirectX9) MUST be offered
   in Vanilla only, and described by what they do, not by the API.
 - **FR-018a**: VR and triple screen MUST NOT be offered while the mode is Vanilla. Saved settings
@@ -285,11 +290,15 @@ floor lit through the windows are darker than in the open, and the frame time is
   keep the saved values for when another mode is chosen.
 - **FR-019**: An option that the audit shows to act in none of the three modes MUST be removed
   together with the code that reads it.
+- **FR-020**: An automated test MUST fail when a graphics option exists without a row in the
+  applicability table, when the in-game menu offers an option the table marks as needing a restart
+  or as not applying to the running mode, or when it leaves out one the table marks as applying at
+  once.
 - **FR-020a**: In the launcher's graphics settings page, the highlighted section at the top (today
   "Graphics API") MUST hold the choice of the graphics mode, named after it, with a short
   description of each of the three modes and the statement that the mode decides what the other
   graphics options can do. Its text MUST no longer say that the API limits the options.
-- **FR-020b**: In the same page, the choice of the graphics API MUST sit inside the "Image" section,
+- **FR-020b**: In the same page, the choice of the graphics API MUST sit inside the "Picture" section,
   in the place the mode choice has today, and MUST be offered only in Vanilla+ and Enhanced.
 - **FR-020c**: The in-game menu MUST NOT offer a graphics option whose change takes effect only
   after the game is restarted. This includes the graphics mode and the graphics API. Such options
@@ -304,10 +313,6 @@ floor lit through the windows are darker than in the open, and the frame time is
   its own change, with a test that the picture after the in-session change equals the picture of a
   fresh start with the same value, and with no frame-time cost while the option is not being
   changed.
-- **FR-020**: An automated test MUST fail when a graphics option exists without a row in the
-  applicability table, when the in-game menu offers an option the table marks as needing a restart
-  or as not applying to the running mode, or when it leaves out one the table marks as applying at
-  once.
 
 **Code structure**
 
@@ -412,7 +417,8 @@ Rules of the structure:
   removal and restructuring step (the sunlight-through-glass change excepted, which ships with its
   own before/after pictures).
 - **SC-006**: No mode is slower after the feature than before it, measured on the same machine and
-  scene; Vanilla on its remaining renderer is not slower than the removed implementation.
+  scene; Vanilla on its remaining renderer is not slower than the removed implementation, by the
+  rule of FR-008.
 - **SC-007**: Opening the renderer in Vanilla+ takes less time than before, because nothing of
   Enhanced is prepared.
 - **SC-008**: A contributor can name, from the directory listing alone, where the code of each mode
@@ -434,14 +440,15 @@ Rules of the structure:
   brightness and LED glow act only in Enhanced but are offered in Vanilla+ today; shadows, ambient
   occlusion and detail textures are improvements Vanilla does not have; the "DirectX9" effort-saving
   options act only in Vanilla; the anti-aliasing after the picture differs per mode.
-- Still open from the earlier plan:
-  - Which side of each difference between the two Vanilla implementations matches OMSI 2 is decided
-    by the maintainer in the game (FR-007); the feature does not guess.
+- Which side of each difference between the two Vanilla implementations matches OMSI 2 was checked
+  by the maintainer in the game on 2026-11-13 (FR-007); the results are in
+  [research.md](research.md). Three differences are fixed in the remaining renderer before the
+  change: the wet road with its puddle reflections, the snow on by default, and the darker ground.
 - Making every graphics option take effect without a restart is out of scope: only the small set of
   FR-020e is.
 - Dynamic shadows in Vanilla are out of scope (maintainer, 2026-11-13). OMSI 2 has them, and neither
-  of today's Vanilla implementations draws them, so the change of renderer loses nothing; they get an
-  issue and a specification of their own. This feature only stops the shadow options' text from
+  of today's Vanilla implementations draws them, so the change of renderer loses nothing; they are
+  issue #751 and get a specification of their own. This feature only stops the shadow options' text from
   saying OMSI 2 lacks them.
 - New advanced features for Enhanced (for example screen-space reflections or a new ambient
   occlusion) are out of scope: this feature prepares the place for them.

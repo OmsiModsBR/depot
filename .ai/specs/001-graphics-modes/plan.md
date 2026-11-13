@@ -65,7 +65,7 @@ Model 3.0 with 2048 textures
 
 **Performance Goals**: no regression in any mode (Principle VII, SC-006); opening the renderer gets
 faster in Vanilla+ (SC-007); Vanilla on Direct3D 9Ex not slower than wgpu Vanilla before the switch
-(FR-008, no tolerance)
+(FR-008: median frame time of three runs, measured after the A4 fixes, no tolerance)
 
 **Constraints**: Vanilla+ never changes a pixel (FR-004); Enhanced changes only in phase A2
 (FR-005); a moving or reorganising step changes no pixel, no trace and no frame time beyond noise,
@@ -106,7 +106,7 @@ Result: **pass**, with the conditions above as tasks. Re-checked after design: u
 ├── research.md          # R-V, R-E, R-1..R-6 (2026-11-08, re-checked), R-7..R-12 (structure, options)
 ├── data-model.md        # GraphicsMode, option table, mode interface, frame plan, Vanilla crate
 ├── quickstart.md        # how each phase is validated
-├── tasks.md             # /speckit-tasks: 79 tasks by user story, each tagged with its phase
+├── tasks.md             # /speckit-tasks: 81 tasks by user story, each tagged with its phase
 ├── checklists/requirements.md
 └── contracts/
     ├── settings-cfg.md        # saved keys and their migration
@@ -170,11 +170,11 @@ different picture.
 
 | # | Branch | Content | Needs | Pixels |
 |---|---|---|---|---|
-| A0 | (no code) | In-game check of the R-V differences (D1); Direct3D 9Ex against wgpu Vanilla measured (quickstart Q1, Q2) | — | — |
+| A0 | (no code) | In-game check of the R-V differences (D1, done 2026-11-13); Direct3D 9Ex against wgpu Vanilla measured (quickstart Q1, Q2) | — | — |
 | A1 | `feat/remove-enhanced-plus` | Remove ray tracing, its options, flags and arguments (ignored with a log line); `enhanced_plus` read as `enhanced`; its grade, vignette and sharpening go with it; the second copy of the material rule goes; docs | — | only for Enhanced+ users |
 | A2 | `feat/enhanced-glass-sunlight` | Glass dims the sun in Enhanced's shadow map (research E1), from the material's alpha and colour | A1 | yes, Enhanced (before/after, measured) |
 | A3 | `feat/graphics-mode-type` | `GraphicsMode` in `omsi-cfg`; one resolution at start-up; `Settings::enhanced`, the globals `ENHANCED`, `ENHANCED_PLUS`, `CLASSIC` and the launcher core's `graphics_mode` go | A1 | no |
-| A4 | `fix/dx9-*` (one per item) | The differences A0 decides to bring to Direct3D 9Ex; a speed fix if Q2 fails | A0 | yes, in DirectX9 |
+| A4 | `fix/dx9-wet-road`, `fix/dx9-snow-default`, `fix/dx9-ground-brightness` (three) | The differences A0 decided to bring to Direct3D 9Ex: the wet road with its puddle reflections, the snow on by default, the darker ground (cause found first). Then Q2 is measured again, with a speed fix of its own if it fails | A0 | yes, in DirectX9 |
 | A5 | `feat/vanilla-is-dx9` | Vanilla chooses the Direct3D 9Ex backend; `graphics_api` loses `d3d9` and applies to Vanilla+ and Enhanced; saved `graphics_api=d3d9` read as Vanilla; VR and triple screen not applied in Vanilla (FR-018a); the open-failure error (FR-011a) | A0, A3, A4 | yes, for wgpu Vanilla users |
 | A6 | `feat/remove-wgpu-vanilla` | Remove the `classic` branch of the shaders, `Lighting::classic`, the `sky_color.w` bit, the dead `flags.z` branch, the classic case of the spray and the puddles | A5 | no (the path can no longer be reached) |
 
@@ -251,8 +251,12 @@ Settled on 2026-11-13 and no longer open: VR and triple screen in Vanilla (not o
 Vanilla renderer (fixed first), what Enhanced inherits (the glass only), a machine that cannot open
 Vanilla (clear error), options made live (a small set).
 
-- **D1** (phase A0, open by nature): for each R-V difference, which side matches OMSI 2. A4 and A5
-  wait on it.
+- **D1** (decided 2026-11-13 by the maintainer in the game; research R-V, "Checked in the game"):
+  Direct3D 9Ex is kept in every row. Three rows are fixed in it before the switch (phase A4): the
+  wet road with its puddle reflections (V3), the snow on by default (V13) and the darker ground
+  (V15, found during the check). V12 (fog inside the cab) could not be shown either way and stays
+  "to validate". Dynamic shadows (V14) are a gap of both implementations, outside this feature
+  (issue #751).
 - **D5** (decided 2026-11-13: agreed): the base surface shading stays in the shared core, because
   Enhanced draws its mirrors with it (0.6 ms against 12.7 ms per mirror with the enhanced shading).
   So `modes/vanilla_plus/` holds the sky, FXAA without MSAA, the puddles' own pass and the sprite
