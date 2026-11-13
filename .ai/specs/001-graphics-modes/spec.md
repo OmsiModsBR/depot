@@ -42,6 +42,9 @@ After this feature there are **three modes**, each with one role:
 - Q: Does making graphics options take effect at once (without a restart) belong to this feature? →
   A: Yes, for a small set. The plan lists a few options that are cheap to apply in the running
   session; every other option that needs a restart stays in the launcher only.
+- Q: What happens to VR and triple screen in the Vanilla mode? → A: They are not offered in
+  Vanilla. A settings file edited by hand to ask for them opens Vanilla without them and logs why;
+  the mode is never switched on the player's behalf.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -264,6 +267,9 @@ floor lit through the windows are darker than in the open, and the frame time is
   has no option a preset would change, presets are not offered in it.
 - **FR-018**: The options that exist only for Vanilla (today named after DirectX9) MUST be offered
   in Vanilla only, and described by what they do, not by the API.
+- **FR-018a**: VR and triple screen MUST NOT be offered while the mode is Vanilla. Saved settings
+  that ask for them together with Vanilla MUST open Vanilla without them, with a log line, and MUST
+  keep the saved values for when another mode is chosen.
 - **FR-019**: An option that the audit shows to act in none of the three modes MUST be removed
   together with the code that reads it.
 - **FR-020a**: In the launcher's graphics settings page, the highlighted section at the top (today
@@ -417,8 +423,6 @@ Rules of the structure:
   options act only in Vanilla; the anti-aliasing after the picture differs per mode.
 - Decisions still open from the earlier plan, taken here as their recommended answers until the
   maintainer says otherwise (`/speckit-clarify`):
-  - Vanilla with VR or triple screen: not offered in the launcher (no silent switch to another
-    mode).
   - A computer that cannot open Vanilla's renderer: a clear error pointing to Vanilla+ (no silent
     switch).
   - Enhanced+'s colour grade, vignette and sharpening are an aesthetic choice and are not carried
