@@ -47,7 +47,7 @@ Rust workspace: `crates/<crate>/src/` for code, `crates/<crate>/tests/` for test
 **Purpose**: what phases A4 and A5 wait on, done by the maintainer on a machine with OMSI 2
 (quickstart Q1, Q2), and the reference numbers every later comparison uses.
 
-- [ ] T001 [ph A0] Q1: three same-camera screenshots (OMSI 2, Depot `graphics=vanilla` on DirectX 12, Depot on DirectX9) for each row V1-V14; fill an "OMSI 2 = ?" column in R-V of `.ai/specs/001-graphics-modes/research.md` and list which rows become `fix/dx9-*` (decision D1, FR-007). **Done 2026-11-13**: V1, V2, V4, V5, V6, V7, V8 (keep DirectX9's behaviour), V13 (keep DirectX9's snow; its default to confirm), V14 (OMSI 2 has dynamic shadows; a Vanilla gap outside this feature). V12 (inconclusive in the game: no fix, stays "to validate"). **Still open**: V3 (to confirm from the screenshots), V9, V10, V11
+- [ ] T001 [ph A0] Q1: three same-camera screenshots (OMSI 2, Depot `graphics=vanilla` on DirectX 12, Depot on DirectX9) for each row V1-V14; fill an "OMSI 2 = ?" column in R-V of `.ai/specs/001-graphics-modes/research.md` and list which rows become `fix/dx9-*` (decision D1, FR-007). **Done 2026-11-13**: V1, V2, V4, V5, V6, V7, V8 (keep DirectX9's behaviour), V13 (keep DirectX9's snow; its default to confirm), V14 (OMSI 2 has dynamic shadows; a Vanilla gap outside this feature). V12 (inconclusive in the game: no fix, stays "to validate"). V3 (OMSI 2 has the wet road and its puddle reflections: `fix/dx9-wet-road`). **Still open**: V9, V10, V11
 - [ ] T002 [P] [ph A0] Q2: `OMSI_PROFILE=1`, 5 minutes on the same map, bus and stretch, `graphics=vanilla` on DirectX 12 and then `graphics_api=d3d9`; record the `profile window:` lines and loading times under "Baseline measurements" in `.ai/specs/001-graphics-modes/research.md` and state pass or fail of FR-008
 - [ ] T003 [P] Record the reference numbers at the current `main` in `.ai/specs/001-graphics-modes/research.md`: the per-mode measurement (one process per mode, lavapipe), the renderer start-up time in Vanilla+ and Enhanced, and `wc -l` of `crates/omsi-render/src` and `crates/omsi-render-d3d9/src`
 
@@ -92,7 +92,7 @@ the DirectX9 API) and check which mode opens and what the settings show (quickst
 
 ### Bring the missing pieces to Direct3D 9Ex `fix/dx9-*`
 
-- [ ] T016 [US1] [ph A4] One `fix/dx9-<item>` pull request per row T001 decides (candidates: V3 wet road and puddles, V10 transmap depth, V11 surface uv, V13 snow on by default) in `crates/omsi-render-d3d9/src/d3d9/scene.rs` and `crates/omsi-render-d3d9/src/d3d9/shaders/scene.hlsl`, each with its failing test in `crates/omsi-render-d3d9/` on `NullBackend`
+- [ ] T016 [US1] [ph A4] One `fix/dx9-<item>` pull request per row T001 decides (decided: V3 wet road and puddle reflections, `fix/dx9-wet-road`, which holds T018; candidates: V10 transmap depth, V11 surface uv, V13 snow on by default) in `crates/omsi-render-d3d9/src/d3d9/scene.rs` and `crates/omsi-render-d3d9/src/d3d9/shaders/scene.hlsl`, each with its failing test in `crates/omsi-render-d3d9/` on `NullBackend`
 - [ ] T017 [US1] [ph A4] If T002 failed: find and fix the difference in `crates/omsi-render-d3d9/src/d3d9/` as its own `fix/dx9-<cause>` pull request, then repeat T002; A5 does not start until it passes (FR-008, no tolerance)
 
 ### Vanilla is the Direct3D 9Ex renderer `feat/vanilla-is-dx9`
