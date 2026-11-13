@@ -45,6 +45,9 @@ After this feature there are **three modes**, each with one role:
 - Q: What happens to VR and triple screen in the Vanilla mode? → A: They are not offered in
   Vanilla. A settings file edited by hand to ask for them opens Vanilla without them and logs why;
   the mode is never switched on the player's behalf.
+- Q: What happens if Vanilla's remaining renderer measures slower than the implementation it
+  replaces? → A: It is fixed first. The difference becomes a fix of its own, and Vanilla changes
+  renderer only after a new measurement shows it is not slower.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -237,7 +240,9 @@ floor lit through the windows are darker than in the open, and the frame time is
   difference in which the removed implementation is the correct one MUST be fixed in the remaining
   renderer first.
 - **FR-008**: Before Vanilla changes renderer, the remaining renderer MUST be measured against the
-  removed one on the same scene, and MUST NOT be slower.
+  removed one on the same machine and scene, and MUST NOT be slower. If it is, the difference is
+  fixed in a change of its own and measured again; Vanilla does not change renderer, and the
+  replaced implementation is not removed, until the measurement passes. No tolerance is granted.
 - **FR-009**: The mode MUST be resolved once at start-up into a single value that the game, the
   launcher and the in-game menu all read. No second copy of the rule that reads a saved mode may
   exist.
