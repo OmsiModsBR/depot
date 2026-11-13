@@ -35,33 +35,36 @@ Two observations matter for the plan:
 
 ### DirectX9 against wgpu Vanilla on a graphics card (T002, first reading, 2026-11-13)
 
-One run of 5 minutes each on the maintainer's computer (GeForce RTX 4070 Ti, 3440x1440, MSAA 1,
-Berlin-Spandau at noon, clear weather, traffic 120 %, build `edd692eb`), `OMSI_PROFILE=1`, the frame
-limit out of the way (`max_fps` 1000), `mirror_refresh` full in both and the same `OMSI_SEED`.
-Medians of the nine `profile window:` lines after the loading one, in ms per frame:
+Two runs of 5 minutes each per renderer on the maintainer's computer (GeForce RTX 4070 Ti,
+3440x1440, MSAA 1, Berlin-Spandau at noon, clear weather, traffic 120 %, build `edd692eb`),
+`OMSI_PROFILE=1`, the frame limit out of the way (`max_fps` 1000), `mirror_refresh` full in both and
+the same `OMSI_SEED`. Medians of the nine `profile window:` lines after the loading one, in ms per
+frame:
 
-| | DirectX9 | wgpu Vanilla (DirectX 12) | difference |
-|---|---:|---:|---:|
-| **frame** | **7.4** | **6.0** | **+1.4 (23 %)** |
-| render | 3.00 | 1.95 | +1.05 |
-| present | 0.45 | 0.20 | +0.25 |
-| mirrors | 0.46 | 0.25 | +0.21 |
-| traffic, people, scripts, lights | 2.2 | 2.3 | about the same |
+| | DirectX9, run 1 | run 2 | wgpu Vanilla (DirectX 12), run 1 | run 2 |
+|---|---:|---:|---:|---:|
+| **frame** | **7.4** | **8.1** | **6.0** | **5.9** |
+| render | 3.00 | 3.08 | 1.95 | 1.86 |
+| present | 0.45 | 0.44 | 0.20 | 0.20 |
+| mirrors | 0.46 | 0.47 | 0.25 | 0.26 |
+| traffic | 1.25 | 1.46 | 1.38 | 1.30 |
 
-**Reading: DirectX9 does not pass FR-008 as it is.** One setting still differed, in DirectX9's
-favour: wgpu Vanilla ran with FXAA and DirectX9 without (it fixes `post_aa` at off). The gap is in
-the drawing itself (`render`, `present`, `mirrors`); the simulation costs the same in both. Two
-things to look at when the cause is searched (task T017):
+**Reading: DirectX9 does not pass FR-008 as it is**: 23 % to 37 % slower, the same in both runs.
+One setting still differed, in DirectX9's favour: wgpu Vanilla ran with FXAA and DirectX9 without
+(it fixes `post_aa` at off). The gap is in the drawing itself (`render` about 1.1 ms, `present`
+0.25 ms, `mirrors` 0.2 ms); the simulation costs the same in both. Two things to look at when the
+cause is searched (task T017):
 
-- DirectX9's frame grew during the run, from 5.8 ms to 9.5 ms, with `render` going from 2.3 ms to
-  3.7 ms and `mirrors` from 0.26 ms to 0.90 ms, while wgpu Vanilla settled at about 6.1 ms with
-  `render` flat at 1.9 ms. The number of AI vehicles was about the same; the people in view rose
-  from 15 to 53 in both. The bus was driven by hand, so the two routes are close but not equal.
+- DirectX9's frame grows during the run more than wgpu Vanilla's: from 5.8 ms to 9.5 ms in run 1
+  and from 5.9 ms to 8.4 ms in run 2, with `render` going from 2.3 ms to above 3 ms, while wgpu
+  Vanilla goes from 4.7 ms to about 6.1 ms with `render` between 1.6 ms and 2.0 ms. The AI vehicles
+  and the people in view rise alike in both. The bus was driven by hand, so the routes are close
+  but not equal.
 - `present` costs more than twice as much.
 
 An earlier pair taken the same day with the frame limit at 120 is not usable (both showed 9.4 ms,
 the difference hidden in the limiter's wait). FR-008 asks for three runs each, measured after the
-`fix/dx9-*` pull requests of phase A4; this single pair is the first reading only.
+`fix/dx9-*` pull requests of phase A4; these two pairs are the first reading only.
 
 ## R-V. wgpu Vanilla x DirectX9: what each draws
 
