@@ -40,11 +40,7 @@ pub(in crate::hud) fn same_value(a: &str, b: &str) -> bool {
 
 pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
-        "graphics" => vec![
-            ("vanilla", "Vanilla (as OMSI 2)"),
-            ("vanilla_plus", "Vanilla+"),
-            ("enhanced", "Enhanced"),
-        ],
+        "graphics" => omsi_cfg::GraphicsMode::CHOICES.to_vec(),
         "msaa" => vec![
             ("1", "Off"),
             ("2", "2x MSAA"),

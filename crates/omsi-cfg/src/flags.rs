@@ -422,8 +422,6 @@ flags! {
     SAFE_GPU = "OMSI_SAFE_GPU", Number, User, "omsi-app::settings", env_txt;
     /// The renderer for one run: `vanilla`, `vanilla_plus` or `enhanced`.
     GRAPHICS = "OMSI_GRAPHICS", Text, User, "omsi-app::settings", env_txt;
-    /// The enhanced renderer, whatever the setting says.
-    ENHANCED = "OMSI_ENHANCED", Switch, User, "omsi-app";
     /// No clouds.
     NO_CLOUDS = "OMSI_NO_CLOUDS", Switch, User, "omsi-app", env_txt;
     /// The frame rate limit, in place of the setting.
@@ -592,8 +590,6 @@ flags! {
     NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-render::renderer::frame", env_txt;
     /// No ambient occlusion.
     NO_AO = "OMSI_NO_AO", Switch, User, "omsi-render::renderer::frame", env_txt;
-    /// The enhanced renderer's HDR picture left out.
-    NO_ENHANCED = "OMSI_NO_ENHANCED", Switch, User, "omsi-render::renderer::frame", env_txt;
 
     // --- omsi-render: its own settings and diagnostics
 

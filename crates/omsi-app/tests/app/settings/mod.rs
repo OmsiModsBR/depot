@@ -87,7 +87,7 @@ fn the_d3d9_lock_sets_every_option_of_the_table() {
     s.lock_vanilla();
     for l in openomsi_game::testing::api_limits::D3D9 {
         let ok = match l.key {
-            "graphics" => s.graphics == "vanilla" && s.classic(),
+            "graphics" => s.graphics == GraphicsMode::Vanilla,
             // (the player's choice, held to the scales the table offers)
             "render_scale" => s.render_scale == 0.5 && l.allows("0.5"),
             "mirror_size" => {
@@ -135,15 +135,15 @@ fn d3d9_takes_the_render_scale_saved_under_another_api() {
 
 #[test]
 fn d3d9_has_no_graphics_improvements_to_choose() {
-    for g in ["vanilla_plus", "enhanced"] {
+    for mode in [GraphicsMode::VanillaPlus, GraphicsMode::Enhanced] {
+        let g = mode.as_str();
         let text = format!("graphics={g}\ngraphics_api=d3d9\n");
         let chosen = Settings::from_text(&text);
-        assert_eq!(chosen.graphics, g);
+        assert_eq!(chosen.graphics, mode);
         // (the game loads it with `locked_for_api`; "DirectX9 (D3D9Ex)" is Windows only)
         let loaded = chosen.clone().locked_for_api();
         if cfg!(windows) {
-            assert_eq!(loaded.graphics, "vanilla");
-            assert!(loaded.classic() && !loaded.enhanced);
+            assert_eq!(loaded.graphics, GraphicsMode::Vanilla);
             // as a file that says graphics=vanilla is loaded
             let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
             assert_eq!(
@@ -182,28 +182,18 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
             // VR takes DirectX 12 instead, with the graphics as chosen
             let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n"))
                 .locked_for_api();
-            assert_eq!(vr.graphics, g);
+            assert_eq!(vr.graphics, mode);
         } else {
             assert_eq!(loaded, chosen);
         }
         // another API keeps the choice, which comes back when it is picked again
         let other =
             Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
-        assert_eq!(other.graphics, g);
+        assert_eq!(other.graphics, mode);
     }
-    // --enhanced (and its variable) does not apply to DirectX9 (D3D9Ex)
-    let d3d9 = Settings::from_text("graphics_api=d3d9\n");
-    assert_eq!(
-        openomsi_game::testing::core::startup::enhanced_wanted(&d3d9, true),
-        !cfg!(windows)
-    );
-    let vulkan = Settings::from_text("graphics_api=vulkan\n");
-    assert!(openomsi_game::testing::core::startup::enhanced_wanted(
-        &vulkan, true
-    ));
     let mut s = Settings::from_text("graphics=enhanced\n");
     s.lock_vanilla();
-    assert!(s.classic() && !s.enhanced);
+    assert_eq!(s.graphics, GraphicsMode::Vanilla);
 }
 
 #[test]
@@ -327,16 +317,11 @@ fn old_files_board_automatically() {
 #[test]
 fn graphics_modes() {
     // an old file: its vanilla renderer is Vanilla+ now, enhanced stays enhanced
-    assert_eq!(Settings::from_text("enhanced=0\n").graphics, "vanilla_plus");
-    assert_eq!(Settings::from_text("enhanced=1\n").graphics, "enhanced");
     let v = Settings::from_text("graphics=vanilla\nshadows=1\nssao=1\n");
-    assert!(v.classic() && !v.shadows && !v.ssao && !v.detail_textures && !v.enhanced);
-    assert!(Settings::from_text("graphics=enhanced\nenhanced=0\n").enhanced);
-    assert_eq!(graphics_mode("Vanilla+"), "vanilla_plus");
-    assert_eq!(graphics_mode("OMSI 2"), "vanilla");
+    assert_eq!(v.graphics, GraphicsMode::Vanilla);
+    assert!(!v.shadows && !v.ssao && !v.detail_textures);
     let s = Settings {
-        graphics: "enhanced".into(),
-        enhanced: true,
+        graphics: GraphicsMode::Enhanced,
         ..Default::default()
     };
     assert_eq!(Settings::from_text(&s.to_text()), s);

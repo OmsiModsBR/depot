@@ -291,14 +291,11 @@ impl Renderer {
             && (width, height) == (full_w, full_h)
             && self.options.fxaa
             && self.options.msaa <= 1
-            && !(lighting.enhanced
-                && self.hdr_pass.is_some()
-                && !omsi_cfg::flags::NO_ENHANCED.is_set())
+            && !(lighting.enhanced && self.hdr_pass.is_some())
             && !omsi_cfg::flags::NO_FXAA.is_set();
         // Rain films are drawn after copying the clean current-frame scene. Classic
         // graphics need a sampleable scene target too, even without puddles or scaling.
-        let enhanced_view =
-            lighting.enhanced && self.hdr_pass.is_some() && !omsi_cfg::flags::NO_ENHANCED.is_set();
+        let enhanced_view = lighting.enhanced && self.hdr_pass.is_some();
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
@@ -326,7 +323,6 @@ impl Renderer {
         let lead_view = (with_overlays || xr_view) && !second_eye;
         let enhanced_frame = lighting.enhanced
             && self.hdr_pass.is_some()
-            && !omsi_cfg::flags::NO_ENHANCED.is_set()
             && (with_overlays || xr_view || omsi_cfg::flags::MIRROR_ENHANCED.is_set());
         // the mirrors are drawn by the same path as the window (their picture graded with
         // the window's exposure, see the post passes)

@@ -25,6 +25,7 @@
 
 use glam::{DVec3, Mat4, Vec3};
 use omsi_geometry::util::smoothstep;
+use omsi_cfg::GraphicsMode;
 use omsi_render::SmokeParticle;
 
 /// How far the puddle threshold drops with the wetness (`PUDDLE_SPREAD` in `enhanced.wgsl`
@@ -176,14 +177,11 @@ impl Body {
 /// Enhanced (in the same overcast rain: the light it adds to the road behind a car is about a
 /// third of the road's own in each mode), and the light it is given scales it from there -
 /// darker at dusk and at night.
-fn spray_look() -> ([f32; 3], f32) {
-    use std::sync::atomic::Ordering::Relaxed;
-    let (grey, opacity) = if crate::core::startup::CLASSIC.load(Relaxed) {
-        (0.32, 0.26)
-    } else if crate::core::startup::ENHANCED.load(Relaxed) {
-        (0.5, 1.0)
-    } else {
-        (0.65, 0.42)
+fn spray_look(graphics: GraphicsMode) -> ([f32; 3], f32) {
+    let (grey, opacity) = match graphics {
+        GraphicsMode::Vanilla => (0.32, 0.26),
+        GraphicsMode::Enhanced => (0.5, 1.0),
+        GraphicsMode::VanillaPlus => (0.65, 0.42),
     };
     ([grey, grey * 1.02, grey * 1.06], opacity)
 }
@@ -678,7 +676,7 @@ impl Spray {
     /// windows and in its mirrors, never in it); none inside another vehicle's body pokes up
     /// above the wheels; and a puff the camera is about to pass through fades away rather
     /// than filling the picture.
-    pub fn sprites(&self, eye: DVec3, out: &mut Vec<SmokeParticle>) {
+    pub fn sprites(&self, eye: DVec3, graphics: GraphicsMode, out: &mut Vec<SmokeParticle>) {
         let cab: Vec<&Body> = self
             .bodies
             .iter()
@@ -689,7 +687,7 @@ impl Spray {
             .iter()
             .filter(|b| (b.origin - eye).length() < SPAWN_RANGE + 40.0)
             .collect();
-        let (color, strength) = spray_look();
+        let (color, strength) = spray_look(graphics);
         out.reserve(self.puffs.len());
         for p in &self.puffs {
             let mut size = p.size();

@@ -325,7 +325,7 @@ player's bus (its `[boundingbox]`), and heavy rain darkens the day enough for th
 lights to matter.
 
 `detail_textures` lays procedural (fractal) grain over the ground and the roads up close,
-in vanilla and enhanced alike. `enhanced=1` (or `--enhanced`) switches to its own
+in vanilla and enhanced alike. `graphics=enhanced` (or `--enhanced` for one run) switches to its own
 physically based renderer: high-range lighting with energy-conserving diffuse and GGX
 reflections (roughness from `[matl_envmap]`), a computed atmosphere that also lights the
 scene, contact-hardening sun shadows, aerial perspective and height fog, automatic

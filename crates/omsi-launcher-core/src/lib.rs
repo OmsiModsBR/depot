@@ -22,6 +22,7 @@ pub mod timetable;
 pub mod weather;
 
 use anyhow::{anyhow, Context, Result};
+use omsi_cfg::GraphicsMode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -3109,24 +3110,6 @@ pub fn language_iso(code: &str) -> &'static str {
         .unwrap_or("")
 }
 
-/// `vanilla` (as OMSI 2), `vanilla_plus` or `enhanced`, from the ways a file may spell them
-/// (as the game's `settings::graphics_mode`). The removed Enhanced+ reads as Enhanced.
-pub fn graphics_mode(v: &str) -> &'static str {
-    if omsi_cfg::graphics::names_enhanced_plus(v) {
-        return "enhanced";
-    }
-    match v
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', ' '], "_")
-        .as_str()
-    {
-        "enhanced" | "1" => "enhanced",
-        "vanilla" | "classic" | "original" | "omsi" | "omsi2" | "omsi_2" => "vanilla",
-        _ => "vanilla_plus",
-    }
-}
-
 /// How often the mirrors are drawn: `off`, `eco` or `full`, also from OMSI's
 /// `performance_realreflexions` (none, economy, full).
 fn mirror_refresh(x: &str) -> &'static str {
@@ -3395,7 +3378,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["head_idle_pace"] = json!(1.0);
     let Some(t) = text else { return v };
     let mut version = 0;
-    let mut graphics: Option<&str> = None;
+    let mut graphics: Option<GraphicsMode> = None;
     for line in t.lines() {
         let line = line.trim();
         if line.starts_with('#') || line.starts_with(';') {
@@ -4129,12 +4112,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             "language" => v[&k] = json!(language_code(val)),
             "physics" => v[&k] = json!(omsi_cfg::PhysicsMode::parse(val).as_str()),
-            "graphics" | "renderer" => {
-                if omsi_cfg::graphics::names_enhanced_plus(val) {
-                    omsi_cfg::graphics::note_enhanced_plus_read_as_enhanced();
-                }
-                graphics = Some(graphics_mode(val))
-            }
+            "graphics" | "renderer" => graphics = Some(GraphicsMode::parse(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
             // the game's default
             "view_distance" => {
@@ -4156,12 +4134,12 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     // a file without `graphics` (older builds) says only `enhanced`; its vanilla renderer is
     // what is now Vanilla+
     let g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
-        "enhanced"
+        GraphicsMode::Enhanced
     } else {
-        "vanilla_plus"
+        GraphicsMode::VanillaPlus
     });
-    v["graphics"] = json!(g);
-    v["enhanced"] = json!(g == "enhanced");
+    v["graphics"] = json!(g.as_str());
+    v["enhanced"] = json!(g == GraphicsMode::Enhanced);
     // before version 2 the launcher wrote its old default `boarding=pay` for everybody
     // (passengers then waited at the cash desk for the driver): the game reads that as auto
     if version < 2 && v["boarding"] == "pay" {
@@ -4426,7 +4404,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     };
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let text = format!(
-        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4438,8 +4416,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         v.get("boarding").and_then(|x| x.as_str()).unwrap_or("auto"),
         b("detail_textures", true),
         b("exact_fare", true),
-        (graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")) == "enhanced") as u8,
-        graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")),
+        GraphicsMode::parse(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("")).as_str(),
         b("fullscreen", false),
         b("vsync", true),
         f("volume", 0.6),

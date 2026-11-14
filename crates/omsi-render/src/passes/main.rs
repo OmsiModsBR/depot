@@ -220,8 +220,7 @@ pub(crate) fn encode_main_pass(
                 if lighting.enhanced
                     && !enhanced
                     && !with_overlays
-                    && ctx.sky.sky_state.is_some()
-                    && !omsi_cfg::flags::NO_ENHANCED.is_set() =>
+                    && ctx.sky.sky_state.is_some() =>
             {
                 p
             }

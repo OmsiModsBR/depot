@@ -651,26 +651,27 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
-/// Enhanced wanted by the settings, the flag and the environment. "DirectX9 (D3D9Ex)" is the
-/// "as OMSI 2" renderer: it ignores all of them.
-pub fn enhanced_wanted(settings: &crate::settings::Settings, flag: bool) -> bool {
-    let enhanced = settings.enhanced || flag || omsi_cfg::flags::ENHANCED.is_set();
+/// The graphics mode of this run: the settings' (the file, or `OMSI_GRAPHICS`), or Enhanced
+/// with `--enhanced` (`enhanced_flag`). "DirectX9 (D3D9Ex)" is the "as OMSI 2" renderer: it
+/// draws Vanilla whatever is asked.
+pub fn resolved_graphics(
+    settings: &crate::settings::Settings,
+    enhanced_flag: bool,
+) -> omsi_cfg::GraphicsMode {
+    use omsi_cfg::GraphicsMode;
     if settings.backend() == Backend::D3d9 {
-        if enhanced {
+        if enhanced_flag || settings.graphics == GraphicsMode::Enhanced {
             log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
         }
-        return false;
+        return GraphicsMode::Vanilla;
     }
-    enhanced
+    if enhanced_flag {
+        GraphicsMode::Enhanced
+    } else {
+        settings.graphics
+    }
 }
 
-/// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).
-pub(crate) static ENHANCED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-/// Vanilla graphics: the picture as OMSI 2 draws it (no Vanilla+ extras, see
-/// `omsi_render::Lighting::classic`).
-pub(crate) static CLASSIC: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
 /// Volume of the AI vehicles and of the scenery's own sounds (OMSI's `sound_ai` and
 /// `sound_scenery`), as the bits of an f32.
 pub(crate) static SOUND_AI: std::sync::atomic::AtomicU32 =

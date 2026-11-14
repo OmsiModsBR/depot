@@ -52,6 +52,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         .unwrap_or((1600, 900));
     let view_aspect = w as f32 / h.max(1) as f32;
     let settings = settings::Settings::load();
+    let graphics = crate::core::startup::resolved_graphics(&settings, args.enhanced);
     let instance = graphics_instance();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
@@ -463,6 +464,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         cloud_drift_at(&weather, run_clock.time),
                         0.0,
                         settings.shadows,
+                        graphics,
                     );
                     let pixels =
                         renderer.render_to_image(&mut scene, w, h, &view_cam, &lighting)?;
@@ -1077,7 +1079,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                 }
                 if lights::smoke_active() {
-                    spray.sprites(cam.position, &mut scene.smoke);
+                    spray.sprites(cam.position, graphics, &mut scene.smoke);
                 }
                 let rate = precip_of(&weather).1;
                 let mut lighting = weather_lighting(
@@ -1090,6 +1092,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         0.0
                     },
                     settings.shadows,
+                    graphics,
                 );
                 lighting.inside = player.as_ref().and_then(|p| {
                     p.vehicle
@@ -2477,6 +2480,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         cloud_drift_at(&weather, clock.time),
         wetness,
         settings.shadows,
+        graphics,
     );
     // the player's vehicle has moved into `player_ref` by now (after --drive): without
     // this the offscreen picture had no cab box, unlike the window
@@ -2633,7 +2637,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         // the tyres' spray as the drive left it (OMSI_DRIVE_V0=S moves the bus without a
         // full engine-start sequence)
         if lights::smoke_active() {
-            spray.sprites(camera.position, &mut scene.smoke);
+            spray.sprites(camera.position, graphics, &mut scene.smoke);
         }
         log::info!(
             "spray: {} puffs; at the end {} tyres threw water, {} of them in a puddle",

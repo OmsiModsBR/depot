@@ -10,7 +10,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | --- | --- | --- | --- | --- |
 | `OMSI_BACKEND` | text | `omsi-app::startup` | yes | The graphics interface to ask first: `vulkan`, `dx12` or `gl` (set by the game itself when it starts again after a lost device, and on phones without a good Vulkan). |
 | `OMSI_BASIC_PIPELINES` | switch | `omsi-render::gpu::open` | yes | Only the simple pipelines, for drivers whose shader compiler fails on the others. |
-| `OMSI_ENHANCED` | switch | `omsi-app` |  | The enhanced renderer, whatever the setting says. |
 | `OMSI_FULL_GPU` | switch | `omsi-render::api::renderer` | yes | The settings as they are on a weak graphics chip too (no lighter defaults). |
 | `OMSI_GRAPHICS` | text | `omsi-app::settings` | yes | The renderer for one run: `vanilla`, `vanilla_plus` or `enhanced`. |
 | `OMSI_IBIS_BUDGET` | number | `omsi-sim::ibis` |  | How long (seconds, 10 by default) the IBIS may look for a way to type a duty in. |
@@ -24,7 +23,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_BUMP` | switch | `omsi-app::scene` | yes | No bump maps on vehicles and objects. |
 | `OMSI_NO_CLOUDS` | switch | `omsi-app` | yes | No clouds. |
 | `OMSI_NO_CORONAS` | switch | `omsi-render::passes::main` | yes | No coronas round the lamps. |
-| `OMSI_NO_ENHANCED` | switch | `omsi-render::renderer::frame` | yes | The enhanced renderer's HDR picture left out. |
 | `OMSI_NO_ENVMAP` | switch | `omsi-app::scene` | yes | No environment maps (reflections) on vehicles and objects. |
 | `OMSI_NO_FXAA` | switch | `omsi-render::renderer::frame` | yes | No FXAA. |
 | `OMSI_NO_SHADOWS` | switch | `omsi-render::lighting::model` | yes | No shadows. |
