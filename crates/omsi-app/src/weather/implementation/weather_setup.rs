@@ -1,7 +1,7 @@
 //! The weather of a session: its `.owt` file, the sky and clouds it makes, and how wet the streets are.
 
 use crate::core::cli::Args;
-use crate::core::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
+use crate::core::startup::{CLOUDS, FAIR_CLOUDS};
 use crate::lights;
 use crate::world::scene;
 pub(crate) use omsi_content::weather::psychro::{
@@ -481,10 +481,11 @@ pub(crate) fn weather_lighting(
     cloud_drift: [f32; 2],
     wetness: f32,
     shadows: bool,
+    graphics: omsi_cfg::GraphicsMode,
 ) -> omsi_render::Lighting {
     let mut lighting = lights::lighting_from(daylight, w.fog.0);
-    lighting.enhanced = ENHANCED.load(std::sync::atomic::Ordering::Relaxed);
-    lighting.classic = CLASSIC.load(std::sync::atomic::Ordering::Relaxed);
+    lighting.enhanced = graphics == omsi_cfg::GraphicsMode::Enhanced;
+    lighting.classic = graphics == omsi_cfg::GraphicsMode::Vanilla;
     let (density, offset) = clouds_of(w, cloud_drift);
     lighting.cloud_density = density;
     lighting.cloud_offset = offset;

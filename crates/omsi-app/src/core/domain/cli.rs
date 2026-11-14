@@ -260,7 +260,7 @@ pub struct Args {
     /// launcher's 3D preview, and quit.
     #[arg(long)]
     pub export_glb: Option<PathBuf>,
-    /// Enhanced graphics, as the settings' `enhanced=1`: the physically based renderer
+    /// Enhanced graphics for this run, as the settings' `graphics=enhanced`: the physically based renderer
     /// (high-range lighting with GGX reflections, a computed sky, soft sun shadows,
     /// automatic exposure, a glow around real highlights and the PBR Neutral tone curve).
     #[arg(long)]

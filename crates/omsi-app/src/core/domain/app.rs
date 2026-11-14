@@ -358,6 +358,8 @@ pub(crate) struct App {
     /// The mouse cursor currently shows the hand (it is over a switch).
     pub(crate) cursor_kind: u8,
     pub(crate) settings: settings::Settings,
+    /// The graphics mode of this run, resolved once at the start (`startup::resolved_graphics`).
+    pub(crate) graphics: omsi_cfg::GraphicsMode,
     /// Frames longer than 50 ms (stutters) and the worst frame, for the exit summary.
     pub(crate) spikes: u32,
     pub(crate) worst_ms: f32,

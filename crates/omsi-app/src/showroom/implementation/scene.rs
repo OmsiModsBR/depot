@@ -658,10 +658,9 @@ fn lighting_for(args: &Args, weather: &omsi_content::weather::Weather) -> Lighti
         crate::weather::weather_setup::cloud_drift_at(weather, clock.time),
         0.0,
         true,
+        omsi_cfg::GraphicsMode::VanillaPlus,
     );
     l.shadows = daylight.altitude_deg > 2.0;
-    l.enhanced = false;
-    l.classic = false;
     l.detail = false;
     l.wetness = 0.0;
     l.snow = 0.0;

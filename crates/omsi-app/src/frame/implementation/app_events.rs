@@ -2632,7 +2632,7 @@ impl ApplicationHandler for App {
                                 &|x, y| puddles::water_at(x, y, w.wet_road_at(x, y, wetness)),
                             );
                             if lights::smoke_active() {
-                                self.spray.sprites(cam.position, &mut scene.smoke);
+                                self.spray.sprites(cam.position, self.graphics, &mut scene.smoke);
                             }
                             *self.profile.entry("lights.spray").or_default() +=
                                 __ts.elapsed().as_secs_f64();
@@ -3257,6 +3257,7 @@ impl ApplicationHandler for App {
                             self.cloud_drift,
                             self.wetness,
                             self.settings.shadows,
+                            self.graphics,
                         )
                     }
                     None => lights::lighting_from(&daylight, 50000.0),

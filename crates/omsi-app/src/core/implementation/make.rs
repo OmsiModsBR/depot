@@ -7,8 +7,7 @@ use super::super::domain::cli::Args;
 use super::super::interface::output::Settings;
 use super::applog;
 use super::startup::{
-    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLASSIC, CLOUDS, ENHANCED,
-    FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
+    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLOUDS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
 use crate::frame::domain::session::Session;
 use crate::gameplay::duty_start::place_on_duty;
@@ -31,11 +30,6 @@ pub(crate) enum ServerCfg {}
 /// The showroom is drawn the way the game will be.
 pub(crate) fn launcher_statics() {
     let s = Settings::load();
-    ENHANCED.store(
-        startup::enhanced_wanted(&s, false),
-        std::sync::atomic::Ordering::Relaxed,
-    );
-    CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(
         s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(),
         std::sync::atomic::Ordering::Relaxed,
@@ -173,8 +167,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     if args.enhanced_plus {
         log::info!("--enhanced-plus ignored: Enhanced+ graphics were removed");
     }
-    let enhanced = startup::enhanced_wanted(&settings, args.enhanced);
-    ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
+    let graphics = startup::resolved_graphics(&settings, args.enhanced);
     CLOUDS.store(
         settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(),
         std::sync::atomic::Ordering::Relaxed,
@@ -195,10 +188,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     omsi_audio::DOPPLER.store(settings.doppler, std::sync::atomic::Ordering::Relaxed);
     omsi_audio::MUFFLE_OUTSIDE.store(
         settings.muffle_outside,
-        std::sync::atomic::Ordering::Relaxed,
-    );
-    CLASSIC.store(
-        settings.classic() && !ENHANCED.load(std::sync::atomic::Ordering::Relaxed),
         std::sync::atomic::Ordering::Relaxed,
     );
     let _ = server_cfg;
@@ -396,6 +385,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         metar_next: 0.0,
         cursor_kind: 0,
         settings,
+        graphics,
         spikes: 0,
         worst_ms: 0.0,
         governor: (0.0, 0, 0.0),

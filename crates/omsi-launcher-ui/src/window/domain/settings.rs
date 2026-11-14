@@ -4,6 +4,7 @@
 
 use super::super::interface::output::{core, Choice};
 use super::modules::Asks;
+use omsi_cfg::GraphicsMode;
 use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
 use omsi_ui::widgets::matches;
 use serde_json::{json, Value};
@@ -912,11 +913,7 @@ pub static OPTS: &[Opt] = &[
         "graphics",
         "Graphics",
         "Vanilla draws what OMSI 2 draws",
-        &[
-            ("vanilla", "Vanilla (as OMSI 2)"),
-            ("vanilla_plus", "Vanilla+"),
-            ("enhanced", "Enhanced"),
-        ],
+        &GraphicsMode::CHOICES,
     ),
     pick(
         GRAPHICS,
@@ -2210,9 +2207,9 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         };
     }
     let fixed = depot_api && d3d9_fixes_vanilla(st.s);
-    let graphics = st.get("graphics").as_str().unwrap_or("");
+    let graphics = GraphicsMode::parse(st.get("graphics").as_str().unwrap_or(""));
     // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain)
-    let classic = fixed || graphics == "vanilla";
+    let classic = fixed || graphics == GraphicsMode::Vanilla;
     let triple = st.on("triple_screen") && !st.on("vr");
     let visible = match o.key {
         "graphics_api" => !cfg!(target_os = "macos"),

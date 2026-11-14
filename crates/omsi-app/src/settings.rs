@@ -2,6 +2,7 @@
 //! `~/.depot/settings.cfg` (the launcher writes the same file). Anything missing
 //! keeps its default, so an old file never breaks a new build.
 
+pub use omsi_cfg::GraphicsMode;
 use std::path::PathBuf;
 
 /// Where the game keeps its own files (`~/.depot`): settings beside the content, the
@@ -67,12 +68,10 @@ pub struct Settings {
     pub detail_textures: bool,
     /// Passengers pay the exact fare (no change to give at the cash desk).
     pub exact_fare: bool,
-    /// Enhanced graphics: the physically based renderer (its own lighting, sky, exposure).
-    pub enhanced: bool,
-    /// The graphics: `vanilla` (as OMSI 2 draws it: no sun shadows, no ambient occlusion,
-    /// no detail grain, no snow cover or rain drops of our own), `vanilla_plus` (the same
-    /// renderer with those extras, the default) or `enhanced` (`enhanced` follows it).
-    pub graphics: String,
+    /// The graphics mode: Vanilla (as OMSI 2 draws it: no sun shadows, no ambient occlusion,
+    /// no detail grain, no snow cover or rain drops of our own), Vanilla+ (the same renderer
+    /// with those extras, the default) or Enhanced (the physically based renderer).
+    pub graphics: GraphicsMode,
     /// Start a PC OpenXR headset session when the game starts (Windows only).
     pub vr: bool,
     /// Fraction of the OpenXR runtime's recommended eye resolution.
@@ -525,8 +524,7 @@ impl Settings {
             boarding: "auto".into(),
             detail_textures: true,
             exact_fare: true,
-            enhanced: false,
-            graphics: "vanilla_plus".into(),
+            graphics: GraphicsMode::VanillaPlus,
             triple: Default::default(),
             triple_span: true,
             triple_hud_center: true,
@@ -728,7 +726,7 @@ impl Settings {
         if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
             s.apply_safe_gpu(n);
         }
-        log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics, s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
+        log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics.as_str(), s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
         s
     }
 
@@ -736,7 +734,9 @@ impl Settings {
     pub fn from_text(text: &str) -> Settings {
         let mut s = Settings::default();
         let mut version = 0u32;
-        let mut graphics: Option<String> = None;
+        let mut graphics: Option<GraphicsMode> = None;
+        // (the old key of files from before `graphics`)
+        let mut enhanced = false;
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
@@ -769,13 +769,8 @@ impl Settings {
                 "boarding" => s.boarding = v.to_ascii_lowercase(),
                 "detail_textures" | "fractal" => s.detail_textures = b(v),
                 "exact_fare" => s.exact_fare = b(v),
-                "enhanced" => s.enhanced = b(v),
-                "graphics" | "renderer" => {
-                    if omsi_cfg::graphics::names_enhanced_plus(v) {
-                        omsi_cfg::graphics::note_enhanced_plus_read_as_enhanced();
-                    }
-                    graphics = Some(graphics_mode(v).to_string())
-                }
+                "enhanced" => enhanced = b(v),
+                "graphics" | "renderer" => graphics = Some(GraphicsMode::parse(v)),
                 "vr" => s.vr = b(v),
                 "vr_scale" => {
                     s.vr_scale = v
@@ -1469,16 +1464,12 @@ impl Settings {
         }
         // `graphics` decides; a file without it (older builds) says only `enhanced`, and
         // its vanilla renderer is what is now called Vanilla+
-        s.graphics = graphics.unwrap_or_else(|| {
-            if s.enhanced {
-                "enhanced"
-            } else {
-                "vanilla_plus"
-            }
-            .to_string()
+        s.graphics = graphics.unwrap_or(if enhanced {
+            GraphicsMode::Enhanced
+        } else {
+            GraphicsMode::VanillaPlus
         });
-        s.enhanced = s.graphics == "enhanced";
-        if s.classic() {
+        if s.graphics == GraphicsMode::Vanilla {
             s.shadows = false;
             s.ssao = false;
             s.detail_textures = false;
@@ -1577,8 +1568,7 @@ impl Settings {
     /// Vanilla graphics, whatever was set: the "same as OMSI 2" mode of "DirectX9 (D3D9Ex)"
     /// has no graphics improvements to choose.
     pub fn lock_vanilla(&mut self) {
-        self.graphics = "vanilla".into();
-        self.enhanced = false;
+        self.graphics = GraphicsMode::Vanilla;
         // (what a Vanilla file is loaded without, see `from_text`)
         self.shadows = false;
         self.ssao = false;
@@ -1611,11 +1601,6 @@ impl Settings {
         self.clouds = true;
         // (the sun's own light only: Enhanced's brighter night is an improvement)
         self.night_brightness = 0.0;
-    }
-
-    /// Vanilla graphics: the picture as OMSI 2 draws it.
-    pub fn classic(&self) -> bool {
-        self.graphics == "vanilla"
     }
 
     /// How far objects are drawn (m, 0 = no limit): `max_obj_dist`, or when that is `auto`
@@ -1690,26 +1675,8 @@ impl Settings {
             shadow_blobs: self.shadow_blobs,
             reflections: self.reflections,
             smoke_in_mirrors: self.smoke_in_mirrors,
-            no_enhanced: graphics_mode(&self.graphics) != "enhanced",
+            no_enhanced: self.graphics != GraphicsMode::Enhanced,
         }
-    }
-}
-
-/// `vanilla`, `vanilla_plus` or `enhanced` from the ways a file may spell them. The removed
-/// Enhanced+ reads as Enhanced.
-pub fn graphics_mode(v: &str) -> &'static str {
-    if omsi_cfg::graphics::names_enhanced_plus(v) {
-        return "enhanced";
-    }
-    match v
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', ' '], "_")
-        .as_str()
-    {
-        "enhanced" | "1" => "enhanced",
-        "vanilla" | "classic" | "original" | "omsi" | "omsi2" | "omsi_2" => "vanilla",
-        _ => "vanilla_plus",
     }
 }
 
