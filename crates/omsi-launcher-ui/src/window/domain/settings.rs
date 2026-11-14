@@ -916,7 +916,6 @@ pub static OPTS: &[Opt] = &[
             ("vanilla", "Vanilla (as OMSI 2)"),
             ("vanilla_plus", "Vanilla+"),
             ("enhanced", "Enhanced"),
-            ("enhanced_plus", "Enhanced+"),
         ],
     ),
     pick(
@@ -2212,17 +2211,14 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     }
     let fixed = depot_api && d3d9_fixes_vanilla(st.s);
     let graphics = st.get("graphics").as_str().unwrap_or("");
-    // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain;
-    // Enhanced+ traces its shadows, occlusion and reflections: always on there)
+    // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain)
     let classic = fixed || graphics == "vanilla";
-    let traced = !fixed && graphics == "enhanced_plus";
     let triple = st.on("triple_screen") && !st.on("vr");
     let visible = match o.key {
         "graphics_api" => !cfg!(target_os = "macos"),
         "shadow_size" | "shadow_casters" | "detail_textures" | "night_brightness" | "led_glow"
         | "led_mips" => !classic,
-        "ssao" | "shadows" => !classic && !traced,
-        "reflections" => !traced,
+        "ssao" | "shadows" => !classic,
         "fov" => !triple,
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)

@@ -3,10 +3,10 @@
 use super::options::RenderOptions;
 use super::state::Renderer;
 use crate::assets::{AssetStore, TexAddressing};
-use crate::effects::{puddles, rt};
+use crate::effects::puddles;
 use crate::gpu::{
     basic_pipelines, color_targets, sixteen_texture_units, target_2d, uniform_entry, GpuContext,
-    Samplers, DEPTH_FORMAT, GL_BACKEND, RT_GBUF,
+    Samplers, DEPTH_FORMAT, GL_BACKEND,
 };
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
@@ -32,8 +32,7 @@ impl Renderer {
         options: RenderOptions,
     ) -> Renderer {
         let (msaa, shadow_size) = (options.msaa, options.shadow_size);
-        RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
-        let gpu = GpuContext::open(&device, format, msaa, options.ray_tracing);
+        let gpu = GpuContext::open(&device, format, msaa);
         if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("build") && msaa > 1 {
             // test hook for the fallback in `new_with`: a sample count no device takes
             let _ = target_2d(
@@ -133,7 +132,6 @@ impl Renderer {
                             wgpu::ColorWrites::ALL
                         },
                         fs != "fs_surface_depth",
-                        fs == "fs_enhanced",
                     ),
                     // Only cutouts and painted terrain keep their discard; opaque and
                     // ordinary blended materials retain early depth testing.
@@ -289,7 +287,6 @@ impl Renderer {
                         Some(premultiplied_snow),
                         wgpu::ColorWrites::COLOR,
                         false,
-                        false,
                     ),
                     compilation_options: Default::default(),
                 }),
@@ -328,7 +325,7 @@ impl Renderer {
                 fragment: Some(wgpu::FragmentState {
                     module: &corona_shader,
                     entry_point: Some(fs),
-                    targets: &color_targets(f, Some(blend), wgpu::ColorWrites::COLOR, false, false),
+                    targets: &color_targets(f, Some(blend), wgpu::ColorWrites::COLOR, false),
                     compilation_options: Default::default(),
                 }),
                 multiview_mask: None,
@@ -381,7 +378,7 @@ impl Renderer {
                 fragment: Some(wgpu::FragmentState {
                     module: &sky_shader,
                     entry_point: Some(fs),
-                    targets: &color_targets(f, None, wgpu::ColorWrites::COLOR, false, false),
+                    targets: &color_targets(f, None, wgpu::ColorWrites::COLOR, false),
                     compilation_options: Default::default(),
                 }),
                 multiview_mask: None,
@@ -468,7 +465,6 @@ impl Renderer {
                 &layouts.material_layout,
             )
         });
-        let rt = options.ray_tracing.then(|| rt::RayTracer::new(&device));
         Renderer {
             gpu,
             presenter,
@@ -525,7 +521,6 @@ impl Renderer {
             plan_sink: None,
             counts: Default::default(),
             scratch: Default::default(),
-            rt,
         }
     }
 }

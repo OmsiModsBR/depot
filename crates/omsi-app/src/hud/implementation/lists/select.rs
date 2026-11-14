@@ -44,7 +44,6 @@ pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static s
             ("vanilla", "Vanilla (as OMSI 2)"),
             ("vanilla_plus", "Vanilla+"),
             ("enhanced", "Enhanced"),
-            ("enhanced_plus", "Enhanced+"),
         ],
         "msaa" => vec![
             ("1", "Off"),

@@ -8,7 +8,7 @@ use super::super::interface::output::Settings;
 use super::applog;
 use super::startup::{
     self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLASSIC, CLOUDS, ENHANCED,
-    ENHANCED_PLUS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
+    FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
 use crate::frame::domain::session::Session;
 use crate::gameplay::duty_start::place_on_duty;
@@ -32,7 +32,7 @@ pub(crate) enum ServerCfg {}
 pub(crate) fn launcher_statics() {
     let s = Settings::load();
     ENHANCED.store(
-        startup::enhanced_wanted(&s, false, false).0,
+        startup::enhanced_wanted(&s, false),
         std::sync::atomic::Ordering::Relaxed,
     );
     CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
@@ -170,8 +170,10 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     {
         args.drive_keys = settings.drive_keys.clone();
     }
-    let (enhanced, plus) = startup::enhanced_wanted(&settings, args.enhanced, args.enhanced_plus);
-    ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
+    if args.enhanced_plus {
+        log::info!("--enhanced-plus ignored: Enhanced+ graphics were removed");
+    }
+    let enhanced = startup::enhanced_wanted(&settings, args.enhanced);
     ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(
         settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(),

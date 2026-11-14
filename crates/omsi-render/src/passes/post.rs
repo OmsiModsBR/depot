@@ -146,7 +146,6 @@ pub(crate) fn encode_enhanced_post(
     enhanced: bool,
     lead_view: bool,
     puddles_on: bool,
-    rt_frame: bool,
     scaled: bool,
     with_overlays: bool,
     tset: &Option<wgpu::QuerySet>,
@@ -208,16 +207,13 @@ pub(crate) fn encode_enhanced_post(
                 ctx.adaptation.exposure.map(f32::exp).unwrap_or(1.0),
                 lighting.led_glow * 10.0,
             ],
-            // Enhanced+: its grade, the vignette and the sharpening; both: the tone
-            // curve's contrast (post.wgsl `natural_tone`)
-            d: {
-                let contrast = tone_contrast(ctx.adaptation.exposure.unwrap_or(0.0));
-                if rt_frame && !omsi_cfg::flags::NO_RT_GRADE.is_set() {
-                    [1.0, 0.08, 0.0, contrast]
-                } else {
-                    [0.0, 0.0, 0.0, contrast]
-                }
-            },
+            // (w: the tone curve's contrast, post.wgsl `natural_tone`)
+            d: [
+                0.0,
+                0.0,
+                0.0,
+                tone_contrast(ctx.adaptation.exposure.unwrap_or(0.0)),
+            ],
         };
         ctx.queue
             .write_buffer(&ctx.post.post_buf, 0, bytemuck::bytes_of(&pu));

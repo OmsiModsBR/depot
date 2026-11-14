@@ -4,7 +4,6 @@
 
 use super::options::RenderOptions;
 use super::state::Renderer;
-use crate::assets::RT_BUFFERS;
 use crate::gpu::{
     basic_pipelines, dedicated_vram_mb, fallback_load, fallback_store, gpu_error_text,
     note_adapter, vulkan_vram_mb, ArrayPath, ARRAY_PATH, BASIC_PIPELINES, DEPTH_FORMAT, GL_BACKEND,
@@ -199,26 +198,6 @@ impl Renderer {
             // textures are decoded to RGBA by upload_texture on this device.
             required_features = wgpu::Features::empty();
         }
-        // Enhanced+: hardware ray queries where the device has them (Apple silicon from the
-        // M3/A17 on, RTX and RDNA 2 cards and newer through Vulkan and Direct3D 12 - with DXC,
-        // which the Windows build ships beside the game); OMSI_NO_RT=1 leaves them out. Should
-        // the device refuse its work all the same, it falls back to Enhanced (`rt_error`).
-        let ray_query = options.ray_tracing
-            && !intel_vulkan_safe
-            && info.backend != wgpu::Backend::Noop
-            && adapter
-                .features()
-                .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-            && !omsi_cfg::flags::NO_RT.is_set();
-        if ray_query {
-            required_features |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
-            limits = limits.using_acceleration_structure_values(adapter.limits());
-        } else if options.ray_tracing {
-            log::warn!(
-                "{}: no hardware ray queries; Enhanced+ is drawn as Enhanced",
-                info.name
-            );
-        }
         // the per-draw arrays as storage buffers where the device reads them in a vertex
         // shader (three there, two lights arrays in a fragment shader), else as textures;
         // OMSI_GPU_ARRAYS=textures|nostorage takes those paths on any device
@@ -255,14 +234,6 @@ impl Renderer {
                     wgpu::MemoryHints::MemoryUsage
                 } else {
                     wgpu::MemoryHints::Performance
-                },
-                // (the ray queries are still an experimental feature of wgpu)
-                // SAFETY: only when ray queries were asked for and the adapter offers them;
-                // the experimental features are wgpu's own, with no memory the game owns
-                experimental_features: if ray_query {
-                    unsafe { wgpu::ExperimentalFeatures::enabled() }
-                } else {
-                    wgpu::ExperimentalFeatures::disabled()
                 },
                 ..Default::default()
             })
@@ -301,10 +272,8 @@ impl Renderer {
             // 16x showed none of it - 16x kept the far dashes narrow where 8x smeared them
             // sideways - so 16x is the player's choice again, 8x the default)
             anisotropy: options.anisotropy.clamp(1, 16),
-            ray_tracing: ray_query,
             ..options
         };
-        RT_BUFFERS.store(ray_query, std::sync::atomic::Ordering::Relaxed);
         let bc = device
             .features()
             .contains(wgpu::Features::TEXTURE_COMPRESSION_BC);

@@ -11,7 +11,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_BACKEND` | text | `omsi-app::startup` | yes | The graphics interface to ask first: `vulkan`, `dx12` or `gl` (set by the game itself when it starts again after a lost device, and on phones without a good Vulkan). |
 | `OMSI_BASIC_PIPELINES` | switch | `omsi-render::gpu::open` | yes | Only the simple pipelines, for drivers whose shader compiler fails on the others. |
 | `OMSI_ENHANCED` | switch | `omsi-app` |  | The enhanced renderer, whatever the setting says. |
-| `OMSI_ENHANCED_PLUS` | switch | `omsi-app` |  | The enhanced renderer with its extras (`--enhanced-plus`). |
 | `OMSI_FULL_GPU` | switch | `omsi-render::api::renderer` | yes | The settings as they are on a weak graphics chip too (no lighter defaults). |
 | `OMSI_GRAPHICS` | text | `omsi-app::settings` | yes | The renderer for one run: `vanilla`, `vanilla_plus` or `enhanced`. |
 | `OMSI_IBIS_BUDGET` | number | `omsi-sim::ibis` |  | How long (seconds, 10 by default) the IBIS may look for a way to type a duty in. |
@@ -28,8 +27,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_ENHANCED` | switch | `omsi-render::renderer::frame` | yes | The enhanced renderer's HDR picture left out. |
 | `OMSI_NO_ENVMAP` | switch | `omsi-app::scene` | yes | No environment maps (reflections) on vehicles and objects. |
 | `OMSI_NO_FXAA` | switch | `omsi-render::renderer::frame` | yes | No FXAA. |
-| `OMSI_NO_RT` | switch | `omsi-render::api::renderer` | yes | No ray queries. |
-| `OMSI_NO_RT_GRADE` | switch | `omsi-render::passes::post` | yes | The ray-traced frame without its colour grade. |
 | `OMSI_NO_SHADOWS` | switch | `omsi-render::lighting::model` | yes | No shadows. |
 | `OMSI_NO_SURF` | switch | `omsi-app::scene` | yes | Roads without the bumps of their textures' `.surf` maps. |
 | `OMSI_NO_TEXCOMPRESS` | switch | `omsi-render::api::renderer` | yes | No compression of loose pictures. |
@@ -131,7 +128,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_DEBUG_REPEATERS` | switch | `omsi-app::tiles` |  | Log the spline object rows whose start the map and the spline chain disagree about. |
 | `OMSI_DEBUG_REST` | switch | `omsi-app::offscreen` |  | Offscreen: log where the bus came to rest on the ground after it was placed. |
 | `OMSI_DEBUG_ROUTES` | switch | `omsi-app::schedule` |  | Log where the timetable's routes leave a gap between lanes. |
-| `OMSI_DEBUG_RT` | number | `omsi-render::effects::rt` |  | Log the ray-tracing structures; a number shows one of its buffers. |
 | `OMSI_DEBUG_SERVICES` | switch | `omsi-app::services` |  | Log the petrol stations and how far the bus is from them. |
 | `OMSI_DEBUG_SHADOW` | number | `omsi-render::renderer::lists` |  | Log the shadow casters at least this large (a radius, default 3). |
 | `OMSI_DEBUG_SHADOW_FAR` | switch | `omsi-render::passes::shadow` |  | Log why the far shadow map is drawn again. |
@@ -214,7 +210,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_PUDDLE_REFLECTIONS` | switch | `omsi-render::renderer::frame` |  | Wet roads reflect no scene. |
 | `OMSI_NO_PUDDLE_VEHICLE` | switch | `omsi-render::effects::puddles` |  | Puddles reflect no vehicles. |
 | `OMSI_NO_RENDER_POOL` | switch | `omsi-render::gpu::context` |  | The draw lists encoded on the frame's own thread, not on a pool. |
-| `OMSI_NO_RT_FRAME` | switch | `omsi-render::renderer::frame` |  | The ray-traced frame of Enhanced+ left out. |
 | `OMSI_NO_SMOKE` | switch | `omsi-render::passes::main, omsi-app::output::d3d9` |  | No smoke. |
 | `OMSI_NO_SNOWFALL` | switch | `omsi-render::passes::main` |  | No falling snow. |
 | `OMSI_NO_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The splines drawn one by one. |
@@ -243,7 +238,6 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_ROAD_PHOTO_N` | number | `omsi-app::offscreen` |  | Offscreen: how many points (400 by default) `OMSI_ROAD_PHOTO` photographs. |
 | `OMSI_ROAD_PHOTO_SIDE` | number | `omsi-app::offscreen` |  | Offscreen: how far to either side of the lane `OMSI_ROAD_PHOTO` looks. |
 | `OMSI_ROAD_PHOTO_SLANT` | number | `omsi-app::offscreen` |  | Offscreen: `OMSI_ROAD_PHOTO` from a driver's eye this far back along the lane. |
-| `OMSI_RT_REFL_HALF` | switch | `omsi-render::effects::rt` |  | The reflection rays traced per 2 x 2 pixels. |
 | `OMSI_SHADOW_FAR_EVERY_FRAME` | switch | `omsi-render::passes::shadow` |  | The far shadow map drawn again every frame. |
 | `OMSI_SHADOW_NEAR_EVERY_FRAME` | switch | `omsi-render::passes::shadow` |  | The near shadow map drawn again every frame. |
 | `OMSI_SKIP_OBJECT` | text | `omsi-app::scene` |  | Leave out the scenery objects whose file name contains this text. |

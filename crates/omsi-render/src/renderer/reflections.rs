@@ -1,5 +1,5 @@
-//! The frame's reflections (Enhanced+): resolving the surfaces, and the traced reflections or
-//! the puddles' rays for what they reflect.
+//! The frame's reflections: resolving the surfaces, and the puddles' rays for what they
+//! reflect.
 
 use super::Renderer;
 use crate::effects::puddles::PuddleParts;
@@ -47,8 +47,7 @@ impl Renderer {
         }
     }
 
-    /// The reflections: Enhanced+'s traced ones, or the puddles' (whether they are drawn is
-    /// returned).
+    /// The puddles' reflections (whether they are drawn is returned).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_reflections(
         &mut self,
@@ -66,18 +65,12 @@ impl Renderer {
         width: u32,
         height: u32,
         puddles_wanted: bool,
-        rt_frame: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) -> bool {
         // Weather alone is insufficient: leave the allocation and reflection passes out when
         // the visible batches contain no moisture-tagged surface (a showroom, bare terrain).
-        // Enhanced+: the traced reflections (wet roads' too) in place of the puddles' rays
-        if rt_frame {
-            self.encode_rt_reflections(encoder, width, height, tset.as_ref(), timed);
-        }
         let puddles_on = puddles_wanted
-            && !rt_frame
             && main_batches
                 .iter()
                 .any(|b| scene.materials[b.material as usize].uniform.params2[2] > 0.0)

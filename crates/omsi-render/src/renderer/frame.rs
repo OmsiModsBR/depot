@@ -31,8 +31,7 @@ pub(crate) struct FrameFeatures {
     pub(crate) reflection_frame: bool,
     /// The scene drawn into the masked targets (Enhanced or the reflections).
     pub(crate) masked_frame: bool,
-    /// The traced sun shadow and ray-traced reflections; the ambient occlusion pass.
-    pub(crate) rt_frame: bool,
+    /// The ambient occlusion pass.
     pub(crate) ao_on: bool,
     /// The depth prepass before the shading.
     pub(crate) prepass_on: bool,
@@ -72,7 +71,6 @@ pub(crate) struct FrameContext<'a> {
     /// Seconds since the leading view's last frame.
     pub(crate) dt: f32,
     /// The shadows' schedule (`ShadowResources::schedule`).
-    pub(crate) moon_shadows: bool,
     pub(crate) shadows: bool,
     pub(crate) draw_shadows: bool,
     pub(crate) redraw_near: bool,
@@ -230,7 +228,7 @@ impl Renderer {
     }
 
     /// The start of a picture: the device's state and the fallbacks, the picture's size and
-    /// targets, what it draws (Enhanced, the puddles, the glass, ray tracing, ambient
+    /// targets, what it draws (Enhanced, the puddles, the glass, ambient
     /// occlusion), the lights, the shadows' schedule and the camera uniform. None when the
     /// device is lost.
     #[allow(clippy::too_many_arguments)]
@@ -253,9 +251,7 @@ impl Renderer {
             return None;
         }
         self.fake_gpu_errors(with_overlays);
-        if self.gpu.rt_error.load(std::sync::atomic::Ordering::Relaxed) {
-            self.fall_back_without_ray_tracing(scene);
-        } else if self
+        if self
             .gpu
             .gpu_error
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -367,15 +363,7 @@ impl Renderer {
         );
         self.prepare_smoke(scene, camera.position, exclude_texture.is_some());
         // ambient occlusion only for the real picture, not for the mirrors
-        // Enhanced+: the window's picture traces its sun shadow and ambient occlusion (not the
-        // mirrors, a headset's eyes or a triple screen's panels: they keep the shadow map)
-        let rt_frame = self.rt.is_some()
-            && enhanced
-            && with_overlays
-            && projection.is_none()
-            && !omsi_cfg::flags::NO_RT_FRAME.is_set();
         let ao_on = with_overlays
-            && self.rt.is_none()
             && self.options.ssao
             && self.ssao.ssao_pipeline.is_some()
             && !omsi_cfg::flags::NO_AO.is_set();
@@ -388,16 +376,6 @@ impl Renderer {
             scene.dirty = true;
             scene.model_buf = None;
             self.targets.hdr_targets.clear();
-        }
-        if rt_frame
-            && self
-                .rt
-                .as_mut()
-                .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
-        {
-            // the camera bind group must point at the new lighting texture
-            scene.dirty = true;
-            scene.model_buf = None;
         }
         if masked_frame {
             self.hdr_targets(width, height);
@@ -438,7 +416,6 @@ impl Renderer {
             self.prepare_overlays(scene, full_w, full_h);
         }
         let ShadowSchedule {
-            moon_shadows,
             shadows,
             draw_shadows,
             redraw_near,
@@ -528,14 +505,7 @@ impl Renderer {
                 lighting.cloud_density,
                 lighting.cloud_offset[0],
                 lighting.cloud_offset[1],
-                // (2: the traced lighting, full size, see `ao_at`)
-                if rt_frame {
-                    2.0
-                } else if ao_on {
-                    1.0
-                } else {
-                    0.0
-                },
+                if ao_on { 1.0 } else { 0.0 },
             ],
             // (w: the heading the sphere maps are laid out by in the headset, see
             // `set_env_heading`; flagged by cam_up.w)
@@ -657,12 +627,6 @@ impl Renderer {
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
-        if rt_frame {
-            let proj =
-                Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near);
-            self.prepare_ray_tracing(scene, camera, lighting, vp_mat, proj, width, height, dt);
-            clock.stage(self, "ray tracing", "mirror.ray tracing");
-        }
         // (a mirror takes the window's light - its own call would move the exposure on -
         // unless it comes before the window's first frame)
         if enhanced && lead_view {
@@ -738,14 +702,12 @@ impl Renderer {
                     puddles_wanted,
                     reflection_frame,
                     masked_frame,
-                    rt_frame,
                     ao_on,
                     prepass_on,
                 },
                 aspect,
                 cam_rel,
                 dt,
-                moon_shadows,
                 shadows,
                 draw_shadows,
                 redraw_near,

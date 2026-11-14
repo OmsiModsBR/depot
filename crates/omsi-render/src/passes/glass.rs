@@ -67,37 +67,11 @@ pub(crate) fn encode_glass(
                     store: wgpu::StoreOp::Store,
                 },
             }),
-            hdr.and_then(|h| h.gbuf.as_ref())
-                .map(|g| wgpu::RenderPassColorAttachment {
-                    view: &g[0].1,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                }),
-            hdr.and_then(|h| h.gbuf.as_ref())
-                .map(|g| wgpu::RenderPassColorAttachment {
-                    view: &g[1].1,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                }),
         ];
         let pipes = rain_pipelines;
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("rain on current scene"),
-            color_attachments: &colours[..if colours[2].is_some() {
-                4
-            } else if hdr.is_some() {
-                2
-            } else {
-                1
-            }],
+            color_attachments: &colours[..if hdr.is_some() { 2 } else { 1 }],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &targets.ao.as_ref().unwrap().depth_view,
                 depth_ops: Some(wgpu::Operations {

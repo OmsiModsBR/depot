@@ -28,8 +28,8 @@ updates:
         update-types:
           - minor
           - patch
-    # a new major wgpu changes the experimental ray query API Enhanced+ is built on (and the
-    # gpu-allocator patch): it is moved to by hand
+    # a new major wgpu changes the renderer's API (and the gpu-allocator patch): it is moved
+    # to by hand
     ignore:
       - dependency-name: "wgpu"
         update-types: ["version-update:semver-major"]

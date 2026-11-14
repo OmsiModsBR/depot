@@ -770,7 +770,12 @@ impl Settings {
                 "detail_textures" | "fractal" => s.detail_textures = b(v),
                 "exact_fare" => s.exact_fare = b(v),
                 "enhanced" => s.enhanced = b(v),
-                "graphics" | "renderer" => graphics = Some(graphics_mode(v).to_string()),
+                "graphics" | "renderer" => {
+                    if omsi_cfg::graphics::names_enhanced_plus(v) {
+                        omsi_cfg::graphics::note_enhanced_plus_read_as_enhanced();
+                    }
+                    graphics = Some(graphics_mode(v).to_string())
+                }
                 "vr" => s.vr = b(v),
                 "vr_scale" => {
                     s.vr_scale = v
@@ -1472,14 +1477,7 @@ impl Settings {
             }
             .to_string()
         });
-        s.enhanced = s.graphics == "enhanced" || s.graphics == "enhanced_plus";
-        // Enhanced+ is Enhanced with ray tracing: its shadows, ambient occlusion and
-        // reflections are traced and belong to it - they cannot be switched off apart
-        if s.ray_tracing() {
-            s.shadows = true;
-            s.ssao = true;
-            s.reflections = true;
-        }
+        s.enhanced = s.graphics == "enhanced";
         if s.classic() {
             s.shadows = false;
             s.ssao = false;
@@ -1504,12 +1502,6 @@ impl Settings {
         s.ai_max_scheduled = s.ai_max_scheduled.min(1000);
         s.ai_max_parked = s.ai_max_parked.clamp(0, 100);
         s
-    }
-
-    /// Enhanced+ graphics: Enhanced with ray-traced sun shadows, ambient occlusion and
-    /// reflections (and the graded look that goes with them).
-    pub fn ray_tracing(&self) -> bool {
-        self.graphics == "enhanced_plus"
     }
 
     /// Windy trees, unless `OMSI_WINDY_TREES=0`/`1` says otherwise (A/B renders).
@@ -1698,22 +1690,23 @@ impl Settings {
             shadow_blobs: self.shadow_blobs,
             reflections: self.reflections,
             smoke_in_mirrors: self.smoke_in_mirrors,
-            no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
-            ray_tracing: self.ray_tracing()
-                || crate::core::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
+            no_enhanced: graphics_mode(&self.graphics) != "enhanced",
         }
     }
 }
 
-/// `vanilla`, `vanilla_plus`, `enhanced` or `enhanced_plus` from the ways a file may spell them.
+/// `vanilla`, `vanilla_plus` or `enhanced` from the ways a file may spell them. The removed
+/// Enhanced+ reads as Enhanced.
 pub fn graphics_mode(v: &str) -> &'static str {
+    if omsi_cfg::graphics::names_enhanced_plus(v) {
+        return "enhanced";
+    }
     match v
         .trim()
         .to_ascii_lowercase()
         .replace(['-', ' '], "_")
         .as_str()
     {
-        "enhanced_plus" | "enhanced+" | "enhancedplus" | "enhanced_+" | "2" => "enhanced_plus",
         "enhanced" | "1" => "enhanced",
         "vanilla" | "classic" | "original" | "omsi" | "omsi2" | "omsi_2" => "vanilla",
         _ => "vanilla_plus",

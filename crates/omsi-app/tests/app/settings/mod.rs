@@ -1,4 +1,5 @@
 mod bus_seats;
+mod graphics;
 mod physics;
 mod resolution;
 mod right_stick_look;
@@ -134,7 +135,7 @@ fn d3d9_takes_the_render_scale_saved_under_another_api() {
 
 #[test]
 fn d3d9_has_no_graphics_improvements_to_choose() {
-    for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
+    for g in ["vanilla_plus", "enhanced"] {
         let text = format!("graphics={g}\ngraphics_api=d3d9\n");
         let chosen = Settings::from_text(&text);
         assert_eq!(chosen.graphics, g);
@@ -142,7 +143,7 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
         let loaded = chosen.clone().locked_for_api();
         if cfg!(windows) {
             assert_eq!(loaded.graphics, "vanilla");
-            assert!(loaded.classic() && !loaded.enhanced && !loaded.ray_tracing());
+            assert!(loaded.classic() && !loaded.enhanced);
             // as a file that says graphics=vanilla is loaded
             let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
             assert_eq!(
@@ -190,24 +191,19 @@ fn d3d9_has_no_graphics_improvements_to_choose() {
             Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
         assert_eq!(other.graphics, g);
     }
-    // --enhanced / --enhanced-plus (and their variables) do not apply to DirectX9 (D3D9Ex)
+    // --enhanced (and its variable) does not apply to DirectX9 (D3D9Ex)
     let d3d9 = Settings::from_text("graphics_api=d3d9\n");
     assert_eq!(
-        openomsi_game::testing::core::startup::enhanced_wanted(&d3d9, true, true),
-        if cfg!(windows) {
-            (false, false)
-        } else {
-            (true, true)
-        }
+        openomsi_game::testing::core::startup::enhanced_wanted(&d3d9, true),
+        !cfg!(windows)
     );
     let vulkan = Settings::from_text("graphics_api=vulkan\n");
-    assert_eq!(
-        openomsi_game::testing::core::startup::enhanced_wanted(&vulkan, true, true),
-        (true, true)
-    );
-    let mut s = Settings::from_text("graphics=enhanced_plus\n");
+    assert!(openomsi_game::testing::core::startup::enhanced_wanted(
+        &vulkan, true
+    ));
+    let mut s = Settings::from_text("graphics=enhanced\n");
     s.lock_vanilla();
-    assert!(s.classic() && !s.enhanced && !s.ray_tracing());
+    assert!(s.classic() && !s.enhanced);
 }
 
 #[test]
@@ -338,10 +334,6 @@ fn graphics_modes() {
     assert!(Settings::from_text("graphics=enhanced\nenhanced=0\n").enhanced);
     assert_eq!(graphics_mode("Vanilla+"), "vanilla_plus");
     assert_eq!(graphics_mode("OMSI 2"), "vanilla");
-    assert_eq!(graphics_mode("Enhanced+"), "enhanced_plus");
-    let rt = Settings::from_text("graphics=enhanced_plus\nshadows=0\nssao=0\nreflections=0\n");
-    assert!(rt.enhanced && rt.ray_tracing() && rt.shadows && rt.ssao && rt.reflections);
-    assert!(rt.render_options().ray_tracing && !rt.render_options().no_enhanced);
     let s = Settings {
         graphics: "enhanced".into(),
         enhanced: true,

@@ -19,7 +19,7 @@ pub(crate) use material::{
 };
 pub(crate) use mesh::{
     make_meshes, mesh_page_bytes, mesh_vertices, MeshPage, MESH_PAGE_INDEX_BYTES,
-    MESH_PAGE_VERTEX_BYTES, RT_BUFFERS,
+    MESH_PAGE_VERTEX_BYTES,
 };
 #[cfg(test)]
 pub(crate) use mesh::{page_give, page_take};
