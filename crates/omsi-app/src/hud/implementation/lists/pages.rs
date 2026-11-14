@@ -77,17 +77,16 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
             .then(|| pick("dx9_upscale", "Upscaling", "How the smaller picture is scaled up to the window's size"))
             .flatten(),
         limit_or(app, "anisotropy", "Anisotropic", || pick("anisotropy", "Anisotropic", later)),
-        // (Enhanced+ traces its shadows, occlusion and reflections: always on there)
         // (under "DirectX9 (D3D9Ex)" the `api_limits` table hides or locks these: `limit_or`)
-        limit_or(app, "shadows", "Sun shadows", || switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows").filter(|_| !app.settings.ray_tracing())),
+        limit_or(app, "shadows", "Sun shadows", || switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows")),
         limit_or(app, "shadow_size", "Shadow map", || pick("shadow_size", "Shadow map", later)),
-        limit_or(app, "ssao", "Ambient occlusion", || switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| !app.settings.ray_tracing())),
+        limit_or(app, "ssao", "Ambient occlusion", || switch_row(app, "ssao", "Ambient occlusion", later)),
         limit_or(app, "shadow_casters", "Shadows cast by", || pick("shadow_casters", "Shadows cast by", later)),
         limit_or(app, "detail_textures", "Detail texturing up close", || switch_row(app, "detail_textures", "Detail texturing up close", "The ground and large walls get fine grain when close")),
         limit_or(app, "night_brightness", "Night brightness", || slider_row(app, "night_brightness", "Night brightness", "Enhanced graphics: how much brighter the night is shown", &|v| if v < 0.01 { "Off".to_string() } else { format!("+{v:.2}") })),
         limit_or(app, "led_glow", "LED glow", || slider_row(app, "led_glow", "LED glow", "How strongly the dots of LED destination displays glow", &|v| format!("{}/15", v as i64))),
         limit_or(app, "led_mips", "LED mask mipmaps", || slider_row(app, "led_mips", "LED mask mipmaps", "Keep the mip chain of the LED masks (smoother from a distance).", &|v| format!("{v:.2}"))),
-        switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later).filter(|_| !app.settings.ray_tracing()),
+        switch_row(app, "reflections", "Reflection maps (paint, chrome, glass)", later),
         limit_or(app, "clouds", "Clouds", || switch_row(app, "clouds", "Clouds", later)),
         // (every graphics mode draws the sun's glare)
         switch_row(app, "sun_glow", "Sun glow", "The bright glow around the sun"),

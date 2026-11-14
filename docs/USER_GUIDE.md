@@ -50,7 +50,6 @@ Everything can also be given on the command line, which then skips both:
 | `--click x,y[,dx,dy]` | press (and drag) the cockpit switch at that pixel, offscreen |
 | `--season winter` / `--situation x.osn` | season override, a saved situation |
 | `--enhanced` / `--export-glb bus.glb` | the physically based renderer; write the bus as glTF (the launcher's preview) and quit |
-| `--enhanced-plus` | Enhanced+: the physically based renderer with ray-traced shadows, ambient occlusion and reflections |
 | `--launcher` / `--menu` / `--no-menu` | open the launcher (the default without arguments), the in-game menu, or neither |
 
 Keys in the window: **W** throttle, **S** brake, **A**/**D** steering - the arrow keys do the
@@ -348,21 +347,9 @@ night). The camera exposes like one: for daylight, part of the way towards the l
 moment, with a camera's middle-tone contrast; street lamps are bright points with a little
 glare in clear air and wide halos in mist and rain.
 
-`graphics=enhanced_plus` (Enhanced+ in the launcher, `--enhanced-plus`) is Enhanced with
-hardware ray tracing, where the graphics card traces rays (Apple M3/M4 and newer, RTX and
-RDNA 2 cards and newer through Vulkan and Direct3D 12; elsewhere it draws as Enhanced, and
-should a driver refuse the ray tracing it falls back to Enhanced as well). Every solid mesh within
-420 m of the camera goes into an acceleration structure each frame, and the window's
-picture traces the sun's shadow per pixel (soft away from its caster, crisp at the
-contact; cut-out leaves and fences keep the shadow map, whose texels they need), the
-sky's occlusion within two metres, and reflections: wet roads, water, glass, envmapped
-and lacquered paint mirror what really stands around them, off the screen too, and the
-sky where nothing does. Its shadows, occlusion and reflections cannot be switched off
-apart. It shares Enhanced's tone curve, with the light a shade warmer and a light
-vignette.
-`OMSI_NO_RT=1` opens no ray queries, `OMSI_NO_RT_GRADE=1` leaves its grade out,
-`OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see
-`crates/omsi-render/src/rt.rs`) shows its buffers.
+Enhanced+ (`graphics=enhanced_plus`, `--enhanced-plus`), the mode that traced rays, was
+removed. A settings file that still names it opens in Enhanced, and the argument and the
+mode's `OMSI_*` variables are ignored, each with a line in the log.
 
 Vanilla, Vanilla+ and Enhanced reflect buses, buildings and scenery in wet road puddles
 when `reflections=1`, each using its own lighting. Depth-aware filtering softens the image;
@@ -518,8 +505,7 @@ haze. So one day is grey from morning to night, the next opens up after a foggy 
 an afternoon brings showers and a clear blue evening follows - each following from the day
 before (the model starts three days back), with the season's and the latitude's climate.
 It sets everything a weather sets - visibility, wind, temperature, rain or snow, the wet
-road - for every graphics mode; Enhanced and Enhanced+ also take its cloud amounts and its
-air. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes the air for comparisons.
+road - for every graphics mode; Enhanced also takes its cloud amounts and its air. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes the air for comparisons.
 
 ## Radio
 

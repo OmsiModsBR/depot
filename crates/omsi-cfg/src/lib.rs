@@ -40,6 +40,7 @@ pub mod env;
 pub mod flags;
 mod format;
 mod fs;
+pub mod graphics;
 mod install;
 pub mod limits;
 mod physics;

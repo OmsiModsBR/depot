@@ -389,8 +389,6 @@ impl ShadowResources {
 /// The sun's shadows of one picture (see `ShadowResources::schedule`).
 #[derive(Clone, Copy)]
 pub(crate) struct ShadowSchedule {
-    /// By night the moon casts them (Enhanced).
-    pub(crate) moon_shadows: bool,
     /// The picture has sun shadows at all, and draws its maps (not taken from the first eye).
     pub(crate) shadows: bool,
     pub(crate) draw_shadows: bool,
@@ -536,7 +534,6 @@ impl ShadowResources {
             )));
         }
         ShadowSchedule {
-            moon_shadows,
             shadows,
             draw_shadows,
             redraw_near,

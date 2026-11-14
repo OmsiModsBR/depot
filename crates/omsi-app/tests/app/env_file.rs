@@ -28,8 +28,6 @@ fn the_settable_switches_are_the_reviewed_ones() {
         "OMSI_NO_TEXCOMPRESS",
         "OMSI_NO_FXAA",
         "OMSI_NO_AO",
-        "OMSI_NO_RT",
-        "OMSI_NO_RT_GRADE",
         "OMSI_NO_CLOUDS",
         "OMSI_NO_ENHANCED",
         "OMSI_MAX_FPS",

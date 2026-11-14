@@ -3,7 +3,7 @@
 
 use super::options::RenderOptions;
 use crate::assets::{AssetStore, TexAddressing};
-use crate::effects::{puddles, rt};
+use crate::effects::puddles;
 use crate::gpu::{GpuContext, Samplers};
 use crate::lighting::LightMapAtlas;
 use crate::output::{Diagnostics, Presenter};
@@ -84,8 +84,6 @@ pub struct Renderer {
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
-    /// Enhanced+: the ray tracer (on a device with ray queries, see `RenderOptions::ray_tracing`).
-    pub(crate) rt: Option<rt::RayTracer>,
     pub(crate) sprites: SpriteResources,
     pub(crate) prepass: PrepassPipelines,
     pub(crate) ssao: SsaoPass,

@@ -424,8 +424,6 @@ flags! {
     GRAPHICS = "OMSI_GRAPHICS", Text, User, "omsi-app::settings", env_txt;
     /// The enhanced renderer, whatever the setting says.
     ENHANCED = "OMSI_ENHANCED", Switch, User, "omsi-app";
-    /// The enhanced renderer with its extras (`--enhanced-plus`).
-    ENHANCED_PLUS = "OMSI_ENHANCED_PLUS", Switch, User, "omsi-app";
     /// No clouds.
     NO_CLOUDS = "OMSI_NO_CLOUDS", Switch, User, "omsi-app", env_txt;
     /// The frame rate limit, in place of the setting.
@@ -594,10 +592,6 @@ flags! {
     NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-render::renderer::frame", env_txt;
     /// No ambient occlusion.
     NO_AO = "OMSI_NO_AO", Switch, User, "omsi-render::renderer::frame", env_txt;
-    /// No ray queries.
-    NO_RT = "OMSI_NO_RT", Switch, User, "omsi-render::api::renderer", env_txt;
-    /// The ray-traced frame without its colour grade.
-    NO_RT_GRADE = "OMSI_NO_RT_GRADE", Switch, User, "omsi-render::passes::post", env_txt;
     /// The enhanced renderer's HDR picture left out.
     NO_ENHANCED = "OMSI_NO_ENHANCED", Switch, User, "omsi-render::renderer::frame", env_txt;
 
@@ -627,12 +621,6 @@ flags! {
     SURFACE_BIAS = "OMSI_SURFACE_BIAS", Number, Diagnostic, "omsi-render::renderer::build";
     /// Only the surfaces drawn.
     ONLY_SURFACES = "OMSI_ONLY_SURFACES", Switch, Diagnostic, "omsi-render::renderer::lists";
-    /// The ray-traced frame of Enhanced+ left out.
-    NO_RT_FRAME = "OMSI_NO_RT_FRAME", Switch, Diagnostic, "omsi-render::renderer::frame";
-    /// The reflection rays traced per 2 x 2 pixels.
-    RT_REFL_HALF = "OMSI_RT_REFL_HALF", Switch, Diagnostic, "omsi-render::effects::rt";
-    /// Log the ray-tracing structures; a number shows one of its buffers.
-    DEBUG_RT = "OMSI_DEBUG_RT", Number, Diagnostic, "omsi-render::effects::rt";
     /// The enhanced main pass shows one of its terms alone (a number).
     DEBUG_ENHANCED = "OMSI_DEBUG_ENHANCED", Number, Diagnostic, "omsi-render::lighting::model";
     /// Log the automatic exposure.

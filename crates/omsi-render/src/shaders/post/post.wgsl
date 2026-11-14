@@ -18,8 +18,8 @@ struct PostParams {
     // pre-exposure (for absolute luminance), w how much an LED panel's dots count for in
     // the glow's source (0 = not at all, `Led glow`)
     c: vec4<f32>,
-    // x Enhanced+'s grade (0/1), y the vignette's strength, z sharpening, w the tone
-    // curve's contrast about mid grey (1 = none; a camera's by day, less at night)
+    // w the tone curve's contrast about mid grey (1 = none; a camera's by day, less at
+    // night); x, y and z are not used
     d: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: PostParams;
@@ -233,11 +233,6 @@ fn natural_tone(color: vec3<f32>, contrast: f32) -> vec3<f32> {
     return mix(o, vec3<f32>(np), g);
 }
 
-// Enhanced+'s grade: the natural curve, the light a shade warmer.
-fn filmic_grade(c: vec3<f32>) -> vec3<f32> {
-    return natural_tone(c * vec3<f32>(1.015, 1.0, 0.985), max(p.d.w, 1.0));
-}
-
 // What a misted pane shows of what lies behind it: half the light its film scatters is
 // diffracted forward by the droplets, within some 2 degrees for droplets of 10 um (0.61
 // lambda / radius) - about a fortieth of the picture's height at the usual field of view -
@@ -281,14 +276,7 @@ fn graded(in: VsOut) -> vec3<f32> {
     if (p.c.y > 0.0) {
         c = night_vision(c, p.c.y, p.c.z);
     }
-    if (p.d.x > 0.5) {
-        c = filmic_grade(c * pow(2.0, ev));
-        // the lens: the corners a little darker
-        let q = in.uv * 2.0 - vec2<f32>(1.0);
-        c = c * (1.0 - p.d.y * pow(clamp(dot(q, q) * 0.5, 0.0, 1.0), 1.6));
-    } else {
-        c = natural_tone(c * pow(2.0, ev), max(p.d.w, 1.0));
-    }
+    c = natural_tone(c * pow(2.0, ev), max(p.d.w, 1.0));
     var e = srgb_encode(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)));
     // triangular dither of one code value: no bands in the sky's gradient
     let px = in.clip.xy;
@@ -309,25 +297,6 @@ fn fs_tonemap(in: VsOut) -> @location(0) vec4<f32> {
 fn fs_tonemap_encoded(in: VsOut) -> @location(0) vec4<f32> {
     let e = clamp(graded(in), vec3<f32>(0.0), vec3<f32>(1.0));
     return vec4<f32>(e, dot(e, vec3<f32>(0.299, 0.587, 0.114)));
-}
-
-// Enhanced+: contrast-adaptive sharpening of the anti-aliased picture (in its gamma
-// encoding): a pixel is pushed away from its four neighbours' mean by as much as their
-// spread leaves room for, so that flat areas stay calm and fine detail comes out.
-fn sharpened(uv: vec2<f32>, c: vec3<f32>) -> vec3<f32> {
-    if (p.d.z <= 0.0) {
-        return c;
-    }
-    let texel = 1.0 / vec2<f32>(textureDimensions(t_src));
-    let n = textureSampleLevel(t_src, s_lin, uv + vec2<f32>(0.0, -texel.y), 0.0).rgb;
-    let s = textureSampleLevel(t_src, s_lin, uv + vec2<f32>(0.0, texel.y), 0.0).rgb;
-    let e = textureSampleLevel(t_src, s_lin, uv + vec2<f32>(texel.x, 0.0), 0.0).rgb;
-    let w = textureSampleLevel(t_src, s_lin, uv + vec2<f32>(-texel.x, 0.0), 0.0).rgb;
-    let lo = min(c, min(min(n, s), min(e, w)));
-    let hi = max(c, max(max(n, s), max(e, w)));
-    let room = clamp(min(lo, vec3<f32>(1.0) - hi) / max(hi, vec3<f32>(1e-4)), vec3<f32>(0.0), vec3<f32>(1.0));
-    let k = sqrt(room) * p.d.z * 0.25;
-    return clamp(c + (c * 4.0 - (n + s + e + w)) * k, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // --- FXAA 3.11 (quality, 12 search steps) over the tone-mapped picture
@@ -355,7 +324,7 @@ fn fs_fxaa(in: VsOut) -> @location(0) vec4<f32> {
     let lo = min(m, min(min(n, s), min(e, w)));
     let range = hi - lo;
     if (range < max(0.0312, hi * 0.125)) {
-        return vec4<f32>(srgb_decode(sharpened(uv, rgbm.rgb)), 1.0);
+        return vec4<f32>(srgb_decode(rgbm.rgb), 1.0);
     }
     let nw = lum_at(uv + vec2<f32>(-1.0, -1.0) * texel);
     let ne = lum_at(uv + vec2<f32>(1.0, -1.0) * texel);

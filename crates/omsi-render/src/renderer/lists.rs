@@ -7,7 +7,7 @@ use crate::passes::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
     horizontal_sort_distance, in_scope, instance_depth_bias, nearest_by_origin, origin_key,
     pipe_code, run_parts, surface_depth_coverage, world_surface_phase, Batch, DrawItem,
-    PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS, PIPE_OPAQUE, PIPE_SURFACE_DEPTH,
+    PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_OPAQUE, PIPE_SURFACE_DEPTH,
     PIPE_TERRAIN_PAINT, SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR,
 };
 use crate::scene::{
@@ -16,6 +16,36 @@ use crate::scene::{
 };
 use glam::{DVec3, Mat4, Vec3};
 use std::collections::HashMap;
+
+/// How a material casts into the shadow maps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadowCaster {
+    /// The whole triangle.
+    Solid,
+    /// Where its texture's alpha passes the test.
+    CutOut,
+}
+
+/// How a material casts into the shadow maps, None when it casts nothing: an opaque one is
+/// solid, an alpha-tested one is cut out, and so is a blended one whose transmap cuts a body
+/// that writes depth (a bus's paint); any other blended layer (a pane, a decal, dirt) and a
+/// material drawn without the depth check cast nothing.
+pub fn shadow_caster(
+    alpha: AlphaMode,
+    has_transmap: bool,
+    no_z_write: bool,
+    no_z_check: bool,
+) -> Option<ShadowCaster> {
+    if no_z_check {
+        return None;
+    }
+    match alpha {
+        AlphaMode::Opaque => Some(ShadowCaster::Solid),
+        AlphaMode::Test => Some(ShadowCaster::CutOut),
+        AlphaMode::Blend if has_transmap && !no_z_write => Some(ShadowCaster::CutOut),
+        AlphaMode::Blend => None,
+    }
+}
 
 /// The shadow pass's `kind_of`: the pipeline a material's alpha mode is drawn with.
 fn kind_of(alpha: AlphaMode) -> u8 {
@@ -276,9 +306,7 @@ impl Renderer {
         let light_view_proj = f.light_view_proj;
         let light_view_proj_far = f.light_view_proj_far;
         let light_view_proj_close = f.light_view_proj_close;
-        let moon_shadows = f.moon_shadows;
         let shadows = f.shadows;
-        let rt_frame = f.features.rt_frame;
         let omsi_shadow_casters = self.options.omsi_shadow_casters;
         // near, far, close
         // (3: the street lamps' maps, every caster within a chosen lamp's reach under its head)
@@ -357,23 +385,21 @@ impl Renderer {
                 for (ri, (_, _, slot)) in m.ranges.iter().enumerate() {
                     let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
                     let mat = &scene.materials[mat_id];
-                    let mut kind = kind_of(mat.alpha);
-                    let cut_body = kind == PIPE_BLEND && mat.transmap.is_some() && !mat.no_z_write;
-                    if (kind == PIPE_BLEND && !cut_body) || mat.no_z_check {
+                    let Some(caster) = shadow_caster(
+                        mat.alpha,
+                        mat.transmap.is_some(),
+                        mat.no_z_write,
+                        mat.no_z_check,
+                    ) else {
                         if dbg_shadow && r >= dbg_r {
                             log::info!("shadow: mesh r={r:.1} at {:?} slot {slot} is blended, never a caster", inst.origin);
                         }
                         continue;
-                    }
-                    if cut_body {
-                        kind = PIPE_ALPHA_TEST;
-                    }
-                    // (Enhanced+: what is solid casts its shadow by the traced rays; the
-                    // close and near maps keep the cut-out leaves and fences, whose texels
-                    // the rays cannot see)
-                    if rt_frame && kind == PIPE_OPAQUE && !moon_shadows {
-                        kind = PIPE_KINDS;
-                    }
+                    };
+                    let kind = match caster {
+                        ShadowCaster::Solid => PIPE_OPAQUE,
+                        ShadowCaster::CutOut => PIPE_ALPHA_TEST,
+                    };
                     ranges.push((kind, ri as u32, *slot, mat_id, mat.look));
                 }
                 if !lamp_shadows.is_empty()
@@ -381,11 +407,6 @@ impl Renderer {
                     && lamp_reach(c, r)
                 {
                     for &(kind, ri, slot, mat_id, look) in &ranges {
-                        let kind = if kind == PIPE_KINDS {
-                            PIPE_OPAQUE
-                        } else {
-                            kind
-                        };
                         let (material, look) = depth_only_material(kind, mat_id, look);
                         out[3].push(DrawItem {
                             pipe: kind,
@@ -432,15 +453,6 @@ impl Renderer {
                         );
                     }
                     for &(kind, ri, slot, mat_id, look) in &ranges {
-                        let kind = if kind == PIPE_KINDS {
-                            if cascade != 1 {
-                                continue;
-                            }
-                            PIPE_OPAQUE
-                        } else {
-                            kind
-                        };
-                        // (after the remap: a traced-opaque one is drawn as the opaque it is)
                         let (material, look) = depth_only_material(kind, mat_id, look);
                         out[cascade].push(DrawItem {
                             pipe: kind,

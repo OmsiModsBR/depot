@@ -289,41 +289,11 @@ pub(crate) fn encode_main_pass(
                             store: wgpu::StoreOp::Store,
                         },
                     }),
-                    hdr.and_then(|h| h.gbuf.as_ref())
-                        .map(|g| wgpu::RenderPassColorAttachment {
-                            view: g[0].0.as_ref().unwrap_or(&g[0].1),
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: if first {
-                                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
-                                } else {
-                                    wgpu::LoadOp::Load
-                                },
-                                store: wgpu::StoreOp::Store,
-                            },
-                        }),
-                    hdr.and_then(|h| h.gbuf.as_ref())
-                        .map(|g| wgpu::RenderPassColorAttachment {
-                            view: g[1].0.as_ref().unwrap_or(&g[1].1),
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: if first {
-                                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
-                                } else {
-                                    wgpu::LoadOp::Load
-                                },
-                                store: wgpu::StoreOp::Store,
-                            },
-                        }),
                 ];
                 let mut pass = part.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("main part"),
-                    color_attachments: if part_colors[2].is_some() {
+                    color_attachments: if part_colors[1].is_some() {
                         &part_colors[..]
-                    } else if part_colors[1].is_some() {
-                        &part_colors[..2]
                     } else {
                         &part_colors[..1]
                     },
@@ -380,33 +350,9 @@ pub(crate) fn encode_main_pass(
                 },
             },
         });
-        let gbuf_attachments = hdr.and_then(|h| h.gbuf.as_ref()).map(|g| {
-            g.each_ref().map(|(msaa, view)| {
-                Some(wgpu::RenderPassColorAttachment {
-                    view: msaa.as_ref().unwrap_or(view),
-                    depth_slice: None,
-                    resolve_target: msaa.as_ref().map(|_| view),
-                    ops: wgpu::Operations {
-                        load: if parts > 1 {
-                            wgpu::LoadOp::Load
-                        } else {
-                            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
-                        },
-                        store: if msaa.is_some() {
-                            wgpu::StoreOp::Discard
-                        } else {
-                            wgpu::StoreOp::Store
-                        },
-                    },
-                })
-            })
-        });
-        let [g0, g1] = gbuf_attachments.unwrap_or([None, None]);
-        let colors = [main_attachment, mask_attachment, g0, g1];
-        let colors = if colors[2].is_some() {
+        let colors = [main_attachment, mask_attachment];
+        let colors = if colors[1].is_some() {
             &colors[..]
-        } else if colors[1].is_some() {
-            &colors[..2]
         } else {
             &colors[..1]
         };

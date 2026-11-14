@@ -1,16 +1,10 @@
 //! Meshes: the GPU mesh, the shared mesh pages its vertices and indices live in, preparing
 //! meshes off the render thread, and adding and updating them.
 
-use super::texture::next_gen;
 use super::Vertex;
 use crate::gpu::gl_worker_turn;
 use glam::Vec3;
 use omsi_geometry::MeshData;
-
-/// Meshes are made for the ray tracer's acceleration structures as well (Enhanced+ on a
-/// device with ray queries: their buffers are its geometry input).
-pub(crate) static RT_BUFFERS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
 
 /// Vertex and index buffers holding several meshes; the space a freed mesh leaves is
 /// handed to the next that fits.
@@ -77,16 +71,11 @@ pub(crate) fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len:
 
 impl MeshPage {
     pub(crate) fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> MeshPage {
-        let blas = if RT_BUFFERS.load(std::sync::atomic::Ordering::Relaxed) {
-            wgpu::BufferUsages::BLAS_INPUT
-        } else {
-            wgpu::BufferUsages::empty()
-        };
         let buffer = |size: u64, usage| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("mesh page"),
                 size: size.max(32),
-                usage: usage | wgpu::BufferUsages::COPY_DST | blas,
+                usage: usage | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
         };
@@ -166,7 +155,6 @@ impl MeshPage {
             vertex_offset: at.0,
             vertex_bytes: vb.len() as u64,
             index_bytes: ib.len() as u64,
-            gen: next_gen(),
             ranges: data.ranges.clone(),
             bounds_center: center,
             bounds_radius: radius,
@@ -301,9 +289,6 @@ pub struct GpuMesh {
     pub(crate) vertex_offset: u64,
     pub(crate) vertex_bytes: u64,
     pub(crate) index_bytes: u64,
-    /// Which mesh this is (a page's range handed to another mesh is another): what the ray
-    /// tracer's structures are kept by, with the mesh's place.
-    pub(crate) gen: u64,
     pub ranges: Vec<(u32, u32, u32)>,
     pub bounds_center: Vec3,
     pub bounds_radius: f32,
