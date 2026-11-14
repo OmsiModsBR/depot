@@ -244,8 +244,7 @@ pub struct Settings {
     /// The glare round the sun (OMSI 2's "Sun Glow"), in every graphics mode.
     pub sun_glow: bool,
     /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
-    /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
-    /// snow without it.
+    /// flakes of its snowflake picture). On unless switched off.
     pub dx9_snow: bool,
     /// "DirectX9 (D3D9Ex)" only: each spot of the ground takes at most [`NIGHT_LIGHT_CAP`] map
     /// lamps into its light (a deliberate saving for weak graphics cards; off = all, as before).
@@ -566,7 +565,7 @@ impl Settings {
             clouds: true,
             windy_trees: true,
             sun_glow: true,
-            dx9_snow: false,
+            dx9_snow: true,
             fewer_night_lights: false,
             dx9_upscale: "bilinear".into(),
             dx9_glass_rain: true,
