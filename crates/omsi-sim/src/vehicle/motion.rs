@@ -84,11 +84,11 @@ impl VehicleInstance {
         }
     }
 
-    /// What each section carries (kg, the front one first, then each coupled part: the
-    /// people aboard it), on the rigid bodies of the sections that have one (see
+    /// What each section carries (the front one first, then each coupled part: the people
+    /// aboard it), on the rigid bodies of the sections that have one (see
     /// [`crate::physics::RigidBody::set_payload`]). A section left out carries nothing.
-    pub fn set_payload(&mut self, kg: &[f32]) {
-        let at = |i: usize| kg.get(i).copied().unwrap_or(0.0);
+    pub fn set_payload(&mut self, load: &[crate::physics::Payload]) {
+        let at = |i: usize| load.get(i).copied().unwrap_or_default();
         if let Some(rb) = self.rigid_mut() {
             rb.set_payload(at(0));
         }

@@ -31,6 +31,16 @@ pub struct CoupledPart {
     pub load: f32,
 }
 
+/// What a body carries (the people aboard a section): its mass and where that mass is
+/// centred in the body.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Payload {
+    /// Mass (kg).
+    pub kg: f32,
+    /// Where the mass is centred (m, right, forward, up from the model origin).
+    pub centre: Vec3,
+}
+
 #[derive(Debug, Clone)]
 pub struct RigidBody {
     /// The rules the body follows where the engines differ (see [`Engine`]).
@@ -43,8 +53,11 @@ pub struct RigidBody {
     pub(crate) payload: f32,
     /// Body-frame inertia (diagonal, kg m²).
     pub(crate) inertia: Vec3,
-    /// Centre of gravity relative to the model origin (m).
+    /// Centre of gravity relative to the model origin (m): the empty body's (`empty_cog`, the
+    /// file's `[cog]` and `[schwerpunkt]`), moved by the payload where the engine says so (see
+    /// [`RigidBody::set_payload`]).
     pub(crate) cog: Vec3,
+    pub(crate) empty_cog: Vec3,
     /// World position of the centre of gravity.
     pub(crate) position: DVec3,
     pub(crate) orientation: Quat,
@@ -118,6 +131,11 @@ impl RigidBody {
     /// The mass the body carries (kg, see [`RigidBody::set_payload`]).
     pub fn payload(&self) -> f32 {
         self.payload
+    }
+
+    /// The empty body's centre of gravity relative to the model origin (m): the file's.
+    pub fn empty_cog(&self) -> Vec3 {
+        self.empty_cog
     }
 
     /// The body's own frequency on its springs (1/s, see `body_freq`), with its payload.
@@ -223,6 +241,11 @@ impl RigidBody {
     /// Sets the velocity of the centre of gravity (m/s, world).
     pub fn set_velocity(&mut self, v: Vec3) {
         self.velocity = v;
+    }
+
+    /// Sets the angular velocity (rad/s, body frame).
+    pub fn set_omega(&mut self, omega: Vec3) {
+        self.omega = omega;
     }
 
     /// Sets the grip of the road under the body.

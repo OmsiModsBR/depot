@@ -8,7 +8,7 @@
 //! hung on their coupling and pitched towards the ground under their axle.
 
 use super::trailer::{body_reversed, joint_angles, TrailerPart, ARTICULATION_SIGN};
-use crate::physics::{BodyInputs, Engine, Joint, RigidBody};
+use crate::physics::{BodyInputs, Engine, Joint, Payload, RigidBody};
 use crate::vehicle::physics_bridge::PartWheelVars;
 use crate::vehicle::VehicleInstance;
 use glam::{DVec3, Mat4, Vec3};
@@ -63,11 +63,11 @@ impl TrailerPart {
         self.body.as_mut().map(|b| &mut b.rb)
     }
 
-    /// Sets what the part's own body carries (kg, see [`RigidBody::set_payload`]); a part
-    /// without a body of its own carries nothing.
-    pub fn set_payload(&mut self, kg: f32) {
+    /// Sets what the part's own body carries (see [`RigidBody::set_payload`]); a part without
+    /// a body of its own carries nothing.
+    pub fn set_payload(&mut self, load: Payload) {
         if let Some(rb) = self.rigid_mut() {
-            rb.set_payload(kg);
+            rb.set_payload(load);
         }
     }
 

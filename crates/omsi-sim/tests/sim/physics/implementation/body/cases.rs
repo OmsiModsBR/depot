@@ -16,13 +16,21 @@ fn body_damping_does_not_depend_on_the_frame_rate() {
 use crate::physics::cases::run;
 use crate::support::ground::flat;
 use crate::support::vehicles::bus;
-use glam::DVec3;
-use omsi_sim::testing::physics::RigidBody;
+use glam::{DVec3, Vec3};
+use omsi_sim::testing::physics::{Engine, Payload, RigidBody};
+
+/// `kg` carried at the model origin.
+fn kg(kg: f32) -> Payload {
+    Payload {
+        kg,
+        centre: Vec3::ZERO,
+    }
+}
 
 /// A bus carrying `kg`, standing on flat ground for a second (its springs settled).
-fn loaded(kg: f32) -> RigidBody {
+fn loaded(mass: f32) -> RigidBody {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
-    rb.set_payload(kg);
+    rb.set_payload(kg(mass));
     rb.place(DVec3::ZERO, 0.0);
     run(&mut rb, 3.0, 0.0, 0.0, &flat);
     rb
@@ -37,16 +45,16 @@ fn a_payload_adds_to_the_body_mass() {
     let (m0, f0) = (rb.mass(), rb.body_freq());
     assert_eq!(m0, 10_200.0);
     assert_eq!(rb.payload(), 0.0);
-    rb.set_payload(3_000.0);
+    rb.set_payload(kg(3_000.0));
     assert_eq!(rb.payload(), 3_000.0);
     assert_eq!(rb.mass(), 13_200.0);
     let f = f0 * (m0 / 13_200.0f32).sqrt();
     assert!((rb.body_freq() - f).abs() < 1e-4, "{} {f}", rb.body_freq());
     // the people get off again: the payload is set, not added
-    rb.set_payload(750.0);
+    rb.set_payload(kg(750.0));
     assert_eq!(rb.mass(), 10_950.0);
     for nothing in [0.0, -80.0, f32::NAN, f32::INFINITY] {
-        rb.set_payload(nothing);
+        rb.set_payload(kg(nothing));
         assert_eq!((rb.mass(), rb.payload()), (m0, 0.0), "{nothing}");
         assert_eq!(rb.body_freq(), f0);
     }
@@ -98,4 +106,119 @@ fn a_loaded_bus_is_slower_to_speed_up_and_to_stop() {
     };
     let (empty, full) = (stopping(0.0), stopping(5_000.0));
     assert!(full > 1.2 * empty, "empty {empty} m, full {full} m");
+}
+
+/// `D-2`: a crowd of `kg` centred at `centre`, carried by a bus under `engine` standing on
+/// flat ground for three seconds (its springs settled).
+fn crowded(engine: Engine, kg: f32, centre: Vec3) -> RigidBody {
+    let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+    rb.place(DVec3::ZERO, 0.0);
+    rb.set_payload(Payload { kg, centre });
+    run(&mut rb, 3.0, 0.0, 0.0, &flat);
+    rb
+}
+
+/// The front and the rear axle's mean compression (m).
+fn axle_compressions(rb: &RigidBody) -> (f32, f32) {
+    let w = rb.wheels();
+    (
+        (w[0].compression() + w[1].compression()) / 2.0,
+        (w[2].compression() + w[3].compression()) / 2.0,
+    )
+}
+
+/// `D-2`: under Depot the people move the centre of gravity across and along the body to the
+/// mass-weighted mean of the empty body's and theirs; its height stays `[schwerpunkt]`, the
+/// model origin stays where it stood, and nobody aboard gives the file's centre back exactly.
+#[test]
+fn depot_moves_the_centre_of_gravity_towards_the_people() {
+    let mut rb = RigidBody::for_engine(&bus(), &[], Engine::Depot);
+    rb.place(DVec3::new(10.0, 20.0, 0.0), 30.0);
+    let (empty, origin) = (rb.cog(), rb.origin());
+    rb.set_payload(Payload {
+        kg: 3_000.0,
+        centre: Vec3::new(-0.6, 4.0, 1.8),
+    });
+    let want = Vec3::new(-0.6 * 3_000.0 / 13_200.0, 4.0 * 3_000.0 / 13_200.0, empty.z);
+    assert!((rb.cog() - want).length() < 1e-4, "{} {want}", rb.cog());
+    assert_eq!(rb.empty_cog(), empty);
+    assert!(
+        (rb.origin() - origin).length() < 1e-4,
+        "{} {origin}",
+        rb.origin()
+    );
+    for nothing in [0.0, -80.0, f32::NAN] {
+        rb.set_payload(Payload {
+            kg: nothing,
+            centre: Vec3::new(0.0, 4.0, 1.0),
+        });
+        assert_eq!(rb.cog(), empty, "{nothing}");
+    }
+    // a place that is no place moves nothing: the mass is carried at `[cog]`
+    rb.set_payload(Payload {
+        kg: 3_000.0,
+        centre: Vec3::new(0.0, f32::NAN, 1.0),
+    });
+    assert_eq!((rb.cog(), rb.mass()), (empty, 13_200.0));
+}
+
+/// `D-2`: moving the centre of gravity leaves the motion of the body's points as it was: a
+/// body turning and rolling forward keeps its origin's velocity.
+#[test]
+fn moving_the_centre_of_gravity_keeps_the_body_moving_as_before() {
+    let mut rb = RigidBody::for_engine(&bus(), &[], Engine::Depot);
+    rb.place(DVec3::ZERO, 0.0);
+    rb.set_velocity(Vec3::new(0.0, 8.0, 0.0));
+    rb.set_omega(Vec3::new(0.0, 0.0, 0.3));
+    let at_origin = |rb: &RigidBody| {
+        rb.velocity()
+            + rb.orientation()
+                .mul_vec3(rb.omega())
+                .cross(-rb.orientation().mul_vec3(rb.cog()))
+    };
+    let before = at_origin(&rb);
+    rb.set_payload(Payload {
+        kg: 4_000.0,
+        centre: Vec3::new(0.5, -4.0, 1.0),
+    });
+    assert!(
+        (at_origin(&rb) - before).length() < 1e-4,
+        "{} {before}",
+        at_origin(&rb)
+    );
+}
+
+/// `D-2`: under Depot a crowd at the front presses the front springs more than the same
+/// crowd at the back, and the back springs less; under Classic where the people stand
+/// changes nothing - they weigh as if at `[cog]`.
+#[test]
+fn where_the_people_stand_moves_the_load_between_the_axles_under_depot_only() {
+    let front = Vec3::new(0.0, 4.0, 1.0);
+    let back = Vec3::new(0.0, -4.5, 1.0);
+    let (f_front, r_front) = axle_compressions(&crowded(Engine::Depot, 4_000.0, front));
+    let (f_back, r_back) = axle_compressions(&crowded(Engine::Depot, 4_000.0, back));
+    assert!(f_front > f_back + 0.02, "{f_front} {f_back}");
+    assert!(r_front < r_back - 0.02, "{r_front} {r_back}");
+    let classic_front = axle_compressions(&crowded(Engine::Classic, 4_000.0, front));
+    let classic_back = axle_compressions(&crowded(Engine::Classic, 4_000.0, back));
+    assert_eq!(classic_front, classic_back);
+}
+
+/// `D-2`: under Depot people on one side lean the bus towards them; under Classic it stands
+/// level.
+#[test]
+fn people_on_one_side_lean_the_bus_under_depot_only() {
+    let left = Vec3::new(-1.0, 0.0, 1.0);
+    let lean = |engine| {
+        let rb = crowded(engine, 3_000.0, left);
+        let w = rb.wheels();
+        // left wheels minus right wheels, both axles
+        (w[0].compression() + w[2].compression()) - (w[1].compression() + w[3].compression())
+    };
+    assert!(lean(Engine::Depot) > 0.01, "{}", lean(Engine::Depot));
+    assert!(
+        lean(Engine::Classic).abs() < 1e-4,
+        "{}",
+        lean(Engine::Classic)
+    );
 }
