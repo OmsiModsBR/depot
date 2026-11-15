@@ -2,8 +2,8 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. For now there is one override,
-`D-1` (the plan's decision D2). The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are two overrides: `D-1`
+(the plan's decision D2) and `D-2`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
@@ -14,6 +14,7 @@ Module paths are under `crates/omsi-sim/src/`.
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
+| [D-2](#d-2-the-people-aboard-move-cog) | the people aboard move `[cog]` | physics |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -61,6 +62,36 @@ share, used to place the vehicle at rest, with a floor of 0.2 of an even split o
 changing the axles. Under Depot the axle loads follow it. A mod whose springs were sized for the
 origin rule stands differently here: this is the one visible difference between the engines on a
 vehicle at rest.
+
+## D-2. The people aboard move `[cog]`
+
+- **Inputs**: `[mass]`, `[cog]` (`cog_x`, `cog_y`), `[schwerpunkt]`, and for each section the people
+  in it: each one's `.hum` `[mass]` (`m_j`) and place in the section's frame (`x_j`, `y_j`: the
+  point of the passenger cabin they sit or stand on). **Outputs**: the body's centre of gravity, so
+  the load on every axle and every side follows it through `D-1` and the struts of `C-3`.
+  **Module**: `physics/implementation/depot/load_share.rs` (`loaded_cog`), `physics/implementation/body.rs`
+  (`set_payload`), `people/aboard.rs` (`payload_by_section`).
+- **Basis**: *physics*: the people's weight acts where they are. **Status**: the equations are
+  checked by unit tests; no claim is made here about OMSI 2. Classic keeps today's rule: the people
+  add their mass at `[cog]`, wherever they are.
+
+With `M` the body's own mass and `P = Σ m_j` the people's:
+
+```
+cog_x' = (M · cog_x + Σ m_j · x_j) / (M + P)
+cog_y' = (M · cog_y + Σ m_j · y_j) / (M + P)
+cog_z' = [schwerpunkt]
+```
+
+The height stays `[schwerpunkt]` and the inertia the file's (`C-8`): the people's place points are at
+seat or floor level, not at their own centre of mass, so a height from them would lower the centre
+and make a full bus roll less than an empty one. The model origin stays where it is when the centre
+moves, and so does the motion of every point of the body. Each section of an articulated bus takes
+the people in it, in its own frame. With nobody aboard the centre is `[cog]` exactly.
+
+**What the player notices.** A crowd at the front presses the front axle more and the bus stands a
+little nose down; people bunched on one side lean it to that side; a full rear raises the nose and
+moves grip to the driven rear axle. The AI's buses are not affected (`DA-*`).
 
 ## The Depot AI
 
@@ -148,5 +179,4 @@ m, with `F_i` the load of the weight shared about `[cog]` (`D-1`).
 
 ## Further `D-*`
 
-None for now (decision D2 of the plan). A later override that its check in OMSI 2 shows is a
-difference adds its own id here.
+A later override that its check in OMSI 2 shows is a difference adds its own id here.

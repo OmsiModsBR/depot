@@ -240,7 +240,9 @@ F_air      = − ½ · ρ · c_w · A · v · |v|               ρ = 1.2, c_w = 
 ```
 
 The body's centre is `([cog] x, [cog] y, [schwerpunkt])`. The people aboard add to the mass in the
-gravity, the tyres and the acceleration; the inertia stays the file's.
+gravity, the tyres and the acceleration; the inertia stays the file's. Under Classic they weigh at
+the body's centre; under Depot their place moves the centre across and along the body (`D-2` of
+[depot-model.md](depot-model.md)).
 
 OMSI's per-frame damping of the body's pitch and roll rates, as it is applied over a time `dt`:
 
