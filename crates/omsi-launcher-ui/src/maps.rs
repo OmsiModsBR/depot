@@ -51,6 +51,9 @@ pub struct MapsView {
     explore: bool,
     /// The host found no OMSI 2 folder (`set_no_folder`): the page says to choose one.
     no_folder: bool,
+    /// The host is reading the content lists itself (`set_host_reading`): the page waits for
+    /// its list instead of reading the whole folder a second time at once.
+    host_reading: bool,
     /// "Open Setup" was clicked (`take_open_setup`).
     open_setup: bool,
 }
@@ -72,6 +75,7 @@ impl Default for MapsView {
             start_area: None,
             explore: false,
             no_folder: false,
+            host_reading: false,
             open_setup: false,
         }
     }
@@ -138,6 +142,13 @@ impl MapsView {
         self.no_folder = none;
     }
 
+    /// Whether the host is reading the content lists now (each frame). Until it is done the
+    /// page reads nothing of its own; it reads its list only if the host's came without any
+    /// maps (an empty or unreadable folder), as before.
+    pub fn set_host_reading(&mut self, reading: bool) {
+        self.host_reading = reading;
+    }
+
     /// Whether "Open Setup" was clicked since the last call.
     pub fn take_open_setup(&mut self) -> bool {
         std::mem::take(&mut self.open_setup)
@@ -199,8 +210,9 @@ impl MapsView {
         }
     }
 
-    fn load(&mut self) {
-        if !matches!(self.catalog, Catalog::NotStarted) {
+    /// Start reading the catalog if that has not begun (and the host is not reading it).
+    pub fn load(&mut self) {
+        if self.host_reading || !matches!(self.catalog, Catalog::NotStarted) {
             return;
         }
         let (tx, rx) = channel();
