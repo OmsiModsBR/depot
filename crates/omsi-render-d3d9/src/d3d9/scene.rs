@@ -2,6 +2,7 @@
 //! [`D3d9Device::draw_scene`], which draws a [`SceneFrame`] with the scene shader
 //! (`shaders/scene.hlsl`), one instanced draw per batch.
 
+use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D9::*;
 
 use super::{make_mesh, map_err, rgba_to_argb, shader, some, write_buffer, D3d9Device, Mesh};
@@ -1439,8 +1440,7 @@ impl D3d9Device {
                     .map_err(map_err)?;
             }
         }
-        let mut current: (Option<DrawKind>, Option<bool>, Option<bool>, Option<usize>) =
-            (None, None, None, None);
+        let mut bound = Bound::default();
         let mut skipped = 0usize;
         // the scene's shaders and blend after a pass of the smoke's or the coronas' own
         let rebind = || -> Result<()> {
@@ -1473,32 +1473,38 @@ impl D3d9Device {
                 check_batch(b, mesh, &m)?;
                 // SAFETY: as above; the buffers and textures belong to this device.
                 unsafe {
-                    if current.0 != Some(b.kind) {
+                    if bound.kind != Some(b.kind) {
                         kind_states(d, b.kind, coverage)?;
-                        current.0 = Some(b.kind);
+                        bound.kind = Some(b.kind);
                     }
-                    if current.1 != Some(b.cull) {
+                    if bound.cull != Some(b.cull) {
                         let mode = if b.cull { D3DCULL_CCW } else { D3DCULL_NONE };
                         d.SetRenderState(D3DRS_CULLMODE, mode.0 as u32)
                             .map_err(map_err)?;
-                        current.1 = Some(b.cull);
+                        bound.cull = Some(b.cull);
                     }
-                    if current.2 != Some(b.surface) {
+                    if bound.surface != Some(b.surface) {
                         let (c, s) = if b.surface { (bias, slope) } else { (0.0, 0.0) };
                         d.SetRenderState(D3DRS_DEPTHBIAS, c.to_bits())
                             .map_err(map_err)?;
                         d.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, s.to_bits())
                             .map_err(map_err)?;
-                        current.2 = Some(b.surface);
+                        bound.surface = Some(b.surface);
                     }
-                    if current.3 != Some(b.material) {
-                        self.bind_material(&m)?;
-                        current.3 = Some(b.material);
+                    if bound.material != Some(b.material) {
+                        self.bind_material(&m, &mut bound.maps)?;
+                        bound.material = Some(b.material);
                     }
-                    d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
-                    d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
-                        .map_err(map_err)?;
-                    d.SetIndices(&mesh.ib).map_err(map_err)?;
+                    // (batches of one mesh follow each other: its buffers stay bound)
+                    if bound.mesh != Some(b.mesh) {
+                        if bound.mesh.is_none() {
+                            d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
+                                .map_err(map_err)?;
+                        }
+                        d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
+                        d.SetIndices(&mesh.ib).map_err(map_err)?;
+                        bound.mesh = Some(b.mesh);
+                    }
                     // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
                     // black box on the road: it is left out, the runs between are drawn)
                     let hide_blobs = b.kind.blends() && !self.covers(&m);
@@ -1526,7 +1532,7 @@ impl D3d9Device {
             }
             if self.draw_wet_road(frame, batches, material, coverage)? {
                 rebind()?;
-                current = (None, None, None, None);
+                bound = Bound::default();
             }
             if self.draw_glass_rain(frame, batches, material, coverage, late)? {
                 // SAFETY: plain calls on a live device; the pipeline belongs to it.
@@ -1539,20 +1545,20 @@ impl D3d9Device {
                     d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
                         .map_err(map_err)?;
                 }
-                current = (None, None, None, None);
+                bound = Bound::default();
             }
             // the world's smoke, over its batches and under the vehicle the camera is in
             if !late && smoke_ready {
                 self.draw_smoke(frame)?;
                 rebind()?;
                 // (the batches' states and material are bound again)
-                current = (None, None, None, None);
+                bound = Bound::default();
             }
             if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
                 self.draw_coronas(frame, late)?;
                 rebind()?;
                 // (the batches' states and material are bound again)
-                current = (None, None, None, None);
+                bound = Bound::default();
             }
         }
         if skipped > 0 {
@@ -1560,6 +1566,21 @@ impl D3d9Device {
         }
         Ok(())
     }
+}
+
+/// The material maps a scene batch binds, one a stage.
+const MAPS: usize = 7;
+
+/// What the batch loop has bound since the scene's states were last set whole: a batch sets
+/// only what differs. Unknown (`None`) after a pass of another shader.
+#[derive(Default)]
+struct Bound {
+    kind: Option<DrawKind>,
+    cull: Option<bool>,
+    surface: Option<bool>,
+    material: Option<usize>,
+    mesh: Option<usize>,
+    maps: [Option<(usize, u32)>; MAPS],
 }
 
 /// The runs of `instances` (entries of the frame's list) to draw: all of them as one, or with
@@ -1651,7 +1672,13 @@ impl D3d9Device {
     }
 
     /// The material's uniform, maps, addressing and the constants worked out from them.
-    fn bind_material(&self, m: &SceneMaterial) -> Result<()> {
+    /// `maps_bound` holds what each of its stages has bound (the texture and its addressing):
+    /// a stage that keeps both is not set again.
+    fn bind_material(
+        &self,
+        m: &SceneMaterial,
+        maps_bound: &mut [Option<(usize, u32)>; MAPS],
+    ) -> Result<()> {
         let d = &self.device;
         let pipeline = self.scene.pipeline.as_ref().expect("built before");
         let found = |id: Option<usize>| {
@@ -1711,6 +1738,11 @@ impl D3d9Device {
             d.SetVertexShaderConstantF(11, vs.as_ptr().cast(), vs.len() as u32)
                 .map_err(map_err)?;
             for (stage, (texture, address)) in maps.iter().enumerate() {
+                let key = Some((texture.as_raw() as usize, *address));
+                if maps_bound[stage] == key {
+                    continue;
+                }
+                maps_bound[stage] = key;
                 let stage = stage as u32;
                 d.SetTexture(stage, *texture).map_err(map_err)?;
                 d.SetSamplerState(stage, D3DSAMP_ADDRESSU, *address)
