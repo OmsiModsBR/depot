@@ -64,8 +64,12 @@ pub struct State {
     pub squeeze: Squeeze,
     /// The original OMSI 2 mode: what is installed and the install flow.
     pub original: Original,
-    /// Counts the readings of the content that brought other files than before.
-    pub content_gen: u64,
+    /// Count the changes of `maps` and `vehicles` (each batch of a first reading, each
+    /// reading, the buses read again after a depot file sync): the Maps and Vehicles pages
+    /// take a list again whenever its number moves, also when it holds as many entries as
+    /// before.
+    pub maps_gen: u64,
+    pub vehicles_gen: u64,
     pub mod_info: Option<Result<core::install::SourceInfo, String>>,
     pub mod_path: String,
     pub ibis: Option<(String, Result<core::IbisInfo, String>)>,

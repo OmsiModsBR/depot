@@ -54,6 +54,8 @@ pub struct MapsView {
     /// The host is reading the content lists itself (`set_host_reading`): the page waits for
     /// its list instead of reading the whole folder a second time at once.
     host_reading: bool,
+    /// The host's list the catalog was last taken from (`follow_host`; 0: none yet).
+    host_gen: u64,
     /// "Open Setup" was clicked (`take_open_setup`).
     open_setup: bool,
 }
@@ -76,6 +78,7 @@ impl Default for MapsView {
             explore: false,
             no_folder: false,
             host_reading: false,
+            host_gen: 0,
             open_setup: false,
         }
     }
@@ -172,6 +175,17 @@ impl MapsView {
         }
         self.selected = 0;
         self.apply_pending();
+    }
+
+    /// Take the host's list `list`, numbered `gen` (it counts every change of the list), when
+    /// it is another than the one the page shows. An empty list leaves the page as it is (an
+    /// empty or unreadable folder: the page reads its own, as before).
+    pub fn follow_host(&mut self, gen: u64, list: &[MapInfo]) {
+        if gen == self.host_gen || list.is_empty() {
+            return;
+        }
+        self.host_gen = gen;
+        self.set_catalog(list.to_vec());
     }
 
     /// How many maps the catalog holds, once it is read.
