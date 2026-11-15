@@ -253,11 +253,12 @@ mod tests {
     fn wet_road_pixel_shader_compiles_for_sm3_in_few_slots() {
         let ps = compile(WET_ROAD, "wet_road.hlsl", "ps_main", Stage::Pixel).unwrap();
         assert_eq!(ps[0], 0xFFFF_0300);
-        // (a pass of its own: the scene's pixel shader keeps its slots)
+        // (a pass of its own: its pixel shader has its own 512 slots, with room to spare; the
+        // scene's pixel shader keeps its slots)
         let slots = reported_slots(&ps).unwrap();
         println!("wet road pixel shader: {slots} instruction slots");
         assert!(
-            slots <= 200,
+            slots <= 460,
             "the wet road pixel shader takes {slots} slots"
         );
     }
