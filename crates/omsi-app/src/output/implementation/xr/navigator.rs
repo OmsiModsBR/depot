@@ -136,6 +136,7 @@ impl App {
         if let Some(window) = self.window.as_ref() {
             let _ = window.set_cursor_grab(winit::window::CursorGrabMode::None);
             window.set_cursor_visible(true);
+            self.cursor_confined = false;
             if edit.mouse_drive_before {
                 let _ = window.set_cursor_position(winit::dpi::PhysicalPosition::new(
                     self.cursor.0 as f64,

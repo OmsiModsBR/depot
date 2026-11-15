@@ -6,6 +6,14 @@ use crate::output::{cursor_ray, pixel_angle, ORBIT_MAX, ORBIT_MIN};
 use omsi_render::Camera;
 use winit::keyboard::KeyCode;
 
+/// Whether the cursor is held inside the window: while the mouse steers the bus in the view
+/// shown, so a wide sweep of the wheel does not carry the cursor onto another screen. It goes
+/// free when the window loses the focus or something else takes the mouse (the game menu, a
+/// chooser), so the player can still leave the game.
+pub fn confines_cursor(steering: bool, input_away: bool, mouse_elsewhere: bool) -> bool {
+    steering && !input_away && !mouse_elsewhere
+}
+
 /// How far (m) a click reaches a page (`[htmltexture]`) on a scenery object.
 pub(crate) const HTML_OBJECT_REACH: f32 = 4.0;
 
@@ -255,6 +263,32 @@ impl App {
         self.player.is_some()
             && (matches!(self.view.as_str(), "driver" | "outside" | "pax")
                 || (self.view == "free" && !self.ego))
+    }
+
+    /// Holds the cursor inside the window or lets it go as `confines_cursor` says, once per
+    /// change. The VR seat editor holds the cursor itself and is left alone. Where the system
+    /// cannot confine the cursor the error is ignored and the cursor stays free.
+    pub(crate) fn sync_cursor_confine(&mut self) {
+        if self.vr_nav_edit.is_some() {
+            return;
+        }
+        let want = confines_cursor(
+            self.mouse_drive && self.mouse_steers_in_view(),
+            self.input_away,
+            self.game_menu.is_some() || self.chooser.is_some() || self.plugin_focus(),
+        );
+        if want == self.cursor_confined {
+            return;
+        }
+        if let Some(win) = self.window.as_ref() {
+            let mode = if want {
+                winit::window::CursorGrabMode::Confined
+            } else {
+                winit::window::CursorGrabMode::None
+            };
+            let _ = win.set_cursor_grab(mode);
+            self.cursor_confined = want;
+        }
     }
 
     /// Looking round with the mouse goes by the cursor's way in the window (a view of the
