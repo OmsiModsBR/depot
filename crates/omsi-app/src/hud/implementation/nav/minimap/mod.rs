@@ -6,8 +6,8 @@ use super::geometry::{confirm_road_surfaces, congestion_on};
 use super::route::probe_lanes;
 use super::streets::build_streets;
 use super::{
-    angle_diff, ease, map_samples, placed_at, CityMap, NavFrame, NavStop, Navigator, Route,
-    NAV_REDRAW_S, OFF_ROUTE_AFTER, REROUTE_EVERY,
+    angle_diff, ease, map_samples, placed_at, CityMap, NavFrame, NavStop, Navigator, RoadIndex,
+    Route, NAV_REDRAW_S, OFF_ROUTE_AFTER, REROUTE_EVERY,
 };
 use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
@@ -73,6 +73,8 @@ impl Navigator {
             building: None,
             global_version: 0,
             roads: None,
+            road_index: None,
+            roads_job: None,
             route: Route::default(),
             route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0),
             congestion: HashMap::new(),
@@ -119,8 +121,10 @@ impl Navigator {
                 confirm_road_surfaces(&mut net, &m.road_surfaces);
                 probe_lanes(&net);
                 let streets = build_streets(&net, &m.signs);
+                let roads = RoadIndex::new(&net);
                 let _ = tx.send((
                     net,
+                    roads,
                     m.places,
                     streets,
                     surface,
@@ -141,6 +145,7 @@ impl Navigator {
         confirm_road_surfaces(&mut net, &map.road_surfaces);
         probe_lanes(&net);
         self.streets = Some(std::sync::Arc::new(build_streets(&net, &map.signs)));
+        self.road_index = Some(std::sync::Arc::new(RoadIndex::new(&net)));
         let global = std::sync::Arc::new(net);
         self.global = Some(global);
         self.stop_pos = std::sync::Arc::new(map.places);
@@ -655,7 +660,7 @@ impl Navigator {
         self.day_clock = (f.time, f.weekday);
         self.date = f.date;
         if let Some(rx) = self.building.as_ref() {
-            if let Ok((net, pos, streets, surface, chrono)) = rx.try_recv() {
+            if let Ok((net, roads, pos, streets, surface, chrono)) = rx.try_recv() {
                 self.chrono = chrono;
                 log::info!(
                     "navigator: the map's road network is there ({} lanes, {} streets named)",
@@ -665,6 +670,7 @@ impl Navigator {
                 self.streets = Some(std::sync::Arc::new(streets));
                 self.set_surface(surface);
                 self.global = Some(std::sync::Arc::new(net));
+                self.road_index = Some(std::sync::Arc::new(roads));
                 self.stop_pos = std::sync::Arc::new(pos);
                 self.global_version += 1;
                 self.building = None;
