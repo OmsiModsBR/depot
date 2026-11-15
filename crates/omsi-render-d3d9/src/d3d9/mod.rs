@@ -17,6 +17,7 @@ mod sky;
 mod smoke;
 mod ui;
 mod upscale;
+mod wet_road;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D9::*;

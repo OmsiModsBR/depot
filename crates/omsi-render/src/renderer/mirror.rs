@@ -186,6 +186,12 @@ pub struct FramePlan {
     /// The camera's right and up axes (xyz), which lay out the sphere maps of `[matl_envmap]`.
     pub cam_right: [f32; 4],
     pub cam_up: [f32; 4],
+    /// The render origin's map position modulo the procedural patterns' period (xy, metres),
+    /// for patterns laid on the map that must not jump when the origin moves.
+    pub world_origin: [f32; 4],
+    /// How wet the outdoor surfaces are (0 dry .. 1 soaked): what a road with `[moisture]`
+    /// darkens, shines and gathers puddles by.
+    pub wetness: f32,
     /// Where the lamps' grid lies: x, y its south-west corner (render-origin relative), z a
     /// cell's side, w the cells per side (see [`crate::Scene::frame_lights`]).
     pub light_grid: [f32; 4],
@@ -251,6 +257,8 @@ pub(crate) fn plan_of(
         sky_color: cu.sky_color,
         cam_right: cu.cam_right,
         cam_up: cu.cam_up,
+        world_origin: cu.world_origin,
+        wetness: cu.shadow[3],
         light_grid: cu.light_grid,
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
