@@ -25,7 +25,7 @@ names today's files.
 | Engine | Player's road vehicle | AI road vehicle |
 |---|---|---|
 | **OMSI Classic** (default) | the rigid body on spring struts, its weight shared about the model origin | a new AI body brought in line with OMSI 2's AI (`KA-*`) |
-| **Project Depot Physics** | the same rigid body, with Depot's overrides: the weight shared about `[cog]` (`D-1`), and the people aboard moving `[cog]` and adding to the inertia (`D-2`) | today's AI body, unchanged (`DA-*`) |
+| **Project Depot Physics** | the same rigid body, with Depot's overrides: the weight shared about `[cog]` (`D-1`), the people aboard moving `[cog]` and adding to the inertia (`D-2`), and the tyres holding axle by axle with the turning they must start (`D-3`) | today's AI body, unchanged (`DA-*`) |
 
 Everything the engines do not override is shared (`C-*`). Rail vehicles and aircraft move the same in
 both. Behaviour that only *adds* to OMSI 2 (articulated bus work, standing passengers, skip stop) stays

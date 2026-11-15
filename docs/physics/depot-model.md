@@ -2,8 +2,8 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are two overrides: `D-1`
-(the plan's decision D2) and `D-2`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are three overrides: `D-1`
+(the plan's decision D2), `D-2` and `D-3`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
@@ -15,6 +15,7 @@ Module paths are under `crates/omsi-sim/src/`.
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
 | [D-2](#d-2-the-people-aboard-move-cog-and-add-to-the-inertia) | the people aboard move `[cog]` and add to the inertia | physics |
+| [D-3](#d-3-the-tyres-hold-axle-by-axle-with-the-turning-they-must-start) | the tyres hold axle by axle, with the turning they must start | physics, tuned |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -190,6 +191,43 @@ Heave, pitch and roll are three spring-damper systems, run in 4 substeps per fra
 
 The pose at rest is the `[ai_deltaheight]` offset plus the sag of each wheel, `min(F_i / k_sag, 0.24)`
 m, with `F_i` the load of the weight shared about `[cog]` (`D-1`).
+
+## D-3. The tyres hold axle by axle, with the turning they must start
+
+- **Inputs**: each tyre's grip (`μ · N_i`, its load from its strut as in `C-7`) and lever `y_i` (m
+  forward of the centre of gravity), the bend's pull `F = m · v² · κ` less a joint's push (as in
+  `C-7`), the body's yaw inertia `I_z` (`C-8`, with `D-2`) and its yaw rate. **Outputs**: whether the
+  tyres still hold (`C-7`'s holding state). **Module**: `physics/implementation/depot/grip.rs`
+  (`holds_across`, `yaw_accel`), `physics/implementation/tyre.rs` (`lateral_start`).
+- **Basis**: *physics* for the split of the force between the axles; *tuned* for the tyres'
+  relaxation length (`RELAXATION_LENGTH`, 0.6 m). **Status**: checked by unit tests; no claim is made
+  here about OMSI 2. Classic keeps `C-7`: the bend's pull against the grip of all tyres together,
+  with no turning to start.
+
+While holding, the body's yaw rate is set to `v · κ` (`C-7`), so the tyres must also give the moment
+that starts or stops that turning. With the tyres ahead of the centre of gravity at their
+grip-weighted lever `y_f` and those behind at `y_r`:
+
+```
+F_f + F_r         = F
+y_f F_f + y_r F_r = - I_z · ω̇
+|F_f| ≤ μ N_f  and  |F_r| ≤ μ N_r        the tyres hold
+```
+
+`ω̇` is the change of the yaw rate over a substep, followed with the lag of the tyres' relaxation,
+`τ = 0.6 m / max(v, 1 m/s)`: a steering key that sets the full bend in one step does not ask an
+endless force. A body with tyres on one side of its centre of gravity only (a rear section on one
+axle) is held by all of them together, as in `C-7`.
+
+**What it means.** In a steady bend nothing changes: the weight is shared about `[cog]` (`D-1`), so
+`N_f · y_f = - N_r · y_r` and each axle is asked the same share of its grip as all the tyres
+together. A quick swing of the steering (a lane change, a swerve) now asks more of the tyres, the
+more so the larger `[momentofintertia]`'s yaw value (and the passengers' share, `D-2`): on the test
+bus at 50 km/h, a swing to and back from the steering's position in one second lets the tyres go at
+0.24 of the lock with a yaw inertia of 130 t m² (Classic: 0.34), 0.14 with 400 t m². Braking or
+accelerating in a bend moves load between the axles and lets the lighter one go first. A
+`[momentofintertia]` far larger than the bus's real one (about `m · (L² + W²) / 12`) now shows as a
+bus that lets go too easily in quick manoeuvres; the value belongs fixed in the file (Principle III).
 
 ## Further `D-*`
 

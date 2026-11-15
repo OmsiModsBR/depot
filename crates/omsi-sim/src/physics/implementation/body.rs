@@ -99,6 +99,8 @@ impl RigidBody {
             body_freq: spec.body_freq,
             empty_body_freq: spec.body_freq,
             holding: true,
+            yaw_accel: 0.0,
+            last_yaw_rate: 0.0,
             joint_across: 0.0,
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
@@ -121,6 +123,7 @@ impl RigidBody {
         self.position = origin + self.orientation.mul_vec3(self.cog).as_dvec3();
         self.velocity = Vec3::ZERO;
         self.omega = Vec3::ZERO;
+        (self.yaw_accel, self.last_yaw_rate) = (0.0, 0.0);
         self.spawned_inside = None;
         self.unstepped = 0.0;
         (self.last_position, self.last_orientation) = (self.position, self.orientation);
