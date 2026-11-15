@@ -3,7 +3,9 @@
 //! fog, and what it does to the picture.
 
 use glam::{DVec3, Vec3};
-use omsi_render::{Lighting, SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE};
+use omsi_render::{
+    Lighting, ShadingPath, SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE,
+};
 
 /// A unit vector at this azimuth (degrees, clockwise from north) and altitude (degrees).
 fn towards(azimuth: f32, altitude: f32) -> Vec3 {
@@ -21,8 +23,6 @@ fn day(altitude: f32) -> Lighting {
         cloud_density: 0.0,
         fog_density: 0.0,
         sun_glow: true,
-        classic: false,
-        enhanced: false,
         ..Default::default()
     }
 }
@@ -88,7 +88,7 @@ fn the_setting_off_draws_none_and_enhanced_one_procedural_sprite() {
     };
     assert!(off.sun_glare(DVec3::ZERO, 0, 0).is_empty());
     let enhanced = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         ..day(40.0)
     };
     let e = enhanced.sun_glare(DVec3::ZERO, 0, 0);
@@ -101,18 +101,12 @@ fn the_setting_off_draws_none_and_enhanced_one_procedural_sprite() {
         "{}",
         e[0].size
     );
-    let vanilla = Lighting {
-        classic: true,
-        ..day(40.0)
-    };
+    let vanilla = Lighting { ..day(40.0) };
     assert_eq!(vanilla.sun_glare(DVec3::ZERO, 0, 0).len(), 2);
 }
 
 fn vanilla_star() -> omsi_render::Corona {
-    let l = Lighting {
-        classic: true,
-        ..day(40.0)
-    };
+    let l = Lighting { ..day(40.0) };
     l.sun_glare(DVec3::ZERO, 0, 0)[1]
 }
 
@@ -188,8 +182,11 @@ fn looking_at_the_sun_in(enhanced: bool, glare: bool, wall: bool, off: u32) -> (
     let lighting = Lighting {
         shadows: false,
         sky_weights: [0.0, 0.0, 1.0],
-        classic: !enhanced,
-        enhanced,
+        path: if enhanced {
+            ShadingPath::Hdr
+        } else {
+            ShadingPath::Linear
+        },
         ..day(20.0)
     };
     let rgba = renderer
@@ -276,7 +273,6 @@ fn cost_of_the_sun_glare() {
     let lighting = Lighting {
         shadows: false,
         sky_weights: [0.0, 0.0, 1.0],
-        classic: true,
         ..day(20.0)
     };
     for s in scenes.iter_mut() {

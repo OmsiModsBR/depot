@@ -16,7 +16,7 @@ use glam::{DVec3, Mat4, Vec3};
 #[derive(Clone, Copy)]
 pub(crate) struct FrameFeatures {
     /// The FXAA on the plain graphics, the picture drawn into a texture of the window's size.
-    pub(crate) vanilla_fxaa: bool,
+    pub(crate) fxaa_without_msaa: bool,
     /// The rain's glass picture (what is behind the glass is drawn first).
     pub(crate) glass_on: bool,
     /// The picture goes through a scaled target (`scene_view`).
@@ -294,21 +294,22 @@ impl Renderer {
         // FXAA on the plain graphics too, where there is no multisampling to smooth the
         // edges (the Enhanced path has it in its post passes): the picture is drawn into a
         // texture of the window's size and smoothed on its way to the window, the HUD after
-        let vanilla_fxaa = with_overlays
+        let fxaa_without_msaa = with_overlays
             && (width, height) == (full_w, full_h)
             && self.options.fxaa
             && self.options.msaa <= 1
-            && !(lighting.enhanced && self.hdr_pass.is_some())
+            && !(lighting.hdr() && self.hdr_pass.is_some())
             && !omsi_cfg::flags::NO_FXAA.is_set();
         // Rain films are drawn after copying the clean current-frame scene. Classic
         // graphics need a sampleable scene target too, even without puddles or scaling.
-        let enhanced_view = lighting.enhanced && self.hdr_pass.is_some();
+        let enhanced_view = lighting.hdr() && self.hdr_pass.is_some();
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
             && (lighting.rain > 0.001 || lighting.wetness > 0.02)
             && !omsi_cfg::flags::NO_GLASS_PICTURE.is_set();
-        let scaled =
-            (width, height) != (full_w, full_h) || vanilla_fxaa || (glass_on && !enhanced_view);
+        let scaled = (width, height) != (full_w, full_h)
+            || fxaa_without_msaa
+            || (glass_on && !enhanced_view);
         let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if scaled {
             Some(self.scale_target(width, height))
         } else {
@@ -328,7 +329,7 @@ impl Renderer {
         // exposure, the sky cube and the frame clock on, as the window does without VR.
         let xr_view = projection.is_some();
         let lead_view = (with_overlays || xr_view) && !second_eye;
-        let enhanced_frame = lighting.enhanced
+        let enhanced_frame = lighting.hdr()
             && self.hdr_pass.is_some()
             && (with_overlays || xr_view || omsi_cfg::flags::MIRROR_ENHANCED.is_set());
         // the mirrors are drawn by the same path as the window (their picture graded with
@@ -489,14 +490,7 @@ impl Renderer {
                 .sun_color
                 .extend(lighting.night_maps.unwrap_or(lighting.night))
                 .to_array(),
-            sky_color: lighting
-                .secondary
-                .extend(if lighting.classic && !enhanced {
-                    1.0
-                } else {
-                    0.0
-                })
-                .to_array(),
+            sky_color: lighting.secondary.extend(0.0).to_array(),
             light_grid: grid,
             sky: [
                 lighting.sun_azimuth,
@@ -695,7 +689,7 @@ impl Renderer {
                 width,
                 height,
                 features: FrameFeatures {
-                    vanilla_fxaa,
+                    fxaa_without_msaa,
                     glass_on,
                     scaled,
                     xr_view,

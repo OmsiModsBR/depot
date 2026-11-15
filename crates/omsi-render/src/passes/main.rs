@@ -182,11 +182,7 @@ pub(crate) fn encode_main_pass(
         // (unscaled - multiplying it by the enhanced exposure blew a night sky's dim clear
         // colour out to white instead) keeps a real gap from ever reading as a rendering
         // bug of its own.
-        let sky = if lighting.classic && !enhanced {
-            lighting.sky_color.map(omsi_texture::srgb::to_linear)
-        } else {
-            lighting.sky_color
-        };
+        let sky = lighting.sky_color;
         let msaa_color = targets.as_ref().map(|t| &t.0);
         let depth_view: &wgpu::TextureView = match &targets {
             Some(t) => &t.1,
@@ -217,10 +213,7 @@ pub(crate) fn encode_main_pass(
         // `sky_mirror_pipeline`)
         let sky_pipe = match ctx.sky_mirror_pipeline {
             Some(p)
-                if lighting.enhanced
-                    && !enhanced
-                    && !with_overlays
-                    && ctx.sky.sky_state.is_some() =>
+                if lighting.hdr() && !enhanced && !with_overlays && ctx.sky.sky_state.is_some() =>
             {
                 p
             }

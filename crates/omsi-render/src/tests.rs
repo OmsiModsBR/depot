@@ -121,7 +121,7 @@ fn enhanced_respects_material_ambient() {
         far: 100.0,
     };
     let lighting = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         shadows: false,
         fog_density: 0.0,
         sun_dir: -Vec3::Y,
@@ -318,7 +318,7 @@ fn enhanced_untextured_keeps_its_colour() {
         far: 100.0,
     };
     let lighting = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         shadows: false,
         fog_density: 0.0,
         sun_dir: -Vec3::Y,
@@ -510,7 +510,7 @@ fn enhanced_masked_and_uncut_ground_share_lighting() {
         far: 100.0,
     };
     let day = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         sun_dir: Vec3::Z,
         sun_intensity: 1.0,
         shadows: false,
@@ -791,7 +791,7 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
     };
     for wetness in [0.0, 1.0] {
         let lighting = Lighting {
-            enhanced: true,
+            path: ShadingPath::Hdr,
             shadows: false,
             fog_density: 0.0,
             wetness,
@@ -1046,7 +1046,7 @@ fn terrain_paint_fast_path_preserves_composition() {
                 }
             }
             let lighting = Lighting {
-                enhanced: true,
+                path: ShadingPath::Hdr,
                 shadows: false,
                 fog_density: 0.0,
                 wetness,
@@ -1472,7 +1472,11 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
         );
         scene.instances[foreground].visible = false;
         let lighting = Lighting {
-            enhanced,
+            path: if enhanced {
+                ShadingPath::Hdr
+            } else {
+                ShadingPath::Linear
+            },
             shadows: false,
             fog_density: 0.0,
             ..Default::default()
@@ -1768,7 +1772,6 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
     let lighting = Lighting {
         shadows: false,
         fog_density: 0.0,
-        classic: true,
         ..Default::default()
     };
     let mut read = |n: Vec3, along: Vec3| {
@@ -2029,7 +2032,7 @@ fn smoke_puffs_are_drawn() {
         has_alpha: true,
     });
     let mut scene = renderer.new_scene();
-    for (classic, enhanced) in [(true, false), (false, false), (false, true)] {
+    for path in [ShadingPath::Linear, ShadingPath::Hdr] {
         scene.smoke = vec![SmokeParticle {
             position: DVec3::new(0.0, 5.0, 0.0),
             size: 1.0,
@@ -2040,8 +2043,7 @@ fn smoke_puffs_are_drawn() {
         let lighting = Lighting {
             shadows: false,
             fog_density: 0.0,
-            classic,
-            enhanced,
+            path,
             ..Default::default()
         };
         let rgba = renderer
@@ -2050,7 +2052,7 @@ fn smoke_puffs_are_drawn() {
         let c = &rgba[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 3];
         assert!(
             c[0] > 120 && c[1] < 60 && c[2] < 60,
-            "a red puff 5 m ahead (classic {classic}, enhanced {enhanced}): {c:?}"
+            "a red puff 5 m ahead ({path:?}): {c:?}"
         );
     }
 }
@@ -2097,12 +2099,11 @@ fn a_smoke_puff_fades_into_its_ground() {
     });
     let mut scene = renderer.new_scene();
     let red = |row: usize, rgba: &[u8]| rgba[(row * 64 + 32) * 4] as i32;
-    for (classic, enhanced) in [(true, false), (false, false), (false, true)] {
+    for path in [ShadingPath::Linear, ShadingPath::Hdr] {
         let lighting = Lighting {
             shadows: false,
             fog_density: 0.0,
-            classic,
-            enhanced,
+            path,
             ..Default::default()
         };
         // 5 m ahead with the ground at its middle: drawn 0.9 m round, a pixel row 9 cm
@@ -2125,7 +2126,7 @@ fn a_smoke_puff_fades_into_its_ground() {
         scene.smoke[0].ground = Some(0.0);
         let faded = profile(&mut scene, &mut renderer);
         let (at, full) = (|row: usize| faded[row - 24], |row: usize| plain[row - 24]);
-        let mode = format!("classic {classic}, enhanced {enhanced}: {faded:?} against {plain:?}");
+        let mode = format!("{path:?}: {faded:?} against {plain:?}");
         assert!(
             full(25) > 30 && full(33) > 30,
             "the plain puff is drawn ({mode})"
@@ -2155,7 +2156,7 @@ fn a_smoke_puff_fades_into_its_ground() {
             .unwrap();
         assert!(
             (red(30, &rgba) - red(56, &rgba)).abs() < 6,
-            "a puff under its ground drawn (classic {classic}, enhanced {enhanced})"
+            "a puff under its ground drawn ({path:?})"
         );
     }
 }
@@ -2190,7 +2191,6 @@ fn a_smoke_puffs_picture_turns_with_its_spin() {
     let lighting = Lighting {
         shadows: false,
         fog_density: 0.0,
-        classic: true,
         ..Default::default()
     };
     for (spin, top) in [(0.0, true), (std::f32::consts::PI, false)] {

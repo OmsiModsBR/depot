@@ -180,6 +180,8 @@ pub struct FramePlan {
     /// The light model as this renderer's shaders read it (`CameraUniform`).
     pub sun_dir: [f32; 4],
     pub sun_color: [f32; 4],
+    /// The weather's ambient light (xyz) and the snow (w). Unlike the camera's, without the
+    /// moonlight Vanilla+ adds: the renderer that takes the plan draws OMSI 2's nights.
     pub ambient: [f32; 4],
     pub fog: [f32; 4],
     pub sky_color: [f32; 4],
@@ -257,7 +259,12 @@ pub(crate) fn plan_of(
         cam_pos: cu.cam_pos,
         sun_dir: cu.sun_dir,
         sun_color: cu.sun_color,
-        ambient: cu.ambient,
+        // (the weather's own ambient light: the moonlight Vanilla+ adds is not OMSI 2's)
+        ambient: f
+            .lighting
+            .ambient
+            .extend(f.lighting.snow.clamp(0.0, 1.0))
+            .to_array(),
         fog: cu.fog,
         sky_color: cu.sky_color,
         cam_right: cu.cam_right,

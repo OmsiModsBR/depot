@@ -4,7 +4,9 @@
 
 use glam::{DVec3, Mat4, Vec2, Vec3};
 use omsi_geometry::MeshData;
-use omsi_render::{AlphaMode, Camera, Lighting, MaterialExtra, RenderOptions, Renderer};
+use omsi_render::{
+    AlphaMode, Camera, Lighting, MaterialExtra, RenderOptions, Renderer, ShadingPath,
+};
 use omsi_texture::Image;
 
 const SIZE: u32 = 32;
@@ -72,7 +74,7 @@ fn roughness(renderer: &mut Renderer, bump: bool) -> f32 {
         far: 100.0,
     };
     let lighting = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         shadows: false,
         fog_density: 0.0,
         ..Default::default()

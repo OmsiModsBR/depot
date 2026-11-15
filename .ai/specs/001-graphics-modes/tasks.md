@@ -109,9 +109,9 @@ the DirectX9 API) and check which mode opens and what the settings show (quickst
 
 ### Remove the wgpu Vanilla path `feat/remove-wgpu-vanilla`
 
-- [ ] T024 [US1] [ph A6] Remove the `classic` branch and the never-taken `camera.flags.z` branch from `crates/omsi-render/src/shaders/scene/shader.wgsl`, the `vehicle_info.w == 0` case from `crates/omsi-render/src/shaders/effects/puddle_reflection.wgsl`, and the `sky_color.w` bit from `crates/omsi-render/src/scene/camera.rs`
-- [ ] T025 [US1] [ph A6] Replace `Lighting::classic` and `Lighting::enhanced` with `Lighting::path: ShadingPath { Linear, Hdr }` in `crates/omsi-render/src/lighting/model.rs` and its readers in `crates/omsi-render/src/renderer/`, `crates/omsi-render/src/effects/puddles.rs`, `crates/omsi-render/src/sky/` and `crates/omsi-app/src/frame/implementation/app_events.rs`; rename `vanilla_fxaa` to `fxaa_without_msaa`
-- [ ] T026 [US1] [ph A6] Remove the classic case of the spray and the puddles in `crates/omsi-app/src/weather/implementation/{weather_setup,puddles}.rs`; run quickstart Q6 (golden unchanged)
+- [x] T024 [US1] [ph A6] Remove the `classic` branch and the never-taken `camera.flags.z` branch from `crates/omsi-render/src/shaders/scene/shader.wgsl`, the `vehicle_info.w == 0` case from `crates/omsi-render/src/shaders/effects/puddle_reflection.wgsl`, and the `sky_color.w` bit from `crates/omsi-render/src/scene/camera.rs`
+- [x] T025 [US1] [ph A6] Replace `Lighting::classic` and `Lighting::enhanced` with `Lighting::path: ShadingPath { Linear, Hdr }` in `crates/omsi-render/src/lighting/model.rs` and its readers in `crates/omsi-render/src/renderer/`, `crates/omsi-render/src/effects/puddles.rs`, `crates/omsi-render/src/sky/` and `crates/omsi-app/src/frame/implementation/app_events.rs`; rename `vanilla_fxaa` to `fxaa_without_msaa`
+- [x] T026 [US1] [ph A6] Remove the classic case of the spray and the puddles in `crates/omsi-app/src/weather/implementation/{weather_setup,puddles}.rs`; run quickstart Q6 (golden unchanged)
 
 **Checkpoint**: three modes, each reachable one way. User Story 1 passes its acceptance scenarios; the option lists still follow the old rules.
 

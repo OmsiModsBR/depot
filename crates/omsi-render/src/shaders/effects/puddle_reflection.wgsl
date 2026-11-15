@@ -50,12 +50,6 @@ fn clip_uv(c: vec4<f32>) -> vec2<f32> {
 fn finite_colour(c: vec3<f32>) -> vec3<f32> {
     return finite_clamped(c, 65000.0);
 }
-fn reflection_colour(c: vec3<f32>) -> vec3<f32> {
-    return select(c, srgb_encode(c), abs(p.vehicle_info.w) < 0.5);
-}
-fn scene_colour(c: vec3<f32>) -> vec3<f32> {
-    return select(c, srgb_decode(c), abs(p.vehicle_info.w) < 0.5);
-}
 fn trace_miss(depth: f32) -> vec4<f32> {
     return vec4<f32>(select(vec3<f32>(0.0), vec3<f32>(1.0, 0.0, 0.0), p.projection_trace.z == 2.0), depth);
 }
@@ -139,7 +133,7 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
         if (vehicle.a > 0.01) {
             if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
             if (p.projection_trace.z == 3.0) { return vec4<f32>(finite_colour(vehicle.rgb), depth); }
-            return vec4<f32>((reflection_colour(finite_colour(vehicle.rgb / max(vehicle.a, 1e-5))) - fallback_light(direction, px)) * vehicle.a, depth);
+            return vec4<f32>((finite_colour(vehicle.rgb / max(vehicle.a, 1e-5)) - fallback_light(direction, px)) * vehicle.a, depth);
         }
     }
     let start = world + normal * 0.025 + direction * 0.08;
@@ -201,7 +195,7 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
                 if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
                 if (p.projection_trace.z == 3.0) { return vec4<f32>(colour, depth); }
                 // Replace the reflected sky light rather than adding a second reflection.
-                return vec4<f32>((reflection_colour(colour) - fallback_light(direction, px)) * confidence, depth);
+                return vec4<f32>((colour - fallback_light(direction, px)) * confidence, depth);
             }
         }
         previous = t;
@@ -274,5 +268,5 @@ fn fs_resolve(in: PuddleVertex) -> @location(0) vec4<f32> {
         }
     }
     if (p.projection_trace.z > 1.0) { return vec4<f32>(max(sum / max(total, 1e-5), vec3<f32>(0.0)), 1.0); }
-    return vec4<f32>(scene_colour(max(reflection_colour(base.rgb) + sum / max(total, 1e-5) * weight, vec3<f32>(0.0))), base.a);
+    return vec4<f32>(max(base.rgb + sum / max(total, 1e-5) * weight, vec3<f32>(0.0)), base.a);
 }

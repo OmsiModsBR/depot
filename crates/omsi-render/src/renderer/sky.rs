@@ -95,7 +95,7 @@ impl Renderer {
         // way from here, a little blurred (a cloud's shadow has a soft edge tens of metres
         // wide) and followed over a moment as the clouds drift
         let cloud_t = {
-            let now = if lighting.enhanced && lighting.cloud_density > 0.0 {
+            let now = if lighting.hdr() && lighting.cloud_density > 0.0 {
                 cloud_sun_transmittance(&self.sky.cloud_shape_cpu, lighting, cam_rel, ro)
             } else {
                 1.0
