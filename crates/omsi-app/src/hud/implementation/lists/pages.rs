@@ -10,10 +10,10 @@ use crate::core::app::App;
 use crate::hud::domain::lists::{
     physics_line, ListKind, Page, TitlesCache, CLOUD_TYPES, PRECIP_KINDS,
 };
+use omsi_cfg::graphics_options::offered_in_launcher;
 
 pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
     let s = &app.settings;
-    let vanilla = s.graphics == crate::settings::GraphicsMode::Vanilla;
     let file = settings_file();
     let pick = |key: &str, name: &str, desc: &str| select_row(&file, key, name, desc);
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
@@ -73,12 +73,11 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         limit_or(app, "graphics", "Graphics", || pick("graphics", "Graphics", later)),
         limit_or(app, "msaa", "Anti-aliasing", || pick("msaa", "Anti-aliasing", later)),
         limit_or(app, "render_scale", "Render scale", || pick("render_scale", "Render scale", later)),
-        // (DirectX9 only, and only while a scale below 100 % is chosen)
-        (app.output.backend() == crate::output::Backend::D3d9 && s.dx9_render_scale() > 0.0)
-            .then(|| pick("dx9_upscale", "Upscaling", "How the smaller picture is scaled up to the window's size"))
-            .flatten(),
+        // (Vanilla only, and only while a scale below 100 % is chosen)
+        limit_or(app, "dx9_upscale", "Upscaling", || pick("dx9_upscale", "Upscaling", "How the smaller picture is scaled up to the window's size"))
+            .filter(|_| s.render_scale > 0.0 && s.render_scale < 0.995),
         limit_or(app, "anisotropy", "Anisotropic", || pick("anisotropy", "Anisotropic", later)),
-        // (under "DirectX9 (D3D9Ex)" the `api_limits` table hides or locks these: `limit_or`)
+        // (each graphics mode hides or fixes some of these: `limit_or`)
         limit_or(app, "shadows", "Sun shadows", || switch_row(app, "shadows", "Sun shadows", "Enables/Disabled shadows")),
         limit_or(app, "shadow_size", "Shadow map", || pick("shadow_size", "Shadow map", later)),
         limit_or(app, "ssao", "Ambient occlusion", || switch_row(app, "ssao", "Ambient occlusion", later)),
@@ -92,17 +91,15 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         // (every graphics mode draws the sun's glare)
         switch_row(app, "sun_glow", "Sun glow", "The bright glow around the sun"),
         limit_or(app, "windy_trees", "Windy trees", || switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still")),
-        // (DirectX9 only: the other APIs draw their own snowfall)
-        (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "dx9_snow", "Snow", "Snowflakes fall in snow weather")).flatten(),
-        // (DirectX9 only: OMSI 2's rain reflections, the people in them with them on)
-        (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "rain_reflections", "Rain reflections", "The puddles on a wet road mirror the street; off, they mirror the sky alone")).flatten(),
-        (app.output.backend() == crate::output::Backend::D3d9 && app.settings.rain_reflections).then(|| switch_row(app, "humans_in_rain_reflections", "People in rain reflections", "The people in the street show in the puddles' reflections")).flatten(),
-        (app.output.backend() == crate::output::Backend::D3d9).then(|| switch_row(app, "fewer_night_lights", "Fewer night lights", "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2")).flatten(),
-        // (DirectX9 only, our own ways to ease its work)
-        switch_row(app, "dx9_glass_rain", "Raindrops on glass", "Drops gather on the panes in the rain").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
-        switch_row(app, "dx9_coronas", "Light coronas", "The glow round lamps and headlights").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
-        switch_row(app, "dx9_stars", "Stars", "The points of light in the night sky").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
-        switch_row(app, "dx9_cloud_picture", "Cloud picture", "The clouds drawn over the sky; their light on the scene stays").filter(|_| app.output.backend() == crate::output::Backend::D3d9),
+        // (Vanilla only: OMSI 2's rain reflections, the people in them with them on)
+        limit_or(app, "rain_reflections", "Rain reflections", || switch_row(app, "rain_reflections", "Rain reflections", "The puddles on a wet road mirror the street; off, they mirror the sky alone")),
+        limit_or(app, "humans_in_rain_reflections", "People in rain reflections", || switch_row(app, "humans_in_rain_reflections", "People in rain reflections", "The people in the street show in the puddles' reflections")).filter(|_| app.settings.rain_reflections),
+        limit_or(app, "fewer_night_lights", "Fewer night lights", || switch_row(app, "fewer_night_lights", "Fewer night lights", "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2")),
+        // (Vanilla only, our own ways to ease its work)
+        limit_or(app, "dx9_glass_rain", "Raindrops on glass", || switch_row(app, "dx9_glass_rain", "Raindrops on glass", "Drops gather on the panes in the rain")),
+        limit_or(app, "dx9_coronas", "Light coronas", || switch_row(app, "dx9_coronas", "Light coronas", "The glow round lamps and headlights")),
+        limit_or(app, "dx9_stars", "Stars", || switch_row(app, "dx9_stars", "Stars", "The points of light in the night sky")),
+        limit_or(app, "dx9_cloud_picture", "Cloud picture", || switch_row(app, "dx9_cloud_picture", "Cloud picture", "The clouds drawn over the sky; their light on the scene stays")),
     ]
         .into_iter()
         .flatten()
@@ -116,16 +113,14 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         ),
         pick("resolution", "Window size", later),
         // (Vanilla opens without the triple screen and VR: not offered there)
-        (!vanilla)
-            .then(|| {
-                switch_row(
-                    app,
-                    "triple_screen",
-                    "Triple screen",
-                    "Three physical screen projections; OpenXR takes priority",
-                )
-            })
-            .flatten(),
+        limit_or(app, "triple_screen", "Triple screen", || {
+            switch_row(
+                app,
+                "triple_screen",
+                "Triple screen",
+                "Three physical screen projections; OpenXR takes priority",
+            )
+        }),
     ];
     // (the rig's own settings only while it is on)
     let triple = vec![
@@ -205,9 +200,9 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
                 pick("mirror_size", "Mirrors", later)
             }),
             pick("texture_memory", "Texture memory", later),
-            (app.output.backend() == crate::output::Backend::D3d9)
-                .then(|| pick("dx9_texture_limit", "Texture size limit", later))
-                .flatten(),
+            limit_or(app, "dx9_texture_limit", "Texture size limit", || {
+                pick("dx9_texture_limit", "Texture size limit", later)
+            }),
             switch_row(
                 app,
                 "texture_compression",
@@ -279,7 +274,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         "Put the seat back where the vehicle has it.",
         "seat_reset",
     ));
-    if cfg!(windows) && !vanilla {
+    if cfg!(windows) && offered_in_launcher("vr", s.graphics) {
         camera.extend(
             vec![
                 switch_row(app, "vr", "Use OpenXR headset", later),

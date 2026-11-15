@@ -10,7 +10,6 @@
 //! the game in one window of one process.
 
 mod about;
-use omsi_launcher_ui::api_limits;
 mod describe;
 mod env_file;
 mod frame;

@@ -243,9 +243,6 @@ pub struct Settings {
     pub windy_trees: bool,
     /// The glare round the sun (OMSI 2's "Sun Glow"), in every graphics mode.
     pub sun_glow: bool,
-    /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
-    /// flakes of its snowflake picture). On unless switched off.
-    pub dx9_snow: bool,
     /// "DirectX9 (D3D9Ex)" only: the puddles of a wet road mirror the street (OMSI 2's "Rain
     /// reflexions"; off writes its `[no_rain_refl]`). On unless switched off; off, they
     /// mirror the sky alone.
@@ -572,7 +569,6 @@ impl Settings {
             clouds: true,
             windy_trees: true,
             sun_glow: true,
-            dx9_snow: true,
             rain_reflections: true,
             humans_in_rain_reflections: true,
             fewer_night_lights: false,
@@ -750,8 +746,8 @@ impl Settings {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
-        // Vanilla's renderer draws the picture as OMSI 2 does and no more (the file keeps the
-        // choices for the other modes)
+        // each graphics mode draws only what it offers (the file keeps the choices for the
+        // other modes)
         s = s.fitted_to_mode();
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
@@ -982,7 +978,6 @@ impl Settings {
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
-                "dx9_snow" => s.dx9_snow = b(v),
                 "rain_reflections" => s.rain_reflections = b(v),
                 "humans_in_rain_reflections" => s.humans_in_rain_reflections = b(v),
                 "fewer_night_lights" => s.fewer_night_lights = b(v),
@@ -1571,10 +1566,10 @@ impl Settings {
         }
     }
 
-    /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
-    /// under that API (the other renderers draw their own snowfall).
+    /// Whether Vanilla's Direct3D 9Ex renderer draws the falling snow (as OMSI 2 does, it
+    /// follows the weather alone; the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
-        self.dx9_snow && self.backend() == crate::output::Backend::D3d9
+        self.backend() == crate::output::Backend::D3d9
     }
 
     /// The rain reflection to draw: under "DirectX9 (D3D9Ex)" with the option on, whether
@@ -1617,50 +1612,44 @@ impl Settings {
         self.backend() != crate::output::Backend::D3d9
     }
 
-    /// These settings as the mode's renderer takes them: under Vanilla's Direct3D 9Ex, what it
-    /// does not draw is off and the rest is held to the choices it offers (`fit_vanilla`).
+    /// These settings as the graphics mode draws them (`omsi_cfg::graphics_options::fit`): an
+    /// option the mode fixes takes its fixed value, one it offers with fewer choices the nearest
+    /// of them, one it draws without its "off". The file keeps the choices for the other modes.
     pub fn fitted_to_mode(mut self) -> Self {
-        if self.backend() == crate::output::Backend::D3d9 {
-            self.fit_vanilla();
-        }
+        self.fit_to_mode();
         self
     }
 
-    /// The limits of Vanilla's renderer (the table in `api_limits`): it draws the picture as
-    /// OMSI 2 does and has no graphics improvements to choose.
-    pub fn fit_vanilla(&mut self) {
-        // (what a Vanilla file is loaded without, see `from_text`)
-        self.shadows = false;
-        self.ssao = false;
-        self.detail_textures = false;
-        // (the other limits of the table: what Vanilla does not draw yet; the render scale it
-        // does, see `dx9_render_scale`: kept as saved)
-        self.post_aa = "off".into();
-        // (a scale saved in another mode carries over, fitted to the steps Vanilla offers: 0.6
-        // becomes 0.67; Auto stays Auto)
-        if self.render_scale > 0.0 {
-            if let Some(l) = crate::api_limits::d3d9("render_scale") {
-                let fitted = l.fit(&self.render_scale_text());
-                if let Ok(x) = fitted.parse::<f32>() {
-                    self.render_scale = x;
-                }
-            }
-        }
-        // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
-        // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
-        if let Some(l) = crate::api_limits::d3d9("mirror_size") {
-            self.mirror_size = l.fit(&self.mirror_size.to_string()).parse().unwrap_or(0);
-        }
-        if let Some(l) = crate::api_limits::d3d9("mirror_refresh") {
-            self.mirror_refresh = l.fit(&self.mirror_refresh);
-        }
-        self.mirror_hud = 0;
-        self.windy_trees = false;
-        // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
+    /// `fitted_to_mode` in place.
+    pub fn fit_to_mode(&mut self) {
+        use omsi_cfg::graphics_options::fit;
+        let mode = self.graphics;
+        let on = |key: &str, v: bool| fit(key, mode, if v { "true" } else { "false" }) == "true";
+        self.shadows = on("shadows", self.shadows);
+        self.ssao = on("ssao", self.ssao);
+        self.detail_textures = on("detail_textures", self.detail_textures);
+        self.shadow_blobs = on("shadow_blobs", self.shadow_blobs);
+        self.windy_trees = on("windy_trees", self.windy_trees);
+        // (OMSI 2's sky in Vanilla: the weather's own clouds, none added to a clear sky, see
         // `fair_weather_clouds`)
-        self.clouds = true;
-        // (the sun's own light only: Enhanced's brighter night is an improvement)
-        self.night_brightness = 0.0;
+        self.clouds = on("clouds", self.clouds);
+        let number = |key: &str, v: f32| fit(key, mode, &format!("{v}")).parse().unwrap_or(v);
+        self.night_brightness = number("night_brightness", self.night_brightness);
+        // (a scale saved in another mode carries over, fitted to the steps the mode offers:
+        // 0.6 becomes 0.67 in Vanilla; Auto stays Auto)
+        if self.render_scale > 0.0 {
+            self.render_scale = number("render_scale", self.render_scale);
+        }
+        self.mirror_size = fit("mirror_size", mode, &self.mirror_size.to_string())
+            .parse()
+            .unwrap_or(self.mirror_size);
+        self.mirror_refresh = fit("mirror_refresh", mode, &self.mirror_refresh);
+        // (settings of the file alone, with no row on any page: Vanilla draws without FXAA
+        // and without the corner copies of the mirrors, which are ours)
+        if mode == GraphicsMode::Vanilla {
+            self.post_aa = "off".into();
+            self.mirror_hud = 0;
+        }
     }
 
     /// How far objects are drawn (m, 0 = no limit): `max_obj_dist`, or when that is `auto`

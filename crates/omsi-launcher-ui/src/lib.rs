@@ -6,7 +6,6 @@
 //! heading from `window`. `Shell` puts the same sidebar and pages together without the
 //! game, for pictures (`offscreen`, the `launcher_shot` example) and tests.
 
-pub mod api_limits;
 pub mod backdrop;
 pub mod host;
 pub mod kit;

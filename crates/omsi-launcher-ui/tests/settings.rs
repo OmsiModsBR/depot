@@ -1,11 +1,12 @@
 //! The Settings page without a window: every option in one section with its control, the
-//! DirectX9 limits, the search, the reset and what the page asks of the launcher.
+//! graphics modes' table, the search, the reset and what the page asks of the launcher.
 
 use glam::Vec2;
+use omsi_cfg::graphics_options::{self, Applies, GRAPHICS_OPTIONS};
+use omsi_cfg::GraphicsMode;
 use omsi_content::input::gamectrler::DeviceCfg;
 use omsi_launcher_lib as core;
 use omsi_launcher_lib::start::Choice;
-use omsi_launcher_ui::api_limits::D3D9;
 use omsi_launcher_ui::window::*;
 use omsi_ui::widgets::{id_of, Ui};
 use omsi_ui::Rect;
@@ -36,7 +37,6 @@ const BEFORE: &[&str] = &[
     "smoke_user_only",
     "smoke_max",
     "smoke_in_mirrors",
-    "dx9_snow",
     "rain_reflections",
     "humans_in_rain_reflections",
     "fewer_night_lights",
@@ -385,52 +385,83 @@ fn every_shown_option_has_its_control() {
     }
 }
 
-/// Every option of the table of Vanilla's Direct3D 9Ex renderer (`api_limits`) has a control in
-/// another mode, and none in Vanilla on Windows (it is hidden or shown locked); nothing saved is
-/// rewritten.
+/// Every option of the Graphics and Advanced graphics sections, VR and the triple screen has a
+/// row in the graphics modes' table (spec 001, FR-020).
 #[test]
-fn vanilla_limits_each_option_of_the_table() {
-    let section_of = |key: &str| {
-        OPTS.iter()
-            .find(|o| o.key == key)
-            .unwrap_or_else(|| panic!("{key} is not on the page"))
-            .sec
-    };
-    let drawn = |s: &mut Value, key: &str| {
-        let mut ui = Ui::new();
-        frame(
-            &mut ui,
-            section_of(key),
-            "",
-            s,
-            &mut start(),
-            &mut Outside::default(),
-        );
-        ui.drawn.contains_key(&id_of(&format!("opt-{key}")))
-    };
-    let mut s = all_rows();
-    for l in D3D9 {
+fn every_graphics_option_has_a_row_in_the_table() {
+    for o in OPTS.iter().filter(|o| {
+        o.sec == GRAPHICS
+            || SECTIONS[o.sec] == "Advanced graphics"
+            || o.group == "VR headset"
+            || o.group == "Triple screen"
+    }) {
         assert!(
-            drawn(&mut s, l.key),
-            "{} has no control in Enhanced",
-            l.key
+            graphics_options::graphics_option(o.key).is_some(),
+            "{} has no row in GRAPHICS_OPTIONS",
+            o.key
         );
     }
-    s["graphics"] = json!("vanilla");
-    let before = s.clone();
-    if cfg!(windows) {
-        for l in D3D9 {
-            assert_eq!(drawn(&mut s, l.key), l.is_row(), "{} in Vanilla", l.key);
-        }
+    for row in GRAPHICS_OPTIONS {
+        assert!(
+            OPTS.iter().any(|o| o.key == row.key),
+            "{} is in the table but not on the page",
+            row.key
+        );
     }
-    assert_eq!(s, before);
-    // (the mode itself is always offered; the graphics API is not in Vanilla on Windows, and
-    // never on a Mac)
-    assert!(drawn(&mut s, "graphics"));
-    assert_eq!(
-        drawn(&mut s, "graphics_api"),
-        !cfg!(windows) && !cfg!(target_os = "macos")
-    );
+}
+
+/// In each mode the page shows each option of the table as the table says: no row where it is
+/// not offered, a fixed line where it is fixed, a control where it is offered; nothing saved is
+/// rewritten (spec 001, FR-014, FR-015, FR-016).
+#[test]
+fn the_page_offers_what_the_table_says_in_each_mode() {
+    for (mode, name) in [
+        (GraphicsMode::Vanilla, "vanilla"),
+        (GraphicsMode::VanillaPlus, "vanilla_plus"),
+        (GraphicsMode::Enhanced, "enhanced"),
+    ] {
+        let (mut s, mut start) = (all_rows(), start());
+        s["graphics"] = json!(name);
+        // (what the conditional rows wait for)
+        s["render_scale"] = json!("0.75");
+        s["rain_reflections"] = json!(true);
+        s["vr"] = json!(false);
+        let before = s.clone();
+        let st = Store {
+            s: &mut s,
+            start: &mut start,
+            changed: false,
+            start_changed: false,
+            omsi2: false,
+            adapter_mb: 0,
+            ceiling_mb: 0,
+        };
+        for row in GRAPHICS_OPTIONS {
+            let o = OPTS.iter().find(|o| o.key == row.key).unwrap();
+            let got = shown(o, &st);
+            match row.applies(mode) {
+                Applies::NotOffered { .. } => {
+                    assert_eq!(got, Shown::Hidden, "{} in {mode:?}", row.key)
+                }
+                Applies::Fixed { .. } => assert!(
+                    matches!(got, Shown::Locked(_)),
+                    "{} in {mode:?}: {got:?}",
+                    row.key
+                ),
+                // (the platform's own rules: no VR off Windows, no API choice on a Mac; the VR
+                // headset's settings wait for it, which is off here)
+                Applies::Offered | Applies::Choices { .. }
+                    if row.key == "graphics_api"
+                        || row.key == "vr"
+                        || row.key.starts_with("vr_")
+                        || row.key == "triple_fov_deg" => {}
+                Applies::Offered | Applies::Choices { .. } => {
+                    assert_eq!(got, Shown::Row, "{} in {mode:?}", row.key)
+                }
+            }
+        }
+        assert_eq!(s, before, "{mode:?}");
+    }
 }
 
 /// Vanilla opens without VR and the triple screen: the page does not offer them there, and
@@ -461,29 +492,6 @@ fn vanilla_offers_no_vr_and_no_triple_screen() {
     assert_eq!(s["triple_screen"], json!(true));
 }
 
-/// The Snow option is Vanilla's own on Windows: it is on the page only in that mode.
-#[test]
-fn the_dx9_snow_option_is_shown_only_in_vanilla() {
-    let drawn = |mode: &str| {
-        let mut s = all_rows();
-        s["graphics"] = json!(mode);
-        let sec = OPTS.iter().find(|o| o.key == "dx9_snow").unwrap().sec;
-        let mut ui = Ui::new();
-        frame(
-            &mut ui,
-            sec,
-            "",
-            &mut s,
-            &mut start(),
-            &mut Outside::default(),
-        );
-        ui.drawn.contains_key(&id_of("opt-dx9_snow"))
-    };
-    assert!(!drawn("enhanced"));
-    assert!(!drawn("vanilla_plus"));
-    assert_eq!(drawn("vanilla"), cfg!(windows));
-}
-
 /// An option Vanilla leaves some choices out of offers only the rest, and a saved value
 /// outside them shows as the choice it takes.
 #[test]
@@ -509,10 +517,8 @@ fn vanilla_offers_only_the_choices_it_allows() {
         let mut options = options_of(o, &st);
         let at = chosen(o, &st, &mut options);
         let values: Vec<_> = options.iter().map(|x| x.0.as_str()).collect();
-        if cfg!(windows) {
-            assert_eq!(values, want, "{key}");
-            assert_eq!(options[at].0, now, "{key}");
-        }
+        assert_eq!(values, want, "{key}");
+        assert_eq!(options[at].0, now, "{key}");
     }
 }
 

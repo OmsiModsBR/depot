@@ -362,6 +362,73 @@ interface `graphics_api` names. A file from before this that says `graphics_api=
 former "DirectX9 (D3D9Ex)" API) opens in Vanilla with `graphics_api=auto`. The launcher's
 picture of the bus is drawn as Vanilla+ whatever the mode.
 
+### Graphics options per mode
+
+The graphics mode decides which graphics options the launcher and the in-game menu offer. An
+option a mode does not offer keeps its saved value for the other modes; one shown as fixed is
+drawn with that value whatever is saved; "only" lists the values the mode offers (a saved value
+outside them is drawn as the nearest one). The in-game menu offers only the options that take
+effect at once. This table is printed from the game's own table.
+
+<!-- graphics-options:begin (printed by crates/omsi-cfg/tests/graphics_options.rs) -->
+| Setting | Vanilla | Vanilla+ | Enhanced | Takes effect |
+|---|---|---|---|---|
+| `graphics` | yes | yes | yes | next start |
+| `graphics_api` | no | yes | yes | next start |
+| `preset` | yes | yes | yes | next start |
+| `msaa` | yes | yes | yes | next start |
+| `render_scale` | only auto, 1, 0.85, 0.75, 0.67, 0.5 | yes | yes | next start |
+| `dx9_upscale` | yes | no | no | at once |
+| `anisotropy` | yes | yes | yes | next start |
+| `view_distance` | yes | yes | yes | next start |
+| `max_obj_dist` | yes | yes | yes | next start |
+| `min_obj_size` | yes | yes | yes | next start |
+| `shadows` | no | yes | yes | at once |
+| `shadow_size` | no | yes | yes | next start |
+| `shadow_casters` | no | yes | yes | next start |
+| `ssao` | no | yes | yes | next start |
+| `shadow_blobs` | fixed: On | yes | yes | next start |
+| `night_brightness` | no | no | yes | at once |
+| `reflections` | yes | yes | yes | next start |
+| `mirror_size` | only 0, 128, 256, 512 | yes | yes | next start |
+| `mirror_refresh` | only off, full | yes | yes | at once |
+| `clouds` | fixed: As OMSI 2 | yes | yes | next start |
+| `sun_glow` | yes | yes | yes | at once |
+| `windy_trees` | fixed: Off | yes | yes | at once |
+| `smoke` | yes | yes | yes | next start |
+| `smoke_user_only` | yes | yes | yes | next start |
+| `smoke_max` | yes | yes | yes | next start |
+| `smoke_in_mirrors` | yes | yes | yes | next start |
+| `rain_reflections` | yes | no | no | at once |
+| `humans_in_rain_reflections` | yes | no | no | at once |
+| `fewer_night_lights` | yes | no | no | at once |
+| `dx9_glass_rain` | yes | no | no | at once |
+| `dx9_coronas` | yes | no | no | at once |
+| `dx9_stars` | yes | no | no | at once |
+| `dx9_cloud_picture` | yes | no | no | at once |
+| `texture_memory` | yes | yes | yes | next start |
+| `dx9_texture_limit` | yes | no | no | next start |
+| `texture_compression` | yes | yes | yes | next start |
+| `detail_textures` | no | yes | yes | at once |
+| `led_glow` | no | no | yes | at once |
+| `led_mips` | no | no | yes | at once |
+| `vr` | no | yes | yes | next start |
+| `vr_scale` | no | yes | yes | next start |
+| `vr_head_smoothing_ms` | no | yes | yes | next start |
+| `vr_mirror_rate` | no | yes | yes | next start |
+| `vr_desktop_mirror` | no | yes | yes | next start |
+| `triple_screen` | no | yes | yes | at once |
+| `triple_span` | no | yes | yes | next start |
+| `triple_hud_center` | no | yes | yes | at once |
+| `triple_width_mm` | no | yes | yes | at once |
+| `triple_distance_mm` | no | yes | yes | at once |
+| `triple_bezel_mm` | no | yes | yes | at once |
+| `triple_left_angle_deg` | no | yes | yes | at once |
+| `triple_right_angle_deg` | no | yes | yes | at once |
+| `triple_eye_height_mm` | no | yes | yes | at once |
+| `triple_fov_deg` | no | yes | yes | at once |
+<!-- graphics-options:end -->
+
 Vanilla, Vanilla+ and Enhanced reflect buses, buildings and scenery in wet road puddles
 when `reflections=1`, each using its own lighting. Depth-aware filtering softens the image;
 Enhanced also shades shallow rain ripples.

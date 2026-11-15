@@ -41,6 +41,7 @@ pub mod flags;
 mod format;
 mod fs;
 mod graphics;
+pub mod graphics_options;
 mod install;
 pub mod limits;
 mod physics;
