@@ -9,7 +9,7 @@
 
 use glam::{DVec3, Vec3};
 use omsi_content::stars::{StarCatalog, StarMap};
-use omsi_render::{Camera, Lighting, RenderOptions, Renderer, Scene};
+use omsi_render::{Camera, Lighting, RenderOptions, Renderer, Scene, ShadingPath};
 use omsi_texture::Image;
 
 fn renderer() -> Renderer {
@@ -61,7 +61,7 @@ fn camera(fov_deg: f32) -> Camera {
 
 const UNTURNED: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
-fn night(frame: [[f32; 3]; 3], bright: f32, classic: bool) -> Lighting {
+fn night(frame: [[f32; 3]; 3], bright: f32) -> Lighting {
     Lighting {
         shadows: false,
         fog_density: 0.0,
@@ -69,7 +69,6 @@ fn night(frame: [[f32; 3]; 3], bright: f32, classic: bool) -> Lighting {
         sky_weights: [0.0, 0.0, 1.0],
         star_frame: frame,
         star_brightness: bright,
-        classic,
         ..Default::default()
     }
 }
@@ -95,20 +94,14 @@ const AHEAD_K: &str = "90\t30\t0.003981072\tK\n";
 #[ignore = "needs a graphics adapter"]
 fn a_star_is_a_square_of_its_size_in_its_class_colour() {
     let mut r = renderer();
-    for classic in [true, false] {
+    {
         // magnitude 0: two pixels a side, in the colour of class A (240, 244, 255)
         let mut scene = sky(&r, AHEAD_A);
         let px = r
-            .render_to_image(
-                &mut scene,
-                SIZE,
-                SIZE,
-                &camera(10.0),
-                &night(UNTURNED, 1.0, classic),
-            )
+            .render_to_image(&mut scene, SIZE, SIZE, &camera(10.0), &night(UNTURNED, 1.0))
             .unwrap();
         let l = lit(&px);
-        assert_eq!(l.len(), 4, "classic {classic}: {l:?}");
+        assert_eq!(l.len(), 4, "{l:?}");
         let [r0, g0, b0] = l[0].1;
         assert!(
             r0.abs_diff(240) <= 3 && g0.abs_diff(244) <= 3 && b0 >= 252,
@@ -123,16 +116,10 @@ fn a_star_is_a_square_of_its_size_in_its_class_colour() {
         // magnitude 6: one pixel, a quarter as bright (class K: 255, 228, 147)
         let mut scene = sky(&r, AHEAD_K);
         let px = r
-            .render_to_image(
-                &mut scene,
-                SIZE,
-                SIZE,
-                &camera(10.0),
-                &night(UNTURNED, 1.0, classic),
-            )
+            .render_to_image(&mut scene, SIZE, SIZE, &camera(10.0), &night(UNTURNED, 1.0))
             .unwrap();
         let l = lit(&px);
-        assert_eq!(l.len(), 1, "classic {classic}: {l:?}");
+        assert_eq!(l.len(), 1, "{l:?}");
         assert!(
             l[0].1[0].abs_diff(64) <= 3 && l[0].1[1].abs_diff(57) <= 3,
             "{:?}",
@@ -147,14 +134,8 @@ fn the_stars_fade_with_the_daylight_and_turn_with_the_sky() {
     let mut r = renderer();
     let mut scene = sky(&r, AHEAD_A);
     let mut draw = |frame, bright| {
-        r.render_to_image(
-            &mut scene,
-            SIZE,
-            SIZE,
-            &camera(10.0),
-            &night(frame, bright, true),
-        )
-        .unwrap()
+        r.render_to_image(&mut scene, SIZE, SIZE, &camera(10.0), &night(frame, bright))
+            .unwrap()
     };
     let half = lit(&draw(UNTURNED, 0.5));
     assert!(half[0].1[0].abs_diff(120) <= 3, "{half:?}");
@@ -183,13 +164,7 @@ fn without_a_star_map_the_sky_has_no_stars() {
     let black = r.add_texture(&mut scene, &Image::solid([0, 0, 0, 255]), false);
     r.set_sky_textures(&mut scene, [black, black, black]);
     let px = r
-        .render_to_image(
-            &mut scene,
-            SIZE,
-            SIZE,
-            &camera(10.0),
-            &night(UNTURNED, 1.0, true),
-        )
+        .render_to_image(&mut scene, SIZE, SIZE, &camera(10.0), &night(UNTURNED, 1.0))
         .unwrap();
     assert!(lit(&px).is_empty());
 }
@@ -199,9 +174,8 @@ fn without_a_star_map_the_sky_has_no_stars() {
 fn in_enhanced_a_bright_star_shows_in_a_dark_night() {
     let mut r = renderer();
     let enhanced = Lighting {
-        classic: false,
-        enhanced: true,
-        ..night(UNTURNED, 1.0, false)
+        path: ShadingPath::Hdr,
+        ..night(UNTURNED, 1.0)
     };
     let mut with = sky(&r, "90\t30\t3.8\tA\n");
     let mut without = r.new_scene();
@@ -276,13 +250,13 @@ fn cost_of_the_stars() {
         sky(&r, &stars),
     ];
     let enhanced = Lighting {
-        enhanced: true,
-        ..night(UNTURNED, 1.0, false)
+        path: ShadingPath::Hdr,
+        ..night(UNTURNED, 1.0)
     };
     let lights = [
-        night(UNTURNED, 1.0, false),
-        night(UNTURNED, 0.0, false),
-        night(UNTURNED, 1.0, false),
+        night(UNTURNED, 1.0),
+        night(UNTURNED, 0.0),
+        night(UNTURNED, 1.0),
         enhanced.clone(),
         enhanced,
     ];

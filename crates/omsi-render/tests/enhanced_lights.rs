@@ -6,6 +6,7 @@ use omsi_geometry::MeshData;
 use omsi_render::testing::linear_light_colour;
 use omsi_render::{
     AlphaMode, Camera, Corona, Lighting, MaterialExtra, PointLight, RenderOptions, Renderer,
+    ShadingPath,
 };
 use omsi_texture::Image;
 
@@ -38,7 +39,7 @@ fn render(
     camera: &Camera,
 ) -> Vec<u8> {
     let lighting = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         shadows: false,
         fog_density: 0.0,
         night: 1.0,

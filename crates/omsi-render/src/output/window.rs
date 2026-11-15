@@ -334,7 +334,7 @@ impl Presenter {
         width: u32,
         height: u32,
         full_w: u32,
-        vanilla_fxaa: bool,
+        fxaa_without_msaa: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
@@ -349,7 +349,7 @@ impl Presenter {
                     width as f32,
                     height as f32,
                     sharpen.clamp(0.0, 0.8),
-                    if vanilla_fxaa { 1.0 } else { 0.0 },
+                    if fxaa_without_msaa { 1.0 } else { 0.0 },
                 ]),
             );
             let mut pass = PostPass::new("upscale", target)

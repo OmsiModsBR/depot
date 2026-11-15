@@ -249,13 +249,11 @@ pub struct Lighting {
     /// The roads are kept clear of the snow (the weather's "snow on road" off): no cover is
     /// laid on road surfaces.
     pub roads_clear: bool,
-    /// Enhanced graphics: the physically based high-range renderer (enhanced.wgsl) with its
-    /// computed sky, automatic exposure, glow and tone mapping (post.wgsl).
-    pub enhanced: bool,
-    /// Vanilla graphics - the picture as OMSI 2 draws it: none of the extras the
-    /// rewrite's own vanilla renderer (Vanilla+) adds (snow laid on the surfaces, rain drops
-    /// running down the panes). Shadows, ambient occlusion and the detail grain are switched off by the settings.
-    pub classic: bool,
+    /// How the picture is shaded: Vanilla+'s plain linear path, or Enhanced's physically
+    /// based high-range one (enhanced.wgsl, with its computed sky, automatic exposure, glow
+    /// and tone mapping in post.wgsl). Vanilla is not drawn here: its Direct3D 9Ex renderer
+    /// takes the [`crate::FramePlan`].
+    pub path: ShadingPath,
     /// The player's vehicle (origin, heading in degrees, `[boundingbox]` w l h cx cy cz):
     /// no rain sheen or snow cover is shaded inside it.
     pub inside: Option<(DVec3, f64, [f32; 6])>,
@@ -337,16 +335,32 @@ pub struct Lighting {
 /// (linear, the units of envir.cfg's light C): bluish, as the eye sees by moonlight.
 pub const MOONLIGHT: Vec3 = Vec3::new(0.050, 0.060, 0.080);
 
+/// How the wgpu renderer shades a picture (spec 001: Vanilla+ and Enhanced).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ShadingPath {
+    /// Vanilla+: the plain picture in linear light.
+    #[default]
+    Linear,
+    /// Enhanced: the physically based high-range picture.
+    Hdr,
+}
+
 impl Lighting {
+    /// Whether the picture is Enhanced's ([`ShadingPath::Hdr`]).
+    pub fn hdr(&self) -> bool {
+        self.path == ShadingPath::Hdr
+    }
+
     /// Vanilla+ only: the moon's light added to the night's ambient light, a cool grey that
     /// grows with the moon's height and, much faster, with its phase (a half moon gives
     /// about a tenth of a full one's light), fades out with the daylight and is mostly
     /// held back by the clouds. A full moon high in a clear sky adds [`MOONLIGHT`], about
     /// as much again as a dark night's ambient floor; a new moon or a moon below the
-    /// horizon adds nothing. Vanilla (as OMSI 2: its nights are no brighter under a
-    /// full moon) and Enhanced (its own moonlight) get none.
+    /// horizon adds nothing. Enhanced (its own moonlight) gets none, and nor does the
+    /// [`crate::FramePlan`] of Vanilla's renderer (as OMSI 2: its nights are no brighter
+    /// under a full moon).
     pub fn moonlight(&self) -> Vec3 {
-        if self.classic || self.enhanced {
+        if self.hdr() {
             return Vec3::ZERO;
         }
         let height = self.moon_dir.normalize_or_zero().z;
@@ -364,7 +378,7 @@ impl Lighting {
     /// sun well down, the moon up and more than a quarter lit - a full moon's 0.3 lux leave
     /// sharp shadows on a road beyond the lamps.
     pub fn casts_moon_shadows(&self) -> bool {
-        self.enhanced
+        self.hdr()
             && self.lamp_shadows
             && self.sun_dir.normalize_or_zero().z < -0.1
             && self.moon_dir.normalize_or_zero().z > 0.1
@@ -411,8 +425,7 @@ impl Default for Lighting {
             wetness: 0.0,
             snow: 0.0,
             roads_clear: false,
-            enhanced: false,
-            classic: false,
+            path: ShadingPath::Linear,
             inside: None,
             puddle_ground: None,
             puddle_normal: Vec3::Z,

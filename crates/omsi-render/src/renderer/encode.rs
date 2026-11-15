@@ -27,7 +27,7 @@ impl Renderer {
         let full_h = f.full_h;
         let width = f.width;
         let height = f.height;
-        let vanilla_fxaa = f.features.vanilla_fxaa;
+        let fxaa_without_msaa = f.features.fxaa_without_msaa;
         let glass_on = f.features.glass_on;
         let scaled = f.features.scaled;
         let aspect = f.aspect;
@@ -270,7 +270,7 @@ impl Renderer {
             width,
             height,
             full_w,
-            vanilla_fxaa,
+            fxaa_without_msaa,
             &clock.tset,
             &mut clock.timed,
         );

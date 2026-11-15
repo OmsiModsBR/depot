@@ -201,8 +201,5 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let horizon = clamp(1.0 - elev / 0.12, 0.0, 1.0) * clamp(camera.fog.w * 1500.0, 0.0, 1.0);
     let whole = clamp(camera.fog.w * 150.0 - 0.15, 0.0, 1.0) * clamp(1.0 - elev / 1.2, 0.35, 1.0);
     let f = max(horizon, whole);
-    if (camera.sky_color.w > 0.5) {
-        return vec4<f32>(srgb_decode(mix(srgb_encode(col), camera.fog.xyz, f)), 1.0);
-    }
     return vec4<f32>(mix(col, camera.fog.xyz, f), 1.0);
 }

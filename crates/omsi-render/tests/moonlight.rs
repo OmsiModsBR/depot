@@ -1,8 +1,9 @@
 //! Vanilla+'s moonlight (`Lighting::moonlight`): how much the moon adds to the night's
-//! ambient light, by its phase, its height, the daylight, the clouds and the graphics mode.
+//! ambient light, by its phase, its height, the daylight, the clouds and the graphics mode
+//! (Vanilla's Direct3D 9Ex renderer is handed the ambient light without it, see `FramePlan`).
 
 use glam::Vec3;
-use omsi_render::Lighting;
+use omsi_render::{Lighting, ShadingPath};
 
 /// A clear night with the moon `illum` lit at `altitude` degrees, in Vanilla+.
 fn night(illum: f32, altitude: f32) -> Lighting {
@@ -12,8 +13,6 @@ fn night(illum: f32, altitude: f32) -> Lighting {
         moon_illum: illum,
         night: 1.0,
         cloud_density: 0.0,
-        classic: false,
-        enhanced: false,
         ..Default::default()
     }
 }
@@ -62,14 +61,10 @@ fn daylight_and_clouds_hold_it_back() {
 }
 
 #[test]
-fn vanilla_and_enhanced_add_no_moonlight() {
-    let vanilla = Lighting {
-        classic: true,
-        ..night(1.0, 60.0)
-    };
-    assert_eq!(vanilla.moonlight(), Vec3::ZERO);
+fn enhanced_adds_no_moonlight() {
+    assert!(night(1.0, 60.0).moonlight().length() > 0.0);
     let enhanced = Lighting {
-        enhanced: true,
+        path: ShadingPath::Hdr,
         ..night(1.0, 60.0)
     };
     assert_eq!(enhanced.moonlight(), Vec3::ZERO);

@@ -169,19 +169,18 @@ impl Body {
 /// The water's colour for the smoke shading, which lights a puff with the weather's ambient
 /// light and a share of the sun's in every graphics mode alike, and how much of what is
 /// behind a puff it covers (a factor on its opacity). What that comes to on the screen
-/// differs: Vanilla writes it into a picture whose other colours are OMSI's encoded ones, so
-/// it came out far too light, and Enhanced's exposure carries it above the sky it is lit by;
-/// and the many puffs over one another stack up to a plume two to three times as strong in
-/// Vanilla's and Vanilla+'s plain picture as under Enhanced's exposure and tone mapping. The
+/// differs: Enhanced's exposure carries it above the sky it is lit by, and the many puffs
+/// over one another stack up to a plume two to three times as strong in Vanilla+'s plain
+/// picture as under Enhanced's exposure and tone mapping. (Vanilla's Direct3D 9Ex renderer
+/// draws no spray: it is not OMSI 2's.) The
 /// grey and the opacity are chosen so that the mist shows about as light, and as thin, as in
 /// Enhanced (in the same overcast rain: the light it adds to the road behind a car is about a
 /// third of the road's own in each mode), and the light it is given scales it from there -
 /// darker at dusk and at night.
 fn spray_look(graphics: GraphicsMode) -> ([f32; 3], f32) {
     let (grey, opacity) = match graphics {
-        GraphicsMode::Vanilla => (0.32, 0.26),
         GraphicsMode::Enhanced => (0.5, 1.0),
-        GraphicsMode::VanillaPlus => (0.65, 0.42),
+        GraphicsMode::Vanilla | GraphicsMode::VanillaPlus => (0.65, 0.42),
     };
     ([grey, grey * 1.02, grey * 1.06], opacity)
 }
