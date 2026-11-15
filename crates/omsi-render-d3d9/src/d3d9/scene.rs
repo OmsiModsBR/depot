@@ -150,9 +150,8 @@ pub(super) struct SceneStore {
     pub(super) smoke: super::smoke::SmokeStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
     unsupported: Option<String>,
-    /// The per-frame instance records, and the dynamic buffer they go up in (with the
-    /// records it holds).
-    records: Vec<f32>,
+    /// The dynamic buffer the per-frame instance records go up in (with the records it
+    /// holds).
     pub(super) instances: Option<(IDirect3DVertexBuffer9, usize)>,
     /// What every mesh and texture was made from.
     pub(super) copies: SceneCopies,
@@ -1309,8 +1308,6 @@ impl D3d9Device {
     ) -> Result<()> {
         let lamps = self.bind_lamps(&frame.lamps)?;
         self.bind_or_table()?;
-        self.scene.records.clear();
-        frame.instance_records(&mut self.scene.records);
         let records = frame.list.len();
         let too_many = || BackendError::InvalidArgument(format!("{records} instances"));
         let bytes = u32::try_from(records)
@@ -1371,17 +1368,17 @@ impl D3d9Device {
         let pixel = [-1.0 / width as f32, 1.0 / height as f32, 0.0, 0.0];
         let (bias, slope) = surface_depth_bias(frame.surface_bias);
         // SAFETY: plain calls on a live device; constant arrays outlive the calls; the
-        // instance buffer holds `records` records, locked with DISCARD and written whole.
+        // instance buffer holds at least `records` records, locked with DISCARD and written
+        // whole, straight from the frame's lists (no copy in between).
         unsafe {
             if let (Some((vb, _)), true) = (&self.scene.instances, records > 0) {
                 let mut p = std::ptr::null_mut();
                 vb.Lock(0, bytes, &mut p, D3DLOCK_DISCARD as u32)
                     .map_err(map_err)?;
-                std::ptr::copy_nonoverlapping(
-                    self.scene.records.as_ptr() as *const u8,
-                    p as *mut u8,
-                    bytes as usize,
-                );
+                frame.write_instance_records(std::slice::from_raw_parts_mut(
+                    p as *mut f32,
+                    records * INSTANCE_FLOATS,
+                ));
                 vb.Unlock().map_err(map_err)?;
             }
             // reversed depth: cleared to the far plane, 0, and nearer is greater
