@@ -123,13 +123,20 @@ fn the_mode_of_a_run_is_the_settings_or_enhanced_with_the_flag() {
             mode.as_str()
         ));
         assert_eq!(resolved_graphics(&s, false), mode);
-        assert_eq!(resolved_graphics(&s, true), GraphicsMode::Enhanced);
+        // (a Vanilla drawn by Direct3D 9Ex, on Windows, has its window before the flag is read)
+        let flagged = if cfg!(windows) && mode == GraphicsMode::Vanilla {
+            GraphicsMode::Vanilla
+        } else {
+            GraphicsMode::Enhanced
+        };
+        assert_eq!(resolved_graphics(&s, true), flagged, "{mode:?}");
     }
 }
 
 #[test]
-fn directx9_draws_vanilla_whatever_is_asked() {
-    // ("DirectX9 (D3D9Ex)" is Windows only: elsewhere the setting falls back to Auto)
+fn a_saved_directx9_api_runs_vanilla() {
+    // (a saved `graphics_api=d3d9` is Vanilla on Windows, whatever `graphics` says; elsewhere
+    // it is Auto and the mode stays)
     for mode in GraphicsMode::ALL {
         let s = Settings::from_text(&format!("graphics={}\ngraphics_api=d3d9\n", mode.as_str()));
         for flag in [false, true] {

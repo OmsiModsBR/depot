@@ -30,7 +30,7 @@ pub(crate) fn switch_row(app: &App, id: &str, name: &str, desc: &str) -> Option<
     ))
 }
 
-/// The row of an option, unless "DirectX9 (D3D9Ex)" limits it (`api_limits`): then a locked one is
+/// The row of an option, unless Vanilla's Direct3D 9Ex renderer limits it (`api_limits`): then a locked one is
 /// an info line with its fixed value and the reason, and a hidden one has no row.
 pub(in crate::hud) fn limit_or(
     app: &App,

@@ -267,6 +267,9 @@ pub mod output {
             pub use crate::output::implementation::camera::util::*;
         }
     }
+    pub mod backend {
+        pub use crate::output::domain::backend::vanilla_cannot_open;
+    }
     pub mod head_idle {
         pub use crate::output::domain::head_idle::*;
     }

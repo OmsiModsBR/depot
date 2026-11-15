@@ -13,6 +13,7 @@ use crate::hud::domain::lists::{
 
 pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
     let s = &app.settings;
+    let vanilla = s.graphics == crate::settings::GraphicsMode::Vanilla;
     let file = settings_file();
     let pick = |key: &str, name: &str, desc: &str| select_row(&file, key, name, desc);
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
@@ -114,12 +115,17 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
             "Switches the window between windowed and fullscreen",
         ),
         pick("resolution", "Window size", later),
-        switch_row(
-            app,
-            "triple_screen",
-            "Triple screen",
-            "Three physical screen projections; OpenXR takes priority",
-        ),
+        // (Vanilla opens without the triple screen and VR: not offered there)
+        (!vanilla)
+            .then(|| {
+                switch_row(
+                    app,
+                    "triple_screen",
+                    "Triple screen",
+                    "Three physical screen projections; OpenXR takes priority",
+                )
+            })
+            .flatten(),
     ];
     // (the rig's own settings only while it is on)
     let triple = vec![
@@ -178,7 +184,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
             &|v| format!("{v:.0} mm"),
         ),
     ];
-    if app.settings.triple.enabled {
+    if app.settings.triple_screen() {
         display.extend(triple);
     }
     let display: Vec<(String, String)> = display
@@ -273,7 +279,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         "Put the seat back where the vehicle has it.",
         "seat_reset",
     ));
-    if cfg!(windows) {
+    if cfg!(windows) && !vanilla {
         camera.extend(
             vec![
                 switch_row(app, "vr", "Use OpenXR headset", later),

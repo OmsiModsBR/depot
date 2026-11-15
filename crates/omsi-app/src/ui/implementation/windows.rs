@@ -80,7 +80,7 @@ impl App {
             && self.game_menu.is_none()
             && self.menu.is_none()
             && !self.vr_active()
-            && !self.settings.triple.enabled
+            && !self.settings.triple_screen()
     }
 
     /// Open the window of the bar's button `id`. Opening a window never pauses the game.

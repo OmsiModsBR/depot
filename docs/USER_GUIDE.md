@@ -265,7 +265,7 @@ as designed; `navigator_opacity` in older files),
 `nav_follow_view` (on foot the maps show a walker icon, in the free camera F4 a camera icon they are centred on; off by default),
 `boarding`, `detail_textures`, `exact_fare`, `enhanced`, `fullscreen`, `vsync`, `volume`
 and `drive_keys`, plus `render_scale` (`auto` or a fraction: the picture is drawn smaller
-and upscaled; under "DirectX9 (D3D9Ex)" `auto` is the window's size and the fraction is yours,
+and upscaled; in Vanilla on Windows `auto` is the window's size and the fraction is yours,
 with `dx9_upscale` = `bilinear` or `fsr1` choosing how it is brought up), `post_aa` (`fxaa`, the enhanced renderer's, or `off`), `view_distance` (m,
 how far the tiles are kept loaded), `texture_memory` (MB - OMSI's `texmemlimit` is read
 under that name too; an eighth of the machine's memory when unset), `texture_compression`
@@ -296,8 +296,9 @@ rest breathes and shifts its weight, and 0 of it is exactly as OMSI; most of it 
 the bus waits at a stop) and `head_idle_pace` (0.5..2: how fast that sway moves, 1 being the
 pace it is designed at), `collision_objects` (walls, poles and bridges stop the bus; off is OMSI's `no_collision`
 option and is taken from OMSI's options when Project Depot starts the first time), `graphics_api`
-(`auto`, `vulkan`, `dx12` on Windows, `gl`: which graphics interface the game asks first -
-with `auto` Vulkan, then DirectX 12, then OpenGL), `ctrl_off` (game controllers switched off
+(`auto`, `vulkan`, `dx12` on Windows, `gl`: which graphics interface Vanilla+ and Enhanced ask
+first - with `auto` Vulkan, then DirectX 12, then OpenGL; Vanilla on Windows draws with
+Direct3D 9Ex whatever it says), `ctrl_off` (game controllers switched off
 on the Controllers page, by name, separated by `|`) and `language` (`ENG`, `DEU`, `FRA`: the language the HUD names cockpit switches
 in). The file also carries a `version`; older files that say
 `boarding=pay` because that was the launcher's old default are read as `auto`.
@@ -350,6 +351,16 @@ glare in clear air and wide halos in mist and rain.
 Enhanced+ (`graphics=enhanced_plus`, `--enhanced-plus`), the mode that traced rays, was
 removed. A settings file that still names it opens in Enhanced, and the argument and the
 mode's `OMSI_*` variables are ignored, each with a line in the log.
+
+The graphics mode (`graphics`) is `vanilla`, `vanilla_plus` (the default) or `enhanced`. On
+Windows Vanilla is drawn by the Direct3D 9Ex renderer, as close to OMSI 2 as it can: only the
+options OMSI 2 has, the Performance section of the launcher's settings, and no graphics API
+choice, VR or triple screen (their saved values are kept for the other modes, and the log says
+Vanilla opened without them). When Direct3D 9Ex cannot open, the game says why, tells you to
+choose Vanilla+ in the launcher, and closes. Vanilla+ and Enhanced draw with wgpu on the
+interface `graphics_api` names. A file from before this that says `graphics_api=d3d9` (the
+former "DirectX9 (D3D9Ex)" API) opens in Vanilla with `graphics_api=auto`. The launcher's
+picture of the bus is drawn as Vanilla+ whatever the mode.
 
 Vanilla, Vanilla+ and Enhanced reflect buses, buildings and scenery in wet road puddles
 when `reflections=1`, each using its own lighting. Depth-aware filtering softens the image;
