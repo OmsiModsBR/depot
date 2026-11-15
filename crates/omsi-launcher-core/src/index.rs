@@ -179,9 +179,11 @@ pub fn cached<T: Serialize + DeserializeOwned>(
 pub fn save(prefix: &str, keep: Option<&[String]>) {
     with_store(|s| {
         if let Some(keep) = keep {
+            // (by a set: thousands of vehicle folders checked each against the whole list)
+            let keep: std::collections::HashSet<&str> = keep.iter().map(String::as_str).collect();
             let before = s.entries.len();
             s.entries
-                .retain(|k, _| !k.starts_with(prefix) || keep.contains(k));
+                .retain(|k, _| !k.starts_with(prefix) || keep.contains(k.as_str()));
             if s.entries.len() != before {
                 s.dirty = true;
             }

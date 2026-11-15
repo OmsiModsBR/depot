@@ -1200,12 +1200,18 @@ pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
     }
 }
 
-/// The vehicle packs whose parts a model file names and that are installed nowhere.
-fn missing_packs_of(model: &Path) -> Vec<String> {
-    let Ok(text) = omsi_cfg::vfs::read(model) else {
-        return Vec::new();
-    };
-    let text = omsi_cfg::decode_text(&text);
+/// The model file `model` read once: what it says and the vehicle packs it borrows parts from
+/// that are installed nowhere. None when it cannot be read.
+fn read_model(model: &Path) -> Option<(omsi_model::Model, Vec<String>)> {
+    let bytes = omsi_cfg::vfs::read(model).ok()?;
+    let parsed = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_bytes(model, &bytes));
+    let packs = missing_packs_of(model, &omsi_cfg::decode_text(&bytes));
+    Some((parsed, packs))
+}
+
+/// The vehicle packs whose parts the model file `model` (its text `text`) names and that are
+/// installed nowhere.
+fn missing_packs_of(model: &Path, text: &str) -> Vec<String> {
     let dir = model.parent().unwrap_or(Path::new("."));
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -1231,16 +1237,12 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
 /// the paint schemes, and the folders they were read from.
-fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
+fn paint_schemes(
+    vehicle: &omsi_vehicle::Vehicle,
+    model: &omsi_model::Model,
+) -> (Vec<String>, Vec<PathBuf>) {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
-    let Some(model_rel) = vehicle.model.as_ref() else {
-        return (names, dirs_read);
-    };
-    let model_path = omsi_cfg::resolve_path(vehicle.dir(), model_rel);
-    let Ok(model) = omsi_model::Model::load(&model_path) else {
-        return (names, dirs_read);
-    };
     for c in &model.ctc {
         let dir = omsi_cfg::resolve_path(vehicle.dir(), &c.path);
         let mut files: Vec<PathBuf> = Vec::new();
@@ -1424,6 +1426,22 @@ pub fn reread_vehicles(folders: &[String]) -> Vec<VehicleInfo> {
     out
 }
 
+/// What the content index's entries of vehicle folders begin with: the saves that drop the
+/// entries of folders gone use it, so it must be the start of every key `vehicle_folder_key`
+/// makes.
+pub const VEHICLE_KEYS: &str = "bus5|";
+
+/// The content index's key of a vehicle folder (all its copies `dirs`) read in language `lang`.
+pub fn vehicle_folder_key(lang: &str, dirs: &[PathBuf]) -> String {
+    format!(
+        "{VEHICLE_KEYS}{lang}|{}",
+        dirs.iter()
+            .map(|d| d.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("|")
+    )
+}
+
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {
     list_vehicles_progress(|_, _, _| {})
 }
@@ -1474,15 +1492,7 @@ pub fn list_vehicles_progress(
     let shared_hofs = shared_depot_names();
     let keys: Vec<String> = folders
         .iter()
-        .map(|(_, dirs)| {
-            format!(
-                "bus5|{lang}|{}",
-                dirs.iter()
-                    .map(|d| d.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("|")
-            )
-        })
+        .map(|(_, dirs)| vehicle_folder_key(&lang, dirs))
         .collect();
     let read = |(folder, dirs): &(String, Vec<PathBuf>), key: &String| -> Vec<VehicleInfo> {
         // the stamp covers every copy of the folder and their direct entries (Model/,
@@ -1548,13 +1558,13 @@ pub fn list_vehicles_progress(
         // what was read is kept every few seconds: a first reading left half-way (the
         // launcher closed) starts from there the next time
         if saved.elapsed().as_secs() >= 10 {
-            index::save("bus4|", None);
+            index::save(VEHICLE_KEYS, None);
             saved = std::time::Instant::now();
         }
         progress(&batch, done, total);
         out.extend(batch);
     }
-    index::save("bus4|", Some(&keys));
+    index::save(VEHICLE_KEYS, Some(&keys));
     if out.is_empty() {
         log_empty("Vehicles", ".bus file");
     }
@@ -1684,14 +1694,19 @@ fn read_vehicle_folder(
         let name = format!("{} {}", v.manufacturer.trim(), v.type_name.trim())
             .trim()
             .to_string();
-        let (paints, paint_dirs) = paint_schemes(&v);
+        // (the model file read once for its paint folders and the packs it borrows from)
+        let read = model.as_deref().and_then(read_model);
+        let (paints, paint_dirs) = read
+            .as_ref()
+            .map(|(m, _)| paint_schemes(&v, m))
+            .unwrap_or_default();
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
         let description = omsi_content::Dsc::find(f, lang)
             .map(|x| x.description)
             .filter(|t| !t.is_empty())
             .unwrap_or_else(|| v.description.trim().to_string());
-        let missing_packs = model.as_deref().map(missing_packs_of).unwrap_or_default();
+        let missing_packs = read.map(|(_, packs)| packs).unwrap_or_default();
         if !missing_packs.is_empty() {
             log_line(&format!(
                 "vehicles: {} borrows parts from packs that are not installed: {}",
@@ -5632,7 +5647,7 @@ mod tests {
             "[mesh]\r\n..\\..\\..\\Sceneryobjects\\X\\a.o3d\r\n..\\..\\..\\Other\\b.o3d\r\n",
         )
         .unwrap();
-        let packs = super::missing_packs_of(&model);
+        let packs = super::read_model(&model).unwrap().1;
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(packs, vec!["Other".to_string()]);

@@ -2090,6 +2090,7 @@ impl Launcher {
         self.vehicles.set_picture(has_bus.then_some(picture));
         let none = !self.root_ok();
         self.vehicles.set_no_folder(none);
+        self.vehicles.set_host_reading(self.state.loading_content);
         self.vehicles.draw(&mut self.ui, body);
         if self.vehicles.take_open_setup() {
             self.go(Page::Setup);
@@ -2242,6 +2243,7 @@ impl Launcher {
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         let none = !self.root_ok();
         self.maps.set_no_folder(none);
+        self.maps.set_host_reading(self.state.loading_content);
         self.maps.draw(&mut self.ui, body);
         if self.maps.take_open_setup() {
             self.go(Page::Setup);
