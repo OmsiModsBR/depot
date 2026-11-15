@@ -66,6 +66,33 @@ An earlier pair taken the same day with the frame limit at 120 is not usable (bo
 the difference hidden in the limiter's wait). FR-008 asks for three runs each, measured after the
 `fix/dx9-*` pull requests of phase A4; these two pairs are the first reading only.
 
+### The deciding reading (T017, 2026-11-15)
+
+Same computer, map and settings as above (Berlin-Spandau at noon, MAN EN92, clear weather, MSAA 1,
+vsync off), one run of 5 minutes per build and renderer, ten `profile window:` lines of 30 s each.
+Medians in ms per frame:
+
+| | DirectX9 after A4 (`77eda47`) | DirectX9 with the speed fixes (`1a076ba`) | wgpu Vanilla (`77eda47`) |
+|---|---:|---:|---:|
+| **frame** | **7.0** | **7.5** | **5.4** |
+| render | 2.55 | 2.64 | 1.67 |
+| present | 0.41 | 0.44 | 0.19 |
+| mirrors | 0.38 | 0.39 | 0.22 |
+| hud | 0.15 | 0.15 | 0.08 |
+
+The simulation (traffic, player, scripts, people) costs the same in both renderers; the gap of
+about 1.5 ms is in the drawing. The speed fixes (#759: a batch sets only what the batch before did
+not leave bound; #760: instance records written straight into the locked buffer; #761: a pure
+device; #762: the flip model for a window without multisampling) changed nothing beyond the spread
+between runs (7.5 and 7.95 ms in the first reading). **Reading: DirectX9 does not pass FR-008.** The
+maintainer accepted the gap (FR-008, amended 2026-11-15) as the cost of an API bound by the CPU.
+
+What is not known yet, and what task T017a measures if it is taken up: how the 2.6 ms of `render`
+divide between the scene's preparation in `omsi-render` (shared by both renderers, on wgpu's no-op
+device under DirectX9), the submission of the batches to Direct3D 9, and the waits (the instance
+buffer's `Lock` with `DISCARD`, `Present`). The number of batches drawn per frame is not logged
+either.
+
 ## R-V. wgpu Vanilla x DirectX9: what each draws
 
 wgpu Vanilla is `shader.wgsl` with its `classic` branch on (`camera.sky_color.w = 1`). DirectX9 is
@@ -201,7 +228,9 @@ Not measurable without Windows. **Decision**: phase A0 measures on the maintaine
 map and stretch, `OMSI_PROFILE=1`, one session with `graphics=vanilla` on DirectX 12 and one on
 DirectX9, comparing the `profile window:` lines (#683). Criterion: phase A5 goes in only if DirectX9 is
 not slower (Principle VII); if it is, the difference becomes a `fix/dx9-*` first and is measured
-again, with no tolerance (clarified 2026-11-13, FR-008).
+again, with no tolerance (clarified 2026-11-13, FR-008). **Outcome (T017, 2026-11-15)**: DirectX9
+stays about 30 % slower after A4 and four speed fixes; the maintainer exempted it from FR-008 and
+phase A5 goes ahead (see "The deciding reading").
 
 ## R-5. DirectX9 in CI
 
