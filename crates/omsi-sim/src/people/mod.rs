@@ -36,8 +36,8 @@ pub(crate) mod skin;
 pub use aboard::payload_by_section;
 pub use pose::{run_factor, Activity, Pose, PoseInput, Posed};
 pub use rig::{
-    slot_of, HumanMesh, HumanType, Influence, Joints, Rig, BONE_HAND_L, BONE_HAND_R, BONE_HEAD,
-    BONE_HIP, BONE_MAIN, BONE_OA_L, BONE_OA_R, BONE_OS_L, BONE_OS_R, BONE_UA_L, BONE_UA_R,
-    BONE_US_L, BONE_US_R, SLOTS,
+    slot_of, BodyCom, HumanMesh, HumanType, Influence, Joints, Rig, BONE_HAND_L, BONE_HAND_R,
+    BONE_HEAD, BONE_HIP, BONE_MAIN, BONE_OA_L, BONE_OA_R, BONE_OS_L, BONE_OS_R, BONE_UA_L,
+    BONE_UA_R, BONE_US_L, BONE_US_R, SLOTS,
 };
 pub use skin::{curl_hands, grip_centres, hand_slot, skin, skin_from, slots_from_omsi};
