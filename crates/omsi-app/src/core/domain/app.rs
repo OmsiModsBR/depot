@@ -232,6 +232,9 @@ pub(crate) struct App {
     pub(crate) center_cursor: bool,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    /// The cursor is held inside the window while the mouse steers (see
+    /// `App::sync_cursor_confine`), so it cannot slip onto another screen.
+    pub(crate) cursor_confined: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).

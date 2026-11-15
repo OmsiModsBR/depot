@@ -941,6 +941,8 @@ impl ApplicationHandler for App {
                     dt,
                 });
                 crate::input::game_controller_menu::frame(self);
+                // the cursor stays inside the window while the mouse steers
+                self.sync_cursor_confine();
                 // OMSI's mouse control: the cursor's place across steers, above the middle
                 // of the window is the throttle, below it the brake.
                 // Steering as OMSI has it: the whole width of the
