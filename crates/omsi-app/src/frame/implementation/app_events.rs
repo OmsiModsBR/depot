@@ -3551,7 +3551,7 @@ impl ApplicationHandler for App {
                             // (black). Refresh all bus mirrors in VR, still taking turns
                             // within the configured budget; keep desktop visibility culling.
                             let mirror_view = if vr_active
-                                || self.settings.triple.enabled
+                                || self.settings.triple_screen()
                                 || (self.mirror_hud.active() && self.in_cab)
                             {
                                 None
@@ -3725,10 +3725,7 @@ impl ApplicationHandler for App {
                                 crate::hud::shift_overlays(scene, start, hud[0]);
                             }
                         }
-                        if !mirrored
-                            && self.settings.triple.enabled
-                            && !self.settings.vr_requested()
-                        {
+                        if !mirrored && self.settings.triple_screen() {
                             let rig = self.settings.triple.zoomed(
                                 s.config.width,
                                 s.config.height,

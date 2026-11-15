@@ -1,10 +1,10 @@
-//! What a graphics API leaves out of the graphics options. "DirectX9 (D3D9Ex)" is the "same as
-//! OMSI 2" renderer for older hardware: it offers no graphics improvement and no option it does
-//! not draw yet. The launcher and the game's menu read this one table; the game applies the
-//! locked values to the settings it loads (the saved file is not rewritten, so the choices come
-//! back with another API).
+//! What Vanilla's renderer leaves out of the graphics options. Vanilla is drawn by Direct3D 9Ex,
+//! the "same as OMSI 2" renderer for older hardware: it offers no graphics improvement and no
+//! option it does not draw yet. The launcher and the game's menu read this one table; the game
+//! applies the locked values to the settings it loads (the saved file is not rewritten, so the
+//! choices come back with another mode).
 
-/// How an option shows under the API.
+/// How an option shows under Vanilla's renderer.
 pub enum Limit {
     /// Not offered at all.
     Hidden,
@@ -78,18 +78,13 @@ impl ApiLimit {
 const IMPROVEMENT: &str = "an improvement OMSI 2 does not have";
 const NOT_DRAWN: &str = "not drawn by DirectX9 yet";
 
-/// "DirectX9 (D3D9Ex)". `preset` is the launcher's and the menu's quality preset, not a key of
-/// the file.
+/// Vanilla on Direct3D 9Ex. `preset` is the launcher's and the menu's quality preset, not a key
+/// of the file.
 pub const D3D9: &[ApiLimit] = &[
     ApiLimit {
         key: "preset",
         limit: Limit::Hidden,
         reason: IMPROVEMENT,
-    },
-    ApiLimit {
-        key: "graphics",
-        limit: Limit::Locked("Vanilla (as OMSI 2)"),
-        reason: "fixed with DirectX9 (D3D9Ex)",
     },
     ApiLimit {
         key: "shadows",
@@ -162,7 +157,7 @@ pub const D3D9: &[ApiLimit] = &[
     },
 ];
 
-/// The limit "DirectX9 (D3D9Ex)" puts on the option `key`, if any.
+/// The limit Vanilla's Direct3D 9Ex renderer puts on the option `key`, if any.
 pub fn d3d9(key: &str) -> Option<&'static ApiLimit> {
     D3D9.iter().find(|l| l.key == key)
 }

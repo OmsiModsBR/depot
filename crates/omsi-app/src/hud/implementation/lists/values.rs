@@ -52,7 +52,7 @@ pub fn set_camera_fov(
     } else {
         value.round().min(120.0)
     };
-    if settings.triple.enabled && !settings.vr_requested() {
+    if settings.triple_screen() {
         settings.triple.fov_deg = value;
         ("triple_fov_deg", value.to_string())
     } else {
@@ -100,7 +100,7 @@ pub(in crate::hud) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32
         "triple_right_angle_deg" => s.triple.right_angle_deg,
         "triple_eye_height_mm" => s.triple.eye_height_mm,
         "fov" => {
-            if s.triple.enabled && !s.vr_requested() {
+            if s.triple_screen() {
                 s.triple.fov_deg
             } else {
                 s.fov

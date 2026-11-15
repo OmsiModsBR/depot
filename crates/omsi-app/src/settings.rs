@@ -504,7 +504,7 @@ impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
     /// keeps the full window's physical coordinates.
     pub fn hud_viewport(&self, size: (u32, u32)) -> [f32; 4] {
-        if self.triple.enabled && self.triple_hud_center && !self.vr_requested() && size.0 >= 3 {
+        if self.triple_screen() && self.triple_hud_center && size.0 >= 3 {
             // (the centre panel, as the renderer draws it)
             let w = omsi_render::panel_width(size.0);
             [w as f32, 0.0, w as f32, size.1 as f32]
@@ -690,9 +690,33 @@ impl Settings {
 }
 
 impl Settings {
-    /// The launcher setting, with the old environment switch kept for existing VR runs.
+    /// The launcher setting, with the old environment switch kept for existing VR runs; never
+    /// in Vanilla, which opens without VR (the saved value is kept for the other modes).
     pub fn vr_requested(&self) -> bool {
-        cfg!(windows) && (self.vr || omsi_cfg::flags::OPENXR.is_set())
+        cfg!(windows)
+            && self.graphics != GraphicsMode::Vanilla
+            && (self.vr || omsi_cfg::flags::OPENXR.is_set())
+    }
+
+    /// Whether the window spans three screens: the setting, never with VR and never in
+    /// Vanilla, which opens without it (the saved value is kept for the other modes).
+    pub fn triple_screen(&self) -> bool {
+        self.triple.enabled && self.graphics != GraphicsMode::Vanilla && !self.vr_requested()
+    }
+
+    /// The line the log gets once when Vanilla opens without the VR or the triple screen the
+    /// settings ask for (`None`: nothing left out).
+    pub fn left_out_by_vanilla(&self) -> Option<&'static str> {
+        if self.graphics != GraphicsMode::Vanilla {
+            return None;
+        }
+        let vr = self.vr || omsi_cfg::flags::OPENXR.is_set();
+        match (vr, self.triple.enabled) {
+            (true, true) => Some("Vanilla opens without VR and without the triple screen (kept in the settings for the other modes)"),
+            (true, false) => Some("Vanilla opens without VR (kept in the settings for the other modes)"),
+            (false, true) => Some("Vanilla opens without the triple screen (kept in the settings for the other modes)"),
+            (false, false) => None,
+        }
     }
 
     /// `~/.depot/settings.cfg` (or `%USERPROFILE%` on Windows).
@@ -726,9 +750,9 @@ impl Settings {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
-        // "DirectX9 (D3D9Ex)" draws the picture as OMSI 2 does and no more: Vanilla, whatever
-        // the file says (it keeps the choice for the other graphics APIs)
-        s = s.locked_for_api();
+        // Vanilla's renderer draws the picture as OMSI 2 does and no more (the file keeps the
+        // choices for the other modes)
+        s = s.fitted_to_mode();
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
         if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
@@ -745,6 +769,8 @@ impl Settings {
         let mut graphics: Option<GraphicsMode> = None;
         // (the old key of files from before `graphics`)
         let mut enhanced = false;
+        // (a file that chose the old "DirectX9 (D3D9Ex)" API, which drew Vanilla)
+        let mut dx9_api = false;
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
@@ -1160,7 +1186,11 @@ impl Settings {
                 "graphics_api" => {
                     s.graphics_api = match v.trim().to_ascii_lowercase().as_str() {
                         x @ ("vulkan" | "dx12" | "gl") => x.to_string(),
-                        "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9".to_string(),
+                        // (the old "DirectX9 (D3D9Ex)" API: Vanilla now, see below)
+                        "d3d9" | "d3d9ex" | "dx9" => {
+                            dx9_api = cfg!(windows);
+                            "auto".to_string()
+                        }
                         _ => "auto".to_string(),
                     }
                 }
@@ -1479,6 +1509,19 @@ impl Settings {
         } else {
             GraphicsMode::VanillaPlus
         });
+        // the old "DirectX9 (D3D9Ex)" API showed Vanilla whatever `graphics` said: it is
+        // what the player saw, and Vanilla is that renderer now (the file is rewritten only
+        // when the player saves)
+        if dx9_api {
+            static NOTED: std::sync::Once = std::sync::Once::new();
+            NOTED.call_once(|| {
+                log::info!(
+                    "settings: graphics_api=d3d9 read as graphics=vanilla (was {}) and graphics_api=auto",
+                    s.graphics.as_str()
+                )
+            });
+            s.graphics = GraphicsMode::Vanilla;
+        }
         if s.graphics == GraphicsMode::Vanilla {
             s.shadows = false;
             s.ssao = false;
@@ -1574,27 +1617,27 @@ impl Settings {
         self.backend() != crate::output::Backend::D3d9
     }
 
-    /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
-    pub fn locked_for_api(mut self) -> Self {
+    /// These settings as the mode's renderer takes them: under Vanilla's Direct3D 9Ex, what it
+    /// does not draw is off and the rest is held to the choices it offers (`fit_vanilla`).
+    pub fn fitted_to_mode(mut self) -> Self {
         if self.backend() == crate::output::Backend::D3d9 {
-            self.lock_vanilla();
+            self.fit_vanilla();
         }
         self
     }
 
-    /// Vanilla graphics, whatever was set: the "same as OMSI 2" mode of "DirectX9 (D3D9Ex)"
-    /// has no graphics improvements to choose.
-    pub fn lock_vanilla(&mut self) {
-        self.graphics = GraphicsMode::Vanilla;
+    /// The limits of Vanilla's renderer (the table in `api_limits`): it draws the picture as
+    /// OMSI 2 does and has no graphics improvements to choose.
+    pub fn fit_vanilla(&mut self) {
         // (what a Vanilla file is loaded without, see `from_text`)
         self.shadows = false;
         self.ssao = false;
         self.detail_textures = false;
-        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
-        // the render scale it does, see `dx9_render_scale`: kept as saved)
+        // (the other limits of the table: what Vanilla does not draw yet; the render scale it
+        // does, see `dx9_render_scale`: kept as saved)
         self.post_aa = "off".into();
-        // (a scale saved under Vulkan or DirectX12 carries over, fitted to the steps this API
-        // offers: 0.6 becomes 0.67; Auto stays Auto)
+        // (a scale saved in another mode carries over, fitted to the steps Vanilla offers: 0.6
+        // becomes 0.67; Auto stays Auto)
         if self.render_scale > 0.0 {
             if let Some(l) = crate::api_limits::d3d9("render_scale") {
                 let fitted = l.fit(&self.render_scale_text());

@@ -5,7 +5,7 @@
 use super::super::interface::output::{core, Choice};
 use super::modules::Asks;
 use omsi_cfg::GraphicsMode;
-use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
+use omsi_launcher_lib::settings::{vanilla_on_d3d9, RESOLUTIONS};
 use omsi_ui::widgets::matches;
 use serde_json::{json, Value};
 
@@ -79,7 +79,7 @@ pub const PERFORMANCE_OPTS: &[(&str, &str)] = &[
 
 /// Whether the Performance section is offered with the settings `s` (the Depot's DirectX9 only).
 pub fn performance_offered(s: &Value, omsi2: bool) -> bool {
-    !omsi2 && d3d9_fixes_vanilla(s)
+    !omsi2 && vanilla_on_d3d9(s)
 }
 
 /// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
@@ -2194,7 +2194,7 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
 
 /// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
 pub(crate) fn api_limit(s: &Value, key: &str) -> Option<&'static crate::api_limits::ApiLimit> {
-    if d3d9_fixes_vanilla(s) {
+    if vanilla_on_d3d9(s) {
         crate::api_limits::d3d9(key)
     } else {
         None
@@ -2222,13 +2222,16 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
             None => Shown::Hidden,
         };
     }
-    let fixed = depot_api && d3d9_fixes_vanilla(st.s);
+    let fixed = depot_api && vanilla_on_d3d9(st.s);
     let graphics = GraphicsMode::parse(st.get("graphics").as_str().unwrap_or(""));
     // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain)
     let classic = fixed || graphics == GraphicsMode::Vanilla;
-    let triple = st.on("triple_screen") && !st.on("vr");
+    // (Vanilla opens without VR and the triple screen: neither is offered there)
+    let vanilla = depot_api && graphics == GraphicsMode::Vanilla;
+    let triple = !vanilla && st.on("triple_screen") && !st.on("vr");
     let visible = match o.key {
-        "graphics_api" => !cfg!(target_os = "macos"),
+        // (Vanilla's renderer is Direct3D 9Ex: the API applies to the other modes)
+        "graphics_api" => !cfg!(target_os = "macos") && !fixed,
         "shadow_size" | "shadow_casters" | "detail_textures" | "night_brightness" | "led_glow"
         | "led_mips" => !classic,
         "ssao" | "shadows" => !classic,
@@ -2251,9 +2254,10 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         // (and our own ways to ease its work: DirectX9 draws what they leave out)
         "dx9_glass_rain" | "dx9_coronas" | "dx9_stars" | "dx9_cloud_picture"
         | "dx9_texture_limit" => fixed,
-        "vr" => cfg!(windows),
-        k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
-        k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
+        "vr" => cfg!(windows) && !vanilla,
+        k if k.starts_with("vr_") => cfg!(windows) && !vanilla && st.on("vr"),
+        "triple_screen" => !vanilla,
+        k if k.starts_with("triple_") => !vanilla && st.on("triple_screen"),
         k if k.starts_with("head_tracking_") => st.on("head_tracking"),
         k if k.starts_with("info_item_") => st.get("info_bar_mode").as_str() == Some("custom"),
         "info_bar_collapsed" | "info_bar_labels" | "info_bar_lowfuel" => {
@@ -2294,15 +2298,13 @@ pub(crate) fn presets() -> [(&'static str, Value); 4] {
 
 pub(crate) fn api_options() -> &'static [(&'static str, &'static str)] {
     // (a Mac has Metal only; elsewhere a driver's Vulkan that misbehaves, or a card without
-    // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
-    // renderer, Windows only and never chosen by "Automatic")
+    // it, is got round here; Vanilla's Direct3D 9Ex renderer is chosen by the mode, not here)
     if cfg!(windows) {
         &[
             ("auto", "Automatic"),
             ("vulkan", "Vulkan"),
             ("dx12", "DirectX 12"),
             ("gl", "OpenGL"),
-            ("d3d9", "DirectX9 (D3D9Ex)"),
         ]
     } else {
         &[
@@ -2432,9 +2434,10 @@ pub(crate) fn choose(o: &Opt, st: &mut Store, value: &str) {
             .unwrap_or(json!(value)),
         _ => json!(value),
     };
-    // (DirectX9 is for older hardware: choosing it brings the anti-aliasing and anisotropic
-    // filtering down to 2x and 4x, which the player may raise again)
-    if o.key == "graphics_api" && v == json!("d3d9") && cfg!(windows) {
+    // (Vanilla's Direct3D 9Ex renderer is for older hardware: choosing the mode brings the
+    // anti-aliasing and anisotropic filtering down to 2x and 4x, which the player may raise
+    // again)
+    if o.key == "graphics" && v == json!("vanilla") && cfg!(windows) {
         for (key, most) in [("msaa", 2), ("anisotropy", 4)] {
             if st.get(key).as_i64().is_some_and(|n| n > most) {
                 st.set(key, json!(most));

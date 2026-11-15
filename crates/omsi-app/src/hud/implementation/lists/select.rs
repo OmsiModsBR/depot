@@ -260,8 +260,8 @@ pub fn select_state(
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let mut options = select_options(key);
-    // (under DirectX9 an option may leave some choices out, see `api_limits`)
-    if omsi_launcher_lib::settings::d3d9_fixes_vanilla(file) {
+    // (Vanilla's Direct3D 9Ex renderer may leave some choices out, see `api_limits`)
+    if omsi_launcher_lib::settings::vanilla_on_d3d9(file) {
         if let Some(l) = crate::api_limits::d3d9(key) {
             options.retain(|o| l.allows(o.0));
         }

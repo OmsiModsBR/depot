@@ -3053,7 +3053,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         panels.push(&mut scene, &world, viewport[2], viewport[3], (0.0, 0.0));
         crate::hud::shift_overlays(&mut scene, start, viewport[0]);
     }
-    let pixels = if settings.triple.enabled && !settings.vr_requested() {
+    let pixels = if settings.triple_screen() {
         renderer.render_triple_to_image(&mut scene, w, h, &camera, &lighting, &settings.triple)?
     } else {
         renderer.render_to_image(&mut scene, w, h, &camera, &lighting)?
@@ -3120,7 +3120,7 @@ fn triple_extent(
     w: u32,
     h: u32,
 ) -> Option<(f64, f64)> {
-    (settings.triple.enabled && !settings.vr_requested()).then(|| {
+    settings.triple_screen().then(|| {
         let (x, y) = settings.triple.view_extent(cam, w, h);
         (x as f64, y as f64)
     })

@@ -106,7 +106,7 @@ impl App {
             && self.menu.is_none()
             && self.game_menu.is_none()
             && !self.vr_active()
-            && !self.settings.triple.enabled
+            && !self.settings.triple_screen()
     }
 
     fn alt_ctx(&self) -> AltCtx {

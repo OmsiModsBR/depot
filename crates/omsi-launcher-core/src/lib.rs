@@ -3400,6 +3400,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     let Some(t) = text else { return v };
     let mut version = 0;
     let mut graphics: Option<GraphicsMode> = None;
+    // (a file that chose the old "DirectX9 (D3D9Ex)" API, which drew Vanilla)
+    let mut dx9_api = false;
     for line in t.lines() {
         let line = line.trim();
         if line.starts_with('#') || line.starts_with(';') {
@@ -3752,7 +3754,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "vulkan" => "vulkan",
                     "dx12" => "dx12",
                     "gl" => "gl",
-                    "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9",
+                    // (the old "DirectX9 (D3D9Ex)" API: Vanilla now, see below)
+                    "d3d9" | "d3d9ex" | "dx9" => {
+                        dx9_api = cfg!(windows);
+                        "auto"
+                    }
                     _ => "auto",
                 })
             }
@@ -4156,11 +4162,23 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     }
     // a file without `graphics` (older builds) says only `enhanced`; its vanilla renderer is
     // what is now Vanilla+
-    let g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
+    let mut g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
         GraphicsMode::Enhanced
     } else {
         GraphicsMode::VanillaPlus
     });
+    // the old "DirectX9 (D3D9Ex)" API showed Vanilla whatever `graphics` said, and Vanilla is
+    // that renderer now (written so when the player saves)
+    if dx9_api {
+        static NOTED: std::sync::Once = std::sync::Once::new();
+        NOTED.call_once(|| {
+            log::info!(
+                "settings: graphics_api=d3d9 read as graphics=vanilla (was {}) and graphics_api=auto",
+                g.as_str()
+            )
+        });
+        g = GraphicsMode::Vanilla;
+    }
     v["graphics"] = json!(g.as_str());
     v["enhanced"] = json!(g == GraphicsMode::Enhanced);
     // before version 2 the launcher wrote its old default `boarding=pay` for everybody
@@ -4539,7 +4557,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
             "gl" => "gl",
-            "d3d9" if cfg!(windows) => "d3d9",
             _ => "auto",
         },
         v.get("ctrl_off").and_then(|x| x.as_str()).unwrap_or("").replace(['\n', '\r'], " "),
@@ -5651,16 +5668,6 @@ mod tests {
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(packs, vec!["Other".to_string()]);
-    }
-
-    /// "DirectX9 (D3D9Ex)" survives the launcher's save on Windows only.
-    #[test]
-    fn d3d9_is_kept_on_windows_only() {
-        let want = if cfg!(windows) { "d3d9" } else { "auto" };
-        let v = super::settings_from_text(Some("graphics_api=D3D9Ex\n"));
-        assert_eq!(v["graphics_api"], want);
-        let text = super::settings_to_text(&v, None);
-        assert!(text.contains(&format!("graphics_api={want}\n")));
     }
 
     #[test]

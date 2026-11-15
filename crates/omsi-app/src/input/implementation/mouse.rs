@@ -1045,7 +1045,7 @@ impl App {
     /// The triple screen's rig as drawn this frame (the view's zoom applied), while it is on
     /// and no headset is asked for.
     pub(crate) fn triple_rig(&self, size: (u32, u32)) -> Option<omsi_render::TripleScreen> {
-        (self.settings.triple.enabled && !self.settings.vr_requested()).then(|| {
+        self.settings.triple_screen().then(|| {
             self.settings.triple.zoomed(
                 size.0,
                 size.1,

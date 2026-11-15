@@ -1,13 +1,12 @@
-//! The graphics API chosen and what it fixes.
+//! The graphics mode chosen and the renderer that draws it.
 
 use super::super::interface::output::Value;
+use omsi_cfg::GraphicsMode;
 
-/// Whether the settings choose "DirectX9 (D3D9Ex)" (Windows only), which draws as OMSI 2 does:
-/// Graphics is Vanilla there, and fixed. (VR takes DirectX 12 instead, as the game does.)
-pub fn d3d9_fixes_vanilla(s: &Value) -> bool {
-    // (the environment read last: the page asks this for every option, every frame)
+/// Whether the settings choose Vanilla on Windows, which the Direct3D 9Ex renderer draws as
+/// OMSI 2 does: only the options OMSI 2 has, and no VR or triple screen.
+pub fn vanilla_on_d3d9(s: &Value) -> bool {
     cfg!(windows)
-        && s.get("graphics_api").and_then(Value::as_str) == Some("d3d9")
-        && !s.get("vr").and_then(Value::as_bool).unwrap_or(false)
-        && !omsi_cfg::flags::OPENXR.is_set()
+        && GraphicsMode::parse(s.get("graphics").and_then(Value::as_str).unwrap_or(""))
+            == GraphicsMode::Vanilla
 }

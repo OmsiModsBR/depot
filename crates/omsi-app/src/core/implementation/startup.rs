@@ -652,16 +652,16 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
 }
 
 /// The graphics mode of this run: the settings' (the file, or `OMSI_GRAPHICS`), or Enhanced
-/// with `--enhanced` (`enhanced_flag`). "DirectX9 (D3D9Ex)" is the "as OMSI 2" renderer: it
-/// draws Vanilla whatever is asked.
+/// with `--enhanced` (`enhanced_flag`). A Vanilla that the Direct3D 9Ex renderer draws stays
+/// Vanilla: its window is opened from the settings before the arguments are read.
 pub fn resolved_graphics(
     settings: &crate::settings::Settings,
     enhanced_flag: bool,
 ) -> omsi_cfg::GraphicsMode {
     use omsi_cfg::GraphicsMode;
     if settings.backend() == Backend::D3d9 {
-        if enhanced_flag || settings.graphics == GraphicsMode::Enhanced {
-            log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
+        if enhanced_flag {
+            log::info!("--enhanced ignored: the mode is Vanilla, drawn by Direct3D 9Ex (choose Enhanced in the launcher, or OMSI_GRAPHICS=enhanced)");
         }
         return GraphicsMode::Vanilla;
     }

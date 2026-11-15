@@ -159,6 +159,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     }
     let settings = Settings::load();
     applog::log_system(&settings);
+    if let Some(line) = settings.left_out_by_vanilla() {
+        log::info!("settings: {line}");
+    }
     if args.drive_keys.eq_ignore_ascii_case("simple")
         && !settings.drive_keys.eq_ignore_ascii_case("simple")
     {
