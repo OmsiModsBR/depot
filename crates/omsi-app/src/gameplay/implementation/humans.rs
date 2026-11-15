@@ -1865,19 +1865,25 @@ impl Humans {
             .count()
     }
 
-    /// What the people in the player's bus weigh on each of its sections (kg, the front one
-    /// first, see [`omsi_sim::people::payload_by_section`]): each person's `.hum` `[mass]` on
-    /// the section of the cabin they are in.
-    pub fn player_payload(&self) -> Vec<f32> {
-        let joints: Vec<f32> = self
+    /// What the people in the player's bus weigh on each of its sections (the front one first,
+    /// see [`omsi_sim::people::payload_by_section`]): each person's `.hum` `[mass]` on the
+    /// section of the cabin they are in, centred where they are.
+    pub fn player_payload(&self) -> Vec<omsi_sim::physics::Payload> {
+        let sections: Vec<(f32, Vec3)> = self
             .player_cabin
             .as_ref()
-            .map(|c| c.parts.iter().skip(1).map(|p| p.joint_y).collect())
+            .map(|c| {
+                c.parts
+                    .iter()
+                    .skip(1)
+                    .map(|p| (p.joint_y, p.offset))
+                    .collect()
+            })
             .unwrap_or_default();
         omsi_sim::people::payload_by_section(
-            &joints,
+            &sections,
             self.people.iter().filter_map(|p| match p.place {
-                Place::Bus(BusId::Player, local) => Some((local.y, p.ty.def.mass)),
+                Place::Bus(BusId::Player, local) => Some((local, p.ty.def.mass)),
                 _ => None,
             }),
         )

@@ -278,10 +278,15 @@ directly.
 
 - **FR-011**: OMSI Classic MUST share a vehicle's weight between its axles about the model's origin,
   as OMSI 2 does; Project Depot Physics MUST share it about the vehicle's centre of gravity (`[cog]`).
-- **FR-012**: For now, the weight sharing of FR-011 MUST be the only difference between the two engines
-  for the player's vehicle; every other behaviour MUST be the same in both (decision D2). Changes
+- **FR-012**: The weight sharing of FR-011 and the people's place of FR-012a MUST be the only
+  differences between the two engines for the player's vehicle; every other behaviour MUST be the
+  same in both (decision D2, widened by the maintainer on 2026-11-15). Changes
   that only add behaviour OMSI 2 lacks (articulated bus work, standing passengers, skip stop) MUST
   stay on in both engines.
+- **FR-012a**: In Project Depot Physics the people aboard each section of the player's vehicle MUST
+  move that section's centre of gravity across and along the body to the mass-weighted mean of the
+  section's own `[cog]` and their places (`D-2`); its height stays `[schwerpunkt]` and its inertia
+  the file's. In OMSI Classic their mass MUST stay at `[cog]`, as before this requirement.
 - **FR-013**: With OMSI Classic and no key, the player's vehicle MUST move exactly as it does before
   this feature.
 - **FR-014**: In Project Depot Physics, AI road vehicles MUST move exactly as AI road vehicles move
