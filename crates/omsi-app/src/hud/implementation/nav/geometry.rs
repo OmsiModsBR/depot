@@ -1,4 +1,4 @@
-use super::{ROAD, ROAD_CASING, ROAD_MAIN, ROAD_RADIUS};
+use super::{MapRoad, RoadIndex, RoadPlan, RoadShape, ROAD, ROAD_CASING, ROAD_MAIN};
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::HashMap;
 use omsi_sim::traffic::{LaneKey, LaneKind, Network};
@@ -63,14 +63,6 @@ pub(crate) fn city_roads(
     confirm_road_surfaces(&mut net, surfaces);
     let roads = road_geometry(&net);
     (roads, net)
-}
-
-/// A road of the city map: the centre line of a carriageway, as wide as the map makes it.
-pub struct MapRoad {
-    pub points: Vec<DVec3>,
-    pub width: f32,
-    /// A road cars drive far along (the map's own speed limits say so): drawn brighter.
-    pub main: bool,
 }
 
 /// Some maps separate the asphalt mesh from their editor-only traffic splines. Use the
@@ -187,30 +179,40 @@ pub fn confirm_road_surfaces(net: &mut Network, surfaces: &[(Vec<DVec3>, f32)]) 
 /// describe one carriageway; combine their footprints without filling a median. Align
 /// opposing directions before averaging so bends, mirrors and ramps retain their shape.
 pub fn road_geometry(net: &Network) -> Vec<MapRoad> {
+    road_plans(net).iter().map(|r| r.road(net)).collect()
+}
+
+/// The roads of `road_geometry` as the lanes they are made of, without their points.
+fn road_plans(net: &Network) -> Vec<RoadPlan> {
     let mut roads = Vec::new();
-    let mut splines =
-        std::collections::BTreeMap::<((i32, i32), i64), Vec<&omsi_sim::traffic::Lane>>::new();
-    for (_, lane) in visible_road_lanes(net) {
+    let mut splines = std::collections::BTreeMap::<
+        ((i32, i32), i64),
+        Vec<(usize, &omsi_sim::traffic::Lane)>,
+    >::new();
+    for (i, lane) in visible_road_lanes(net) {
         if let Some(key) = lane.key.filter(|_| lane.source == 1) {
-            splines.entry((key.tile, key.id)).or_default().push(lane);
+            splines
+                .entry((key.tile, key.id))
+                .or_default()
+                .push((i, lane));
         } else {
-            roads.push(MapRoad {
-                points: lane.points.clone(),
+            roads.push(RoadPlan {
+                shape: RoadShape::Lane(i),
                 width: lane.width.max(2.6),
                 main: lane.speed_limit_kmh >= 55.0,
             });
         }
     }
     for mut lanes in splines.into_values() {
-        lanes.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+        lanes.sort_by(|a, b| a.1.offset.total_cmp(&b.1.offset));
         let mut start = 0;
         while start < lanes.len() {
-            let a = lanes[start];
+            let a = lanes[start].1;
             let lo = a.offset - a.width.max(2.6) * 0.5;
             let mut hi = a.offset + a.width.max(2.6) * 0.5;
             let mut end = start + 1;
             while end < lanes.len() {
-                let b = lanes[end];
+                let b = lanes[end].1;
                 if b.points.len() != a.points.len() || b.offset - b.width.max(2.6) * 0.5 > hi + 0.65
                 {
                     break;
@@ -234,49 +236,40 @@ pub fn road_geometry(net: &Network) -> Vec<MapRoad> {
                 hi = hi.max(b.offset + b.width.max(2.6) * 0.5);
                 end += 1;
             }
-            let b = lanes[end - 1];
+            let b = lanes[end - 1].1;
             let span = b.offset - a.offset;
             let t = if span.abs() > 0.01 {
                 (((lo + hi) * 0.5 - a.offset) / span) as f64
             } else {
                 0.0
             };
-            let point = |l: &omsi_sim::traffic::Lane, i: usize| {
-                l.points[if l.reversed {
-                    l.points.len() - 1 - i
-                } else {
-                    i
-                }]
-            };
-            let points = (0..a.points.len())
-                .map(|i| point(a, i).lerp(point(b, i), t))
-                .collect();
-            roads.push(MapRoad {
-                points,
+            roads.push(RoadPlan {
+                shape: RoadShape::Between {
+                    a: lanes[start].0,
+                    b: lanes[end - 1].0,
+                    t,
+                },
                 width: hi - lo,
-                main: lanes[start..end].iter().any(|l| l.speed_limit_kmh >= 55.0),
+                main: lanes[start..end]
+                    .iter()
+                    .any(|l| l.1.speed_limit_kmh >= 55.0),
             });
             start = end;
         }
     }
     // Bridge only explicit graph connections within the map's placement tolerance.
-    for lane in net
-        .lanes
-        .iter()
-        .filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2)
-    {
+    let street = |l: &&omsi_sim::traffic::Lane| {
+        l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2
+    };
+    for (i, lane) in net.lanes.iter().enumerate().filter(|(_, l)| street(l)) {
         for &j in &lane.next {
-            let Some(next) = net
-                .lanes
-                .get(j)
-                .filter(|l| l.kind == LaneKind::Street && !l.invisible && l.points.len() >= 2)
-            else {
+            let Some(next) = net.lanes.get(j).filter(street) else {
                 continue;
             };
             let distance = lane.end().distance(next.start());
             if distance > 0.05 && distance <= 2.0 {
-                roads.push(MapRoad {
-                    points: vec![lane.end(), next.start()],
+                roads.push(RoadPlan {
+                    shape: RoadShape::Gap { from: i, to: j },
                     width: lane.width.min(next.width).max(2.6),
                     main: lane.speed_limit_kmh >= 55.0 && next.speed_limit_kmh >= 55.0,
                 });
@@ -286,10 +279,40 @@ pub fn road_geometry(net: &Network) -> Vec<MapRoad> {
     roads
 }
 
-/// Street lanes within `ROAD_RADIUS` of `anchor`: casings first, then surfaces (so that a
-/// junction's surfaces cover each other's casings).
+impl RoadPlan {
+    /// The road with its points, made from `net`'s lanes (the network it was planned on).
+    fn road(&self, net: &Network) -> MapRoad {
+        MapRoad {
+            points: self.points(net),
+            width: self.width,
+            main: self.main,
+        }
+    }
+
+    fn points(&self, net: &Network) -> Vec<DVec3> {
+        let lanes = &net.lanes;
+        match self.shape {
+            RoadShape::Lane(i) => lanes[i].points.clone(),
+            RoadShape::Between { a, b, t } => {
+                let (a, b) = (&lanes[a], &lanes[b]);
+                let point = |l: &omsi_sim::traffic::Lane, i: usize| {
+                    l.points[if l.reversed {
+                        l.points.len() - 1 - i
+                    } else {
+                        i
+                    }]
+                };
+                (0..a.points.len())
+                    .map(|i| point(a, i).lerp(point(b, i), t))
+                    .collect()
+            }
+            RoadShape::Gap { from, to } => vec![lanes[from].end(), lanes[to].start()],
+        }
+    }
+}
+
 /// The colours roads are drawn in: edge, side street, main road (the light look has pale roads with a grey edge on the light ground).
-pub(super) fn road_colors(light: bool) -> (Color, Color, Color) {
+pub fn road_colors(light: bool) -> (Color, Color, Color) {
     if light {
         (
             Color::hex(0xa8a397),
@@ -301,16 +324,17 @@ pub(super) fn road_colors(light: bool) -> (Color, Color, Color) {
     }
 }
 
-pub(super) fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2, light: bool) {
+/// `roads` (those around `anchor`, see `roads_within`) as the minimap draws them: casings
+/// first, then surfaces (so that a junction's surfaces cover each other's casings).
+pub fn build_roads(
+    p: &mut Painter,
+    roads: impl Iterator<Item = MapRoad>,
+    anchor: DVec2,
+    light: bool,
+) {
     let (casing, road, main) = road_colors(light);
     let rel = |q: DVec3| Vec3::new((q.x - anchor.x) as f32, (q.y - anchor.y) as f32, 0.0);
-    let lanes: Vec<(MapRoad, Vec<Vec3>)> = road_geometry(net)
-        .into_iter()
-        .filter(|l| {
-            l.points
-                .iter()
-                .any(|q| (q.truncate() - anchor).length() < ROAD_RADIUS)
-        })
+    let lanes: Vec<(MapRoad, Vec<Vec3>)> = roads
         .map(|l| {
             let pts = simplify(&l.points.iter().map(|q| rel(*q)).collect::<Vec<_>>(), 0.12);
             (l, pts)
@@ -328,6 +352,80 @@ pub(super) fn build_roads(p: &mut Painter, net: &Network, anchor: DVec2, light: 
             true,
         );
     }
+}
+
+/// Side of a cell of `RoadIndex`'s grid (m): the minimap's 1.3 km radius covers about a
+/// hundred cells, a long road only a few.
+const ROAD_CELL: f64 = 250.0;
+
+impl RoadIndex {
+    pub fn new(net: &Network) -> Self {
+        let plans = road_plans(net);
+        let mut cells: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+        for (i, plan) in plans.iter().enumerate() {
+            let mut last = None;
+            for q in &plan.points(net) {
+                // (a lane has a point every metre or two: most follow one in the same cell)
+                let cell = road_cell(q.truncate());
+                if last == Some(cell) {
+                    continue;
+                }
+                last = Some(cell);
+                let ids = cells.entry(cell).or_default();
+                // (roads go in in order, so a road already in this cell is the last one)
+                if ids.last() != Some(&i) {
+                    ids.push(i);
+                }
+            }
+        }
+        Self { plans, cells }
+    }
+
+    /// The roads of `net` (the network the index was made of) with a point closer than
+    /// `radius` to `centre`, in `road_geometry`'s order: the order they are drawn in, so
+    /// that the picture does not depend on the index.
+    pub fn near<'a>(
+        &'a self,
+        net: &'a Network,
+        centre: DVec2,
+        radius: f64,
+    ) -> impl Iterator<Item = MapRoad> + 'a {
+        let (x0, y0) = road_cell(centre - DVec2::splat(radius));
+        let (x1, y1) = road_cell(centre + DVec2::splat(radius));
+        let mut ids: Vec<usize> = (x0..=x1)
+            .flat_map(|x| (y0..=y1).map(move |y| (x, y)))
+            .filter_map(|c| self.cells.get(&c))
+            .flatten()
+            .copied()
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        roads_within(
+            ids.into_iter().map(move |i| self.plans[i].road(net)),
+            centre,
+            radius,
+        )
+    }
+}
+
+/// The `roads` with a point closer than `radius` to `centre`, in their order.
+pub fn roads_within(
+    roads: impl Iterator<Item = MapRoad>,
+    centre: DVec2,
+    radius: f64,
+) -> impl Iterator<Item = MapRoad> {
+    roads.filter(move |l| {
+        l.points
+            .iter()
+            .any(|q| (q.truncate() - centre).length() < radius)
+    })
+}
+
+fn road_cell(p: DVec2) -> (i64, i64) {
+    (
+        (p.x / ROAD_CELL).floor() as i64,
+        (p.y / ROAD_CELL).floor() as i64,
+    )
 }
 
 /// `pts` with the points dropped that lie within `tol` metres of the line through their

@@ -41,7 +41,8 @@ mod streets;
 
 use super::super::domain::nav::*;
 pub(crate) use draw::stop_requested;
-pub(crate) use geometry::{city_roads, simplify, MapRoad};
+pub(crate) use super::super::domain::nav::MapRoad;
+pub(crate) use geometry::{city_roads, simplify};
 
 fn words(lang: &str) -> Words {
     match lang.to_ascii_uppercase().as_str() {

@@ -232,7 +232,43 @@ pub(in crate::hud) struct Route {
     pub(in crate::hud) approach: bool,
 }
 
+/// A road of the city map: the centre line of a carriageway, as wide as the map makes it.
+pub struct MapRoad {
+    pub points: Vec<DVec3>,
+    pub width: f32,
+    /// A road cars drive far along (the map's own speed limits say so): drawn brighter.
+    pub main: bool,
+}
+
+/// A road of `road_geometry` as the lanes of its network it is made of: its points are made
+/// from them when needed, so that `RoadIndex` keeps no second copy of the whole map's.
+pub(in crate::hud) struct RoadPlan {
+    pub(in crate::hud) shape: RoadShape,
+    pub(in crate::hud) width: f32,
+    pub(in crate::hud) main: bool,
+}
+
+/// Which lanes a road follows.
+pub(in crate::hud) enum RoadShape {
+    /// One lane, as it is.
+    Lane(usize),
+    /// The carriageway of the lanes of one spline from `a` to `b`, `t` of the way across.
+    Between { a: usize, b: usize, t: f64 },
+    /// The short gap between a lane's end and the start of the next one.
+    Gap { from: usize, to: usize },
+}
+
+/// The roads of a network (`road_plans`) with a grid of the cells their points lie in, so
+/// that the roads around a place are found by looking at that place only, not at the whole
+/// map. The roads do not depend on where the bus is, so a network that does not change (the
+/// whole map's, read once) is indexed once instead of on every rebuild of the minimap.
+pub struct RoadIndex {
+    pub(in crate::hud) plans: Vec<RoadPlan>,
+    pub(in crate::hud) cells: HashMap<(i64, i64), Vec<usize>>,
+}
+
 /// Roads around a centre, built into vertex buffer 0.
+#[derive(Clone, Copy)]
 pub(in crate::hud) struct Roads {
     pub(in crate::hud) light: bool,
     pub(in crate::hud) anchor: DVec2,
@@ -314,6 +350,7 @@ pub struct Navigator {
     pub(in crate::hud) building: Option<
         std::sync::mpsc::Receiver<(
             Network,
+            RoadIndex,
             HashMap<i64, DVec3>,
             Streets,
             Option<crate::world::map_surface::MapSurface>,
@@ -322,6 +359,11 @@ pub struct Navigator {
     >,
     pub global_version: u64,
     pub(in crate::hud) roads: Option<Roads>,
+    /// `global`'s roads, indexed on the worker that reads the map (it never changes after).
+    pub(in crate::hud) road_index: Option<std::sync::Arc<RoadIndex>>,
+    /// The roads around the bus being built again on a worker: what they are for and their
+    /// vertices, taken over by the frame they arrive in (the old ones are drawn until then).
+    pub(in crate::hud) roads_job: Option<std::sync::mpsc::Receiver<(Roads, Vec<omsi_ui::Vertex>)>>,
     pub(in crate::hud) route: Route,
     /// The route mesh (buffer 1): the route and traffic versions and the anchor it was
     /// built for, and its size.
