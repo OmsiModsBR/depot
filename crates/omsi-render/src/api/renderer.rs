@@ -413,6 +413,14 @@ impl Renderer {
         self.texture_aspect = None;
     }
 
+    /// The rain reflection for a second renderer to lay on the puddles of the window's
+    /// picture: the texture `render_to_texture` drew the mirrored `camera` into this frame,
+    /// with the projection's `aspect` it was drawn with. `None`: no reflection this frame.
+    /// The window's frame plan carries it ([`crate::FramePlan::rain_reflection`]).
+    pub fn set_rain_reflection(&mut self, reflection: Option<(TextureId, Camera, f32)>) {
+        self.rain_reflection = reflection;
+    }
+
     /// Average GPU time per pass so far: (pass, milliseconds, frames measured).
     /// The mirrors' frames (drawn without the overlays) are timed on their own.
     pub fn gpu_pass_times(&self) -> Vec<(String, f64, u32)> {

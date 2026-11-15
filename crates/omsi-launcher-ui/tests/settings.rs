@@ -37,6 +37,8 @@ const BEFORE: &[&str] = &[
     "smoke_max",
     "smoke_in_mirrors",
     "dx9_snow",
+    "rain_reflections",
+    "humans_in_rain_reflections",
     "fewer_night_lights",
     "dx9_upscale",
     "dx9_glass_rain",

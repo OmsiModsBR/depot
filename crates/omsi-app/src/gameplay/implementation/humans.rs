@@ -2106,6 +2106,8 @@ impl Humans {
             let mats = self.gpu_materials[&key].clone();
             let id = renderer.add_mesh(scene, &hm.data);
             let inst = renderer.add_instance(scene, id, position, Mat4::IDENTITY, mats);
+            // (a person: left out of the puddles' reflection with that option off)
+            renderer.set_human(scene, inst, true);
             meshes.push((id, inst));
         }
         // walking pace 1.1 m/s +- 0.2, as OMSI draws it for everybody;

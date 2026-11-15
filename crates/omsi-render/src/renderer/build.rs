@@ -484,6 +484,7 @@ impl Renderer {
             enh_buf,
             sky,
             texture_aspect: None,
+            rain_reflection: None,
             last_frame: None,
             instant_exposure: false,
             // (OMSI_RENDER_CLOCK=<s>: the animations' clock starts that far on - offscreen

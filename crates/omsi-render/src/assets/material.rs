@@ -142,6 +142,11 @@ impl Material {
             || self.bump.map(|b| b.0) == Some(id)
     }
 
+    /// A terrain material (the uniform's `extra.x`): the ground of a tile.
+    pub fn is_terrain(&self) -> bool {
+        self.uniform.extra[0] > 0.5
+    }
+
     /// `[matl_transmap]` was given, its file there or not (the shader's
     /// `has_transmap_declared`).
     pub fn transmap_declared(&self) -> bool {

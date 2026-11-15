@@ -141,8 +141,8 @@ Regenerate with `cargo test -p omsi-launcher-core print_docs_table -- --ignored 
 | `graphics.loadAllTiles` | - | Graphics | on / off | `false` | `loadAllTiles` |
 | `graphics.stencilBuffer` | - | Graphics | on / off | `true` | `no_stencilbuffer` (inverted) |
 | `graphics.stencilShadows` | - | Graphics | on / off | `false` | - |
-| `graphics.rainReflections` | - | Graphics | on / off | `true` | `no_rain_refl` (inverted) |
-| `graphics.humansInRainReflections` | - | Graphics | on / off | `true` | `no_humans_on_rain_refl` (inverted) |
+| `graphics.rainReflections` | `rain_reflections` | Graphics | on / off | `true` | `no_rain_refl` (inverted) |
+| `graphics.humansInRainReflections` | `humans_in_rain_reflections` | Graphics | on / off | `true` | `no_humans_on_rain_refl` (inverted) |
 | `graphics.realTimeReflections` | `mirror_refresh` | Graphics | one of economy, full | `economy` | - |
 | `graphics.particles` | - | Graphics | enabled, per-emitter maximum, player vehicle only, in reflections | `true,50,false,true` | - |
 | `simulation.collision` | `collision_objects` | Simulation | on / off | `true` | `no_collision` (inverted) |

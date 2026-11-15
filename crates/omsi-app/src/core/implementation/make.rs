@@ -257,6 +257,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         mirror_budget: 1.0,
         mirrors_seen: 2,
         mirror_turn: 0,
+        rain_reflection: None,
         frozen_mirrors: None,
         mirror_hud: Default::default(),
         hover_key: None,

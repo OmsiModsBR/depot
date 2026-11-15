@@ -122,6 +122,7 @@ impl Renderer {
             any_distance: false,
             near_only: None,
             mirror_only: false,
+            human: false,
             omsi_caster: false,
             ordered: false,
             casts_shadow: true,
@@ -176,6 +177,7 @@ impl Renderer {
             any_distance: false,
             near_only: None,
             mirror_only: false,
+            human: false,
             omsi_caster: false,
             ordered: false,
             casts_shadow: false,
@@ -359,6 +361,13 @@ impl Renderer {
     pub fn set_mirror_only(&self, scene: &mut Scene, instance: usize, on: bool) {
         if let Some(i) = scene.instances.get_mut(instance) {
             i.mirror_only = on;
+        }
+    }
+
+    /// Mark an instance as a person (see [`Instance::human`]).
+    pub fn set_human(&self, scene: &mut Scene, instance: usize, on: bool) {
+        if let Some(i) = scene.instances.get_mut(instance) {
+            i.human = on;
         }
     }
 

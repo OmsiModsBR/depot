@@ -235,6 +235,13 @@ pub struct Lighting {
     pub lamp_cap: u32,
     /// Sun shadow map (off in mirrors and at night).
     pub shadows: bool,
+    /// The ground - the terrain, the roads and what lies on them - is left out of the
+    /// picture: the rain reflection's, seen from under the road by its mirrored camera,
+    /// would otherwise show the underside of the road it is to be laid on.
+    pub ground_hidden: bool,
+    /// The people are left out of the picture (the rain reflection's, with the option
+    /// "people in the rain reflections" off).
+    pub humans_hidden: bool,
     /// How wet the roads are (0..1): rain darkens them and makes them mirror the sky.
     pub wetness: f32,
     /// Snow cover on the ground and the roads (0..1).
@@ -395,6 +402,8 @@ impl Default for Lighting {
             sun_glow: false,
             lamp_cap: 0,
             shadows: true,
+            ground_hidden: false,
+            humans_hidden: false,
             snowfall: 0.0,
             wind: Vec3::ZERO,
             condensation: [0.0; 4],

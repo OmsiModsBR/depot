@@ -963,6 +963,11 @@ impl Renderer {
             if m.ranges.is_empty() || !inst.visible || (inst.mirror_only && main_view) {
                 return None;
             }
+            if (lighting.humans_hidden && inst.human)
+                || (lighting.ground_hidden && lies_on_ground(scene, inst))
+            {
+                return None;
+            }
             if let Some([x0, y0, x1, y1]) = inst.near_only {
                 let c = camera.position;
                 if c.x < x0 || c.x > x1 || c.y < y0 || c.y > y1 {
@@ -1170,4 +1175,17 @@ impl Renderer {
         clock.stage(self, "cull", "mirror.cull");
         visible
     }
+}
+
+/// The instance is the ground or lies on it: the terrain, a road or another surface, a
+/// painted ground layer, a decal or a shadow blob (what a rain reflection leaves out).
+fn lies_on_ground(scene: &Scene, inst: &Instance) -> bool {
+    inst.surface
+        || inst.ground_layer
+        || inst.decal
+        || inst.blob
+        || inst
+            .materials
+            .iter()
+            .any(|&m| scene.materials.get(m).is_some_and(|m| m.is_terrain()))
 }

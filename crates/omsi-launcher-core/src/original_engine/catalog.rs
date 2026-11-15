@@ -244,7 +244,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     e(
         "graphics.rainReflections",
-        None,
+        Some("rain_reflections"),
         Graphics,
         Bool,
         "true",
@@ -252,7 +252,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     e(
         "graphics.humansInRainReflections",
-        None,
+        Some("humans_in_rain_reflections"),
         Graphics,
         Bool,
         "true",

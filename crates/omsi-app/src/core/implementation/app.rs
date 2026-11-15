@@ -305,6 +305,8 @@ impl App {
         let renderer = self.renderer.take().expect("renderer");
         self.output.new_scene();
         let mut scene = renderer.new_scene();
+        // (the puddles' picture was the old scene's texture)
+        self.rain_reflection = None;
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
         if crate::weather::weather_cycle::is_cycle(self.args.weather.as_deref()) {

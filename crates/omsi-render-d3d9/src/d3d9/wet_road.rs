@@ -4,7 +4,8 @@
 //! (`shaders/wet_road.hlsl`). The scene's pixel shader keeps its instruction slots; a device
 //! that cannot make the pass (it is tried once) draws the world dry and says so in the log.
 //!
-//! Not part of it yet: what the puddles mirror besides the sky (houses, vehicles, people).
+//! With the rain reflections on, the puddles mirror the picture the game drew from the camera
+//! mirrored under the road ([`SceneFrame::rain_reflection`]); without it, the sky's colour.
 
 use windows::Win32::Graphics::Direct3D9::*;
 
@@ -92,6 +93,15 @@ impl D3d9Device {
             ],
             [light.weather[2], light.weather[3], 0.0, 0.0],
         ];
+        // (the street's picture, when the game drew one and the device still has it)
+        let reflection = frame
+            .rain_reflection
+            .and_then(|(t, view_proj)| Some((self.scene_texture(t)?, view_proj)));
+        let mut mirrored = [[0.0f32; 4]; 5];
+        if let Some((_, view_proj)) = reflection {
+            mirrored[..4].copy_from_slice(&view_proj);
+            mirrored[4][0] = 1.0;
+        }
         let (bias, slope) = surface_depth_bias(frame.surface_bias);
         let mut drawn = false;
         let mut current: (Option<bool>, Option<bool>) = (None, None);
@@ -129,6 +139,15 @@ impl D3d9Device {
                         .map_err(map_err)?;
                     d.SetPixelShaderConstantF(0, constants.as_ptr().cast(), constants.len() as u32)
                         .map_err(map_err)?;
+                    d.SetPixelShaderConstantF(4, mirrored.as_ptr().cast(), mirrored.len() as u32)
+                        .map_err(map_err)?;
+                    if let Some((texture, _)) = reflection {
+                        d.SetTexture(1, texture).map_err(map_err)?;
+                        for state in [D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV] {
+                            d.SetSamplerState(1, state, D3DTADDRESS_CLAMP.0 as u32)
+                                .map_err(map_err)?;
+                        }
+                    }
                     drawn = true;
                 }
                 if current.0 != Some(b.cull) {
@@ -190,6 +209,11 @@ impl D3d9Device {
                 .map_err(map_err)?;
             }
             if drawn {
+                // (the street's picture is drawn into again next frame: not left bound)
+                if reflection.is_some() {
+                    d.SetTexture(1, None::<&IDirect3DBaseTexture9>)
+                        .map_err(map_err)?;
+                }
                 d.SetPixelShader(&scene.ps).map_err(map_err)?;
                 d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
                     .map_err(map_err)?;

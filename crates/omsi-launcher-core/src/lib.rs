@@ -211,6 +211,9 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(x) = o.str("performance_realreflexions") {
         v["mirror_refresh"] = json!(mirror_refresh(x));
     }
+    // (flags without a value: their presence switches the reflections off)
+    v["rain_reflections"] = json!(!o.flag("no_rain_refl"));
+    v["humans_in_rain_reflections"] = json!(!o.flag("no_humans_on_rain_refl"));
     if let Some(x) = num("sound_vol_master") {
         v["volume"] = json!(x.clamp(0.0, 1.0));
     }
@@ -3239,6 +3242,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["sun_glow"] = json!(true);
     // DirectX9 (D3D9Ex) only: falling snow, on unless switched off
     v["dx9_snow"] = json!(true);
+    // DirectX9 (D3D9Ex) only: the puddles mirror the street, the people in it too
+    v["rain_reflections"] = json!(true);
+    v["humans_in_rain_reflections"] = json!(true);
     // DirectX9 (D3D9Ex) only: fewer map lamps a spot, off unless chosen
     v["fewer_night_lights"] = json!(false);
     // DirectX9 (D3D9Ex) only: how a render scale below 100 % is brought up
@@ -4075,6 +4081,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
             "dx9_snow" => v[&k] = json!(b(val)),
+            "rain_reflections" => v[&k] = json!(b(val)),
+            "humans_in_rain_reflections" => v[&k] = json!(b(val)),
             "fewer_night_lights" => v[&k] = json!(b(val)),
             // (bilinear or fsr1, as the game reads it)
             "dx9_upscale" => {
@@ -4739,6 +4747,11 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
     text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", true)));
+    text.push_str(&format!(
+        "rain_reflections={}\nhumans_in_rain_reflections={}\n",
+        b("rain_reflections", true),
+        b("humans_in_rain_reflections", true)
+    ));
     text.push_str(&format!(
         "fewer_night_lights={}\n",
         b("fewer_night_lights", false)

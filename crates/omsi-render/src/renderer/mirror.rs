@@ -192,6 +192,11 @@ pub struct FramePlan {
     /// How wet the outdoor surfaces are (0 dry .. 1 soaked): what a road with `[moisture]`
     /// darkens, shines and gathers puddles by.
     pub wetness: f32,
+    /// The rain reflection a second renderer lays on the puddles of the window's picture:
+    /// the texture the mirrored camera's picture was drawn into this frame and that camera's
+    /// view-projection (column-major, relative to `render_origin`). `None` in the pictures
+    /// drawn into textures and when no reflection was drawn.
+    pub rain_reflection: Option<(TextureId, [[f32; 4]; 4])>,
     /// Where the lamps' grid lies: x, y its south-west corner (render-origin relative), z a
     /// cell's side, w the cells per side (see [`crate::Scene::frame_lights`]).
     pub light_grid: [f32; 4],
@@ -259,6 +264,7 @@ pub(crate) fn plan_of(
         cam_up: cu.cam_up,
         world_origin: cu.world_origin,
         wetness: cu.shadow[3],
+        rain_reflection: None,
         light_grid: cu.light_grid,
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),
