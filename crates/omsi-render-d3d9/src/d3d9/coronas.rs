@@ -331,7 +331,8 @@ impl D3d9Device {
             ] {
                 d.SetRenderState(state, value).map_err(map_err)?;
             }
-            // (what stage 0 held is put back after the pass, whatever the scene set it to)
+            // (stage 0 is set back to the scene's filters after the pass: a pure device
+            // cannot be asked what it held)
             let sampler = [
                 (D3DSAMP_MINFILTER, D3DTEXF_LINEAR.0 as u32),
                 (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
@@ -340,10 +341,6 @@ impl D3d9Device {
                 (D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP.0 as u32),
                 (D3DSAMP_SRGBTEXTURE, 0),
             ];
-            let mut before = [0u32; 6];
-            for (kept, &(state, _)) in before.iter_mut().zip(&sampler) {
-                d.GetSamplerState(0, state, kept).map_err(map_err)?;
-            }
             for (state, value) in sampler {
                 d.SetSamplerState(0, state, value).map_err(map_err)?;
             }
@@ -372,9 +369,7 @@ impl D3d9Device {
                 d.DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, 4, 0, 2)
                     .map_err(map_err)?;
             }
-            for (&(state, _), &value) in sampler.iter().zip(&before) {
-                d.SetSamplerState(0, state, value).map_err(map_err)?;
-            }
+            self.scene_sampler(0)?;
             d.SetRenderState(D3DRS_SRGBWRITEENABLE, 0)
                 .map_err(map_err)?;
         }
