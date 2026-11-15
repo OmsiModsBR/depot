@@ -66,11 +66,11 @@ vehicle at rest.
 ## D-2. The people aboard move `[cog]`
 
 - **Inputs**: `[mass]`, `[cog]` (`cog_x`, `cog_y`), `[schwerpunkt]`, and for each section the people
-  in it: each one's `.hum` `[mass]` (`m_j`) and place in the section's frame (`x_j`, `y_j`: the
-  point of the passenger cabin they sit or stand on). **Outputs**: the body's centre of gravity, so
+  in it: each one's `.hum` `[mass]` (`m_j`) and the centre of their own body in the section's
+  frame (`x_j`, `y_j`; see "Each person's centre of mass" below). **Outputs**: the body's centre of gravity, so
   the load on every axle and every side follows it through `D-1` and the struts of `C-3`.
   **Module**: `physics/implementation/depot/load_share.rs` (`loaded_cog`), `physics/implementation/body.rs`
-  (`set_payload`), `people/aboard.rs` (`payload_by_section`).
+  (`set_payload`), `people/aboard.rs` (`payload_by_section`), `people/rig/com.rs` (`BodyCom`).
 - **Basis**: *physics*: the people's weight acts where they are. **Status**: the equations are
   checked by unit tests; no claim is made here about OMSI 2. Classic keeps today's rule: the people
   add their mass at `[cog]`, wherever they are.
@@ -83,11 +83,18 @@ cog_y' = (M · cog_y + Σ m_j · y_j) / (M + P)
 cog_z' = [schwerpunkt]
 ```
 
-The height stays `[schwerpunkt]` and the inertia the file's (`C-8`): the people's place points are at
-seat or floor level, not at their own centre of mass, so a height from them would lower the centre
-and make a full bus roll less than an empty one. The model origin stays where it is when the centre
+The height stays `[schwerpunkt]` and the inertia the file's (`C-8`). The model origin stays where it is when the centre
 moves, and so does the motion of every point of the body. Each section of an articulated bus takes
 the people in it, in its own frame. With nobody aboard the centre is `[cog]` exactly.
+
+**Each person's centre of mass.** Worked out once for each human type when it is loaded, from the
+joints of its rig in two still postures, with the segment shares of the anthropometric tables (D. A.
+Winter, *Biomechanics and Motor Control of Human Movement*, table 4.1: head 8.1 %, trunk 49.7 %, each
+thigh 10 %, shank 4.65 %, foot 1.45 %, upper arm 2.8 %, forearm 1.6 %, hand 0.6 %). Standing upright
+with the arms down, it lies over the feet at about 0.57 of the body's height (1.02 m for a 1.77 m
+man); seated upright with the thighs level and the hands on the lap, about 0.07 m ahead of the hips
+and 0.19 m over them. A person's centre is that point from their place in the cabin, turned the way
+they face. A rig made from broken `[links]` gives the centre of the body as broken as it is drawn.
 
 **What the player notices.** A crowd at the front presses the front axle more and the bus stands a
 little nose down; people bunched on one side lean it to that side; a full rear raises the nose and

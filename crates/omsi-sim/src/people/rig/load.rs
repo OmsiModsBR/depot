@@ -10,7 +10,8 @@ use omsi_model::Model;
 use std::path::{Path, PathBuf};
 
 use crate::people::rig::{
-    bone_id_by_name, slot_of, HumanMesh, Influence, Joints, Rig, FOOT, MAIN, SHIN, THIGH, TOE,
+    bone_id_by_name, slot_of, BodyCom, HumanMesh, Influence, Joints, Rig, FOOT, MAIN, SHIN, THIGH,
+    TOE,
 };
 
 pub struct HumanType {
@@ -22,6 +23,8 @@ pub struct HumanType {
     pub meshes: Vec<HumanMesh>,
     pub joints: Joints,
     pub rig: Rig,
+    /// Where the body's own centre of mass lies, standing and seated.
+    pub com: BodyCom,
     /// Clothing variants: the `[item]`s of the `.cti` files in the model's `[CTC]` folder
     /// (the stock people have two or three each), which replace the `[CTCTexture]`
     /// default. Variant 0 is the default texture, variant n the scheme n-1.
@@ -138,6 +141,7 @@ impl HumanType {
         Ok(HumanType {
             omsi: crate::people::omsi_anim::OmsiRig::new(&def),
             joints,
+            com: BodyCom::of(&rig, def.seat_height),
             rig,
             def,
             model,

@@ -5,8 +5,10 @@ use glam::{Vec2, Vec3};
 use omsi_content::Human;
 use omsi_geometry::MeshData;
 
+mod com;
 mod load;
 
+pub use com::BodyCom;
 pub use load::HumanType;
 
 /// Engine bone ids of `[setbone]`.
