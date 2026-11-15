@@ -5,7 +5,8 @@ use crate::physics::Payload;
 use glam::Vec3;
 
 /// What the people aboard a vehicle put on each of its sections, the front one first: their
-/// mass (kg) and its centre in the section's own frame (m from the section's model origin).
+/// mass (kg), its centre in the section's own frame (m from the section's model origin) and
+/// how it spreads about that centre.
 /// `sections` are, for each section behind the first one, the y of the joint in front of it
 /// and where its model origin lies (both in the frame of the vehicle unfolded straight, front
 /// first, whose origin is the front section's); `aboard` each person's place in that frame and
@@ -15,8 +16,8 @@ pub fn payload_by_section(
     sections: &[(f32, Vec3)],
     aboard: impl IntoIterator<Item = (Vec3, f32)>,
 ) -> Vec<Payload> {
-    // per section: the mass and its first moment about the section's origin
-    let mut sums = vec![(0.0f32, Vec3::ZERO); sections.len() + 1];
+    // per section: the mass and its first and second moments about the section's origin
+    let mut sums = vec![(0.0f32, Vec3::ZERO, Vec3::ZERO); sections.len() + 1];
     for (at, tonnes) in aboard {
         if !(at.is_finite() && tonnes.is_finite() && tonnes > 0.0) {
             continue;
@@ -28,12 +29,22 @@ pub fn payload_by_section(
         let origin = section.checked_sub(1).map_or(Vec3::ZERO, |s| sections[s].1);
         let kg = tonnes * 1000.0;
         sums[section].0 += kg;
-        sums[section].1 += (at - origin) * kg;
+        let r = at - origin;
+        sums[section].1 += r * kg;
+        sums[section].2 += r * r * kg;
     }
     sums.into_iter()
-        .map(|(kg, moment)| Payload {
-            kg,
-            centre: if kg > 0.0 { moment / kg } else { Vec3::ZERO },
+        .map(|(kg, first, second)| {
+            if kg <= 0.0 {
+                return Payload::default();
+            }
+            let centre = first / kg;
+            Payload {
+                kg,
+                centre,
+                // about the centre: Σ m r² - M c² (a rounding below nothing is nothing)
+                spread: (second - centre * centre * kg).max(Vec3::ZERO),
+            }
         })
         .collect()
 }

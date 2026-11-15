@@ -33,6 +33,18 @@ fn everybody_aboard_a_rigid_bus_weighs_on_it() {
         (75.0 + 1.4 * 80.0 + 45.0) / 200.0,
     );
     assert!((load[0].centre - want).length() < 1e-4, "{load:?} {want}");
+    // the spread about that centre: Σ m (r - centre)² along each axis
+    let spread = [
+        (Vec3::new(-0.8, 4.0, 1.0), 75.0),
+        (Vec3::new(0.8, -3.0, 1.4), 80.0),
+        (Vec3::new(0.0, 0.0, 1.0), 45.0),
+    ]
+    .iter()
+    .fold(Vec3::ZERO, |s, (r, m)| s + (*r - want) * (*r - want) * *m);
+    assert!(
+        (load[0].spread - spread).abs().max_element() < 1e-2,
+        "{load:?} {spread}"
+    );
 }
 
 /// An articulated bus: each person weighs on the section they are in, the one behind every

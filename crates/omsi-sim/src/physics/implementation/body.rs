@@ -82,6 +82,7 @@ impl RigidBody {
             empty_mass: mass,
             payload: 0.0,
             inertia: spec.inertia,
+            empty_inertia: spec.inertia,
             cog: spec.cog,
             empty_cog: spec.cog,
             position: DVec3::ZERO,
@@ -138,11 +139,11 @@ impl RigidBody {
 
     /// What the body carries (the people aboard): its mass weighs on the body as the body's own
     /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes to
-    /// speed it up, brake it and turn it -, only the inertia about the centre of gravity stays
-    /// the file's. The body's pitch and roll damping follows the heavier body on the same
-    /// springs (`body_freq`). Where the payload sits moves the centre of gravity by the
-    /// engine's rule (`loaded_cog`: Classic keeps `[cog]`, Depot moves it towards the people);
-    /// the model origin stays where it is and the body keeps its motion.
+    /// speed it up, brake it and turn it. The body's pitch and roll damping follows the heavier
+    /// body on the same springs (`body_freq`). Where the payload sits moves the centre of
+    /// gravity and adds to the inertia by the engine's rule (`loaded_body`: Classic keeps
+    /// `[cog]` and `[momentofintertia]`, Depot sums the people into the body); the model
+    /// origin stays where it is and the body keeps its motion.
     pub fn set_payload(&mut self, load: Payload) {
         let kg = if load.kg.is_finite() {
             load.kg.max(0.0)
@@ -157,12 +158,12 @@ impl RigidBody {
         } else {
             self.empty_body_freq
         };
-        let cog = match self.engine {
-            Engine::Classic => {
-                classic::load_share::loaded_cog(self.empty_cog, self.empty_mass, load)
-            }
-            Engine::Depot => depot::load_share::loaded_cog(self.empty_cog, self.empty_mass, load),
+        let empty = (self.empty_cog, self.empty_mass, self.empty_inertia);
+        let (cog, inertia) = match self.engine {
+            Engine::Classic => classic::load_share::loaded_body(empty, load),
+            Engine::Depot => depot::load_share::loaded_body(empty, load),
         };
+        self.inertia = inertia;
         self.move_cog(cog);
     }
 

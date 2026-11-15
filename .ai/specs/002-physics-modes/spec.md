@@ -284,9 +284,10 @@ directly.
   that only add behaviour OMSI 2 lacks (articulated bus work, standing passengers, skip stop) MUST
   stay on in both engines.
 - **FR-012a**: In Project Depot Physics the people aboard each section of the player's vehicle MUST
-  move that section's centre of gravity across and along the body to the mass-weighted mean of the
-  section's own `[cog]` and their places (`D-2`); its height stays `[schwerpunkt]` and its inertia
-  the file's. In OMSI Classic their mass MUST stay at `[cog]`, as before this requirement.
+  move that section's centre of gravity to the mass-weighted mean of the section's own (`[cog]`,
+  `[schwerpunkt]`) and each person's own centre of mass, and add to its inertia by the parallel-axis
+  rule (`D-2`). In OMSI Classic their mass MUST stay at `[cog]` and the inertia the file's, as before
+  this requirement.
 - **FR-013**: With OMSI Classic and no key, the player's vehicle MUST move exactly as it does before
   this feature.
 - **FR-014**: In Project Depot Physics, AI road vehicles MUST move exactly as AI road vehicles move
