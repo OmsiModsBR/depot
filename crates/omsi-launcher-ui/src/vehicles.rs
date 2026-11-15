@@ -56,6 +56,9 @@ pub struct VehiclesView {
     folded: std::collections::HashSet<String>,
     /// The host found no OMSI 2 folder (`set_no_folder`): the page says to choose one.
     no_folder: bool,
+    /// The host is reading the content lists itself (`set_host_reading`): the page waits for
+    /// its list instead of reading the whole folder a second time at once.
+    host_reading: bool,
     /// "Open Setup" was clicked (`take_open_setup`).
     open_setup: bool,
 }
@@ -139,6 +142,7 @@ impl Default for VehiclesView {
             prerender_asked: None,
             folded: Default::default(),
             no_folder: false,
+            host_reading: false,
             open_setup: false,
         }
     }
@@ -149,6 +153,13 @@ impl VehiclesView {
     /// for one instead of showing why its list could not be read.
     pub fn set_no_folder(&mut self, none: bool) {
         self.no_folder = none;
+    }
+
+    /// Whether the host is reading the content lists now (each frame). Until it is done the
+    /// page reads nothing of its own; it reads its list only if the host's came without any
+    /// buses (an empty or unreadable folder), as before.
+    pub fn set_host_reading(&mut self, reading: bool) {
+        self.host_reading = reading;
     }
 
     /// Whether "Open Setup" was clicked since the last call.
@@ -311,9 +322,9 @@ impl VehiclesView {
         self.prep_for = v.file.clone();
     }
 
-    /// Start reading the catalog if that has not begun.
+    /// Start reading the catalog if that has not begun (and the host is not reading it).
     pub fn load(&mut self) {
-        if !matches!(self.catalog, Catalog::NotStarted) {
+        if self.host_reading || !matches!(self.catalog, Catalog::NotStarted) {
             return;
         }
         let (tx, rx) = channel();
