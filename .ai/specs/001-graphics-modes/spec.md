@@ -253,6 +253,13 @@ floor lit through the windows are darker than in the open, and the frame time is
   difference is
   fixed in a change of its own and measured again; Vanilla does not change renderer, and the
   replaced implementation is not removed, until the measurement passes. No tolerance is granted.
+  **Amended 2026-11-15 (maintainer's decision)**: Direct3D 9Ex is exempt from this rule. After
+  the fixes of FR-007 and four speed fixes that changed nothing measurable, it stays about 30 %
+  slower than wgpu Vanilla on the maintainer's computer (median 7.0-7.5 ms against 5.4 ms a
+  frame, see research.md, T017). The gap is accepted as the cost of an API whose every draw call
+  is paid on the CPU, and Vanilla changes renderer with it. A measurement inside the frame that
+  tells the scene's preparation, the submission to Direct3D 9 and the waits apart (task T017a)
+  may be taken later; a cause found there is fixed in a change of its own.
 - **FR-009**: The mode MUST be resolved once at start-up into a single value that the game, the
   launcher and the in-game menu all read. No second copy of the rule that reads a saved mode may
   exist.
@@ -418,7 +425,7 @@ Rules of the structure:
   own before/after pictures).
 - **SC-006**: No mode is slower after the feature than before it, measured on the same machine and
   scene; Vanilla on its remaining renderer is not slower than the removed implementation, by the
-  rule of FR-008.
+  rule of FR-008 (with its 2026-11-15 exemption for Direct3D 9Ex).
 - **SC-007**: Opening the renderer in Vanilla+ takes less time than before, because nothing of
   Enhanced is prepared.
 - **SC-008**: A contributor can name, from the directory listing alone, where the code of each mode

@@ -65,7 +65,7 @@ Model 3.0 with 2048 textures
 
 **Performance Goals**: no regression in any mode (Principle VII, SC-006); opening the renderer gets
 faster in Vanilla+ (SC-007); Vanilla on Direct3D 9Ex not slower than wgpu Vanilla before the switch
-(FR-008: median frame time of three runs, measured after the A4 fixes, no tolerance)
+(FR-008: median frame time of three runs, measured after the A4 fixes, no tolerance); **amended 2026-11-15**: Direct3D 9Ex is exempt, about 30 % slower and accepted by the maintainer (T017; diagnostic T017a optional)
 
 **Constraints**: Vanilla+ never changes a pixel (FR-004); Enhanced changes only in phase A2
 (FR-005); a moving or reorganising step changes no pixel, no trace and no frame time beyond noise,
