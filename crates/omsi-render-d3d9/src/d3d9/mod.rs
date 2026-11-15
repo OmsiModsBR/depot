@@ -352,9 +352,17 @@ impl D3d9Device {
             } else {
                 D3DCREATE_SOFTWARE_VERTEXPROCESSING
             };
+            // PUREDEVICE (with hardware vertex processing only): the runtime keeps no copy of
+            // the device's state, which takes CPU time off every call; nothing here asks the
+            // device what state it holds.
+            let pure = if vertex_processing == D3DCREATE_HARDWARE_VERTEXPROCESSING {
+                D3DCREATE_PUREDEVICE
+            } else {
+                0
+            };
             // FPU_PRESERVE: without it Direct3D 9 switches the thread's x87 unit to single
             // precision, which would silently change floating-point results on that thread.
-            let flags = (vertex_processing | D3DCREATE_FPU_PRESERVE) as u32;
+            let flags = (vertex_processing | pure | D3DCREATE_FPU_PRESERVE) as u32;
             let focus = match target {
                 Target::Offscreen => GetDesktopWindow(),
                 Target::Window(hwnd) => hwnd,

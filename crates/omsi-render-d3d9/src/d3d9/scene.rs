@@ -1411,21 +1411,7 @@ impl D3d9Device {
             d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
             d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
             for stage in 0..SAMPLERS {
-                // (the picture maps - the diffuse, transparency, night and detail textures -
-                // take the anisotropic filtering option; the sphere, mask and bump maps do not)
-                let min = if self.anisotropy > 1 && stage < 4 {
-                    D3DTEXF_ANISOTROPIC
-                } else {
-                    D3DTEXF_LINEAR
-                };
-                for (state, value) in [
-                    (D3DSAMP_MINFILTER, min.0 as u32),
-                    (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
-                    (D3DSAMP_MAXANISOTROPY, self.anisotropy),
-                ] {
-                    d.SetSamplerState(stage, state, value).map_err(map_err)?;
-                }
+                self.scene_sampler(stage)?;
             }
             let vs_light = [
                 light.sun_dir,
@@ -1657,6 +1643,29 @@ impl D3d9Device {
                     .is_none_or(|c| c.translucent),
                 _ => false,
             })
+    }
+
+    /// Sets the filters the scene's batches sample stage `stage` with (their addressing is
+    /// the material's). The picture maps - the diffuse, transparency, night and detail
+    /// textures - take the anisotropic filtering option; the sphere, mask and bump maps do not.
+    /// The scene's maps are stored colour, read as they are (no sRGB conversion).
+    pub(super) fn scene_sampler(&self, stage: u32) -> Result<()> {
+        let min = if self.anisotropy > 1 && stage < 4 {
+            D3DTEXF_ANISOTROPIC
+        } else {
+            D3DTEXF_LINEAR
+        };
+        for (state, value) in [
+            (D3DSAMP_MINFILTER, min.0 as u32),
+            (D3DSAMP_MAGFILTER, D3DTEXF_LINEAR.0 as u32),
+            (D3DSAMP_MIPFILTER, D3DTEXF_LINEAR.0 as u32),
+            (D3DSAMP_MAXANISOTROPY, self.anisotropy),
+            (D3DSAMP_SRGBTEXTURE, 0),
+        ] {
+            // SAFETY: a plain call on a live device.
+            unsafe { self.device.SetSamplerState(stage, state, value) }.map_err(map_err)?;
+        }
+        Ok(())
     }
 
     /// The material's uniform, maps, addressing and the constants worked out from them.
