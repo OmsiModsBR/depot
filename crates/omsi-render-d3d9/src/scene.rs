@@ -692,17 +692,17 @@ impl SceneFrame<'_> {
         self.lamps.validate()
     }
 
-    /// Appends one instance record ([`INSTANCE_FLOATS`]) per list entry, in list order: a
-    /// batch's instances are then the records of its run.
-    pub fn instance_records(&self, out: &mut Vec<f32>) {
-        out.reserve(self.list.len() * INSTANCE_FLOATS);
-        for &e in self.list {
+    /// Writes one instance record ([`INSTANCE_FLOATS`]) per list entry into `out`, in list
+    /// order: a batch's instances are then the records of its run. `out` holds the records
+    /// of the whole list (the device writes them straight into its locked buffer).
+    pub fn write_instance_records(&self, out: &mut [f32]) {
+        for (&e, record) in self.list.iter().zip(out.chunks_exact_mut(INSTANCE_FLOATS)) {
             let e = e as usize;
-            for column in &self.models[e] {
-                out.extend_from_slice(column);
+            for (column, dst) in self.models[e].iter().zip(record.chunks_exact_mut(4)) {
+                dst.copy_from_slice(column);
             }
-            out.extend_from_slice(&self.params[e * 2]);
-            out.extend_from_slice(&self.params[e * 2 + 1]);
+            record[16..20].copy_from_slice(&self.params[e * 2]);
+            record[20..24].copy_from_slice(&self.params[e * 2 + 1]);
         }
     }
 }
@@ -939,9 +939,8 @@ mod tests {
             rain_reflection: None,
         };
         frame.validate().unwrap();
-        let mut out = Vec::new();
-        frame.instance_records(&mut out);
-        assert_eq!(out.len(), 2 * INSTANCE_FLOATS);
+        let mut out = vec![0.0; 2 * INSTANCE_FLOATS];
+        frame.write_instance_records(&mut out);
         assert_eq!(out[0], 2.0);
         assert_eq!(out[16], 20.0);
         assert_eq!(out[20], 21.0);
