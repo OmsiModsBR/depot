@@ -197,9 +197,20 @@ fn present_params(
         Target::Offscreen => (HWND::default(), 1, 1),
         Target::Window(hwnd) => (hwnd, width.max(1), height.max(1)),
     };
+    // A window's picture is flipped to the desktop (Direct3D 9Ex's flip model) rather than
+    // copied into it, which costs less at each Present while Windows composes the desktop.
+    // The flip model takes no multisampled back buffer: with multisampling the picture is
+    // copied as before.
+    let flip = matches!(target, Target::Window(_)) && samples <= 1;
     D3DPRESENT_PARAMETERS {
         Windowed: true.into(),
-        SwapEffect: D3DSWAPEFFECT_DISCARD,
+        SwapEffect: if flip {
+            D3DSWAPEFFECT_FLIPEX
+        } else {
+            D3DSWAPEFFECT_DISCARD
+        },
+        // (the flip model needs two back buffers at least)
+        BackBufferCount: if flip { 2 } else { 1 },
         BackBufferFormat: D3DFMT_UNKNOWN,
         BackBufferWidth: w,
         BackBufferHeight: h,
