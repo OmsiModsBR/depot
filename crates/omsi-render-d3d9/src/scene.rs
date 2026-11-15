@@ -387,6 +387,9 @@ pub struct SceneLight {
     /// The camera's right and up axes (xyz), which lay the sphere maps out.
     pub cam_right: [f32; 4],
     pub cam_up: [f32; 4],
+    /// x how wet the outdoor surfaces are (0 dry .. 1 soaked), zw the render origin's map
+    /// position modulo 1000 m, where the puddles' pattern is laid.
+    pub weather: [f32; 4],
 }
 
 /// The `[matl_envmap]` factor x 255 x its light (each channel at most 1), truncated, and the

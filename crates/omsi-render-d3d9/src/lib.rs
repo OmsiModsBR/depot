@@ -19,6 +19,7 @@ pub mod glass_rain;
 pub mod render_scale;
 pub mod scene;
 pub mod ui;
+pub mod wet_road;
 
 #[cfg(windows)]
 pub mod d3d9;

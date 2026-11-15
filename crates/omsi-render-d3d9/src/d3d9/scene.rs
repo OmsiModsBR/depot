@@ -140,6 +140,8 @@ pub(super) struct SceneStore {
     pub(super) pipeline: Option<ScenePipeline>,
     /// The raindrops-on-glass pass (see `glass_rain`).
     pub(super) glass: super::glass_rain::GlassStore,
+    /// The wet road pass (see `wet_road`).
+    pub(super) wet: super::wet_road::WetStore,
     /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
     pub(super) coronas: super::coronas::CoronaStore,
     /// The sky dome's pass.
@@ -964,6 +966,7 @@ impl D3d9Device {
         }
         self.ensure_coronas();
         self.ensure_glass_rain();
+        self.ensure_wet_road();
         self.ensure_sky();
         self.ensure_smoke();
         Ok(())
@@ -1534,6 +1537,10 @@ impl D3d9Device {
                         .map_err(map_err)?;
                     }
                 }
+            }
+            if self.draw_wet_road(frame, batches, material, coverage)? {
+                rebind()?;
+                current = (None, None, None, None);
             }
             if self.draw_glass_rain(frame, batches, material, coverage, late)? {
                 // SAFETY: plain calls on a live device; the pipeline belongs to it.

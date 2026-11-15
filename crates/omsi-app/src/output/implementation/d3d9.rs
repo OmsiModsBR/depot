@@ -209,6 +209,12 @@ impl Inner {
                 sky_color: plan.sky_color,
                 cam_right: plan.cam_right,
                 cam_up: plan.cam_up,
+                weather: [
+                    plan.wetness,
+                    0.0,
+                    plan.world_origin[0],
+                    plan.world_origin[1],
+                ],
             },
             list: &plan.list,
             models: scene.slot_models(),
