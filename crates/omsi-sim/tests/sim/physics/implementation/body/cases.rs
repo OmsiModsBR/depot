@@ -375,7 +375,6 @@ fn a_heavier_turning_bus_lets_go_sooner_in_a_quick_swing_under_depot_only() {
         least_swing_that_lets_go(Engine::Classic, v, heavy),
     );
     assert_eq!(classic.0, classic.1, "classic");
-    println!("depot {depot:?} classic {classic:?}");
 }
 
 /// `D-3`: a steady bend lets go at the same speed under both engines: with the weight shared
