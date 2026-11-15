@@ -851,6 +851,67 @@ pub(crate) fn recorded_entry_pos(
         .then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
 }
 
+/// The poles of a vehicle the registry does not name, found by its model: the part whose
+/// meshes the convention's pole variables animate carries them, and its poles stand where
+/// the model draws them (see `omsi_trolley::poles_in_model`); the parameter file gives the
+/// rest. None: no part has working poles.
+fn trolley_by_model(
+    world: &World,
+    convention: &omsi_trolley::Convention,
+    vt: &omsi_sim::VehicleType,
+    parts: &[Arc<omsi_sim::VehicleType>],
+) -> Option<Box<omsi_sim::Trolley>> {
+    let all = std::iter::once(vt).chain(parts.iter().map(|p| p.as_ref()));
+    let (carrier, part, poles) = all.enumerate().find_map(|(i, part)| {
+        let anims = part.model.meshes.iter().flat_map(|m| {
+            m.animations.iter().filter_map(|a| {
+                a.origins.iter().find_map(|o| match o {
+                    omsi_model::AnimOrigin::Trans(t) => {
+                        Some((a.variable.as_str(), [t[0] as f64, t[1] as f64, t[2] as f64]))
+                    }
+                    _ => None,
+                })
+            })
+        });
+        omsi_trolley::poles_in_model(anims).map(|p| (i, part, p))
+    })?;
+    let name = vt
+        .def
+        .path
+        .file_stem()
+        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    match omsi_trolley::declaration_from_model(
+        &format!("model:{name}"),
+        &vt.def.path.to_string_lossy(),
+        poles,
+        &convention.params,
+    ) {
+        Ok(declaration) => {
+            log::info!(
+                "trolleybus: {} found by the poles of its model {} (on {}): feet {:?}, shoes {:?}",
+                vt.def.path.display(),
+                part.def.path.display(),
+                if carrier == 0 {
+                    "the vehicle".to_string()
+                } else {
+                    format!("coupled part {carrier}")
+                },
+                declaration.poles.map(|p| p.base),
+                declaration.poles.map(|p| p.rest_shoe),
+            );
+            Some(Box::new(omsi_sim::Trolley::new(
+                declaration,
+                carrier,
+                world.wires.clone(),
+            )))
+        }
+        Err(e) => {
+            log::warn!("trolleybus: {e}; the vehicle runs without poles");
+            None
+        }
+    }
+}
+
 /// The poles of the player's vehicle when the trolleybus registry declares it (see
 /// `omsi_trolley::find_declaration`); a declaration that names it but cannot be used is
 /// reported, and the vehicle runs as an ordinary bus.
@@ -865,7 +926,12 @@ fn trolley_of(
         .map(|p| p.def.path.to_string_lossy().into_owned())
         .collect();
     let refs: Vec<&str> = files.iter().map(String::as_str).collect();
-    match omsi_trolley::find_declaration(convention, &vt.def.path.to_string_lossy(), &refs)? {
+    let Some(found) =
+        omsi_trolley::find_declaration(convention, &vt.def.path.to_string_lossy(), &refs)
+    else {
+        return trolley_by_model(world, convention, vt, parts);
+    };
+    match found {
         Ok((declaration, carrier)) => {
             log::info!(
                 "trolleybus: {} declared by [vehicle:{}], poles on {}",
