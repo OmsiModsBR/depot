@@ -157,8 +157,15 @@ impl Renderer {
         let lists = self.draw_lists(scene, &f, &mut clock);
         if (f.window_picture || f.exclude_texture.is_some()) && self.plan_sink.is_some() {
             let light_map = self.light_map_place(f.ro);
+            // (the window's picture lays the rain reflection drawn before it on its puddles)
+            let rain_reflection = self
+                .rain_reflection
+                .filter(|_| f.window_picture)
+                .map(|(t, cam, aspect)| (t, cam.view_proj(aspect, f.ro).to_cols_array_2d()));
             if let Some(sink) = self.plan_sink.as_mut() {
-                sink(&super::mirror::plan_of(&f, &lists, light_map), scene);
+                let mut plan = super::mirror::plan_of(&f, &lists, light_map);
+                plan.rain_reflection = rain_reflection;
+                sink(&plan, scene);
             }
         }
         let encoders = self.encode_frame(scene, &f, &mut clock, &lists);

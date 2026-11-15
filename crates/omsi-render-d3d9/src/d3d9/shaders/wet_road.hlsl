@@ -8,8 +8,14 @@
 // road, worked on the stored (gamma-encoded) colour: the pass blends ONE, INVSRCALPHA, so
 // the picture becomes the scene's colour times its darkening, mixed towards the sheen by
 // the weight. The fog takes the effect away with the distance, as it covers the road.
+//
+// With the rain reflections on, the pools mirror the street instead of the sky's colour: the
+// game draws the scene into a small texture from the camera mirrored under the road, and a
+// pool takes the colour of that picture where its own spot falls in it.
 
 sampler2D t_diffuse : register(s0);
+// the street seen from under the road (when c8.x is 1)
+sampler2D t_reflection : register(s1);
 
 // rgb the sheen's colour (as stored), w how wet the surfaces are (none under snow)
 float4 sheen : register(c0);
@@ -19,6 +25,10 @@ float4 eye : register(c1);
 float4 origin : register(c2);
 // x the alpha mode (0 opaque, 1 cut, 2 blended), y the alpha cut, z 1 on a terrain
 float4 batch : register(c3);
+// the mirrored camera's view-projection, by columns (from the render origin, as the scene's)
+float4 refl_cols[4] : register(c4);
+// x 1 when the reflection texture is there
+float4 refl_on : register(c8);
 
 struct PsIn {
     float3 world : TEXCOORD0;
@@ -65,6 +75,26 @@ float puddle_coverage(float2 xy, float3 n, float wet) {
     return smoothstep(threshold - 0.02, threshold + 0.02, pn) * smoothstep(0.75, 0.95, n.z);
 }
 
+// The colour the pools mirror at a spot: the street's picture where the spot falls in it,
+// the sheen's colour outside it.
+float3 mirrored(float3 world) {
+    float3 colour = sheen.rgb;
+    if (refl_on.x > 0.5) {
+        float4 clip = refl_cols[0] * world.x + refl_cols[1] * world.y
+            + refl_cols[2] * world.z + refl_cols[3];
+        if (clip.w > 0.001) {
+            float2 uv = float2(0.5 + 0.5 * clip.x / clip.w, 0.5 - 0.5 * clip.y / clip.w);
+            float2 edge = min(uv, 1.0 - uv);
+            if (min(edge.x, edge.y) > 0.0) {
+                float3 street = tex2Dlod(t_reflection, float4(uv, 0.0, 0.0)).rgb;
+                // (faded in from the picture's border, so its edge leaves no seam)
+                colour = lerp(sheen.rgb, street, saturate(min(edge.x, edge.y) * 20.0));
+            }
+        }
+    }
+    return colour;
+}
+
 float4 ps_main(PsIn i) : COLOR0 {
     // (sampled before any branch: a sample's gradients need every pixel of the quad)
     float alpha = tex2D(t_diffuse, i.uv).a;
@@ -89,11 +119,13 @@ float4 ps_main(PsIn i) : COLOR0 {
     float puddle = puddle_coverage(i.world.xy + origin.xy, n, wet);
     float water = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
     float weight = clamp(lerp(fresnel * wet * 0.85, water * wet, puddle), 0.0, 0.9);
+    // (the film mirrors the sky's colour; the pools the street)
+    float3 colour = lerp(sheen.rgb, mirrored(i.world), puddle);
     // the darkening is a quarter of the light at most, made in linear light: on the stored
     // colour that is about that factor to the power 1/2.2
     float dark = pow(lerp(1.0, 0.75, wet), 1.0 / 2.2);
     float keep = exp(-distance(i.world, eye.xyz) * eye.w) * coverage;
     float w = weight * keep;
     float d = 1.0 - (1.0 - dark) * keep;
-    return float4(sheen.rgb * w, 1.0 - (1.0 - w) * d);
+    return float4(colour * w, 1.0 - (1.0 - w) * d);
 }

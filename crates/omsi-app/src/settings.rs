@@ -246,6 +246,13 @@ pub struct Settings {
     /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
     /// flakes of its snowflake picture). On unless switched off.
     pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: the puddles of a wet road mirror the street (OMSI 2's "Rain
+    /// reflexions"; off writes its `[no_rain_refl]`). On unless switched off; off, they
+    /// mirror the sky alone.
+    pub rain_reflections: bool,
+    /// "DirectX9 (D3D9Ex)" only: the people show in those reflections (OMSI 2's "Humans
+    /// visible in rain reflexions", `[no_humans_on_rain_refl]`). On unless switched off.
+    pub humans_in_rain_reflections: bool,
     /// "DirectX9 (D3D9Ex)" only: each spot of the ground takes at most [`NIGHT_LIGHT_CAP`] map
     /// lamps into its light (a deliberate saving for weak graphics cards; off = all, as before).
     pub fewer_night_lights: bool,
@@ -566,6 +573,8 @@ impl Settings {
             windy_trees: true,
             sun_glow: true,
             dx9_snow: true,
+            rain_reflections: true,
+            humans_in_rain_reflections: true,
             fewer_night_lights: false,
             dx9_upscale: "bilinear".into(),
             dx9_glass_rain: true,
@@ -948,6 +957,8 @@ impl Settings {
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
                 "dx9_snow" => s.dx9_snow = b(v),
+                "rain_reflections" => s.rain_reflections = b(v),
+                "humans_in_rain_reflections" => s.humans_in_rain_reflections = b(v),
                 "fewer_night_lights" => s.fewer_night_lights = b(v),
                 "dx9_upscale" => {
                     s.dx9_upscale = match v.to_ascii_lowercase().as_str() {
@@ -1521,6 +1532,13 @@ impl Settings {
     /// under that API (the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
         self.dx9_snow && self.backend() == crate::output::Backend::D3d9
+    }
+
+    /// The rain reflection to draw: under "DirectX9 (D3D9Ex)" with the option on, whether
+    /// the people show in it (`None`: none is drawn; the other APIs draw their own puddles).
+    pub fn rain_reflection(&self) -> Option<bool> {
+        (self.rain_reflections && self.backend() == crate::output::Backend::D3d9)
+            .then_some(self.humans_in_rain_reflections)
     }
 
     /// The fraction of the window the "DirectX9 (D3D9Ex)" renderer draws the scene at (0 =

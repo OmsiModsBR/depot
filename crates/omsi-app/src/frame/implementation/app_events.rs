@@ -3630,6 +3630,17 @@ impl ApplicationHandler for App {
                                 );
                             }
                         }
+                        // the street the puddles mirror (DirectX9, with the option on)
+                        crate::output::implementation::camera::util::render_rain_reflection(
+                            r,
+                            scene,
+                            &mut self.rain_reflection,
+                            self.settings
+                                .rain_reflection()
+                                .filter(|_| self.output.backend() == Backend::D3d9),
+                            &lighting,
+                            Some((*cam, s.config.width as f32 / s.config.height.max(1) as f32)),
+                        );
                         *self.profile.entry("mirrors").or_default() += __t.elapsed().as_secs_f64();
                         let __t = Instant::now();
                         #[cfg(windows)]

@@ -1,8 +1,8 @@
 //! The wet road: what the device's pass of that name (`d3d9::wet_road`) draws, worked out
 //! without a device. Under rain a surface whose texture carries `[moisture]` or `[puddles]`
 //! darkens, mirrors the sky a little and gathers pools of standing water, as the default
-//! renderer's vanilla picture draws it; what the pools mirror besides the sky (houses,
-//! vehicles, people) is not part of it yet.
+//! renderer's vanilla picture draws it. With the rain reflections on, the pools mirror the
+//! street the game drew from under the road instead of the sky's colour.
 
 use crate::scene::{DrawKind, SceneLight, SceneMaterial};
 

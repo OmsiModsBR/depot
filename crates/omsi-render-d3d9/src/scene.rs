@@ -657,6 +657,10 @@ pub struct SceneFrame<'a> {
     pub sky: SceneSky,
     /// The smoke and particles drawn over the world's batches.
     pub smoke: SceneSmoke<'a>,
+    /// The street seen from under the road, for the puddles to mirror: the scene texture it
+    /// was drawn into and the camera's view-projection it was drawn with (as `view_proj`).
+    /// None when the puddles mirror the sky alone.
+    pub rain_reflection: Option<(usize, [[f32; 4]; 4])>,
 }
 
 impl SceneFrame<'_> {
@@ -932,6 +936,7 @@ mod tests {
             rain: Default::default(),
             sky: Default::default(),
             smoke: SceneSmoke::default(),
+            rain_reflection: None,
         };
         frame.validate().unwrap();
         let mut out = Vec::new();

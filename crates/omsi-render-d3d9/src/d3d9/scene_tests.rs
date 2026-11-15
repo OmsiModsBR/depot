@@ -119,6 +119,7 @@ fn draw(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -242,6 +243,7 @@ fn the_cab_is_fogged_like_the_world() {
         surface_bias: -24,
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
         coronas: Default::default(),
         sky: Default::default(),
         lamps: Default::default(),
@@ -319,6 +321,7 @@ fn depth_is_reversed_nearer_is_greater() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -441,6 +444,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -618,6 +622,7 @@ fn draw_lamps(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -788,6 +793,7 @@ fn texture_addressing_follows_the_material() {
             sky: Default::default(),
             rain: Default::default(),
             smoke: Default::default(),
+            rain_reflection: None,
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -1149,6 +1155,7 @@ fn quad_frame<'a>(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     }
 }
 
@@ -1299,6 +1306,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -1417,6 +1425,7 @@ fn draw_coronas(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1522,6 +1531,7 @@ fn a_corona_is_blended_on_the_pictures_own_values() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1640,6 +1650,7 @@ fn a_corona_run_outside_the_sprites_is_refused() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let r = dev.draw_scene(&frame, |_| None);
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
@@ -1713,6 +1724,7 @@ fn draw_sky_with(
         sky,
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |_| None).unwrap();
     dev.end_frame().unwrap()
@@ -2303,6 +2315,7 @@ fn draw_smoke(
         sky: Default::default(),
         rain: Default::default(),
         smoke: crate::scene::SceneSmoke { sprites },
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -2427,6 +2440,7 @@ fn draw_pane(
         sky: Default::default(),
         rain,
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(2.0);
     dev.draw_scene(&frame, |_| {

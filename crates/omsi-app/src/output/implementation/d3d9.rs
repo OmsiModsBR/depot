@@ -279,6 +279,7 @@ impl Inner {
                 stars: scene.sky_stars().map(|(t, _)| t),
                 star_frame: plan.stars,
             },
+            rain_reflection: plan.rain_reflection,
         };
         let material = |id: usize| {
             scene.materials.get(id).map(|m| SceneMaterial {

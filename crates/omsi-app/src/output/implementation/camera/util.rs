@@ -541,3 +541,31 @@ pub fn auto_outside_fov(aspect: f32) -> f32 {
     let tan_y = (BASE.to_radians() * 0.5).tan() * REFERENCE / aspect;
     (2.0 * tan_y.atan()).to_degrees().max(8.0)
 }
+
+/// Draws the street the puddles mirror (see `output::domain::rain_reflection`) into its
+/// picture, made at the first one, and hands it to the renderer for the window's picture;
+/// tells the renderer there is none when it is not wanted. `humans` is
+/// [`crate::settings::Settings::rain_reflection`], `view` the window's camera and aspect.
+pub(crate) fn render_rain_reflection(
+    renderer: &mut Renderer,
+    scene: &mut Scene,
+    texture: &mut Option<omsi_render::TextureId>,
+    humans: Option<bool>,
+    lighting: &omsi_render::Lighting,
+    view: Option<(Camera, f32)>,
+) {
+    use crate::output::domain::rain_reflection::{
+        rain_reflection_camera, rain_reflection_lighting, RAIN_REFLECTION_SIZE,
+    };
+    let wanted = view
+        .and_then(|(cam, aspect)| Some((rain_reflection_camera(humans, lighting, &cam)?, aspect)));
+    let (Some((mirrored, aspect)), Some(humans)) = (wanted, humans) else {
+        renderer.set_rain_reflection(None);
+        return;
+    };
+    let (w, h) = RAIN_REFLECTION_SIZE;
+    let id = *texture.get_or_insert_with(|| renderer.add_render_texture(scene, w, h));
+    let light = rain_reflection_lighting(lighting, humans);
+    renderer.render_to_texture(scene, id, &mirrored, &light, aspect);
+    renderer.set_rain_reflection(Some((id, mirrored, aspect)));
+}

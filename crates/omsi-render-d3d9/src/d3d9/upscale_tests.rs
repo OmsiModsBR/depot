@@ -94,6 +94,7 @@ fn draw(dev: &mut D3d9Device, w: u32, h: u32, clear: f32) -> Vec<u8> {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -267,6 +268,7 @@ fn the_interface_is_drawn_at_the_pictures_size_over_the_scaled_scene() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {

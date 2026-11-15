@@ -1139,6 +1139,22 @@ pub static OPTS: &[Opt] = &[
     toggle(
         GRAPHICS,
         "Effects",
+        "rain_reflections",
+        "Rain reflections",
+        "The puddles on a wet road mirror the street; off, they mirror the sky alone",
+    ),
+    // (DirectX9 only, with the rain reflections on, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "humans_in_rain_reflections",
+        "People in rain reflections",
+        "The people in the street show in the puddles' reflections",
+    ),
+    // (DirectX9 only, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
         "fewer_night_lights",
         "Fewer night lights",
         "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
@@ -2220,6 +2236,8 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
         "triple_fov_deg" => triple,
         // (the falling snow DirectX9 draws on request: the other APIs draw their own)
         "dx9_snow" => fixed,
+        "rain_reflections" => fixed,
+        "humans_in_rain_reflections" => fixed && st.on("rain_reflections"),
         "fewer_night_lights" => fixed,
         // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
         "dx9_upscale" => {

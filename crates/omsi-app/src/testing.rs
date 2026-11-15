@@ -273,6 +273,9 @@ pub mod output {
     pub mod mirror_hud {
         pub use crate::output::domain::mirror_hud::*;
     }
+    pub mod rain_reflection {
+        pub use crate::output::domain::rain_reflection::*;
+    }
     pub mod xr {
         pub mod navigator {
             pub use crate::output::domain::vr_navigator::*;
@@ -381,6 +384,10 @@ pub mod settings {
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
             text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
             text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
+            text.push_str(&format!(
+                "rain_reflections={}\nhumans_in_rain_reflections={}\n",
+                self.rain_reflections as u8, self.humans_in_rain_reflections as u8
+            ));
             text.push_str(&format!(
                 "fewer_night_lights={}\n",
                 self.fewer_night_lights as u8

@@ -84,6 +84,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `head_tracking_y_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `head_tracking_yaw_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
 | `head_tracking_z_sens` | yes | yes | yes | yes, known difference (game>launcher, launcher>game) |
+| `humans_in_rain_reflections` | yes | yes | yes | yes |
 | `info_bar` | yes | yes | yes | yes |
 | `info_bar_collapsed` | yes | yes | yes | yes |
 | `info_bar_fps` | yes | yes | yes | yes |
@@ -144,6 +145,7 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `post_aa` | - | - | - | yes |
 | `precision_zoom` | yes | yes | yes | yes |
 | `red_steer_spd` | yes | yes | yes | yes |
+| `rain_reflections` | yes | yes | yes | yes |
 | `reflections` | yes | yes | yes | yes |
 | `render_scale` | yes | yes | yes | yes, known difference (launcher>game) |
 | `right_stick_look` | yes | - | yes | yes |

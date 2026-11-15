@@ -95,6 +95,8 @@ pub(crate) struct App {
     pub(crate) mirror_budget: f32,
     pub(crate) mirrors_seen: usize,
     pub(crate) mirror_turn: usize,
+    /// The picture the puddles of a wet road mirror (DirectX9), made at its first frame.
+    pub(crate) rain_reflection: Option<omsi_render::TextureId>,
     /// With no real-time reflections: the bus whose mirrors are frozen (see
     /// `MIRROR_FREEZE_REDRAW`).
     pub(crate) frozen_mirrors: Option<FrozenMirrors>,
