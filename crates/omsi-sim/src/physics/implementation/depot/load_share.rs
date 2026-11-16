@@ -1,4 +1,5 @@
-//! `D-1`: the weight shared about `[cog]`, and `D-2`: the people aboard move it, as the model
+//! `D-1`: the weight shared about `[cog]`, and `D-2`: the people aboard move it and add to the
+//! inertia, as the model
 //! document `docs/physics/depot-model.md` has them. The struts turn the body about its centre
 //! of gravity, so a `[cog]` ahead of the middle - or a crowd at the front - presses the front
 //! springs more.
@@ -32,15 +33,33 @@ pub(in crate::physics) fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> 
     rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, cog_y)
 }
 
-/// `D-2`: the body's centre of gravity with what it carries (m, from the model origin): across
-/// and along the body, the mass-weighted mean of the empty body's `[cog]` and the payload's
-/// centre, so that the people aboard press the axles and the side they stand nearer; its
-/// height stays the empty body's `[schwerpunkt]`. Nothing aboard leaves `[cog]` as it is.
-pub(in crate::physics) fn loaded_cog(empty_cog: Vec3, empty_kg: f32, load: Payload) -> Vec3 {
+/// `D-2`: the body's centre of gravity and inertia with what it carries, from the empty
+/// body's (`[cog]` with `[schwerpunkt]`, mass in kg, `[momentofintertia]`): one rigid body
+/// of the two. The centre is the mass-weighted mean of the empty body's and the payload's, so
+/// that the people aboard press the axles and the side they stand nearer and raise or lower
+/// it; the inertia about it is the empty body's and the payload's own spread, each moved to
+/// the new centre (the parallel-axis rule, about the body's pitch, roll and yaw axes). Nothing
+/// aboard, or a payload with no place, leaves the empty body as it is.
+pub(in crate::physics) fn loaded_body(empty: (Vec3, f32, Vec3), load: Payload) -> (Vec3, Vec3) {
+    let (empty_cog, empty_kg, empty_inertia) = empty;
     let total = empty_kg + load.kg;
     if load.kg <= 0.0 || total <= 0.0 || !load.centre.is_finite() {
-        return empty_cog;
+        return (empty_cog, empty_inertia);
     }
-    let mean = (empty_cog * empty_kg + load.centre * load.kg) / total;
-    Vec3::new(mean.x, mean.y, empty_cog.z)
+    let cog = (empty_cog * empty_kg + load.centre * load.kg) / total;
+    let spread = if load.spread.is_finite() {
+        load.spread.max(Vec3::ZERO)
+    } else {
+        Vec3::ZERO
+    };
+    let inertia = empty_inertia
+        + about_axes((empty_cog - cog) * (empty_cog - cog) * empty_kg)
+        + about_axes((load.centre - cog) * (load.centre - cog) * load.kg + spread);
+    (cog, inertia)
+}
+
+/// What second moments along x, y and z (kg m²) give about the body's x (pitch), y (roll) and
+/// z (yaw) axes: about each axis, the two along the other axes.
+fn about_axes(m: Vec3) -> Vec3 {
+    Vec3::new(m.y + m.z, m.x + m.z, m.x + m.y)
 }

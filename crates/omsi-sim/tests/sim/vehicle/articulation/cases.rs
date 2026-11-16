@@ -48,6 +48,7 @@ fn kg(kg: f32) -> Payload {
     Payload {
         kg,
         centre: glam::Vec3::ZERO,
+        spread: glam::Vec3::ZERO,
     }
 }
 

@@ -39,6 +39,10 @@ pub struct Payload {
     pub kg: f32,
     /// Where the mass is centred (m, right, forward, up from the model origin).
     pub centre: Vec3,
+    /// How the mass spreads about `centre` along each axis: the sum of each part's mass times
+    /// its squared distance from `centre` along x, y and z (kg m²). With the mass and the
+    /// centre it gives the payload's share of the body's inertia.
+    pub spread: Vec3,
 }
 
 #[derive(Debug, Clone)]
@@ -51,8 +55,11 @@ pub struct RigidBody {
     /// people aboard the section), which weighs on it as its own does.
     pub(crate) empty_mass: f32,
     pub(crate) payload: f32,
-    /// Body-frame inertia (diagonal, kg m²).
+    /// Body-frame inertia (diagonal, kg m²) about the centre of gravity: the empty body's
+    /// (`empty_inertia`, the file's `[momentofintertia]`) with the payload's where the engine
+    /// says so (see [`RigidBody::set_payload`]).
     pub(crate) inertia: Vec3,
+    pub(crate) empty_inertia: Vec3,
     /// Centre of gravity relative to the model origin (m): the empty body's (`empty_cog`, the
     /// file's `[cog]` and `[schwerpunkt]`), moved by the payload where the engine says so (see
     /// [`RigidBody::set_payload`]).
@@ -131,6 +138,11 @@ impl RigidBody {
     /// The mass the body carries (kg, see [`RigidBody::set_payload`]).
     pub fn payload(&self) -> f32 {
         self.payload
+    }
+
+    /// The empty body's inertia (diagonal, kg m²): the file's.
+    pub fn empty_inertia(&self) -> Vec3 {
+        self.empty_inertia
     }
 
     /// The empty body's centre of gravity relative to the model origin (m): the file's.

@@ -29,8 +29,9 @@ pub(in crate::physics) fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> 
     rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, 0.0)
 }
 
-/// The body's centre of gravity with what it carries (m, from the model origin): the empty
-/// body's, wherever the payload sits - the payload adds only its mass.
-pub(in crate::physics) fn loaded_cog(empty_cog: Vec3, _empty_kg: f32, _load: Payload) -> Vec3 {
-    empty_cog
+/// The body's centre of gravity and inertia with what it carries, from the empty body's
+/// (`[cog]`, mass in kg, `[momentofintertia]`): the empty body's, wherever the payload sits -
+/// the payload adds only its mass.
+pub(in crate::physics) fn loaded_body(empty: (Vec3, f32, Vec3), _load: Payload) -> (Vec3, Vec3) {
+    (empty.0, empty.2)
 }

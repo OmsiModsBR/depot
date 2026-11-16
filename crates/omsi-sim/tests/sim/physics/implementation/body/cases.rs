@@ -24,6 +24,7 @@ fn kg(kg: f32) -> Payload {
     Payload {
         kg,
         centre: Vec3::ZERO,
+        spread: Vec3::ZERO,
     }
 }
 
@@ -113,7 +114,11 @@ fn a_loaded_bus_is_slower_to_speed_up_and_to_stop() {
 fn crowded(engine: Engine, kg: f32, centre: Vec3) -> RigidBody {
     let mut rb = RigidBody::for_engine(&bus(), &[], engine);
     rb.place(DVec3::ZERO, 0.0);
-    rb.set_payload(Payload { kg, centre });
+    rb.set_payload(Payload {
+        kg,
+        centre,
+        spread: Vec3::ZERO,
+    });
     run(&mut rb, 3.0, 0.0, 0.0, &flat);
     rb
 }
@@ -127,9 +132,9 @@ fn axle_compressions(rb: &RigidBody) -> (f32, f32) {
     )
 }
 
-/// `D-2`: under Depot the people move the centre of gravity across and along the body to the
-/// mass-weighted mean of the empty body's and theirs; its height stays `[schwerpunkt]`, the
-/// model origin stays where it stood, and nobody aboard gives the file's centre back exactly.
+/// `D-2`: under Depot the people move the centre of gravity to the mass-weighted mean of the
+/// empty body's (`[cog]`, `[schwerpunkt]`) and theirs, the model origin stays where it stood,
+/// and nobody aboard gives the file's centre back exactly.
 #[test]
 fn depot_moves_the_centre_of_gravity_towards_the_people() {
     let mut rb = RigidBody::for_engine(&bus(), &[], Engine::Depot);
@@ -138,8 +143,13 @@ fn depot_moves_the_centre_of_gravity_towards_the_people() {
     rb.set_payload(Payload {
         kg: 3_000.0,
         centre: Vec3::new(-0.6, 4.0, 1.8),
+        spread: Vec3::ZERO,
     });
-    let want = Vec3::new(-0.6 * 3_000.0 / 13_200.0, 4.0 * 3_000.0 / 13_200.0, empty.z);
+    let want = Vec3::new(
+        -0.6 * 3_000.0 / 13_200.0,
+        4.0 * 3_000.0 / 13_200.0,
+        (empty.z * 10_200.0 + 1.8 * 3_000.0) / 13_200.0,
+    );
     assert!((rb.cog() - want).length() < 1e-4, "{} {want}", rb.cog());
     assert_eq!(rb.empty_cog(), empty);
     assert!(
@@ -151,6 +161,7 @@ fn depot_moves_the_centre_of_gravity_towards_the_people() {
         rb.set_payload(Payload {
             kg: nothing,
             centre: Vec3::new(0.0, 4.0, 1.0),
+            spread: Vec3::ZERO,
         });
         assert_eq!(rb.cog(), empty, "{nothing}");
     }
@@ -158,6 +169,7 @@ fn depot_moves_the_centre_of_gravity_towards_the_people() {
     rb.set_payload(Payload {
         kg: 3_000.0,
         centre: Vec3::new(0.0, f32::NAN, 1.0),
+        spread: Vec3::ZERO,
     });
     assert_eq!((rb.cog(), rb.mass()), (empty, 13_200.0));
 }
@@ -180,6 +192,7 @@ fn moving_the_centre_of_gravity_keeps_the_body_moving_as_before() {
     rb.set_payload(Payload {
         kg: 4_000.0,
         centre: Vec3::new(0.5, -4.0, 1.0),
+        spread: Vec3::ZERO,
     });
     assert!(
         (at_origin(&rb) - before).length() < 1e-4,
@@ -221,4 +234,71 @@ fn people_on_one_side_lean_the_bus_under_depot_only() {
         "{}",
         lean(Engine::Classic)
     );
+}
+
+/// `D-2`: under Depot the people add to the inertia about the new centre of gravity: the
+/// empty body's and the people's own spread, each moved there (the parallel-axis rule); under
+/// Classic the inertia stays the file's. Nobody aboard gives the file's inertia back exactly.
+#[test]
+fn depot_adds_the_people_to_the_inertia_by_the_parallel_axis_rule() {
+    let (m0, kg) = (10_200.0f32, 3_000.0f32);
+    let (centre, spread) = (Vec3::new(0.4, -3.0, 1.5), Vec3::new(500.0, 9_000.0, 200.0));
+    let load = Payload { kg, centre, spread };
+    let mut rb = RigidBody::for_engine(&bus(), &[], Engine::Depot);
+    rb.place(DVec3::ZERO, 0.0);
+    let (i0, c0) = (rb.inertia(), rb.cog());
+    rb.set_payload(load);
+    let c = rb.cog();
+    let (d, e) = (c0 - c, centre - c);
+    let sq = |v: Vec3, k: f32| v * v * k;
+    let (body, people) = (sq(d, m0), sq(e, kg) + spread);
+    let want = i0
+        + Vec3::new(body.y + body.z, body.x + body.z, body.x + body.y)
+        + Vec3::new(
+            people.y + people.z,
+            people.x + people.z,
+            people.x + people.y,
+        );
+    assert!(
+        (rb.inertia() - want).abs().max_element() < 1.0,
+        "{} {want}",
+        rb.inertia()
+    );
+    // a long crowd turns the bus harder about its yaw and pitch than about its roll
+    let added = rb.inertia() - i0;
+    assert!(added.z > added.y && added.x > added.y, "{added}");
+    rb.set_payload(Payload::default());
+    assert_eq!((rb.inertia(), rb.cog()), (i0, c0));
+    assert_eq!(rb.empty_inertia(), i0);
+    let mut classic = RigidBody::for_engine(&bus(), &[], Engine::Classic);
+    classic.set_payload(load);
+    assert_eq!(classic.inertia(), i0);
+}
+
+/// `D-2`: under Depot the same crowd standing higher in the bus leans it further out of a
+/// bend: the centre of gravity is higher, so the bend's pull rolls the body harder.
+#[test]
+fn a_crowd_higher_up_leans_the_bus_further_in_a_bend_under_depot() {
+    let roll = |z: f32| {
+        let mut rb = RigidBody::for_engine(&bus(), &[], Engine::Depot);
+        rb.place(DVec3::ZERO, 0.0);
+        rb.set_payload(Payload {
+            kg: 5_000.0,
+            centre: Vec3::new(0.0, 0.0, z),
+            spread: Vec3::ZERO,
+        });
+        rb.set_velocity(Vec3::new(0.0, 8.0, 0.0));
+        for w in rb.wheels_mut() {
+            let spin = 8.0 / w.radius();
+            w.set_spin(spin);
+        }
+        let brakes = vec![0.0; rb.wheels().len()];
+        for _ in 0..240 {
+            let torque = (8.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance();
+            rb.step(1.0 / 60.0, torque * 0.47, &brakes, 0.3, &flat);
+        }
+        rb.heading_pitch_bank().2.abs()
+    };
+    let (low, high) = (roll(0.6), roll(2.0));
+    assert!(high > low * 1.1, "low {low} deg, high {high} deg");
 }

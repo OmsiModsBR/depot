@@ -14,7 +14,7 @@ Module paths are under `crates/omsi-sim/src/`.
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
-| [D-2](#d-2-the-people-aboard-move-cog) | the people aboard move `[cog]` | physics |
+| [D-2](#d-2-the-people-aboard-move-cog-and-add-to-the-inertia) | the people aboard move `[cog]` and add to the inertia | physics |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -63,29 +63,34 @@ changing the axles. Under Depot the axle loads follow it. A mod whose springs we
 origin rule stands differently here: this is the one visible difference between the engines on a
 vehicle at rest.
 
-## D-2. The people aboard move `[cog]`
+## D-2. The people aboard move `[cog]` and add to the inertia
 
-- **Inputs**: `[mass]`, `[cog]` (`cog_x`, `cog_y`), `[schwerpunkt]`, and for each section the people
-  in it: each one's `.hum` `[mass]` (`m_j`) and the centre of their own body in the section's
-  frame (`x_j`, `y_j`; see "Each person's centre of mass" below). **Outputs**: the body's centre of gravity, so
-  the load on every axle and every side follows it through `D-1` and the struts of `C-3`.
-  **Module**: `physics/implementation/depot/load_share.rs` (`loaded_cog`), `physics/implementation/body.rs`
-  (`set_payload`), `people/aboard.rs` (`payload_by_section`), `people/rig/com.rs` (`BodyCom`).
-- **Basis**: *physics*: the people's weight acts where they are. **Status**: the equations are
-  checked by unit tests; no claim is made here about OMSI 2. Classic keeps today's rule: the people
-  add their mass at `[cog]`, wherever they are.
+- **Inputs**: `[mass]`, `[cog]` (`cog_x`, `cog_y`), `[schwerpunkt]` (`cog_z`), `[momentofintertia]`
+  (`I_0`), and for each section the people in it: each one's `.hum` `[mass]` (`m_j`) and the centre
+  of their own body in the section's frame (`r_j`; see "Each person's centre of mass" below).
+  **Outputs**: the body's centre of gravity, so the load on every axle and every side follows it
+  through `D-1` and the struts of `C-3` and the bend's pull rolls it by its height (`C-7`), and the
+  body's inertia (`C-8`). **Module**: `physics/implementation/depot/load_share.rs` (`loaded_body`),
+  `physics/implementation/body.rs` (`set_payload`), `people/aboard.rs` (`payload_by_section`),
+  `people/rig/com.rs` (`BodyCom`).
+- **Basis**: *physics*: the people and the bus make one rigid body; their weight acts where they are.
+  **Status**: the equations are checked by unit tests; no claim is made here about OMSI 2. Classic
+  keeps today's rule: the people add their mass at `[cog]`, wherever they are, and the inertia stays
+  the file's.
 
-With `M` the body's own mass and `P = Σ m_j` the people's:
+With `M` the body's own mass, `c_0 = (cog_x, cog_y, cog_z)` and `P = Σ m_j` the people's mass:
 
 ```
-cog_x' = (M · cog_x + Σ m_j · x_j) / (M + P)
-cog_y' = (M · cog_y + Σ m_j · y_j) / (M + P)
-cog_z' = [schwerpunkt]
+c'  = (M · c_0 + Σ m_j · r_j) / (M + P)
+I'  = I_0 + A(M · (c_0 - c')²) + A(Σ m_j · (r_j - c')²)
+A(v) = (v_y + v_z,  v_x + v_z,  v_x + v_y)        about the pitch, roll and yaw axes
 ```
 
-The height stays `[schwerpunkt]` and the inertia the file's (`C-8`). The model origin stays where it is when the centre
-moves, and so does the motion of every point of the body. Each section of an articulated bus takes
-the people in it, in its own frame. With nobody aboard the centre is `[cog]` exactly.
+(`v²` taken along each axis.) The products of inertia are left out: the body's inertia is diagonal
+(`C-8`). The model origin stays where it is when the centre moves, and so does the motion of every
+point of the body; the new inertia applies from the next step. Each section of an articulated bus
+takes the people in it, in its own frame. With nobody aboard the centre is `[cog]` and the inertia
+`[momentofintertia]`, exactly.
 
 **Each person's centre of mass.** Worked out once for each human type when it is loaded, from the
 joints of its rig in two still postures, with the segment shares of the anthropometric tables (D. A.
@@ -98,7 +103,9 @@ they face. A rig made from broken `[links]` gives the centre of the body as brok
 
 **What the player notices.** A crowd at the front presses the front axle more and the bus stands a
 little nose down; people bunched on one side lean it to that side; a full rear raises the nose and
-moves grip to the driven rear axle. The AI's buses are not affected (`DA-*`).
+moves grip to the driven rear axle. A full bus leans and pitches a little more under the brakes and
+in bends (its centre of gravity higher) and, once its tyres slide, turns and stops turning more
+slowly (its inertia larger). The AI's buses are not affected (`DA-*`).
 
 ## The Depot AI
 
