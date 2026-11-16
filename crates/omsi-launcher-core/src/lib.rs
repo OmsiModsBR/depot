@@ -3255,8 +3255,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["windy_trees"] = json!(true);
     // the glow around the sun (DirectX9 (D3D9Ex) only)
     v["sun_glow"] = json!(true);
-    // DirectX9 (D3D9Ex) only: falling snow, on unless switched off
-    v["dx9_snow"] = json!(true);
     // DirectX9 (D3D9Ex) only: the puddles mirror the street, the people in it too
     v["rain_reflections"] = json!(true);
     v["humans_in_rain_reflections"] = json!(true);
@@ -4101,7 +4099,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
-            "dx9_snow" => v[&k] = json!(b(val)),
             "rain_reflections" => v[&k] = json!(b(val)),
             "humans_in_rain_reflections" => v[&k] = json!(b(val)),
             "fewer_night_lights" => v[&k] = json!(b(val)),
@@ -4778,7 +4775,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
-    text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", true)));
     text.push_str(&format!(
         "rain_reflections={}\nhumans_in_rain_reflections={}\n",
         b("rain_reflections", true),

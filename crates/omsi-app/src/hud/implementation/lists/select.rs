@@ -260,12 +260,13 @@ pub fn select_state(
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let mut options = select_options(key);
-    // (Vanilla's Direct3D 9Ex renderer may leave some choices out, see `api_limits`)
-    if omsi_launcher_lib::settings::vanilla_on_d3d9(file) {
-        if let Some(l) = crate::api_limits::d3d9(key) {
-            options.retain(|o| l.allows(o.0));
-        }
-    }
+    // (a graphics mode may leave some choices out, `omsi_cfg::graphics_options`)
+    let mode = omsi_cfg::GraphicsMode::parse(
+        file.get("graphics")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(""),
+    );
+    options.retain(|o| omsi_cfg::graphics_options::allows(key, mode, o.0));
     let mut cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     // anisotropy 0 is off, the same entry as 1
     if key == "anisotropy" && cur == "0" {

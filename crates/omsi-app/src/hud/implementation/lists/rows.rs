@@ -30,40 +30,34 @@ pub(crate) fn switch_row(app: &App, id: &str, name: &str, desc: &str) -> Option<
     ))
 }
 
-/// The row of an option, unless Vanilla's Direct3D 9Ex renderer limits it (`api_limits`): then a locked one is
-/// an info line with its fixed value and the reason, and a hidden one has no row.
+/// The row of an option as the running graphics mode offers it
+/// (`omsi_cfg::graphics_options`): a fixed one is an info line with its fixed value and the
+/// reason, and one the mode does not offer has no row.
 pub(in crate::hud) fn limit_or(
     app: &App,
     key: &str,
     name: &str,
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
-    limit_row(
-        app.output.backend() == crate::output::Backend::D3d9,
-        key,
-        name,
-        normal,
-    )
+    limit_row(app.settings.graphics, key, name, normal)
 }
 
-/// `limit_or` with the API given (so a test can ask without a running game).
+/// `limit_or` with the mode given (so a test can ask without a running game).
 pub fn limit_row(
-    d3d9: bool,
+    mode: omsi_cfg::GraphicsMode,
     key: &str,
     name: &str,
     normal: impl FnOnce() -> Option<(String, String)>,
 ) -> Option<(String, String)> {
-    if d3d9 {
-        if let Some(l) = crate::api_limits::d3d9(key).filter(|l| !l.is_row()) {
-            return l.shown().map(|v| {
-                (
-                    row(name, 'i', &omsi_ui::tr(v), &omsi_ui::tr(l.reason), None),
-                    "noop".to_string(),
-                )
-            });
-        }
+    use omsi_cfg::graphics_options::{applies, Applies};
+    match applies(key, mode) {
+        Applies::NotOffered { .. } => None,
+        Applies::Fixed { shown, reason, .. } => Some((
+            row(name, 'i', &omsi_ui::tr(shown), &omsi_ui::tr(reason), None),
+            "noop".to_string(),
+        )),
+        Applies::Offered | Applies::Choices { .. } => normal(),
     }
-    normal()
 }
 
 /// A slider row for the setting `id` ("verb" or "verb arg"); `fmt` writes its value.

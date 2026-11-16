@@ -1,30 +1,32 @@
 use openomsi_game::testing;
 
-/// "DirectX9 (D3D9Ex)": a hidden option has no row, a locked one an info line with its fixed
-/// value and the reason, an unlimited one its own row; other APIs leave every row alone.
+/// Each graphics mode: an option it does not offer has no row, a fixed one an info line with
+/// its fixed value and the reason, an offered one its own row (`omsi_cfg::graphics_options`).
 #[test]
-fn the_menu_rows_follow_the_directx9_limit_table() {
+fn the_menu_rows_follow_the_graphics_option_table() {
+    use omsi_cfg::graphics_options::{Applies, GRAPHICS_OPTIONS};
     let own = || Some(("own".to_string(), "id".to_string()));
-    for l in testing::api_limits::D3D9 {
-        let row = testing::hud::lists::limit_row(true, l.key, "Name", own);
-        match l.shown() {
-            None if l.is_row() => assert_eq!(row, own(), "{} is a row", l.key),
-            None => assert!(row.is_none(), "{} is hidden", l.key),
-            Some(v) => {
-                let (text, action) = row.unwrap();
-                assert_eq!(action, "noop");
-                assert!(text.contains("Name") && text.contains(v), "{text}");
+    for mode in omsi_cfg::GraphicsMode::ALL {
+        for o in GRAPHICS_OPTIONS {
+            let row = testing::hud::lists::limit_row(mode, o.key, "Name", own);
+            match o.applies(mode) {
+                Applies::Offered | Applies::Choices { .. } => {
+                    assert_eq!(row, own(), "{} in {mode:?}", o.key)
+                }
+                Applies::NotOffered { .. } => assert!(row.is_none(), "{} in {mode:?}", o.key),
+                Applies::Fixed { shown, .. } => {
+                    let (text, action) = row.unwrap();
+                    assert_eq!(action, "noop");
+                    assert!(text.contains("Name") && text.contains(shown), "{text}");
+                }
             }
         }
+        // (an option with no row in the table is the mode's in every mode)
         assert_eq!(
-            testing::hud::lists::limit_row(false, l.key, "Name", own),
+            testing::hud::lists::limit_row(mode, "volume", "Name", own),
             own()
         );
     }
-    assert_eq!(
-        testing::hud::lists::limit_row(true, "view_distance", "Name", own),
-        own()
-    );
 }
 
 /// A destination picked from the list keeps the route number the bus shows, its letter
