@@ -172,7 +172,10 @@ fn the_user_guide_prints_the_table() {
         "<!-- graphics-options:begin (printed by crates/omsi-cfg/tests/graphics_options.rs) -->\n";
     const END: &str = "<!-- graphics-options:end -->";
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/USER_GUIDE.md");
-    let guide = std::fs::read_to_string(&path).unwrap();
+    // (a Windows checkout may end its lines with CRLF)
+    let guide = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\r\n", "\n");
     let start = guide
         .find(BEGIN)
         .expect("the user guide has no graphics options table")
