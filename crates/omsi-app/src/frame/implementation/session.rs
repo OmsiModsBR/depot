@@ -11,6 +11,7 @@ use crate::gameplay::money::Money;
 use crate::gameplay::player::Player;
 use crate::gameplay::schedule::{PlayerDuty, Schedule};
 use crate::gameplay::traffic::Traffic;
+use crate::gameplay::traffic_link::own_outlines;
 use crate::settings::Settings;
 use crate::situation::{start_clock, ticket_key_name};
 use crate::world::scene::World;
@@ -129,6 +130,13 @@ pub(crate) fn new_humans(
 /// same signal stays at stop for a scripted player's train and only AI trains clear it.
 /// The difference is kept on purpose until it is changed deliberately (see the test
 /// `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`).
+/// The traffic's own outlines for a frame: the bus the player drives, and the vehicles
+/// placed in the world (`placed`, the window's; the offscreen run places none).
+pub(crate) fn traffic_others(t: &mut Traffic, player: Option<&Player>, placed: &[Player]) {
+    t.others = Vec::new();
+    t.others.extend(own_outlines(player, placed));
+}
+
 pub(crate) fn traffic_step(
     t: &mut Traffic,
     world: &World,
