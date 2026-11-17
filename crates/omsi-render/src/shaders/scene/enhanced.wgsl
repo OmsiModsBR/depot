@@ -707,18 +707,22 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         //
         // The paint itself is a clear coat: a lacquer of refractive index 1.5 (4 % at normal
         // incidence, Fresnel's 100 % at grazing) polished smooth, which mirrors the street
-        // as sharply as the windows do. How much of the sphere map OMSI lays over a
-        // material says how glossy it is: the stock bodies carry 1 or 10, the cabin's
-        // panels, frames and plastic trim 0.05 .. 0.2 - satin, a blurred sheen; the mask
-        // (the texture's alpha) says where. (Roughness
-        // 0.22 for every body, against the photo's contour lines on a car's bonnet, left
-        // the paint matte beside its sharp windows.)
+        // as sharply as the windows do. Any [matl_envmap] at all says the surface is
+        // polished: OMSI lays even a factor of 0.1 over it as a sharp picture, only a faint
+        // one. Many bus bodies carry 0.1 (the Caio Millennium V's paint); taken as a blur
+        // that only a factor of 0.5 sharpened, their paint (roughness 0.72) mirrored a flat
+        // sheen while only the strongly envmapped parts showed a reflection, and the bump
+        // map, which bends only the reflection, showed nowhere. So the coat is smooth from a
+        // factor of 0.1 up; below it (0.02 .. 0.05, the faintest trim) a satin sheen. The
+        // mask (the texture's alpha) says where. (Roughness 0.22 for every body, against
+        // the photo's contour lines on a car's bonnet, left the paint matte beside its
+        // sharp windows.)
         let masked = (u32(material.params2.w + 0.5) & 1u) != 0u;
         let metal_ok = (u32(material.params2.w + 0.5) & 4u) != 0u;
         metal = select(0.0, smoothstep(0.3, 0.85, refl), masked || metal_ok);
         // (where the mask says nothing reflects - a tyre or a seal on the body's texture -
         // it is no coat but the rough rubber or plastic of an unpolished surface)
-        let coat_rough = mix(0.8, 0.05, smoothstep(0.0, 0.5, refl));
+        let coat_rough = mix(0.8, 0.05, smoothstep(0.0, 0.1, refl));
         // Where the model says how much it mirrors - a [matl_envmap_mask], or the texture's
         // alpha under a [matl_transmap] (most mod bodies) - Omsi.exe lays the sphere map
         // over the paint by that share at every angle (shader.wgsl's environment stage):

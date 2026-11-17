@@ -1,6 +1,8 @@
 //! A `[matl_bumpmap]` on an envmapped material in the Enhanced picture moves the
 //! reflection; it does not turn the surface rough. (The specular antialiasing read the bump
 //! map's noise as curvature, and the envmap of a bump-mapped body all but vanished.)
+//! And a weak `[matl_envmap]` (a bus body's 0.1) is a smooth coat that mirrors faintly, not
+//! a rough one whose reflection is a flat sheen.
 
 use glam::{DVec3, Mat4, Vec2, Vec3};
 use omsi_geometry::MeshData;
@@ -11,9 +13,9 @@ use omsi_texture::Image;
 
 const SIZE: u32 = 32;
 
-/// The roughness the Enhanced pass gives an envmapped board (`OMSI_DEBUG_ENHANCED=17`
-/// shows it in the red channel), with a noisy bump map or without.
-fn roughness(renderer: &mut Renderer, bump: bool) -> f32 {
+/// The roughness the Enhanced pass gives a board with `[matl_envmap] … factor`
+/// (`OMSI_DEBUG_ENHANCED=17` shows it in the red channel), with a noisy bump map or without.
+fn roughness(renderer: &mut Renderer, factor: f32, bump: bool) -> f32 {
     let mut scene = renderer.new_scene();
     let grey = renderer.add_texture(&mut scene, &Image::solid([128, 128, 128, 255]), false);
     // a height map of noise, at a factor of 1 (the panel lines of some bodies' maps)
@@ -42,7 +44,7 @@ fn roughness(renderer: &mut Renderer, bump: bool) -> f32 {
         None,
         None,
         None,
-        Some((grey, 1.0)),
+        Some((grey, factor)),
         [0.0; 3],
         MaterialExtra {
             bump: bump.then_some((bump_map, 1.0)),
@@ -90,13 +92,11 @@ fn roughness(renderer: &mut Renderer, bump: bool) -> f32 {
     reds.iter().sum::<f32>() / reds.len() as f32
 }
 
-#[test]
-#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
-fn a_bump_map_keeps_an_envmapped_surface_smooth() {
+fn debug_renderer() -> Renderer {
     std::env::set_var("OMSI_DEBUG_ENHANCED", "17");
     let instance =
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-    let mut renderer = pollster::block_on(Renderer::new_with(
+    pollster::block_on(Renderer::new_with(
         &instance,
         None,
         Some(wgpu::TextureFormat::Rgba8UnormSrgb),
@@ -108,9 +108,15 @@ fn a_bump_map_keeps_an_envmapped_surface_smooth() {
             ..Default::default()
         },
     ))
-    .expect("test renderer");
-    let smooth = roughness(&mut renderer, false);
-    let bumped = roughness(&mut renderer, true);
+    .expect("test renderer")
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_bump_map_keeps_an_envmapped_surface_smooth() {
+    let mut renderer = debug_renderer();
+    let smooth = roughness(&mut renderer, 1.0, false);
+    let bumped = roughness(&mut renderer, 1.0, true);
     eprintln!("roughness on the screen: {smooth} without the bump map, {bumped} with it");
     assert!(
         smooth < 120.0,
@@ -119,5 +125,20 @@ fn a_bump_map_keeps_an_envmapped_surface_smooth() {
     assert!(
         (bumped - smooth).abs() < 12.0,
         "the bump map makes the surface rough: {smooth} without, {bumped} with"
+    );
+}
+
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_weak_envmap_keeps_the_paint_smooth() {
+    let mut renderer = debug_renderer();
+    // (a bus body's `[matl_envmap] envmap2.bmp 0.1`, with neither mask nor transmap)
+    let weak = roughness(&mut renderer, 0.1, false);
+    let bumped = roughness(&mut renderer, 0.1, true);
+    eprintln!("roughness on the screen at a factor of 0.1: {weak}, {bumped} with a bump map");
+    assert!(weak < 120.0, "a weak envmap makes the paint rough: {weak}");
+    assert!(
+        bumped < 120.0,
+        "a weak envmap with a bump map is rough: {bumped}"
     );
 }
