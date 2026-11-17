@@ -251,3 +251,75 @@ pub fn find_declaration(
         Ok((d, carrier))
     }))
 }
+
+/// The convention's pole variable `var` (lower case, the scripts' `_v` copy counts too):
+/// which pole (0 left, 1 right) and whether it turns the shoe rather than the pole.
+fn pole_variable(var: &str) -> Option<(usize, bool)> {
+    let v = var.trim().to_ascii_lowercase();
+    let v = v.strip_suffix("_v").unwrap_or(&v);
+    let rest = v.strip_prefix("shtanga_")?;
+    let (side, what) = rest.split_once('_')?;
+    let i = match side {
+        "lev" => 0,
+        "prav" => 1,
+        _ => return None,
+    };
+    match what {
+        "rot" => Some((i, false)),
+        "shoe_rot" => Some((i, true)),
+        _ => None,
+    }
+}
+
+/// Where a model's poles stand, from the animations the convention's pole variables drive:
+/// for each pole (left, right) its foot - the pivot its turn (`shtanga_lev_rot`) is drawn
+/// about - and its shoe at rest - the pivot of the shoe's turn (`shtanga_lev_shoe_rot`).
+/// `anims` gives each animation's variable and the place of its first origin (`origin_trans`,
+/// the model's frame). None: the model has no working poles, it is no trolleybus.
+pub fn poles_in_model<'a>(
+    anims: impl IntoIterator<Item = (&'a str, [f64; 3])>,
+) -> Option<[(DVec3, DVec3); 2]> {
+    let mut foot: [Option<DVec3>; 2] = [None, None];
+    let mut shoe: [Option<DVec3>; 2] = [None, None];
+    for (var, at) in anims {
+        let Some((i, is_shoe)) = pole_variable(var) else {
+            continue;
+        };
+        let slot = if is_shoe { &mut shoe[i] } else { &mut foot[i] };
+        slot.get_or_insert(DVec3::from(at));
+    }
+    Some([(foot[0]?, shoe[0]?), (foot[1]?, shoe[1]?)])
+}
+
+/// The declaration of a vehicle found a trolleybus by its model (`poles` from
+/// [`poles_in_model`]), with the parameter file's values for everything else: as an entry
+/// named `name` for `bus_file` would give it.
+pub fn declaration_from_model(
+    name: &str,
+    bus_file: &str,
+    poles: [(DVec3, DVec3); 2],
+    params: &ConventionParams,
+) -> Result<TrolleyDeclaration, ConventionError> {
+    let [(lf, ls), (rf, rs)] = poles;
+    let mut values = std::collections::BTreeMap::new();
+    let mut put = |k: &str, v: f64| {
+        values.insert(k.to_string(), v.to_string());
+    };
+    put("pole_base_left_x", lf.x);
+    put("pole_base_right_x", rf.x);
+    put("pole_base_forward", (lf.y + rf.y) / 2.0);
+    put("pole_base_height", (lf.z + rf.z) / 2.0);
+    put("contact_left_x", ls.x);
+    put("contact_right_x", rs.x);
+    put("contact_forward", (ls.y + rs.y) / 2.0);
+    put("contact_height", (ls.z + rs.z) / 2.0);
+    values.insert("bus_file".into(), bus_file.to_string());
+    declaration_from(
+        &RegistryEntry {
+            name: name.to_string(),
+            enabled: true,
+            values,
+        },
+        params,
+    )
+}
