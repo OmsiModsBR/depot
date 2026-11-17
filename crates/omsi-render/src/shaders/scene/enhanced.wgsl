@@ -1014,7 +1014,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // and off a blinding white; clamped to 0.35 .. 2 and laid on at two thirds, the
         // windows mirrored a flat grey where the vanilla ones mirror trees and sky)
         let ratio = clamp(photo / lum_avg, vec3<f32>(0.12), vec3<f32>(3.5));
-        let band = 1.0 - smoothstep(0.25, 0.7, abs(r.z));
+        // (at every height the reflection points to, as the vanilla picture lays its sphere
+        // map over the whole surface: kept to a band round the horizon, a tilted pane seen
+        // from above - a destination display's glass - showed the photo inside an ellipse,
+        // the cone where the reflection is near level, and plain probe sky round it)
         // Only a smooth surface mirrors the photo; a satin one a quarter of its contrast.
         // (A car's bonnet is a handful of triangles: the photo's mip level by its footprint
         // above keeps its trees from turning into contour lines across it close up.)
@@ -1027,7 +1030,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // trees stood as flat grey silhouettes on every pane in fog, in front of the real
         // (fogged) trees behind the glass - outlines of trees that are not there
         let clear_air = exp(-enh.fog.x * 150.0);
-        env = env * mix(vec3<f32>(1.0), ratio, band * mix(0.25, 1.0, sharpness) * outside_env * clear_air * enh.debug.z);
+        env = env * mix(vec3<f32>(1.0), ratio, mix(0.25, 1.0, sharpness) * outside_env * clear_air * enh.debug.z);
     }
     // what the SSAO darkens, it also keeps reflections out of
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
