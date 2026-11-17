@@ -77,7 +77,7 @@ use crate::frame::session;
 use crate::gameplay::humans;
 use crate::gameplay::player::Player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::lights;
@@ -766,10 +766,7 @@ impl ApplicationHandler for App {
                     t.night = daylight.brightness < 0.75 || gloomy;
                     t.daylight = Some(daylight);
                     let __t2 = Instant::now();
-                    let others = Vec::new();
-                    t.others = others;
-                    t.others
-                        .extend(own_outlines(self.player.as_ref(), &self.placed));
+                    session::traffic_others(t, self.player.as_ref(), &self.placed);
                     if !self.paused {
                         let rail = self
                             .player

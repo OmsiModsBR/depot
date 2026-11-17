@@ -13,7 +13,7 @@ use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
 use crate::gameplay::spawn::spawn_player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::input::actions::dump_display_textures;
@@ -507,9 +507,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                 }
             }
-            let others = Vec::new();
-            t.others = others;
-            t.others.extend(own_outlines(player.as_ref(), &[]));
+            session::traffic_others(t, player.as_ref(), &[]);
             session::traffic_step(t, &world, player.as_ref(), dt, None);
             if let Some(p) = player.as_mut() {
                 p.vehicle.dynamic_boxes = t.boxes(p.vehicle.position, 80.0);
