@@ -413,7 +413,28 @@ Every "to confirm" and every Vanilla cell is checked by the task that builds the
 the table in the code, not this page, is then the reference, and the user guide is generated from
 it.
 
-**Decision**: one table, `GRAPHICS_OPTIONS`, next to `GraphicsMode` in `omsi-cfg`
+**Audit (T027, 2026-11-15, read at `main` after #770)**, settled by reading the code:
+
+- `led_glow` and `led_mips` act in Enhanced only: `led_glow` reaches the glow of the Enhanced
+  post passes (`passes/post.rs`, inside `if enhanced`) and the `enh.led` uniform; `led_mips` is
+  read only by `fs_enhanced` (`scene/enhanced.wgsl`). Neither is offered in Vanilla+ any more.
+- `night_brightness` acts in Enhanced only (the meter of the Enhanced post passes); it was
+  offered in Vanilla+, where it did nothing.
+- The Vanilla effect switches act at once: `fewer_night_lights` (`lighting.lamp_cap`, every
+  frame), `rain_reflections` and `humans_in_rain_reflections` (read every frame),
+  `dx9_glass_rain`, `dx9_coronas`, `dx9_stars`, `dx9_cloud_picture` (handed to the device every
+  frame, `Window::set_vsync_and_quality`) and `dx9_upscale` (`set_render_scale`, every frame).
+  `dx9_texture_limit` is kept at the device's first value: next start.
+- `rain_reflections` and `humans_in_rain_reflections` were missing from the list above: Vanilla
+  only, at once.
+- `reflections`, `texture_compression` and `smoke_in_mirrors` act in Vanilla too: Direct3D 9Ex
+  draws the materials, textures and smoke the books renderer (on wgpu's noop device, opened with
+  the same `RenderOptions`) prepares.
+- `shadow_blobs` is fixed on in Vanilla and `dx9_snow` is removed (FR-019), both by the
+  maintainer's check of T001: Vanilla's snow follows the weather alone, as OMSI 2's does.
+- No other option acts in none of the three modes.
+
+
 ([data-model.md](data-model.md)); the launcher's `shown()` and the in-game list both ask it;
 `api_limits.rs` and the loose rules go. The in-game list is **generated** from the launcher's option
 list filtered by the table (mode, live), instead of being written by hand.

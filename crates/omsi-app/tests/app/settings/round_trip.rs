@@ -75,7 +75,6 @@ const VARIED: &[(&str, &str)] = &[
     ("clouds", "0"),
     ("windy_trees", "0"),
     ("sun_glow", "0"),
-    ("dx9_snow", "0"),
     ("rain_reflections", "0"),
     ("humans_in_rain_reflections", "0"),
     ("fewer_night_lights", "1"),

@@ -61,9 +61,6 @@ pub mod about {
 pub mod actions {
     pub use crate::input::actions::*;
 }
-pub mod api_limits {
-    pub use crate::api_limits::*;
-}
 pub mod app_events {
     pub use crate::frame::app_events::*;
 }
@@ -386,7 +383,6 @@ pub mod settings {
             text.push_str(&format!("voice_chat={}\n", self.voice_chat as u8));
             text.push_str(&format!("windy_trees={}\n", self.windy_trees as u8));
             text.push_str(&format!("sun_glow={}\n", self.sun_glow as u8));
-            text.push_str(&format!("dx9_snow={}\n", self.dx9_snow as u8));
             text.push_str(&format!(
                 "rain_reflections={}\nhumans_in_rain_reflections={}\n",
                 self.rain_reflections as u8, self.humans_in_rain_reflections as u8

@@ -105,16 +105,18 @@ GraphicsOption {
     effect:   Effect,                     # Live | NextStart
 }
 Applies = Offered
-        | Choices(&[&str])                # offered with fewer values (Vanilla's mirror sizes)
-        | Fixed { shown: &str, reason: &str }   # a fixed line: value and why
-        | NotOffered
+        | Choices { values: &[&str], reason: &str }    # offered with fewer values (Vanilla's mirror sizes)
+        | Fixed { value: &str, shown: &str, reason: &str }   # a fixed line: the file's value, as shown, and why
+        | NotOffered { draws: Option<&str>, reason: &str }   # not offered; `draws`: the value the mode
+                                                             # draws with (Vanilla's shadows: off)
 ```
 
 - `offered_in_launcher(key, mode)` = `per_mode[mode]` is not `NotOffered`.
 - `offered_in_game(key, mode)` = offered in the launcher **and** `effect == Live` (FR-020c); a
   `Fixed` row is shown in the game only if it is `Live` too.
 - `fit(key, mode, value)`: the value the game uses: the saved one where offered, the nearest allowed
-  one for `Choices`, the fixed one for `Fixed`; the saved value is never rewritten (FR-016).
+  one for `Choices`, the fixed one for `Fixed`, `draws` for a `NotOffered` that has one; the
+  saved value is never rewritten (FR-016).
 - `graphics` and `graphics_api` are rows like any other, with `effect = NextStart`.
 - A preset applies only the keys `Offered` or `Choices` in the current mode (FR-017); a mode in
   which a preset would change fewer than two keys does not offer presets.
