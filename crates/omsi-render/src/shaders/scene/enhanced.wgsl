@@ -629,11 +629,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         n = -n;
         geo_n = n;
     }
-    // [matl_bumpmap]: the height map's slope bends the normal the reflection is taken
-    // about, and only that one (tangent frame from the screen-space derivatives of position
-    // and texture coordinate), as the bump map moves only the envmap's lookup in the vanilla
-    // picture. Bending the shading normal as well lit the height map's noise as relief, and
-    // the specular antialiasing below read that noise as curvature: the roughness rose past
+    // [matl_bumpmap]: the height map's slope bends the normal (tangent frame from the
+    // screen-space derivatives of position and texture coordinate): the sun, the lamps and
+    // the sky light show its relief, and the reflection moves with it. It is bent only after
+    // the specular antialiasing below, which reads the surface's own curvature: read from
+    // the bent normal, the height map's noise counted as curvature, the roughness rose past
     // 0.6 and the envmap of a bump-mapped material all but vanished into a dull sheen.
     var bump_d = vec3<f32>(0.0);
     if (reflective_env && material.bump.y > 0.5) {
@@ -858,6 +858,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let spread = min((dot(dndx, dndx) + dot(dndy, dndy)) * 2.0, 0.4);
         rough = sqrt(min(rough * rough + spread, 1.0));
     }
+    n = safe_normal(n + bump_d);
     var sf: Surface;
     sf.albedo = albedo * (1.0 - metal);
     ambient_albedo = ambient_albedo * (1.0 - metal);
@@ -952,7 +953,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let e_amb = mix(sh_irradiance(n), cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo);
     var ambient = e_amb * ambient_albedo / PI * (vec3<f32>(1.0) - fr * (1.0 - rough));
     // --- reflections: the sky probe, as sharp as the surface is smooth
-    var r = reflect(-v, safe_normal(n + bump_d));
+    var r = reflect(-v, n);
     // a reflection pointing into the surface would show the probe's ground: bend it up
     let below = dot(r, geo_n);
     if (below < 0.0) {
