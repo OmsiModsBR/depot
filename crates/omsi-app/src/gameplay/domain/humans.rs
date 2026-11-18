@@ -428,6 +428,10 @@ pub struct Humans {
     pub ticket_blocks: Option<crate::gameplay::money::TicketBlocks>,
     /// A rider pressed the stop button for the next stop (the app fires the vehicle trigger `int_haltewunsch`).
     pub stop_request: bool,
+    /// Timetable buses a rider pressed the stop button in (the traffic fires their
+    /// `int_haltewunsch`): the stock door scripts open an AI bus's exits only for a stop
+    /// request, and without it the riders stood at the shut exits and held the bus.
+    pub(crate) ai_stop_requests: hashbrown::HashSet<u64>,
     /// Buses the player asked to empty (`force_disembark`).
     pub empty_bus: hashbrown::HashSet<BusId>,
     /// Tickets sold at the cash desk this session and what they were worth.
