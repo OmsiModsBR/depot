@@ -192,8 +192,9 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
                 .map(|a| format!(" joint{i} {:+.2}", a))
         })
         .collect::<String>();
+    let parts = coupled_parts(v);
     log::info!(
-        "physics t={t:5.2} pos ({:.2}, {:.2}, {:.3}) hdg {:.1}{slip}{joints} pitch {:+.2} bank {:+.2} v {:+.2} km/h wheels [{wheels}] crashes {} last {:.1} kJ gear {:?} n {:?} M_Wheel {:?} brake {:?} pedal {:?} abs {:?} rpm {:?}",
+        "physics t={t:5.2} pos ({:.2}, {:.2}, {:.3}) hdg {:.1}{slip}{joints}{parts} pitch {:+.2} bank {:+.2} v {:+.2} km/h wheels [{wheels}] crashes {} last {:.1} kJ gear {:?} n {:?} M_Wheel {:?} brake {:?} pedal {:?} abs {:?} rpm {:?}",
         v.position.x,
         v.position.y,
         v.position.z,
@@ -211,4 +212,48 @@ pub(crate) fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
         v.var("bremse_ABS_eingriff"),
         v.var("Wheel_RotationSpeed_1_L"),
     );
+}
+
+/// Each coupled part against the one in front of it, for `log_physics`: the joint's alpha and
+/// beta as the animations read them, the part's roll against the one in front (the joint lets
+/// none), how far apart the two hold the coupling (m), and the part's own pitch and bank.
+fn coupled_parts(v: &omsi_sim::VehicleInstance) -> String {
+    let mut lead = (v.body_rotation(), v.heading, v.position);
+    let mut out = String::new();
+    for (i, t) in v.trailers.iter().enumerate() {
+        let rot = t.body_rotation();
+        let (alpha, beta) = omsi_sim::vehicle::joint_angles(
+            lead.0,
+            lead.1,
+            rot,
+            t.heading,
+            t.ty.def.pitch_offset() > 0.0,
+        );
+        let (fwd, up) = (
+            rot.transform_vector3(glam::Vec3::Y),
+            rot.transform_vector3(glam::Vec3::Z),
+        );
+        let roll = up
+            .cross(lead.0.transform_vector3(glam::Vec3::Z))
+            .dot(fwd)
+            .clamp(-1.0, 1.0)
+            .asin()
+            .to_degrees();
+        let (_, front) = t.couplings();
+        let gap = (t.position + rot.transform_point3(front).as_dvec3()
+            - t.coupling_point(lead.2, lead.0))
+        .length();
+        let (pitch, bank) = t
+            .rigid()
+            .map(|rb| {
+                let (_, p, b) = rb.heading_pitch_bank();
+                (p, b)
+            })
+            .unwrap_or((f32::NAN, f32::NAN));
+        out += &format!(
+            " part{i} (alpha {alpha:+.2} beta {beta:+.2} roll {roll:+.2} gap {gap:.3} pitch {pitch:+.2} bank {bank:+.2})"
+        );
+        lead = (rot, t.heading, t.position);
+    }
+    out
 }
