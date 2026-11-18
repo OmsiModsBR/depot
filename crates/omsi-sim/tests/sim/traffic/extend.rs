@@ -102,3 +102,34 @@ fn added_lanes_only_change_reach_of_their_predecessors() {
     assert_eq!(grown.reach, whole.reach);
     assert_eq!(grown.reach[2], distant_reach);
 }
+
+/// Two short paths laid over each other (a road piece of a metre and an invisible street on
+/// the same spot) do not lead into each other: linked, each began within reach of the
+/// other's end, and the two made a ring a metre long that a car drove round for good.
+#[test]
+fn paths_laid_over_each_other_do_not_make_a_ring() {
+    let lanes = vec![
+        straight(0.0, 0.0, 20.0, 1, (0, 0)),
+        straight(0.0, 20.0, 21.0, 2, (0, 0)),
+        straight(0.0, 20.0, 21.0, 3, (0, 0)),
+        straight(0.0, 21.0, 40.0, 4, (0, 0)),
+    ];
+    let check = |net: &Network| {
+        assert!(net.lanes[0].next.contains(&1) && net.lanes[0].next.contains(&2));
+        assert_eq!(net.lanes[1].next, vec![3]);
+        assert_eq!(net.lanes[2].next, vec![3]);
+    };
+    let mut whole = Network {
+        lanes: lanes.clone(),
+        ..Default::default()
+    };
+    whole.link(1.5);
+    check(&whole);
+    let mut grown = Network {
+        lanes: lanes[..2].to_vec(),
+        ..Default::default()
+    };
+    grown.link(1.5);
+    grown.extend(lanes[2..].to_vec(), 1.5);
+    check(&grown);
+}
