@@ -13868,10 +13868,6 @@ pub(crate) static SPLINE_ENDS: std::sync::LazyLock<
 /// `omsi_trolley::load_convention`); a broken parameter file is reported and leaves the
 /// session without wire.
 fn load_trolley_convention() -> Option<Arc<omsi_trolley::Convention>> {
-    if !crate::settings::Settings::load().trolleybus {
-        log::info!("trolleybus: support switched off in the settings");
-        return None;
-    }
     match omsi_trolley::load_convention() {
         Ok(Some(c)) => {
             log::info!(

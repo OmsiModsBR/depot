@@ -10,7 +10,7 @@ registry, wire splines, switch objects and recordings the plugin used. None of t
 with Depot, because nothing from an OMSI 2 installation goes into the project. Installing them is
 up to the player, as for any map or bus.
 
-The setting **Simulation > Trolleybus** (on by default) turns all of it off.
+There is no setting to turn it off: a map without wire has no wire, and a bus without poles runs as an ordinary bus. A map can come in two versions, one `global.cfg` with the wire and one without.
 
 ## What goes where
 
@@ -30,8 +30,19 @@ read. You can leave them, since OMSI 2 still uses them, but Depot does not need 
 
 ## Making a bus a trolleybus
 
-A bus is a trolleybus when `TrolleyWireVehicles.ini` has an enabled `[vehicle:<name>]` section
-whose `bus_file` is that bus's `.bus` file. The name after `vehicle:` is free: the log uses it.
+A bus is a trolleybus when its model has working poles: meshes that the convention's pole
+variables animate (`shtanga_lev_rot`, `shtanga_prav_rot` and the shoes' `shtanga_lev_shoe_rot`,
+`shtanga_prav_shoe_rot`; the scripts' `_v` copies count too). Depot looks for them as the bus is
+placed, in every part of it; the part that has them carries the poles. Each pole stands where
+the model draws it: its foot at the pivot of its turn, its shoe at the pivot of the shoe's turn.
+The shoe hangs on the wire as its mesh is shaped: no part of it stands above the wire's top, and
+its groove is at least 2 mm below the wire. Nothing has to be declared, so a vehicle folder can be
+renamed or copied freely.
+
+An enabled `[vehicle:<name>]` section of `TrolleyWireVehicles.ini` whose `bus_file` is the bus's
+`.bus` file tunes it: its other keys apply, and it can declare a bus whose model has no such
+poles. Where the model draws the poles, its pole positions give way to the model's. The name
+after `vehicle:` is free: the log uses it.
 
 Coordinates use the bus's own frame, in metres:
 - `x` is to the right, so the left side is negative;
@@ -129,8 +140,8 @@ The log is `%USERPROFILE%\.depot\game.log`. Look for lines that start with `trol
 
 | What you see | What to check |
 |---|---|
-| The log does not mention trolleybuses at all | Both `Plugins\` files are in place, and **Simulation > Trolleybus** is on. |
+| The log does not mention trolleybuses at all | Both `Plugins\` files are in place. |
 | The bus has no poles to click | The entry's `bus_file` is the bus you are driving. The log names any key the entry lacks. |
 | A pole finds no wire | The log says where the nearest wire is. If it says there is none, the map's wire splines do not match `spline_keywords`. |
-| The shoe floats above the wire or sinks into it | Adjust `shoe_contact_height_offset` in the bus's entry. |
+| The shoe floats above the wire or sinks into it | The log line `trolleybus: lev shoe of ...` says how many of the shoe's points were found and where the wire lies; with none, the shoe's pivot stands for it. `shoe_contact_height_offset` in the bus's entry fine-tunes the height. |
 | Switches are silent | `Sounds\AckerTroll\` is in place, and the parameter file has a `[sound]` section. |

@@ -718,3 +718,28 @@ fn a_pole_in_the_hand_stays_above_its_hook_and_within_its_side_limit() {
         assert!(v.x.atan2(-v.y).to_degrees().abs() <= 87.0 + 1e-9);
     }
 }
+
+#[test]
+fn a_model_whose_poles_work_is_a_trolleybus_with_its_poles_where_it_draws_them() {
+    // (as the convention's models animate them: the pole about its foot, the shoe about its
+    // pivot at the pole's end; the scripts' `_v` copies drive the pole)
+    let anims = [
+        ("shtanga_lev_pitch_v", [-0.25, 2.24, 3.455]),
+        ("shtanga_lev_rot_v", [-0.25, 2.24, 3.455]),
+        ("SHTANGA_PRAV_ROT_V", [0.25, 2.24, 3.455]),
+        ("shtanga_lev_shoe_rot", [-0.255, -3.93, 5.41]),
+        ("shtanga_prav_shoe_rot", [0.255, -3.93, 5.41]),
+        ("door_0", [1.0, 1.0, 1.0]),
+    ];
+    let poles = omsi_trolley::poles_in_model(anims).expect("working poles");
+    let d =
+        omsi_trolley::declaration_from_model("model:t", "Vehicles/T/rigid.bus", poles, &params())
+            .unwrap();
+    assert_eq!(d.poles[0].base, DVec3::new(-0.25, 2.24, 3.455));
+    assert_eq!(d.poles[1].rest_shoe, DVec3::new(0.255, -3.93, 5.41));
+    // the same poles as the registry's entry for that model gives
+    assert_eq!(d.poles, decl().poles);
+    // a model with one pole only, or none, is no trolleybus
+    assert!(omsi_trolley::poles_in_model(anims[..4].iter().copied()).is_none());
+    assert!(omsi_trolley::poles_in_model([("door_0", [0.0; 3])]).is_none());
+}
