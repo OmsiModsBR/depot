@@ -118,7 +118,7 @@ impl App {
             && self.game_menu.is_none()
             && self.menu.is_none()
             && !self.vr_active()
-            && !self.settings.triple.enabled
+            && !self.settings.triple_screen()
     }
 
     /// Open the window (the Alt bar's "Add vehicle"), with the vehicles the place list has.

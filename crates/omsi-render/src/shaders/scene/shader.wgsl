@@ -168,52 +168,12 @@ override ALPHA_TO_COVERAGE: bool = false;
 @group(0) @binding(8) var t_ao: texture_2d<f32>;
 @group(0) @binding(9) var s_ao: sampler;
 
-// Enhanced+: the traced lighting at a pixel (rt.wgsl, full size; camera.clouds.w 2): x the
-// ambient occlusion, z the sun's visibility (< 0 where it was not traced), w 1 where the
-// texel lies at this surface's depth (the pixel's own or a neighbour's; 0: the surface is
-// not in the depth prepass - a pane, a blended layer - and the shadow map stands in).
-fn rt_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
-    if (camera.clouds.w < 1.5) {
-        return vec4<f32>(1.0, 0.0, -1.0, 0.0);
-    }
-    let size = vec2<i32>(textureDimensions(t_ao));
-    let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
-    let tol = 0.03 + 0.01 * z;
-    let px = vec2<i32>(frag);
-    var best = vec4<f32>(1.0, 0.0, -1.0, 0.0);
-    var best_d = tol;
-    for (var k = 0; k < 5; k = k + 1) {
-        var o = vec2<i32>(0, 0);
-        switch k {
-            case 1: { o = vec2<i32>(1, 0); }
-            case 2: { o = vec2<i32>(-1, 0); }
-            case 3: { o = vec2<i32>(0, 1); }
-            case 4: { o = vec2<i32>(0, -1); }
-            default: {}
-        }
-        let s = textureLoad(t_ao, clamp(px + o, vec2<i32>(0), size - vec2<i32>(1)), 0);
-        let d = abs(s.g - z);
-        if (s.g > 0.0 && d < best_d) {
-            best_d = d;
-            best = vec4<f32>(s.r, s.g, s.b, 1.0);
-        }
-        if (k == 0 && d < tol * 0.3) {
-            break;
-        }
-    }
-    return best;
-}
-
 // The ambient occlusion at a pixel of the full picture. It is worked out at half size, and
 // a plain bilinear lookup blended the occlusion of the ground behind an edge with that of
 // the object in front: every wheel, pole and kerb stood in a pale outline on the shaded
 // ground under the bus. Of the four half-size texels around the pixel only those at the
 // pixel's own depth count (a depth-aware upsample); none of them: the closest in depth.
 fn ao_at(frag: vec2<f32>, world: vec3<f32>) -> f32 {
-    if (camera.clouds.w > 1.5) {
-        let t = rt_at(frag, world);
-        return select(t.x, 1.0, t.w < 0.5);
-    }
     let size = vec2<i32>(textureDimensions(t_ao));
     let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
     let f = frag * 0.5 - vec2<f32>(0.5);
@@ -256,10 +216,6 @@ fn ao_at(frag: vec2<f32>, world: vec3<f32>) -> f32 {
 fn ao_on_decal(frag: vec2<f32>, world: vec3<f32>) -> f32 {
     let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
     let tol = 0.01 + 0.004 * z;
-    if (camera.clouds.w > 1.5) {
-        let t = rt_at(frag, world);
-        return select(1.0, t.x, t.w > 0.5 && abs(t.y - z) < tol);
-    }
     let size = vec2<i32>(textureDimensions(t_ao));
     let f = frag * 0.5 - vec2<f32>(0.5);
     let base = vec2<i32>(floor(f));
@@ -283,22 +239,6 @@ fn ao_on_decal(frag: vec2<f32>, world: vec3<f32>) -> f32 {
 @group(0) @binding(18) var t_lmap: texture_2d<f32>;
 @group(0) @binding(19) var<uniform> lmap: vec4<f32>;
 
-// The tile light map's light at a world point (black outside the loaded square).
-fn light_map_at(p: vec3<f32>) -> vec3<f32> {
-    if (lmap.w < 0.5) {
-        return vec3<f32>(0.0);
-    }
-    let uv = vec2<f32>((p.x - lmap.x) / lmap.z, 1.0 - (p.y - lmap.y) / lmap.z);
-    let c = textureSampleLevel(t_lmap, s_ao, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0).rgb;
-    let inside = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
-    return select(vec3<f32>(0.0), c, inside);
-}
-
-// A material lit at night by the tile light map (`[LightMapMapping]`, the splines): the
-// unlit flag carries 0.35.
-fn light_map_mapped(m: vec4<f32>) -> bool {
-    return m.y > 0.3 && m.y < 0.45;
-}
 // (the model matrices as their columns, four vec4 each: some phone GPUs (Mali, Adreno) read an
 // array of matrices from a storage buffer wrongly, and every mesh came out flat and far away)
 @group(0) @binding(1) var<storage, read> models: array<vec4<f32>>;
@@ -1086,8 +1026,8 @@ fn sun_shadow(world_in: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
 // looking into the neighbouring cells as well counted a light up to four times, and how
 // often depended on where the cell edges fell - lamp pools brightened and dimmed as the
 // camera moved.
-// `map_k`: how much of the map's lamps a surface takes (0 on a light-mapped road in the
-// classic picture, whose lamps are in its light map); a vehicle's own lights (dir.x 1, see
+// `map_k`: how much of the map's lamps a surface takes (0 on a [nomaplighting] one); a
+// vehicle's own lights (dir.x 1, see
 // lib.rs `gpu_light`) always shine - the headlights lit no road at all in vanilla.
 fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
     var sum = vec3<f32>(0.0);
@@ -1602,15 +1542,15 @@ fn rain_light(g: RainGlass, v: vec3<f32>, d_thru: vec3<f32>, refl: vec3<f32>, th
     return vec4<f32>(col, a);
 }
 
-// What a drop shows in the classic picture: the sky from the weather's colours, the
-// horizon in the fog's, the ground darker.
+// What a drop shows in the plain picture: the sky from the weather's colours, the horizon
+// in the fog's, the ground darker.
 fn rain_env_vanilla(d: vec3<f32>) -> vec3<f32> {
     let zenith = camera.sky_color.rgb + camera.ambient.rgb * 0.5;
     let horizon = max(camera.fog.rgb, camera.ambient.rgb);
     let ground = camera.ambient.rgb * 0.4 + camera.sun_color.rgb * camera.sun_dir.w * 0.06;
     let sky = mix(horizon, zenith, smoothstep(0.0, 0.5, d.z));
     let c = mix(ground, sky, smoothstep(-0.06, 0.04, d.z));
-    return select(c, srgb_decode(c), camera.sky_color.w > 0.5);
+    return c;
 }
 
 @fragment
@@ -1734,13 +1674,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         albedo = albedo * (1.0 + (nz - 0.5) * 0.42 * k);
     }
     // ([nomaplighting]: params.y 0.25 - not lit by the map's lamps)
-    // (a light-mapped road or plate takes the map's lamps only in Vanilla+: as OMSI 2 shows
-    // it, the vanilla picture lights it from the tile light map alone)
-    let lm_only = light_map_mapped(material.params) && camera.sky_color.w > 0.5;
-    // (and a [tree]'s leaf cards, params.y 0.15: OMSI 2 leaves a tree dark even right under
-    // a street lamp, where the lamp's 40 m core lit the crown up yellow-green)
-    let tree_unlamped = camera.sky_color.w > 0.5 && material.params.y > 0.1 && material.params.y < 0.2;
-    let map_lamps = select(1.0, 0.0, (material.params.y > 0.2 && material.params.y < 0.3) || lm_only || tree_unlamped);
+    let map_lamps = select(1.0, 0.0, material.params.y > 0.2 && material.params.y < 0.3);
     let lamp_light = point_lights(in.world, n, map_lamps);
     var light = diffuse + lamp_light;
     // D3D lights the material's diffuse colour with the sun, the light from above and the
@@ -1751,47 +1685,12 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     let mat_light = material.color.rgb * (light - ambient_light) + material.ambient.rgb * ambient_light;
     let light_mapped = material.params2.x > 0.5 && material.extra.x < 0.5;
     var lit = albedo * mat_light;
-    // The vanilla picture: Omsi.exe's texture stages multiply the gamma-encoded texture by
-    // the vertex light (clamped at 1); here the texture is sampled linear and the target
-    // encodes again, so multiplied here a light L showed as L^(1/2.2) - a night at 0.06
-    // looked like 0.28, a late dusk (#300). So the product is made on the encoded texture
-    // and decoded again, with the light map laid on encoded as well. (Through the sRGB curve
-    // itself: taken as a power of 2.2, t v^2.2, the curve's linear foot below 0.0031 put a
-    // night wall at a quarter of OMSI 2's - a texture of 0.66 under a light of 0.05 came out
-    // at 2 of 255 instead of 8.)
-    let classic = camera.sky_color.w > 0.5;
-    // (the terrain's night map is its tile light map: light, not a glow - see below)
+    // (the terrain's night map is its tile light map: Vanilla's, drawn by Direct3D 9Ex)
     let terrain_map = material.params.y < 0.5
         && material.extra.x > 0.5
         && material.extra.w > 0.5
         && material.extra.w < 1.5;
-    let terrain_night = classic && terrain_map;
-    if (classic && material.params.y < 0.5) {
-        var v = clamp(material.emissive.rgb + mat_light + material.color.rgb * interior_lamps(in.world, n, in.params2.z), vec3<f32>(0.0), vec3<f32>(1.0));
-        if (light_mapped) {
-            let lm = srgb_encode(textureSample(t_light, s_diffuse, buv).rgb) * clamp(in.params2.x, 0.0, 1.0);
-            v = v + lm * (vec3<f32>(1.0) - v);
-        }
-        if (terrain_night) {
-            // the terrain's tile light map lights the ground as the lamps' own light: added
-            // to the vertex light before the texture is multiplied in. Laid over the lit
-            // ground instead, as a night map glows, its faint fringe (0.01, linear) put
-            // one beige veil over cobbles and grass alike, a whole car park the colour of
-            // sand where OMSI 2 shows it dark grey.
-            let nm = srgb_encode(sample_nightmap(vec2<f32>(in.uv.x, 1.0 - in.uv.y)).rgb);
-            v = min(v + nm * camera.sun_color.w * clamp(in.params2.y, 0.0, 1.0), vec3<f32>(1.0));
-        }
-        if (lm_only) {
-            // a road, a plate or a [LightMapMapping] object: the same tile light map, the
-            // same way as the ground beside it (Omsi.exe lights both from it alone - its
-            // `[maplight]`s only bake the map, 0x7903e0). Added after the texture in linear
-            // light instead, the pools that lay bright on the verges hardly showed on the
-            // asphalt between them: the street lamps lit everything but the road (#847).
-            let lm = srgb_encode(light_map_at(in.world));
-            v = min(v + lm * camera.sun_color.w, vec3<f32>(1.0));
-        }
-        lit = srgb_decode(srgb_encode(albedo) * v);
-    } else if (light_mapped) {
+    if (light_mapped) {
         // [matl_lightmap], as Omsi.exe's texture stages have it (0x7fe4d3..0x7fe604): the
         // light map is laid onto the vertex light with D3DTOP_ADDSMOOTH (light + map x (1 -
         // light)) before the texture is multiplied in - a lit saloon glows at night and
@@ -1811,12 +1710,12 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
     if (material.params.y > 0.5) {
         lit = tex.rgb * material.color.rgb;
     }
-    if ((!light_mapped && !classic) || material.params.y > 0.5) {
+    if (!light_mapped || material.params.y > 0.5) {
         lit = lit + tex.rgb * material.emissive.rgb;
     }
     // [interiorlight]: the saloon lamps on the meshes and passengers they illuminate (in
     // a light-mapped material's vertex light already, above)
-    if (!light_mapped && !classic) {
+    if (!light_mapped) {
         lit = lit + tex.rgb * interior_lamps(in.world, n, in.params2.z);
     }
     // (Vanilla+: the map's lamps light the ground, as they light the roads)
@@ -1842,7 +1741,7 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         if (material.params.x < 1.5) {
             // rain: a painted body goes darker and glossier when it is wet, so the bus
             // stands out against a grey street instead of fading into it
-            let env_night = select(1.0 - 0.85 * clamp(camera.sun_color.w, 0.0, 1.0), 1.0, camera.sky_color.w > 0.5);
+            let env_night = 1.0 - 0.85 * clamp(camera.sun_color.w, 0.0, 1.0);
             let env_light = clamp(camera.sun_color.r * camera.sun_dir.w + camera.sky_color.r + camera.ambient.r, 0.05, 1.0) * env_night;
             let wet = camera.shadow.w * weather_outside_n(in.world, n, false, in.params2.w);
             lit = lit * (1.0 - 0.30 * wet);
@@ -1900,22 +1799,15 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         let water = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
         let weight = clamp(mix(fresnel * wet * 0.85, water * wet, puddle), 0.0, 0.9);
         let sheen = camera.sky_color.rgb * 0.5 + camera.sun_color.rgb * camera.sun_dir.w * 0.35;
-        if (classic) {
-            // Vanilla blends encoded weather colours, but asphalt darkening
-            // must stay in linear light to avoid turning the road black.
-            lit = srgb_decode(mix(srgb_encode(lit * mix(1.0, 0.75, wet)), sheen, weight));
-        } else {
-            lit = mix(lit * mix(1.0, 0.55, wet), sheen, weight);
-        }
+        lit = mix(lit * mix(1.0, 0.55, wet), sheen, weight);
         *puddle_weight = weight * puddle;
     }
     // snow: the ground, the roads and every upward-facing surface whiten under it
     // (not on a shadow blob: whitened, it lit the snow under the bus instead of shading it)
-    // (not in vanilla: OMSI 2 shows snow only through the season's WinterSnow textures)
     // (nor on a texture that is the season's snow picture: the map's own WinterSnow
     // textures show the snow as OMSI 2 does, and whitened over, the snowy grass and the
     // grey road went one flat white, the lane markings left standing in it, #879)
-    let snow = camera.ambient.w * outside * select(1.0, 0.0, in.params2.w > 1.5 || camera.sky_color.w > 0.5 || material.ambient.w > 0.5);
+    let snow = camera.ambient.w * outside * select(1.0, 0.0, in.params2.w > 1.5 || material.ambient.w > 0.5);
     if (snow > 0.0) {
         let up = clamp(n.z, 0.0, 1.0);
         let ground = select(0.0, 1.0, material.extra.x > 0.5 || material.params2.z > 0.0);
@@ -1928,29 +1820,12 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         let white = vec3<f32>(0.92, 0.94, 0.98) * light * ao;
         lit = mix(lit, white, cover * (0.55 + 0.35 * tex.a));
     }
-    let dist = distance(in.world, camera.cam_pos.xyz);
     let f = 1.0 - exp(-fog_distance(in.world) * camera.fog.w);
     *puddle_weight *= 1.0 - clamp(f, 0.0, 1.0);
-    var rgb = mix(lit, camera.fog.xyz, clamp(f, 0.0, 1.0));
-    if (classic) {
-        // D3D's fixed-function fog blends the encoded vertex fog colour too.
-        // Treating that colour as linear raised a mid-grey fog from 128 to 188.
-        rgb = srgb_decode(mix(srgb_encode(lit), camera.fog.xyz, clamp(f, 0.0, 1.0)));
-    }
-    if (camera.flags.z > 0.0) {
-        // Never taken: flags.z (the old enhanced look's aerial perspective) is always 0
-        // now - the enhanced path has its own fragment shader (enhanced.wgsl). The branch
-        // stays because Metal's fast-math contracts the fog mix above differently without
-        // it, and the vanilla picture is to stay what it was to the last code value.
-        let vdir = normalize(in.world - camera.cam_pos.xyz);
-        let towards_sun = clamp(dot(vdir, camera.sun_dir.xyz), 0.0, 1.0);
-        let k = (1.0 - exp(-dist * 0.00045)) * camera.flags.z * (0.55 + 0.45 * clamp(camera.sun_dir.w, 0.0, 1.0));
-        let scatter = mix(camera.sky_color.rgb * 1.4 + camera.ambient.rgb * 0.5, camera.sun_color.rgb * camera.sun_dir.w + camera.sky_color.rgb, towards_sun * towards_sun);
-        rgb = mix(rgb, scatter, clamp(k * 0.6, 0.0, 0.5));
-    }
+    let rgb_fog = mix(lit, camera.fog.xyz, clamp(f, 0.0, 1.0));
     // (a NaN anywhere above - a zero-length vector normalised, 0 x infinity - was a black
     // patch on Windows, e.g. an EN92's headlights while off, and invisible on the Mac)
-    rgb = finite_or(rgb, finite_or(albedo * material.color.rgb * diffuse, albedo));
+    let rgb = finite_or(rgb_fog, finite_or(albedo * material.color.rgb * diffuse, albedo));
     var a = tex.a * material.color.a;
     if (mode < 0.5) {
         a = 1.0;

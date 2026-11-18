@@ -77,7 +77,7 @@ use crate::frame::session;
 use crate::gameplay::humans;
 use crate::gameplay::player::Player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::lights;
@@ -766,10 +766,7 @@ impl ApplicationHandler for App {
                     t.night = daylight.brightness < 0.75 || gloomy;
                     t.daylight = Some(daylight);
                     let __t2 = Instant::now();
-                    let others = Vec::new();
-                    t.others = others;
-                    t.others
-                        .extend(own_outlines(self.player.as_ref(), &self.placed));
+                    session::traffic_others(t, self.player.as_ref(), &self.placed);
                     if !self.paused {
                         let rail = self
                             .player
@@ -941,6 +938,8 @@ impl ApplicationHandler for App {
                     dt,
                 });
                 crate::input::game_controller_menu::frame(self);
+                // the cursor stays inside the window while the mouse steers
+                self.sync_cursor_confine();
                 // OMSI's mouse control: the cursor's place across steers, above the middle
                 // of the window is the throttle, below it the brake.
                 // Steering as OMSI has it: the whole width of the
@@ -2648,7 +2647,7 @@ impl ApplicationHandler for App {
                                 &|x, y| puddles::water_at(x, y, w.wet_road_at(x, y, wetness)),
                             );
                             if lights::smoke_active() {
-                                self.spray.sprites(cam.position, &mut scene.smoke);
+                                self.spray.sprites(cam.position, self.graphics, &mut scene.smoke);
                             }
                             *self.profile.entry("lights.spray").or_default() +=
                                 __ts.elapsed().as_secs_f64();
@@ -3273,6 +3272,7 @@ impl ApplicationHandler for App {
                             self.cloud_drift,
                             self.wetness,
                             self.settings.shadows,
+                            self.graphics,
                         )
                     }
                     None => lights::lighting_from(&daylight, 50000.0),
@@ -3566,7 +3566,7 @@ impl ApplicationHandler for App {
                             // (black). Refresh all bus mirrors in VR, still taking turns
                             // within the configured budget; keep desktop visibility culling.
                             let mirror_view = if vr_active
-                                || self.settings.triple.enabled
+                                || self.settings.triple_screen()
                                 || (self.mirror_hud.active() && self.in_cab)
                             {
                                 None
@@ -3645,6 +3645,17 @@ impl ApplicationHandler for App {
                                 );
                             }
                         }
+                        // the street the puddles mirror (DirectX9, with the option on)
+                        crate::output::implementation::camera::util::render_rain_reflection(
+                            r,
+                            scene,
+                            &mut self.rain_reflection,
+                            self.settings
+                                .rain_reflection()
+                                .filter(|_| self.output.backend() == Backend::D3d9),
+                            &lighting,
+                            Some((*cam, s.config.width as f32 / s.config.height.max(1) as f32)),
+                        );
                         *self.profile.entry("mirrors").or_default() += __t.elapsed().as_secs_f64();
                         let __t = Instant::now();
                         #[cfg(windows)]
@@ -3729,10 +3740,7 @@ impl ApplicationHandler for App {
                                 crate::hud::shift_overlays(scene, start, hud[0]);
                             }
                         }
-                        if !mirrored
-                            && self.settings.triple.enabled
-                            && !self.settings.vr_requested()
-                        {
+                        if !mirrored && self.settings.triple_screen() {
                             let rig = self.settings.triple.zoomed(
                                 s.config.width,
                                 s.config.height,

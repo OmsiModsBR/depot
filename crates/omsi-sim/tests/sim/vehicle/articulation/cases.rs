@@ -3,6 +3,7 @@ use glam::DVec3;
 use omsi_sim::host::VehicleHost;
 use omsi_sim::physics::Controls;
 use omsi_sim::physics::GroundProbe;
+use omsi_sim::physics::Payload;
 use omsi_sim::testing::physics::RigidBodyInternals;
 use omsi_sim::testing::vehicle::vehicle_type::VehicleType;
 use omsi_sim::testing::vehicle::{TrailerPartInternals, VehicleInstance, VehicleInstanceInternals};
@@ -40,6 +41,15 @@ fn sections() -> (Arc<VehicleType>, Arc<VehicleType>) {
         section(&[(3.2, false), (-2.6, false)], 8.0),
         section(&[(-0.4, true)], 7.2),
     )
+}
+
+/// `kg` carried at the section's model origin.
+fn kg(kg: f32) -> Payload {
+    Payload {
+        kg,
+        centre: glam::Vec3::ZERO,
+        spread: glam::Vec3::ZERO,
+    }
 }
 
 fn flat() -> Arc<dyn omsi_sim::physics::Ground> {
@@ -371,14 +381,14 @@ fn each_section_carries_the_people_in_it() {
         )
     };
     assert_eq!(masses(&v), (8_000.0, 7_200.0));
-    v.set_payload(&[1_500.0, 750.0]);
+    v.set_payload(&[kg(1_500.0), kg(750.0)]);
     assert_eq!(masses(&v), (9_500.0, 7_950.0));
     assert_eq!(v.mass_kg(), 9_500.0);
     // stepping keeps it
     frames(&mut v, 1.0, &|_| 0.0);
     assert_eq!(masses(&v), (9_500.0, 7_950.0));
     // everybody off: a section left out carries nothing
-    v.set_payload(&[300.0]);
+    v.set_payload(&[kg(300.0)]);
     assert_eq!(masses(&v), (8_300.0, 7_200.0));
     v.set_payload(&[]);
     assert_eq!(masses(&v), (8_000.0, 7_200.0));

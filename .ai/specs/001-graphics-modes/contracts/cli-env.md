@@ -8,7 +8,7 @@ Documented today in `docs/USER_GUIDE.md` and `docs/ENVIRONMENT.md` (made from
 | Argument | After |
 |---|---|
 | `--enhanced` | stays (Enhanced for this run) |
-| `--enhanced-plus` | **removed**: `clap` rejects it; the USER_GUIDE loses its line |
+| `--enhanced-plus` | **removed** from the help and the USER_GUIDE; still accepted and ignored with a log line (spec, Edge Cases: never an error) |
 
 ## Variables
 
@@ -24,15 +24,10 @@ Documented today in `docs/USER_GUIDE.md` and `docs/ENVIRONMENT.md` (made from
 | `OMSI_DEBUG_ENHANCED` | diagnostic | stays; its views of the traced shadow go |
 | `OMSI_MIRROR_ENHANCED` | diagnostic | stays |
 
-A removed variable still present in a player's `env.txt` is ignored with a log line (check whether
-`omsi-cfg` already warns about unknown keys).
+A removed variable still present in a player's `env.txt` is ignored with a log line, never an error
+(spec, Edge Cases); the task of phase A1 checks whether `omsi-cfg` already warns about unknown keys
+and adds the warning if not.
 
 ## Launcher and the game's menu
 
-- "Graphics" list: `Vanilla (as OMSI 2)`, `Vanilla+`, `Enhanced` (`Enhanced+` leaves
-  `hud/implementation/lists/select.rs` and `omsi-launcher-ui/src/window/domain/settings.rs`).
-- "Graphics API" list: `Auto`, `Vulkan`, `DirectX 12`, `OpenGL`; hidden in Vanilla ("DirectX9
-  (D3D9Ex)" leaves the list).
-- The shadow, SSAO and reflection options lose their "traced" (Enhanced+) case.
-- `night_brightness`, `led_glow`, `led_mips` show only in Enhanced (today they show in Vanilla+,
-  where they do nothing).
+See [graphics-options.md](graphics-options.md).

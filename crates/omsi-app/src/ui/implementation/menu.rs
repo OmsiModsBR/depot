@@ -148,7 +148,7 @@ impl App {
     pub(crate) fn new_ui_area(&self) -> Option<Area> {
         let s = self.surface.as_ref()?;
         Some(menu_area(
-            self.settings.triple.enabled,
+            self.settings.triple_screen(),
             self.settings.vr_requested(),
             (s.config.width, s.config.height),
         ))

@@ -37,9 +37,7 @@ impl Output {
         quality: (u32, u32),
         effects: Dx9Effects,
     ) -> Result<()> {
-        use anyhow::Context;
-        let out = D3d9Output::attach(renderer, window, vsync, quality, effects)
-            .context("The game cannot draw with DirectX9 (D3D9Ex) on this computer")?;
+        let out = D3d9Output::attach(renderer, window, vsync, quality, effects)?;
         self.d3d9 = Some(out);
         self.backend = Backend::D3d9;
         Ok(())
@@ -55,7 +53,7 @@ impl Output {
         _quality: (u32, u32),
         _effects: Dx9Effects,
     ) -> Result<()> {
-        Err(anyhow::anyhow!("DirectX9 (D3D9Ex) draws on Windows only"))
+        Err(anyhow::anyhow!("Direct3D 9Ex draws on Windows only"))
     }
 
     /// The window's new size.

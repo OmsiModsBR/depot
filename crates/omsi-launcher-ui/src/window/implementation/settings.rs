@@ -11,7 +11,6 @@ use super::omsi2_modules::module_card;
 use super::omsi2_plugins::plugins_card as omsi2_plugins_card;
 use crate::Page as UiPage;
 use glam::Vec2;
-use omsi_launcher_lib::settings::d3d9_fixes_vanilla;
 use omsi_ui::paint::Align;
 use omsi_ui::theme::*;
 use omsi_ui::widgets::{id_of, ButtonKind, Ui};
@@ -729,11 +728,8 @@ fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
         Align::Left,
     );
     let tx = field.right() + 24.0;
-    let text = if d3d9_fixes_vanilla(st.s) {
-        "DirectX9 (D3D9Ex) is on. It is for compatibility and better performance on older hardware, and draws as close to the real OMSI 2 as it can: only the options OMSI 2 has, no improvements. What goes beyond OMSI 2 is hidden; what DirectX9 does not draw yet is shown locked. Your own choices come back when you switch API."
-    } else {
-        "The API you choose can limit other options. When one is not available with it, that option is locked and says why. Today only DirectX9 (D3D9Ex) limits options."
-    };
+    // (not offered in Vanilla, whose Direct3D 9Ex renderer the mode chooses)
+    let text = "The interface Vanilla+ and Enhanced draw with. Vanilla is drawn by Direct3D 9Ex, as close to the real OMSI 2 as it can, whatever is chosen here.";
     ui.paragraph(
         text,
         Vec2::new(tx, top + 2.0),

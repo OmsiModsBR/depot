@@ -17,6 +17,7 @@ mod sky;
 mod smoke;
 mod ui;
 mod upscale;
+mod wet_road;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D9::*;
@@ -196,9 +197,20 @@ fn present_params(
         Target::Offscreen => (HWND::default(), 1, 1),
         Target::Window(hwnd) => (hwnd, width.max(1), height.max(1)),
     };
+    // A window's picture is flipped to the desktop (Direct3D 9Ex's flip model) rather than
+    // copied into it, which costs less at each Present while Windows composes the desktop.
+    // The flip model takes no multisampled back buffer: with multisampling the picture is
+    // copied as before.
+    let flip = matches!(target, Target::Window(_)) && samples <= 1;
     D3DPRESENT_PARAMETERS {
         Windowed: true.into(),
-        SwapEffect: D3DSWAPEFFECT_DISCARD,
+        SwapEffect: if flip {
+            D3DSWAPEFFECT_FLIPEX
+        } else {
+            D3DSWAPEFFECT_DISCARD
+        },
+        // (the flip model needs two back buffers at least)
+        BackBufferCount: if flip { 2 } else { 1 },
         BackBufferFormat: D3DFMT_UNKNOWN,
         BackBufferWidth: w,
         BackBufferHeight: h,
@@ -351,9 +363,17 @@ impl D3d9Device {
             } else {
                 D3DCREATE_SOFTWARE_VERTEXPROCESSING
             };
+            // PUREDEVICE (with hardware vertex processing only): the runtime keeps no copy of
+            // the device's state, which takes CPU time off every call; nothing here asks the
+            // device what state it holds.
+            let pure = if vertex_processing == D3DCREATE_HARDWARE_VERTEXPROCESSING {
+                D3DCREATE_PUREDEVICE
+            } else {
+                0
+            };
             // FPU_PRESERVE: without it Direct3D 9 switches the thread's x87 unit to single
             // precision, which would silently change floating-point results on that thread.
-            let flags = (vertex_processing | D3DCREATE_FPU_PRESERVE) as u32;
+            let flags = (vertex_processing | pure | D3DCREATE_FPU_PRESERVE) as u32;
             let focus = match target {
                 Target::Offscreen => GetDesktopWindow(),
                 Target::Window(hwnd) => hwnd,

@@ -119,6 +119,7 @@ fn draw(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         materials.get(m).map(|u| SceneMaterial {
@@ -242,6 +243,7 @@ fn the_cab_is_fogged_like_the_world() {
         surface_bias: -24,
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
         coronas: Default::default(),
         sky: Default::default(),
         lamps: Default::default(),
@@ -319,6 +321,7 @@ fn depth_is_reversed_nearer_is_greater() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -441,6 +444,7 @@ fn a_frame_pointing_outside_its_data_is_refused() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let material = |_| {
         Some(SceneMaterial {
@@ -618,6 +622,7 @@ fn draw_lamps(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |_| Some(material)).unwrap();
     dev.end_frame().unwrap()
@@ -788,6 +793,7 @@ fn texture_addressing_follows_the_material() {
             sky: Default::default(),
             rain: Default::default(),
             smoke: Default::default(),
+            rain_reflection: None,
         };
         dev.draw_scene(&frame, |_| {
             Some(SceneMaterial {
@@ -1149,6 +1155,7 @@ fn quad_frame<'a>(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     }
 }
 
@@ -1299,6 +1306,7 @@ fn black_over_white(dev: &mut D3d9Device, format: TexFormat, level: Vec<u8>, cod
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |m| {
         u.get(m).map(|uniform| SceneMaterial {
@@ -1417,6 +1425,7 @@ fn draw_coronas(
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1522,6 +1531,7 @@ fn a_corona_is_blended_on_the_pictures_own_values() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -1640,6 +1650,7 @@ fn a_corona_run_outside_the_sprites_is_refused() {
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let r = dev.draw_scene(&frame, |_| None);
     assert!(matches!(r, Err(BackendError::InvalidArgument(_))));
@@ -1713,6 +1724,7 @@ fn draw_sky_with(
         sky,
         rain: Default::default(),
         smoke: Default::default(),
+        rain_reflection: None,
     };
     dev.draw_scene(&frame, |_| None).unwrap();
     dev.end_frame().unwrap()
@@ -2303,6 +2315,7 @@ fn draw_smoke(
         sky: Default::default(),
         rain: Default::default(),
         smoke: crate::scene::SceneSmoke { sprites },
+        rain_reflection: None,
     };
     let u = uniform(0.0);
     dev.draw_scene(&frame, |_| {
@@ -2427,6 +2440,7 @@ fn draw_pane(
         sky: Default::default(),
         rain,
         smoke: Default::default(),
+        rain_reflection: None,
     };
     let u = uniform(2.0);
     dev.draw_scene(&frame, |_| {
@@ -2579,4 +2593,46 @@ fn the_drops_come_back_with_a_device_opened_again() {
     }
     let px = draw_pane(&mut dev, Some(1), raining(0.25, None), false);
     assert!(glow(&px) > 4000);
+}
+
+/// The grey surface of `the_wet_road_*`: moisture `wet_texture` (0 or 1), the weather's
+/// wetness `wetness`; the sky and the sun are black, so the sheen adds nothing and what the
+/// pass does shows as darkening alone.
+fn wet_road(dev: &mut D3d9Device, wet_texture: f32, wetness: f32) -> Vec<u8> {
+    let (v, i) = quad(0.5);
+    dev.set_scene_mesh(3, &v, &i).unwrap();
+    rgba(dev, 5, [200, 200, 200, 255]);
+    let mut u = uniform(0.0);
+    u[3][2] = wet_texture;
+    draw(
+        dev,
+        &[batch(DrawKind::Opaque, 3, 0, 0..1)],
+        &[IDENTITY],
+        &[VISIBLE, SECOND],
+        &[0],
+        SceneLight {
+            weather: [wetness, 0.0, 0.0, 0.0],
+            ..light([0.0; 4])
+        },
+        &[u],
+        Some(5),
+    )
+}
+
+#[test]
+fn the_wet_road_darkens_and_mirrors_under_rain() {
+    let Some(mut dev) = device() else { return };
+    // looked along (the camera behind the quad's plane, at a grazing angle to its normal),
+    // the soaked road mirrors almost all of its black sky
+    let px = wet_road(&mut dev, 1.0, 1.0);
+    assert!(px.chunks_exact(4).all(|p| p[0] < 60), "{:?}", &px[..4]);
+}
+
+#[test]
+fn a_road_stays_dry_without_rain_and_a_surface_without_moisture_in_it() {
+    let Some(mut dev) = device() else { return };
+    let px = wet_road(&mut dev, 1.0, 0.0);
+    assert!(all(&px, [200, 200, 200, 255], 1), "{:?}", &px[..4]);
+    let px = wet_road(&mut dev, 0.0, 1.0);
+    assert!(all(&px, [200, 200, 200, 255], 1), "{:?}", &px[..4]);
 }

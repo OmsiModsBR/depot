@@ -427,7 +427,11 @@ mod tests {
             scene.overlays.push((white, [0.0, 0.0, 192.0, 4.0]));
             for enhanced in [false, true] {
                 let lighting = Lighting {
-                    enhanced,
+                    path: if enhanced {
+                        crate::lighting::ShadingPath::Hdr
+                    } else {
+                        crate::lighting::ShadingPath::Linear
+                    },
                     shadows: true,
                     fog_density: 0.0,
                     rain: 0.5,

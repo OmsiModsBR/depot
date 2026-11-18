@@ -95,6 +95,8 @@ pub(crate) struct App {
     pub(crate) mirror_budget: f32,
     pub(crate) mirrors_seen: usize,
     pub(crate) mirror_turn: usize,
+    /// The picture the puddles of a wet road mirror (DirectX9), made at its first frame.
+    pub(crate) rain_reflection: Option<omsi_render::TextureId>,
     /// With no real-time reflections: the bus whose mirrors are frozen (see
     /// `MIRROR_FREEZE_REDRAW`).
     pub(crate) frozen_mirrors: Option<FrozenMirrors>,
@@ -230,6 +232,9 @@ pub(crate) struct App {
     pub(crate) center_cursor: bool,
     /// The cursor hidden while a controller drives: where it stood.
     pub(crate) cursor_hidden: Option<(f32, f32)>,
+    /// The cursor is held inside the window while the mouse steers (see
+    /// `App::sync_cursor_confine`), so it cannot slip onto another screen.
+    pub(crate) cursor_confined: bool,
     /// The wheel's place when it last counted as moved.
     pub(crate) last_ctl_steer: Option<f32>,
     /// The mouse's throttle and brake (eased in with the steering).
@@ -358,6 +363,8 @@ pub(crate) struct App {
     /// The mouse cursor currently shows the hand (it is over a switch).
     pub(crate) cursor_kind: u8,
     pub(crate) settings: settings::Settings,
+    /// The graphics mode of this run, resolved once at the start (`startup::resolved_graphics`).
+    pub(crate) graphics: omsi_cfg::GraphicsMode,
     /// Frames longer than 50 ms (stutters) and the worst frame, for the exit summary.
     pub(crate) spikes: u32,
     pub(crate) worst_ms: f32,

@@ -56,6 +56,11 @@ pub struct VehiclesView {
     folded: std::collections::HashSet<String>,
     /// The host found no OMSI 2 folder (`set_no_folder`): the page says to choose one.
     no_folder: bool,
+    /// The host is reading the content lists itself (`set_host_reading`): the page waits for
+    /// its list instead of reading the whole folder a second time at once.
+    host_reading: bool,
+    /// The host's list the catalog was last taken from (`follow_host`; 0: none yet).
+    host_gen: u64,
     /// "Open Setup" was clicked (`take_open_setup`).
     open_setup: bool,
 }
@@ -139,6 +144,8 @@ impl Default for VehiclesView {
             prerender_asked: None,
             folded: Default::default(),
             no_folder: false,
+            host_reading: false,
+            host_gen: 0,
             open_setup: false,
         }
     }
@@ -149,6 +156,13 @@ impl VehiclesView {
     /// for one instead of showing why its list could not be read.
     pub fn set_no_folder(&mut self, none: bool) {
         self.no_folder = none;
+    }
+
+    /// Whether the host is reading the content lists now (each frame). Until it is done the
+    /// page reads nothing of its own; it reads its list only if the host's came without any
+    /// buses (an empty or unreadable folder), as before.
+    pub fn set_host_reading(&mut self, reading: bool) {
+        self.host_reading = reading;
     }
 
     /// Whether "Open Setup" was clicked since the last call.
@@ -231,6 +245,18 @@ impl VehiclesView {
         self.apply_pending();
     }
 
+    /// Take the host's list `list`, numbered `gen` (it counts every change of the list), when
+    /// it is another than the one the page shows: a reading again that found as many buses
+    /// but other paints or other buses changes the page too. An empty list leaves the page
+    /// as it is (an empty or unreadable folder: the page reads its own, as before).
+    pub fn follow_host(&mut self, gen: u64, list: &[VehicleInfo]) {
+        if gen == self.host_gen || list.is_empty() {
+            return;
+        }
+        self.host_gen = gen;
+        self.set_catalog(list.to_vec());
+    }
+
     /// How many buses the catalog holds, once it is read.
     pub fn catalog_len(&self) -> Option<usize> {
         match &self.catalog {
@@ -311,9 +337,9 @@ impl VehiclesView {
         self.prep_for = v.file.clone();
     }
 
-    /// Start reading the catalog if that has not begun.
+    /// Start reading the catalog if that has not begun (and the host is not reading it).
     pub fn load(&mut self) {
-        if !matches!(self.catalog, Catalog::NotStarted) {
+        if self.host_reading || !matches!(self.catalog, Catalog::NotStarted) {
             return;
         }
         let (tx, rx) = channel();

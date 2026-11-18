@@ -3,7 +3,7 @@
 //! The WGSL files sit beside this module, one folder per domain that draws with them;
 //! `common/` holds the pieces several shaders include.
 
-use crate::gpu::{array_path, basic_pipelines, rt_gbuf, ArrayPath, ARRAY_TEX_WIDTH};
+use crate::gpu::{array_path, basic_pipelines, ArrayPath, ARRAY_TEX_WIDTH};
 
 /// A full-screen pass's shader with the shared triangle (`common/fullscreen.wgsl`) ahead
 /// of it.
@@ -138,12 +138,6 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
         include_str!("scene/enhanced.wgsl"),
     ]
     .join("\n");
-    // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
-    let src = if rt_gbuf() {
-        src.replace("//RT ", "")
-    } else {
-        src
-    };
     let src = if basic_pipelines() {
         lean_scene(src)
     } else {

@@ -260,15 +260,14 @@ pub struct Args {
     /// launcher's 3D preview, and quit.
     #[arg(long)]
     pub export_glb: Option<PathBuf>,
-    /// Enhanced graphics, as the settings' `enhanced=1`: the physically based renderer
+    /// Enhanced graphics for this run, as the settings' `graphics=enhanced`: the physically based renderer
     /// (high-range lighting with GGX reflections, a computed sky, soft sun shadows,
     /// automatic exposure, a glow around real highlights and the PBR Neutral tone curve).
     #[arg(long)]
     pub enhanced: bool,
-    /// Enhanced+ graphics, as the settings' `graphics=enhanced_plus`: Enhanced with
-    /// ray-traced sun shadows, ambient occlusion and reflections (where the graphics card
-    /// can trace rays).
-    #[arg(long)]
+    /// Enhanced+ graphics were removed: the argument is still taken, so that an old shortcut
+    /// starts the game, and ignored with a line in the log.
+    #[arg(long, hide = true)]
     pub enhanced_plus: bool,
     /// Open the launcher (the default when the program is started without arguments).
     #[arg(long)]

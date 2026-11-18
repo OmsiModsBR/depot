@@ -193,10 +193,34 @@ impl SceneTexture<'_> {
     }
 }
 
+/// The sRGB curve's decode of a stored byte, in linear light.
+fn srgb_to_linear(byte: u8) -> f32 {
+    let c = byte as f32 / 255.0;
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// The sRGB curve's encode of a linear value, as a stored byte.
+fn linear_to_srgb(linear: f32) -> u8 {
+    let c = linear.clamp(0.0, 1.0);
+    let e = if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
+    (e * 255.0 + 0.5) as u8
+}
+
 /// The levels below a `w` x `h` RGBA image, each the 2 x 2 box average of the one above
-/// (an odd edge repeats its last texel), down to 1 x 1. The colour is weighted by alpha, as
-/// the default renderer's mip generator does it.
+/// (an odd edge repeats its last texel), down to 1 x 1. The colour is averaged in linear
+/// light, as the default renderer's mip generator does it on its sRGB view (averaged as
+/// stored, a fine pattern of light and dark - cobbles, grass - came out darker the further
+/// off it lay), and weighted by alpha, as that generator weights it.
 pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
+    let table: Vec<f32> = (0..=255u8).map(srgb_to_linear).collect();
     let mut out: Vec<Vec<u8>> = Vec::new();
     let (mut pw, mut ph) = (w as usize, h as usize);
     while pw > 1 || ph > 1 {
@@ -207,25 +231,24 @@ pub fn mip_chain(w: u32, h: u32, rgba: &[u8]) -> Vec<Vec<u8>> {
             let (y0, y1) = ((y * 2).min(ph - 1), (y * 2 + 1).min(ph - 1));
             for x in 0..nw {
                 let (x0, x1) = ((x * 2).min(pw - 1), (x * 2 + 1).min(pw - 1));
-                let at = |xx: usize, yy: usize, c: usize| prev[(yy * pw + xx) * 4 + c] as u32;
+                let at = |xx: usize, yy: usize, c: usize| prev[(yy * pw + xx) * 4 + c];
                 let texels = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
-                let alpha: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, 3)).sum();
+                let alpha: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, 3) as u32).sum();
                 let o = (y * nw + x) * 4;
                 for c in 0..3 {
                     // weighted by alpha: the colour stored in transparent texels must not
-                    // bleed into the silhouette (the default renderer's mip.wgsl does this)
-                    let weighted: u32 = texels
-                        .iter()
-                        .map(|&(xx, yy)| at(xx, yy, c) * at(xx, yy, 3))
-                        .sum();
-                    next[o + c] = match (weighted + alpha / 2).checked_div(alpha) {
-                        Some(v) => v as u8,
-                        // all four transparent: the plain average (alpha is often only a mask)
-                        None => {
-                            let sum: u32 = texels.iter().map(|&(xx, yy)| at(xx, yy, c)).sum();
-                            ((sum + 2) / 4) as u8
-                        }
-                    };
+                    // bleed into the silhouette (the default renderer's mip.wgsl does this);
+                    // all four transparent: the plain average (alpha is often only a mask)
+                    let (sum, weight) =
+                        texels.iter().fold((0.0f32, 0.0f32), |(s, k), &(xx, yy)| {
+                            let a = if alpha == 0 {
+                                1.0
+                            } else {
+                                at(xx, yy, 3) as f32
+                            };
+                            (s + table[at(xx, yy, c) as usize] * a, k + a)
+                        });
+                    next[o + c] = linear_to_srgb(sum / weight);
                 }
                 next[o + 3] = ((alpha + 2) / 4) as u8;
             }
@@ -364,6 +387,9 @@ pub struct SceneLight {
     /// The camera's right and up axes (xyz), which lay the sphere maps out.
     pub cam_right: [f32; 4],
     pub cam_up: [f32; 4],
+    /// x how wet the outdoor surfaces are (0 dry .. 1 soaked), zw the render origin's map
+    /// position modulo 1000 m, where the puddles' pattern is laid.
+    pub weather: [f32; 4],
 }
 
 /// The `[matl_envmap]` factor x 255 x its light (each channel at most 1), truncated, and the
@@ -631,6 +657,10 @@ pub struct SceneFrame<'a> {
     pub sky: SceneSky,
     /// The smoke and particles drawn over the world's batches.
     pub smoke: SceneSmoke<'a>,
+    /// The street seen from under the road, for the puddles to mirror: the scene texture it
+    /// was drawn into and the camera's view-projection it was drawn with (as `view_proj`).
+    /// None when the puddles mirror the sky alone.
+    pub rain_reflection: Option<(usize, [[f32; 4]; 4])>,
 }
 
 impl SceneFrame<'_> {
@@ -662,17 +692,17 @@ impl SceneFrame<'_> {
         self.lamps.validate()
     }
 
-    /// Appends one instance record ([`INSTANCE_FLOATS`]) per list entry, in list order: a
-    /// batch's instances are then the records of its run.
-    pub fn instance_records(&self, out: &mut Vec<f32>) {
-        out.reserve(self.list.len() * INSTANCE_FLOATS);
-        for &e in self.list {
+    /// Writes one instance record ([`INSTANCE_FLOATS`]) per list entry into `out`, in list
+    /// order: a batch's instances are then the records of its run. `out` holds the records
+    /// of the whole list (the device writes them straight into its locked buffer).
+    pub fn write_instance_records(&self, out: &mut [f32]) {
+        for (&e, record) in self.list.iter().zip(out.chunks_exact_mut(INSTANCE_FLOATS)) {
             let e = e as usize;
-            for column in &self.models[e] {
-                out.extend_from_slice(column);
+            for (column, dst) in self.models[e].iter().zip(record.chunks_exact_mut(4)) {
+                dst.copy_from_slice(column);
             }
-            out.extend_from_slice(&self.params[e * 2]);
-            out.extend_from_slice(&self.params[e * 2 + 1]);
+            record[16..20].copy_from_slice(&self.params[e * 2]);
+            record[20..24].copy_from_slice(&self.params[e * 2 + 1]);
         }
     }
 }
@@ -714,7 +744,7 @@ mod tests {
         // a single compressed level cannot be made smaller
         t.levels = &chain[..1];
         assert!(t.fitted(4).is_none());
-        // a single RGBA image is halved: white and black columns to grey
+        // a single RGBA image is halved: white and black columns to grey (in linear light)
         let image = vec![[[255, 255, 255, 255], [0, 0, 0, 255]].concat().repeat(2)];
         let t = SceneTexture {
             width: 2,
@@ -725,7 +755,7 @@ mod tests {
         };
         let (w, h, levels) = t.fitted(1).unwrap();
         assert_eq!((w, h), (1, 1));
-        assert_eq!(levels, vec![vec![128, 128, 128, 255]]);
+        assert_eq!(levels, vec![vec![188, 188, 188, 255]]);
     }
 
     #[test]
@@ -776,7 +806,8 @@ mod tests {
 
     #[test]
     fn the_mip_chain_averages_down_to_one_texel() {
-        // 2x2: black, white, white, black -> one mid grey; then nothing more.
+        // 2x2: black, white, white, black -> one mid grey in linear light (half the light is
+        // 188 as stored, not 128); then nothing more.
         let rgba = [
             [0, 0, 0, 255],
             [255, 255, 255, 255],
@@ -785,7 +816,7 @@ mod tests {
         ]
         .concat();
         let chain = mip_chain(2, 2, &rgba);
-        assert_eq!(chain, vec![vec![128, 128, 128, 255]]);
+        assert_eq!(chain, vec![vec![188, 188, 188, 255]]);
         // 3x1 -> 1x1 averages the first two texels (the odd one is left at this level).
         let row = [[0, 0, 0, 0], [100, 100, 100, 100], [200, 200, 200, 200]].concat();
         let chain = mip_chain(3, 1, &row);
@@ -905,11 +936,11 @@ mod tests {
             rain: Default::default(),
             sky: Default::default(),
             smoke: SceneSmoke::default(),
+            rain_reflection: None,
         };
         frame.validate().unwrap();
-        let mut out = Vec::new();
-        frame.instance_records(&mut out);
-        assert_eq!(out.len(), 2 * INSTANCE_FLOATS);
+        let mut out = vec![0.0; 2 * INSTANCE_FLOATS];
+        frame.write_instance_records(&mut out);
         assert_eq!(out[0], 2.0);
         assert_eq!(out[16], 20.0);
         assert_eq!(out[20], 21.0);

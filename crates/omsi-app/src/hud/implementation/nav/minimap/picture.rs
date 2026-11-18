@@ -6,17 +6,19 @@ use super::super::draw::{
     stop_request_icon, traffic_kind, vehicle_icon, EARLY, LATE, LEVEL, ON_TIME, STREET, TEXT,
     TEXT_DIM, WARN,
 };
-use super::super::geometry::build_roads;
+use super::super::geometry::{build_roads, road_geometry, roads_within};
 use super::super::route::{build_route, lane_from_right, RouteStyle};
 use super::super::{
-    angle_diff, project, words, NavFrame, Navigator, Roads, BAR, DOT, FOV, LINE_TEXT,
-    OFF_ROUTE_AFTER, PANEL, PITCH, PLAYER, ROAD_RADIUS, ROUTE,
+    angle_diff, project, words, MapRoad, NavFrame, Navigator, RoadIndex, Roads, BAR, DOT, FOV,
+    LINE_TEXT, OFF_ROUTE_AFTER, PANEL, PITCH, PLAYER, ROAD_RADIUS, ROUTE,
 };
 use glam::{DVec2, DVec3, Mat4, Vec2, Vec3};
 use omsi_render::Renderer;
-use omsi_sim::traffic::LaneKind;
+use omsi_sim::traffic::{LaneKind, Network};
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Draw, Layer, Painter, Rect, Vertex, Weight};
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::Arc;
 
 impl Navigator {
     pub(super) fn draw(
@@ -37,7 +39,20 @@ impl Navigator {
         let map = Rect::new(0.0, top_h, pw, map_h);
         let vp = [map.x, map.y, map.w, map.h];
 
-        // --- roads (buffer 0): rebuilt when the bus went far or tiles brought lanes
+        // --- roads (buffer 0): rebuilt when the bus went far or tiles brought lanes; around a
+        // new place on a worker, the old roads drawn until the new ones arrive
+        let mut road_verts = None;
+        if let Some(rx) = self.roads_job.as_ref() {
+            match rx.try_recv() {
+                Ok((roads, verts)) => {
+                    road_verts = Some(verts);
+                    self.roads = Some(roads);
+                    self.roads_job = None;
+                }
+                Err(TryRecvError::Disconnected) => self.roads_job = None,
+                Err(TryRecvError::Empty) => {}
+            }
+        }
         let own = self.own_net.clone();
         let global = self.global.clone();
         let net = global
@@ -45,38 +60,45 @@ impl Navigator {
             .or(f.traffic.map(|t| &t.net))
             .or(own.as_deref());
         let lanes_now = net.map(|n| n.lanes.len()).unwrap_or(0);
-        let rebuild = match &self.roads {
-            None => lanes_now > 0,
-            Some(r) => {
-                r.light != self.light
-                    || (r.anchor - f.bus.truncate()).length() > ROAD_RADIUS * 0.45
-                    || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5)
-            }
-        };
-        let mut road_verts = None;
+        let rebuild = self.roads_job.is_none()
+            && match &self.roads {
+                None => lanes_now > 0,
+                Some(r) => {
+                    r.light != self.light
+                        || (r.anchor - f.bus.truncate()).length() > ROAD_RADIUS * 0.45
+                        || (r.lanes_seen != lanes_now && self.time - r.built_at > 1.5)
+                }
+            };
         if rebuild {
             if let Some(net) = net {
-                let anchor = f.bus.truncate();
-                let mut p = Painter::new();
-                let t0 = std::time::Instant::now();
-                build_roads(&mut p, net, anchor, self.light);
-                if omsi_cfg::flags::DEBUG_NAV.is_set() {
-                    log::info!(
-                        "navigator: roads around ({:.0}, {:.0}) in {:.1} ms: {} vertices",
-                        anchor.x,
-                        anchor.y,
-                        t0.elapsed().as_secs_f64() * 1000.0,
-                        p.verts.len()
-                    );
-                }
-                road_verts = Some(p.verts);
-                self.roads = Some(Roads {
+                let roads = Roads {
                     light: self.light,
-                    anchor,
+                    anchor: f.bus.truncate(),
                     lanes_seen: lanes_now,
                     verts: 0,
                     built_at: self.time,
-                });
+                };
+                // (`road_index` is `global`'s, which `net` then is; the first roads of a
+                // network are built at once, so that the map is never drawn without them)
+                self.roads_job = match (&self.road_index, &global, &self.roads) {
+                    (Some(index), Some(map), Some(_)) => {
+                        spawn_roads(index.clone(), map.clone(), roads)
+                    }
+                    _ => None,
+                };
+                if self.roads_job.is_none() {
+                    let near = roads.anchor;
+                    road_verts = Some(match &self.road_index {
+                        Some(index) => road_mesh(index.near(net, near, ROAD_RADIUS), roads),
+                        // (the traffic's network, still growing as tiles load: one look at
+                        // its roads costs less than indexing them)
+                        None => road_mesh(
+                            roads_within(road_geometry(net).into_iter(), near, ROAD_RADIUS),
+                            roads,
+                        ),
+                    });
+                    self.roads = Some(roads);
+                }
             }
         }
 
@@ -1047,6 +1069,40 @@ impl Navigator {
         );
         queue.submit([enc.finish()]);
     }
+}
+
+/// Builds the roads around `roads.anchor` on a worker; None when no thread can be started.
+fn spawn_roads(
+    index: Arc<RoadIndex>,
+    net: Arc<Network>,
+    roads: Roads,
+) -> Option<Receiver<(Roads, Vec<Vertex>)>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("navigator roads".into())
+        .spawn(move || {
+            let verts = road_mesh(index.near(&net, roads.anchor, ROAD_RADIUS), roads);
+            let _ = tx.send((roads, verts));
+        })
+        .ok()?;
+    Some(rx)
+}
+
+/// The vertices of `near`, the roads around `roads.anchor` (buffer 0).
+fn road_mesh(near: impl Iterator<Item = MapRoad>, roads: Roads) -> Vec<Vertex> {
+    let mut p = Painter::new();
+    let t0 = std::time::Instant::now();
+    build_roads(&mut p, near, roads.anchor, roads.light);
+    if omsi_cfg::flags::DEBUG_NAV.is_set() {
+        log::info!(
+            "navigator: roads around ({:.0}, {:.0}) in {:.1} ms: {} vertices",
+            roads.anchor.x,
+            roads.anchor.y,
+            t0.elapsed().as_secs_f64() * 1000.0,
+            p.verts.len()
+        );
+    }
+    p.verts
 }
 
 /// The minimap's camera: `zoom` metres from `look_at`, behind it along `fwd` and tilted

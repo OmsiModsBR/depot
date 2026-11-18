@@ -116,6 +116,9 @@ pub struct Instance {
     /// picture: the driver at the wheel while the player looks from the driver's seat (the
     /// figure would fill the view, but the mirrors show him as OMSI does).
     pub mirror_only: bool,
+    /// A person (a pedestrian, a passenger, a driver): left out of the rain reflections when
+    /// the picture asks for it ([`crate::Lighting::humans_hidden`]).
+    pub human: bool,
     /// The model marks the mesh `[shadow]`: one OMSI casts a shadow from (with the
     /// option `omsi_shadow_casters` only these do).
     pub omsi_caster: bool,

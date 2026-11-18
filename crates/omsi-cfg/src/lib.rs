@@ -40,6 +40,8 @@ pub mod env;
 pub mod flags;
 mod format;
 mod fs;
+mod graphics;
+pub mod graphics_options;
 mod install;
 pub mod limits;
 mod physics;
@@ -54,6 +56,7 @@ pub use content::{
 };
 pub use format::{keyword_of, keyword_with, CfgError, CfgFile, CfgReader, Entry, KeywordRule};
 pub use fs::write_atomic;
+pub use graphics::GraphicsMode;
 pub use install::paths;
 pub use install::search::{self as install_search, find_original_install};
 pub use install::{

@@ -50,7 +50,6 @@ Everything can also be given on the command line, which then skips both:
 | `--click x,y[,dx,dy]` | press (and drag) the cockpit switch at that pixel, offscreen |
 | `--season winter` / `--situation x.osn` | season override, a saved situation |
 | `--enhanced` / `--export-glb bus.glb` | the physically based renderer; write the bus as glTF (the launcher's preview) and quit |
-| `--enhanced-plus` | Enhanced+: the physically based renderer with ray-traced shadows, ambient occlusion and reflections |
 | `--launcher` / `--menu` / `--no-menu` | open the launcher (the default without arguments), the in-game menu, or neither |
 
 Keys in the window: **W** throttle, **S** brake, **A**/**D** steering - the arrow keys do the
@@ -266,7 +265,7 @@ as designed; `navigator_opacity` in older files),
 `nav_follow_view` (on foot the maps show a walker icon, in the free camera F4 a camera icon they are centred on; off by default),
 `boarding`, `detail_textures`, `exact_fare`, `enhanced`, `fullscreen`, `vsync`, `volume`
 and `drive_keys`, plus `render_scale` (`auto` or a fraction: the picture is drawn smaller
-and upscaled; under "DirectX9 (D3D9Ex)" `auto` is the window's size and the fraction is yours,
+and upscaled; in Vanilla on Windows `auto` is the window's size and the fraction is yours,
 with `dx9_upscale` = `bilinear` or `fsr1` choosing how it is brought up), `post_aa` (`fxaa`, the enhanced renderer's, or `off`), `view_distance` (m,
 how far the tiles are kept loaded), `texture_memory` (MB - OMSI's `texmemlimit` is read
 under that name too; an eighth of the machine's memory when unset), `texture_compression`
@@ -297,8 +296,9 @@ rest breathes and shifts its weight, and 0 of it is exactly as OMSI; most of it 
 the bus waits at a stop) and `head_idle_pace` (0.5..2: how fast that sway moves, 1 being the
 pace it is designed at), `collision_objects` (walls, poles and bridges stop the bus; off is OMSI's `no_collision`
 option and is taken from OMSI's options when Project Depot starts the first time), `graphics_api`
-(`auto`, `vulkan`, `dx12` on Windows, `gl`: which graphics interface the game asks first -
-with `auto` Vulkan, then DirectX 12, then OpenGL), `ctrl_off` (game controllers switched off
+(`auto`, `vulkan`, `dx12` on Windows, `gl`: which graphics interface Vanilla+ and Enhanced ask
+first - with `auto` Vulkan, then DirectX 12, then OpenGL; Vanilla on Windows draws with
+Direct3D 9Ex whatever it says), `ctrl_off` (game controllers switched off
 on the Controllers page, by name, separated by `|`) and `language` (`ENG`, `DEU`, `FRA`: the language the HUD names cockpit switches
 in). The file also carries a `version`; older files that say
 `boarding=pay` because that was the launcher's old default are read as `auto`.
@@ -326,7 +326,7 @@ player's bus (its `[boundingbox]`), and heavy rain darkens the day enough for th
 lights to matter.
 
 `detail_textures` lays procedural (fractal) grain over the ground and the roads up close,
-in vanilla and enhanced alike. `enhanced=1` (or `--enhanced`) switches to its own
+in vanilla and enhanced alike. `graphics=enhanced` (or `--enhanced` for one run) switches to its own
 physically based renderer: high-range lighting with energy-conserving diffuse and GGX
 reflections (roughness from `[matl_envmap]`), a computed atmosphere that also lights the
 scene, contact-hardening sun shadows, aerial perspective and height fog, automatic
@@ -348,21 +348,86 @@ night). The camera exposes like one: for daylight, part of the way towards the l
 moment, with a camera's middle-tone contrast; street lamps are bright points with a little
 glare in clear air and wide halos in mist and rain.
 
-`graphics=enhanced_plus` (Enhanced+ in the launcher, `--enhanced-plus`) is Enhanced with
-hardware ray tracing, where the graphics card traces rays (Apple M3/M4 and newer, RTX and
-RDNA 2 cards and newer through Vulkan and Direct3D 12; elsewhere it draws as Enhanced, and
-should a driver refuse the ray tracing it falls back to Enhanced as well). Every solid mesh within
-420 m of the camera goes into an acceleration structure each frame, and the window's
-picture traces the sun's shadow per pixel (soft away from its caster, crisp at the
-contact; cut-out leaves and fences keep the shadow map, whose texels they need), the
-sky's occlusion within two metres, and reflections: wet roads, water, glass, envmapped
-and lacquered paint mirror what really stands around them, off the screen too, and the
-sky where nothing does. Its shadows, occlusion and reflections cannot be switched off
-apart. It shares Enhanced's tone curve, with the light a shade warmer and a light
-vignette.
-`OMSI_NO_RT=1` opens no ray queries, `OMSI_NO_RT_GRADE=1` leaves its grade out,
-`OMSI_RT_REFL_HALF=1` traces the reflections at half size, `OMSI_DEBUG_RT=n` (see
-`crates/omsi-render/src/rt.rs`) shows its buffers.
+Enhanced+ (`graphics=enhanced_plus`, `--enhanced-plus`), the mode that traced rays, was
+removed. A settings file that still names it opens in Enhanced, and the argument and the
+mode's `OMSI_*` variables are ignored, each with a line in the log.
+
+The graphics mode (`graphics`) is `vanilla`, `vanilla_plus` (the default) or `enhanced`. On
+Windows Vanilla is drawn by the Direct3D 9Ex renderer, as close to OMSI 2 as it can: only the
+options OMSI 2 has, the Performance section of the launcher's settings, and no graphics API
+choice, VR or triple screen (their saved values are kept for the other modes, and the log says
+Vanilla opened without them). When Direct3D 9Ex cannot open, the game says why, tells you to
+choose Vanilla+ in the launcher, and closes. Vanilla+ and Enhanced draw with wgpu on the
+interface `graphics_api` names. A file from before this that says `graphics_api=d3d9` (the
+former "DirectX9 (D3D9Ex)" API) opens in Vanilla with `graphics_api=auto`. The launcher's
+picture of the bus is drawn as Vanilla+ whatever the mode.
+
+### Graphics options per mode
+
+The graphics mode decides which graphics options the launcher and the in-game menu offer. An
+option a mode does not offer keeps its saved value for the other modes; one shown as fixed is
+drawn with that value whatever is saved; "only" lists the values the mode offers (a saved value
+outside them is drawn as the nearest one). The in-game menu offers only the options that take
+effect at once. This table is printed from the game's own table.
+
+<!-- graphics-options:begin (printed by crates/omsi-cfg/tests/graphics_options.rs) -->
+| Setting | Vanilla | Vanilla+ | Enhanced | Takes effect |
+|---|---|---|---|---|
+| `graphics` | yes | yes | yes | next start |
+| `graphics_api` | no | yes | yes | next start |
+| `preset` | yes | yes | yes | next start |
+| `msaa` | yes | yes | yes | next start |
+| `render_scale` | only auto, 1, 0.85, 0.75, 0.67, 0.5 | yes | yes | next start |
+| `dx9_upscale` | yes | no | no | at once |
+| `anisotropy` | yes | yes | yes | next start |
+| `view_distance` | yes | yes | yes | next start |
+| `max_obj_dist` | yes | yes | yes | next start |
+| `min_obj_size` | yes | yes | yes | next start |
+| `shadows` | no | yes | yes | at once |
+| `shadow_size` | no | yes | yes | next start |
+| `shadow_casters` | no | yes | yes | next start |
+| `ssao` | no | yes | yes | next start |
+| `shadow_blobs` | fixed: On | yes | yes | next start |
+| `night_brightness` | no | no | yes | at once |
+| `reflections` | yes | yes | yes | next start |
+| `mirror_size` | only 0, 128, 256, 512 | yes | yes | next start |
+| `mirror_refresh` | only off, full | yes | yes | at once |
+| `clouds` | fixed: As OMSI 2 | yes | yes | next start |
+| `sun_glow` | yes | yes | yes | at once |
+| `windy_trees` | fixed: Off | yes | yes | at once |
+| `smoke` | yes | yes | yes | next start |
+| `smoke_user_only` | yes | yes | yes | next start |
+| `smoke_max` | yes | yes | yes | next start |
+| `smoke_in_mirrors` | yes | yes | yes | next start |
+| `rain_reflections` | yes | no | no | at once |
+| `humans_in_rain_reflections` | yes | no | no | at once |
+| `fewer_night_lights` | yes | no | no | at once |
+| `dx9_glass_rain` | yes | no | no | at once |
+| `dx9_coronas` | yes | no | no | at once |
+| `dx9_stars` | yes | no | no | at once |
+| `dx9_cloud_picture` | yes | no | no | at once |
+| `texture_memory` | yes | yes | yes | next start |
+| `dx9_texture_limit` | yes | no | no | next start |
+| `texture_compression` | yes | yes | yes | next start |
+| `detail_textures` | no | yes | yes | at once |
+| `led_glow` | no | no | yes | at once |
+| `led_mips` | no | no | yes | at once |
+| `vr` | no | yes | yes | next start |
+| `vr_scale` | no | yes | yes | next start |
+| `vr_head_smoothing_ms` | no | yes | yes | next start |
+| `vr_mirror_rate` | no | yes | yes | next start |
+| `vr_desktop_mirror` | no | yes | yes | next start |
+| `triple_screen` | no | yes | yes | at once |
+| `triple_span` | no | yes | yes | next start |
+| `triple_hud_center` | no | yes | yes | at once |
+| `triple_width_mm` | no | yes | yes | at once |
+| `triple_distance_mm` | no | yes | yes | at once |
+| `triple_bezel_mm` | no | yes | yes | at once |
+| `triple_left_angle_deg` | no | yes | yes | at once |
+| `triple_right_angle_deg` | no | yes | yes | at once |
+| `triple_eye_height_mm` | no | yes | yes | at once |
+| `triple_fov_deg` | no | yes | yes | at once |
+<!-- graphics-options:end -->
 
 Vanilla, Vanilla+ and Enhanced reflect buses, buildings and scenery in wet road puddles
 when `reflections=1`, each using its own lighting. Depth-aware filtering softens the image;
@@ -518,8 +583,7 @@ haze. So one day is grey from morning to night, the next opens up after a foggy 
 an afternoon brings showers and a clear blue evening follows - each following from the day
 before (the model starts three days back), with the season's and the latitude's climate.
 It sets everything a weather sets - visibility, wind, temperature, rain or snow, the wet
-road - for every graphics mode; Enhanced and Enhanced+ also take its cloud amounts and its
-air. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes the air for comparisons.
+road - for every graphics mode; Enhanced also takes its cloud amounts and its air. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes the air for comparisons.
 
 ## Radio
 

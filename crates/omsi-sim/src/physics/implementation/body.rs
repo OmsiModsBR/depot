@@ -4,11 +4,14 @@
 
 use super::train::step_train;
 use super::tyre::Substep;
+use super::{classic, depot};
 use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
-use crate::physics::domain::{BodyInputs, Engine, GroundProbe, PhysicsSpec, RigidBody, RigidWheel};
+use crate::physics::domain::{
+    BodyInputs, Engine, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
+};
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
 
@@ -79,7 +82,9 @@ impl RigidBody {
             empty_mass: mass,
             payload: 0.0,
             inertia: spec.inertia,
+            empty_inertia: spec.inertia,
             cog: spec.cog,
+            empty_cog: spec.cog,
             position: DVec3::ZERO,
             orientation: Quat::IDENTITY,
             velocity: Vec3::ZERO,
@@ -94,6 +99,8 @@ impl RigidBody {
             body_freq: spec.body_freq,
             empty_body_freq: spec.body_freq,
             holding: true,
+            yaw_accel: 0.0,
+            last_yaw_rate: 0.0,
             joint_across: 0.0,
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
@@ -116,6 +123,7 @@ impl RigidBody {
         self.position = origin + self.orientation.mul_vec3(self.cog).as_dvec3();
         self.velocity = Vec3::ZERO;
         self.omega = Vec3::ZERO;
+        (self.yaw_accel, self.last_yaw_rate) = (0.0, 0.0);
         self.spawned_inside = None;
         self.unstepped = 0.0;
         (self.last_position, self.last_orientation) = (self.position, self.orientation);
@@ -132,13 +140,20 @@ impl RigidBody {
         }
     }
 
-    /// What the body carries (kg: the people aboard): it weighs on the body as the body's own
-    /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes
-    /// to speed it up, brake it and turn it - only its inertia about the centre of gravity
-    /// stays the file's, as the payload's place in the body is not known. The body's pitch and
-    /// roll damping follows the heavier body on the same springs (`body_freq`).
-    pub fn set_payload(&mut self, kg: f32) {
-        let kg = if kg.is_finite() { kg.max(0.0) } else { 0.0 };
+    /// What the body carries (the people aboard): its mass weighs on the body as the body's own
+    /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes to
+    /// speed it up, brake it and turn it. The body's pitch and roll damping follows the heavier
+    /// body on the same springs (`body_freq`). Where the payload sits moves the centre of
+    /// gravity and adds to the inertia by the engine's rule (`loaded_body`: Classic keeps
+    /// `[cog]` and `[momentofintertia]`, Depot sums the people into the body); the model
+    /// origin stays where it is and the body keeps its motion.
+    pub fn set_payload(&mut self, load: Payload) {
+        let kg = if load.kg.is_finite() {
+            load.kg.max(0.0)
+        } else {
+            0.0
+        };
+        let load = Payload { kg, ..load };
         self.payload = kg;
         self.mass = self.empty_mass + kg;
         self.body_freq = if self.mass > 0.0 {
@@ -146,6 +161,28 @@ impl RigidBody {
         } else {
             self.empty_body_freq
         };
+        let empty = (self.empty_cog, self.empty_mass, self.empty_inertia);
+        let (cog, inertia) = match self.engine {
+            Engine::Classic => classic::load_share::loaded_body(empty, load),
+            Engine::Depot => depot::load_share::loaded_body(empty, load),
+        };
+        self.inertia = inertia;
+        self.move_cog(cog);
+    }
+
+    /// Puts the centre of gravity at `cog` (body frame) with the model origin and the motion
+    /// of every point of the body unchanged: the new centre is where the body's point at
+    /// `cog` is, moving as that point moves.
+    fn move_cog(&mut self, cog: Vec3) {
+        let shift = cog - self.cog;
+        if shift == Vec3::ZERO {
+            return;
+        }
+        let along = self.orientation.mul_vec3(shift);
+        self.position += along.as_dvec3();
+        self.velocity += self.orientation.mul_vec3(self.omega).cross(along);
+        self.last_position += self.last_orientation.mul_vec3(shift).as_dvec3();
+        self.cog = cog;
     }
 
     /// Model origin (the point the renderer places) in the world.

@@ -9,3 +9,5 @@ pub fn sky_shader_source() -> String {
 pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
     crate::lighting::linear_light_colour(c)
 }
+
+pub use crate::renderer::lists::{shadow_caster, ShadowCaster};

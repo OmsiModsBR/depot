@@ -2,8 +2,8 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. For now there is one override,
-`D-1` (the plan's decision D2). The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are three overrides: `D-1`
+(the plan's decision D2), `D-2` and `D-3`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
@@ -14,6 +14,8 @@ Module paths are under `crates/omsi-sim/src/`.
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
+| [D-2](#d-2-the-people-aboard-move-cog-and-add-to-the-inertia) | the people aboard move `[cog]` and add to the inertia | physics |
+| [D-3](#d-3-the-tyres-hold-axle-by-axle-with-the-turning-they-must-start) | the tyres hold axle by axle, with the turning they must start | physics, tuned |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -61,6 +63,50 @@ share, used to place the vehicle at rest, with a floor of 0.2 of an even split o
 changing the axles. Under Depot the axle loads follow it. A mod whose springs were sized for the
 origin rule stands differently here: this is the one visible difference between the engines on a
 vehicle at rest.
+
+## D-2. The people aboard move `[cog]` and add to the inertia
+
+- **Inputs**: `[mass]`, `[cog]` (`cog_x`, `cog_y`), `[schwerpunkt]` (`cog_z`), `[momentofintertia]`
+  (`I_0`), and for each section the people in it: each one's `.hum` `[mass]` (`m_j`) and the centre
+  of their own body in the section's frame (`r_j`; see "Each person's centre of mass" below).
+  **Outputs**: the body's centre of gravity, so the load on every axle and every side follows it
+  through `D-1` and the struts of `C-3` and the bend's pull rolls it by its height (`C-7`), and the
+  body's inertia (`C-8`). **Module**: `physics/implementation/depot/load_share.rs` (`loaded_body`),
+  `physics/implementation/body.rs` (`set_payload`), `people/aboard.rs` (`payload_by_section`),
+  `people/rig/com.rs` (`BodyCom`).
+- **Basis**: *physics*: the people and the bus make one rigid body; their weight acts where they are.
+  **Status**: the equations are checked by unit tests; no claim is made here about OMSI 2. Classic
+  keeps today's rule: the people add their mass at `[cog]`, wherever they are, and the inertia stays
+  the file's.
+
+With `M` the body's own mass, `c_0 = (cog_x, cog_y, cog_z)` and `P = Σ m_j` the people's mass:
+
+```
+c'  = (M · c_0 + Σ m_j · r_j) / (M + P)
+I'  = I_0 + A(M · (c_0 - c')²) + A(Σ m_j · (r_j - c')²)
+A(v) = (v_y + v_z,  v_x + v_z,  v_x + v_y)        about the pitch, roll and yaw axes
+```
+
+(`v²` taken along each axis.) The products of inertia are left out: the body's inertia is diagonal
+(`C-8`). The model origin stays where it is when the centre moves, and so does the motion of every
+point of the body; the new inertia applies from the next step. Each section of an articulated bus
+takes the people in it, in its own frame. With nobody aboard the centre is `[cog]` and the inertia
+`[momentofintertia]`, exactly.
+
+**Each person's centre of mass.** Worked out once for each human type when it is loaded, from the
+joints of its rig in two still postures, with the segment shares of the anthropometric tables (D. A.
+Winter, *Biomechanics and Motor Control of Human Movement*, table 4.1: head 8.1 %, trunk 49.7 %, each
+thigh 10 %, shank 4.65 %, foot 1.45 %, upper arm 2.8 %, forearm 1.6 %, hand 0.6 %). Standing upright
+with the arms down, it lies over the feet at about 0.57 of the body's height (1.02 m for a 1.77 m
+man); seated upright with the thighs level and the hands on the lap, about 0.07 m ahead of the hips
+and 0.19 m over them. A person's centre is that point from their place in the cabin, turned the way
+they face. A rig made from broken `[links]` gives the centre of the body as broken as it is drawn.
+
+**What the player notices.** A crowd at the front presses the front axle more and the bus stands a
+little nose down; people bunched on one side lean it to that side; a full rear raises the nose and
+moves grip to the driven rear axle. A full bus leans and pitches a little more under the brakes and
+in bends (its centre of gravity higher) and, once its tyres slide, turns and stops turning more
+slowly (its inertia larger). The AI's buses are not affected (`DA-*`).
 
 ## The Depot AI
 
@@ -146,7 +192,43 @@ Heave, pitch and roll are three spring-damper systems, run in 4 substeps per fra
 The pose at rest is the `[ai_deltaheight]` offset plus the sag of each wheel, `min(F_i / k_sag, 0.24)`
 m, with `F_i` the load of the weight shared about `[cog]` (`D-1`).
 
+## D-3. The tyres hold axle by axle, with the turning they must start
+
+- **Inputs**: each tyre's grip (`μ · N_i`, its load from its strut as in `C-7`) and lever `y_i` (m
+  forward of the centre of gravity), the bend's pull `F = m · v² · κ` less a joint's push (as in
+  `C-7`), the body's yaw inertia `I_z` (`C-8`, with `D-2`) and its yaw rate. **Outputs**: whether the
+  tyres still hold (`C-7`'s holding state). **Module**: `physics/implementation/depot/grip.rs`
+  (`holds_across`, `yaw_accel`), `physics/implementation/tyre.rs` (`lateral_start`).
+- **Basis**: *physics* for the split of the force between the axles; *tuned* for the tyres'
+  relaxation length (`RELAXATION_LENGTH`, 0.6 m). **Status**: checked by unit tests; no claim is made
+  here about OMSI 2. Classic keeps `C-7`: the bend's pull against the grip of all tyres together,
+  with no turning to start.
+
+While holding, the body's yaw rate is set to `v · κ` (`C-7`), so the tyres must also give the moment
+that starts or stops that turning. With the tyres ahead of the centre of gravity at their
+grip-weighted lever `y_f` and those behind at `y_r`:
+
+```
+F_f + F_r         = F
+y_f F_f + y_r F_r = - I_z · ω̇
+|F_f| ≤ μ N_f  and  |F_r| ≤ μ N_r        the tyres hold
+```
+
+`ω̇` is the change of the yaw rate over a substep, followed with the lag of the tyres' relaxation,
+`τ = 0.6 m / max(v, 1 m/s)`: a steering key that sets the full bend in one step does not ask an
+endless force. A body with tyres on one side of its centre of gravity only (a rear section on one
+axle) is held by all of them together, as in `C-7`.
+
+**What it means.** In a steady bend nothing changes: the weight is shared about `[cog]` (`D-1`), so
+`N_f · y_f = - N_r · y_r` and each axle is asked the same share of its grip as all the tyres
+together. A quick swing of the steering (a lane change, a swerve) now asks more of the tyres, the
+more so the larger `[momentofintertia]`'s yaw value (and the passengers' share, `D-2`): on the test
+bus at 50 km/h, a swing to and back from the steering's position in one second lets the tyres go at
+0.24 of the lock with a yaw inertia of 130 t m² (Classic: 0.34), 0.14 with 400 t m². Braking or
+accelerating in a bend moves load between the axles and lets the lighter one go first. A
+`[momentofintertia]` far larger than the bus's real one (about `m · (L² + W²) / 12`) now shows as a
+bus that lets go too easily in quick manoeuvres; the value belongs fixed in the file (Principle III).
+
 ## Further `D-*`
 
-None for now (decision D2 of the plan). A later override that its check in OMSI 2 shows is a
-difference adds its own id here.
+A later override that its check in OMSI 2 shows is a difference adds its own id here.

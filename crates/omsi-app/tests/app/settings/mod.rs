@@ -1,8 +1,11 @@
 mod bus_seats;
+mod graphics;
 mod physics;
+mod rain_reflections;
 mod resolution;
 mod right_stick_look;
 mod round_trip;
+mod vanilla;
 
 /// The Traffic AI counts follow the original's sliders: a version 2 file said 0 for "no
 /// limit" and "every space", -1 for "no parked cars", and a count for the rest.
@@ -66,166 +69,6 @@ fn the_information_bar_is_kept_between_sessions() {
     assert!(!openomsi_game::testing::settings::Settings::default().info_bar);
     assert!(openomsi_game::testing::settings::Settings::from_text("info_bar=1\n").info_bar);
     assert!(!openomsi_game::testing::settings::Settings::from_text("info_bar=0\n").info_bar);
-}
-
-/// "DirectX9 (D3D9Ex)" is kept on Windows only; elsewhere the setting reads "auto".
-/// The locked values of the "DirectX9 (D3D9Ex)" table (`api_limits`) are what `lock_vanilla`
-/// sets, option by option; a new table entry needs its check here.
-#[test]
-fn the_d3d9_lock_sets_every_option_of_the_table() {
-    let mut s = Settings::default();
-    s.msaa = 8;
-    s.anisotropy = 16;
-    s.render_scale = 0.5;
-    s.mirror_size = 64;
-    s.mirror_refresh = "eco".into();
-    s.mirror_hud = 3;
-    s.windy_trees = true;
-    s.night_brightness = 1.0;
-    s.clouds = false;
-    s.lock_vanilla();
-    for l in openomsi_game::testing::api_limits::D3D9 {
-        let ok = match l.key {
-            "graphics" => s.graphics == "vanilla" && s.classic(),
-            // (the player's choice, held to the scales the table offers)
-            "render_scale" => s.render_scale == 0.5 && l.allows("0.5"),
-            "mirror_size" => {
-                s.mirror_size == 128 && l.allows(&s.mirror_size.to_string()) && s.mirror_hud == 0
-            }
-            "mirror_refresh" => s.mirror_refresh == "full" && l.allows(&s.mirror_refresh),
-            "windy_trees" => !s.windy_trees,
-            "clouds" => s.clouds,
-            "shadows" => !s.shadows,
-            "ssao" => !s.ssao,
-            "detail_textures" => !s.detail_textures,
-            "night_brightness" => s.night_brightness == 0.0,
-            // (hidden, and with nothing of their own to switch off under Vanilla)
-            "preset" | "shadow_size" | "shadow_casters" | "led_glow" | "led_mips" => true,
-            other => panic!("{other} is in the table but `lock_vanilla` is not checked for it"),
-        };
-        assert!(ok, "{} is not set by the lock", l.key);
-    }
-}
-
-#[test]
-fn d3d9_takes_the_render_scale_saved_under_another_api() {
-    // (the same key serves every API: a value saved under Vulkan or DirectX12 carries over,
-    // fitted to the steps DirectX9 offers; Auto and 100 % leave the picture at the window's size)
-    for (saved, want) in [
-        ("0.5", 0.5),
-        ("0.6", 0.67),
-        ("0.7", 0.67),
-        ("0.9", 0.85),
-        ("75%", 0.75),
-        ("auto", 0.0),
-    ] {
-        let mut s = Settings::from_text(&format!("graphics_api=d3d9\nrender_scale={saved}\n"));
-        s.lock_vanilla();
-        assert_eq!(s.render_scale, want, "saved {saved}");
-        // (a plain Settings is DirectX9 only on Windows, where its backend is decided)
-        if cfg!(windows) {
-            assert_eq!(s.dx9_render_scale(), want, "saved {saved}");
-        }
-    }
-    let mut full = Settings::from_text("graphics_api=d3d9\nrender_scale=1\n");
-    full.lock_vanilla();
-    assert_eq!(full.dx9_render_scale(), 0.0);
-}
-
-#[test]
-fn d3d9_has_no_graphics_improvements_to_choose() {
-    for g in ["vanilla_plus", "enhanced", "enhanced_plus"] {
-        let text = format!("graphics={g}\ngraphics_api=d3d9\n");
-        let chosen = Settings::from_text(&text);
-        assert_eq!(chosen.graphics, g);
-        // (the game loads it with `locked_for_api`; "DirectX9 (D3D9Ex)" is Windows only)
-        let loaded = chosen.clone().locked_for_api();
-        if cfg!(windows) {
-            assert_eq!(loaded.graphics, "vanilla");
-            assert!(loaded.classic() && !loaded.enhanced && !loaded.ray_tracing());
-            // as a file that says graphics=vanilla is loaded
-            let file = Settings::from_text("graphics=vanilla\ngraphics_api=d3d9\n");
-            assert_eq!(
-                (loaded.shadows, loaded.ssao, loaded.detail_textures),
-                (file.shadows, file.ssao, file.detail_textures)
-            );
-            assert!(!loaded.shadows && !loaded.ssao && !loaded.detail_textures);
-            // what DirectX9 does not draw yet is off, whatever was saved (`api_limits`);
-            // anti-aliasing and anisotropic filtering are drawn: kept as saved
-            let saved = Settings::from_text(&format!(
-                "graphics={g}\ngraphics_api=d3d9\nmsaa=8\nanisotropy=16\nrender_scale=0.5\nmirror_size=1024\nmirror_refresh=eco\nmirror_hud=3\nwindy_trees=1\npost_aa=fxaa\nclouds=0\n"
-            ))
-            .locked_for_api();
-            assert_eq!(
-                (saved.msaa, saved.anisotropy, saved.render_scale),
-                (8, 16, 0.5)
-            );
-            // (the render scale is DirectX9's own: the picture it draws is scaled there, the
-            // default renderer behind it is not told)
-            assert_eq!(saved.dx9_render_scale(), 0.5);
-            assert_eq!(saved.render_options().render_scale, 0.0);
-            // (mirrors are drawn: a saved value DirectX9 does not offer is fitted)
-            assert_eq!(
-                (
-                    saved.mirror_size,
-                    saved.mirror_refresh.as_str(),
-                    saved.mirror_hud
-                ),
-                (512, "full", 0)
-            );
-            // (what it does draw stays as saved: env maps and shadow meshes)
-            assert!(saved.reflections && saved.shadow_blobs);
-            assert_eq!((saved.windy_trees, saved.post_aa.as_str()), (false, "off"));
-            // (clouds are on, as OMSI 2 has the weather's own: a saved "off" is not taken)
-            assert!(saved.clouds);
-            // VR takes DirectX 12 instead, with the graphics as chosen
-            let vr = Settings::from_text(&format!("graphics={g}\ngraphics_api=d3d9\nvr=1\n"))
-                .locked_for_api();
-            assert_eq!(vr.graphics, g);
-        } else {
-            assert_eq!(loaded, chosen);
-        }
-        // another API keeps the choice, which comes back when it is picked again
-        let other =
-            Settings::from_text(&format!("graphics={g}\ngraphics_api=vulkan\n")).locked_for_api();
-        assert_eq!(other.graphics, g);
-    }
-    // --enhanced / --enhanced-plus (and their variables) do not apply to DirectX9 (D3D9Ex)
-    let d3d9 = Settings::from_text("graphics_api=d3d9\n");
-    assert_eq!(
-        openomsi_game::testing::core::startup::enhanced_wanted(&d3d9, true, true),
-        if cfg!(windows) {
-            (false, false)
-        } else {
-            (true, true)
-        }
-    );
-    let vulkan = Settings::from_text("graphics_api=vulkan\n");
-    assert_eq!(
-        openomsi_game::testing::core::startup::enhanced_wanted(&vulkan, true, true),
-        (true, true)
-    );
-    let mut s = Settings::from_text("graphics=enhanced_plus\n");
-    s.lock_vanilla();
-    assert!(s.classic() && !s.enhanced && !s.ray_tracing());
-}
-
-#[test]
-fn d3d9_is_a_windows_graphics_api() {
-    let want = if cfg!(windows) { "d3d9" } else { "auto" };
-    for v in ["d3d9", "D3D9Ex", "dx9"] {
-        let s =
-            openomsi_game::testing::settings::Settings::from_text(&format!("graphics_api={v}\n"));
-        assert_eq!(s.graphics_api, want);
-        assert_eq!(
-            openomsi_game::testing::settings::Settings::from_text(&s.to_text()).graphics_api,
-            want
-        );
-    }
-    assert_eq!(
-        openomsi_game::testing::settings::Settings::default().graphics_api,
-        "auto"
-    );
 }
 
 #[test]
@@ -331,20 +174,11 @@ fn old_files_board_automatically() {
 #[test]
 fn graphics_modes() {
     // an old file: its vanilla renderer is Vanilla+ now, enhanced stays enhanced
-    assert_eq!(Settings::from_text("enhanced=0\n").graphics, "vanilla_plus");
-    assert_eq!(Settings::from_text("enhanced=1\n").graphics, "enhanced");
     let v = Settings::from_text("graphics=vanilla\nshadows=1\nssao=1\n");
-    assert!(v.classic() && !v.shadows && !v.ssao && !v.detail_textures && !v.enhanced);
-    assert!(Settings::from_text("graphics=enhanced\nenhanced=0\n").enhanced);
-    assert_eq!(graphics_mode("Vanilla+"), "vanilla_plus");
-    assert_eq!(graphics_mode("OMSI 2"), "vanilla");
-    assert_eq!(graphics_mode("Enhanced+"), "enhanced_plus");
-    let rt = Settings::from_text("graphics=enhanced_plus\nshadows=0\nssao=0\nreflections=0\n");
-    assert!(rt.enhanced && rt.ray_tracing() && rt.shadows && rt.ssao && rt.reflections);
-    assert!(rt.render_options().ray_tracing && !rt.render_options().no_enhanced);
+    assert_eq!(v.graphics, GraphicsMode::Vanilla);
+    assert!(!v.shadows && !v.ssao && !v.detail_textures);
     let s = Settings {
-        graphics: "enhanced".into(),
-        enhanced: true,
+        graphics: GraphicsMode::Enhanced,
         ..Default::default()
     };
     assert_eq!(Settings::from_text(&s.to_text()), s);

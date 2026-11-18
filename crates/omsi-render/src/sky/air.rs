@@ -199,7 +199,7 @@ pub(crate) fn enhanced_sky_input(
         aerosol_height: day.aerosol_height,
         strat_aod: day.strat_aod,
         veil: lighting.veil.clamp(0.0, 3.0),
-        cumulus: if lighting.enhanced {
+        cumulus: if lighting.hdr() {
             (lighting.cloud_density.min(0.84)) * (1.0 - closed)
         } else {
             0.0

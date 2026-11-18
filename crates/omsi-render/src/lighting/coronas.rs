@@ -114,7 +114,7 @@ impl super::Lighting {
             sky: true,
             ..Default::default()
         };
-        if self.enhanced {
+        if self.hdr() {
             return vec![super::Corona {
                 // (the star's drawn width: 2.5 times the size, grown by its brightness)
                 size: size * 1.25 * SUN_GLARE_BRIGHTNESS * k * SUN_GLARE_DAY_GLOW,

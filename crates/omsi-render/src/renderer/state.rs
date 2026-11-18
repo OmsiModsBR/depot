@@ -3,7 +3,7 @@
 
 use super::options::RenderOptions;
 use crate::assets::{AssetStore, TexAddressing};
-use crate::effects::{puddles, rt};
+use crate::effects::puddles;
 use crate::gpu::{GpuContext, Samplers};
 use crate::lighting::LightMapAtlas;
 use crate::output::{Diagnostics, Presenter};
@@ -12,7 +12,7 @@ use crate::passes::{
     Exposure, FogLampsPass, PassPipelines, PostPipelines, PrepassPipelines, ShadowResources,
     SpriteResources, SsaoPass,
 };
-use crate::scene::{CullHistory, Layouts};
+use crate::scene::{Camera, CullHistory, Layouts, TextureId};
 use crate::sky::SkyResources;
 use crate::targets::TargetCache;
 
@@ -50,6 +50,9 @@ pub struct Renderer {
     /// The projection's width over height while a picture is drawn into a texture (see
     /// `render_to_texture`), whatever the texture's own shape.
     pub(crate) texture_aspect: Option<f32>,
+    /// The rain reflection drawn into a texture this frame for a second renderer (see
+    /// [`Renderer::set_rain_reflection`]): its texture, mirrored camera and aspect.
+    pub(crate) rain_reflection: Option<(TextureId, Camera, f32)>,
     pub(crate) last_frame: Option<std::time::Instant>,
     /// The next frame stands alone (an offscreen picture): the exposure is there at once.
     pub instant_exposure: bool,
@@ -84,8 +87,6 @@ pub struct Renderer {
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,
-    /// Enhanced+: the ray tracer (on a device with ray queries, see `RenderOptions::ray_tracing`).
-    pub(crate) rt: Option<rt::RayTracer>,
     pub(crate) sprites: SpriteResources,
     pub(crate) prepass: PrepassPipelines,
     pub(crate) ssao: SsaoPass,

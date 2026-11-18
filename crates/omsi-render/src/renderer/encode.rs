@@ -27,7 +27,7 @@ impl Renderer {
         let full_h = f.full_h;
         let width = f.width;
         let height = f.height;
-        let vanilla_fxaa = f.features.vanilla_fxaa;
+        let fxaa_without_msaa = f.features.fxaa_without_msaa;
         let glass_on = f.features.glass_on;
         let scaled = f.features.scaled;
         let aspect = f.aspect;
@@ -37,7 +37,6 @@ impl Renderer {
         let puddles_wanted = f.features.puddles_wanted;
         let reflection_frame = f.features.reflection_frame;
         let masked_frame = f.features.masked_frame;
-        let rt_frame = f.features.rt_frame;
         let ao_on = f.features.ao_on;
         let prepass_on = f.features.prepass_on;
         let dt = f.dt;
@@ -129,14 +128,6 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        if rt_frame {
-            self.encode_ray_tracing(
-                &mut prepass_encoder,
-                scene,
-                clock.tset.as_ref(),
-                &mut clock.timed,
-            );
-        }
         self.sky.encode_sky_cube(
             scene,
             &mut prepass_encoder,
@@ -195,7 +186,6 @@ impl Renderer {
             width,
             height,
             puddles_wanted,
-            rt_frame,
             &clock.tset,
             &mut clock.timed,
         );
@@ -265,7 +255,6 @@ impl Renderer {
             enhanced,
             lead_view,
             puddles_on,
-            rt_frame,
             scaled,
             with_overlays,
             &clock.tset,
@@ -281,7 +270,7 @@ impl Renderer {
             width,
             height,
             full_w,
-            vanilla_fxaa,
+            fxaa_without_msaa,
             &clock.tset,
             &mut clock.timed,
         );

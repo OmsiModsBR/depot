@@ -397,9 +397,6 @@ impl Renderer {
     /// creation failed validation and mapping it panicked (Windows, Vulkan).
     pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
         let pending = std::mem::take(&mut *self.assets.pending_meshes.borrow_mut());
-        if let Some(rt) = self.rt.as_ref() {
-            rt.meshes_changed(pending.iter().map(|(id, _)| *id));
-        }
         for (id, b) in &pending {
             let Some(m) = scene.meshes.get(*id) else {
                 continue;

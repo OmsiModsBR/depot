@@ -1,17 +1,13 @@
 //! The one place the graphics backend is chosen from the settings.
 
 use super::super::domain::backend::Backend;
-use crate::settings::Settings;
+use crate::settings::{GraphicsMode, Settings};
 
 impl Backend {
-    /// The backend `settings` choose: "DirectX9 (D3D9Ex)" for `graphics_api = d3d9` or
-    /// OMSI_BACKEND=d3d9, on Windows only and not with VR (OpenXR takes DirectX 12); wgpu
-    /// otherwise.
+    /// The backend `settings` choose: the mode decides. Vanilla is drawn by the Direct3D 9Ex
+    /// renderer on Windows; Vanilla+ and Enhanced, and Vanilla elsewhere, by wgpu.
     pub(crate) fn of(settings: &Settings) -> Backend {
-        let wanted = omsi_cfg::flags::BACKEND
-            .text()
-            .unwrap_or_else(|| settings.graphics_api.clone());
-        if cfg!(windows) && is_d3d9(&wanted) && !settings.vr_requested() {
+        if cfg!(windows) && settings.graphics == GraphicsMode::Vanilla {
             Backend::D3d9
         } else {
             Backend::Wgpu
@@ -26,12 +22,4 @@ impl Backend {
         }
         Backend::of(&Settings::load())
     }
-}
-
-/// Whether a `graphics_api` or OMSI_BACKEND value names "DirectX9 (D3D9Ex)".
-pub(crate) fn is_d3d9(name: &str) -> bool {
-    matches!(
-        name.trim().to_ascii_lowercase().as_str(),
-        "d3d9" | "d3d9ex" | "dx9"
-    )
 }

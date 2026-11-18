@@ -11,7 +11,7 @@ mod train;
 mod vehicle;
 mod wheel;
 
-pub use body::{CoupledPart, RigidBody};
+pub use body::{CoupledPart, Payload, RigidBody};
 pub use ground::{Ground, GroundProbe, WallFace};
 pub use impact::Impact;
 pub use kinematic::KinematicModel;

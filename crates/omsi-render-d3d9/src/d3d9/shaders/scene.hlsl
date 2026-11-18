@@ -20,7 +20,7 @@
 // [LightMapMapping] objects at night.
 //
 // Not yet here (later phases): shadows and ambient occlusion (taken as 1), the detail noise, swaying
-// trees, rain and snow (and the wet sheen on a reflecting surface). The fog covers the
+// trees, rain and snow (the wet road is a pass of its own: wet_road.hlsl). The fog covers the
 // player's vehicle like the rest of the scene.
 
 // ---- vertex stage ----

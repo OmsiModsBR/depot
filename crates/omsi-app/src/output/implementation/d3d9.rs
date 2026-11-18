@@ -182,12 +182,6 @@ impl Inner {
         self.main.extend(plan.main.iter().map(batch));
         self.cab.clear();
         self.cab.extend(plan.cab.iter().map(batch));
-        if plan.sky_color[3] < 0.5 {
-            self.warn_once(
-                "look",
-                "only the vanilla look is drawn here; the chosen one is drawn vanilla",
-            );
-        }
         let lights = scene.frame_lights();
         // (only a window picture carries time; a mirror's picture leaves the drops where they are)
         let seconds = if target.is_none() {
@@ -209,6 +203,12 @@ impl Inner {
                 sky_color: plan.sky_color,
                 cam_right: plan.cam_right,
                 cam_up: plan.cam_up,
+                weather: [
+                    plan.wetness,
+                    0.0,
+                    plan.world_origin[0],
+                    plan.world_origin[1],
+                ],
             },
             list: &plan.list,
             models: scene.slot_models(),
@@ -273,6 +273,7 @@ impl Inner {
                 stars: scene.sky_stars().map(|(t, _)| t),
                 star_frame: plan.stars,
             },
+            rain_reflection: plan.rain_reflection,
         };
         let material = |id: usize| {
             scene.materials.get(id).map(|m| SceneMaterial {

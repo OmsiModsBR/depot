@@ -2,6 +2,7 @@
 //! `~/.depot/settings.cfg` (the launcher writes the same file). Anything missing
 //! keeps its default, so an old file never breaks a new build.
 
+pub use omsi_cfg::GraphicsMode;
 use std::path::PathBuf;
 
 /// Where the game keeps its own files (`~/.depot`): settings beside the content, the
@@ -67,12 +68,10 @@ pub struct Settings {
     pub detail_textures: bool,
     /// Passengers pay the exact fare (no change to give at the cash desk).
     pub exact_fare: bool,
-    /// Enhanced graphics: the physically based renderer (its own lighting, sky, exposure).
-    pub enhanced: bool,
-    /// The graphics: `vanilla` (as OMSI 2 draws it: no sun shadows, no ambient occlusion,
-    /// no detail grain, no snow cover or rain drops of our own), `vanilla_plus` (the same
-    /// renderer with those extras, the default) or `enhanced` (`enhanced` follows it).
-    pub graphics: String,
+    /// The graphics mode: Vanilla (as OMSI 2 draws it: no sun shadows, no ambient occlusion,
+    /// no detail grain, no snow cover or rain drops of our own), Vanilla+ (the same renderer
+    /// with those extras, the default) or Enhanced (the physically based renderer).
+    pub graphics: GraphicsMode,
     /// Start a PC OpenXR headset session when the game starts (Windows only).
     pub vr: bool,
     /// Fraction of the OpenXR runtime's recommended eye resolution.
@@ -244,10 +243,13 @@ pub struct Settings {
     pub windy_trees: bool,
     /// The glare round the sun (OMSI 2's "Sun Glow"), in every graphics mode.
     pub sun_glow: bool,
-    /// "DirectX9 (D3D9Ex)" only: falling snow, drawn the way OMSI 2 draws it (camera-facing
-    /// flakes of its snowflake picture). Off by default: the DirectX9 picture has no falling
-    /// snow without it.
-    pub dx9_snow: bool,
+    /// "DirectX9 (D3D9Ex)" only: the puddles of a wet road mirror the street (OMSI 2's "Rain
+    /// reflexions"; off writes its `[no_rain_refl]`). On unless switched off; off, they
+    /// mirror the sky alone.
+    pub rain_reflections: bool,
+    /// "DirectX9 (D3D9Ex)" only: the people show in those reflections (OMSI 2's "Humans
+    /// visible in rain reflexions", `[no_humans_on_rain_refl]`). On unless switched off.
+    pub humans_in_rain_reflections: bool,
     /// "DirectX9 (D3D9Ex)" only: each spot of the ground takes at most [`NIGHT_LIGHT_CAP`] map
     /// lamps into its light (a deliberate saving for weak graphics cards; off = all, as before).
     pub fewer_night_lights: bool,
@@ -499,7 +501,7 @@ impl Settings {
     /// HUD coordinates occupy the centre panel by default; world picking always
     /// keeps the full window's physical coordinates.
     pub fn hud_viewport(&self, size: (u32, u32)) -> [f32; 4] {
-        if self.triple.enabled && self.triple_hud_center && !self.vr_requested() && size.0 >= 3 {
+        if self.triple_screen() && self.triple_hud_center && size.0 >= 3 {
             // (the centre panel, as the renderer draws it)
             let w = omsi_render::panel_width(size.0);
             [w as f32, 0.0, w as f32, size.1 as f32]
@@ -525,8 +527,7 @@ impl Settings {
             boarding: "auto".into(),
             detail_textures: true,
             exact_fare: true,
-            enhanced: false,
-            graphics: "vanilla_plus".into(),
+            graphics: GraphicsMode::VanillaPlus,
             triple: Default::default(),
             triple_span: true,
             triple_hud_center: true,
@@ -568,7 +569,8 @@ impl Settings {
             clouds: true,
             windy_trees: true,
             sun_glow: true,
-            dx9_snow: false,
+            rain_reflections: true,
+            humans_in_rain_reflections: true,
             fewer_night_lights: false,
             dx9_upscale: "bilinear".into(),
             dx9_glass_rain: true,
@@ -684,9 +686,33 @@ impl Settings {
 }
 
 impl Settings {
-    /// The launcher setting, with the old environment switch kept for existing VR runs.
+    /// The launcher setting, with the old environment switch kept for existing VR runs; never
+    /// in Vanilla, which opens without VR (the saved value is kept for the other modes).
     pub fn vr_requested(&self) -> bool {
-        cfg!(windows) && (self.vr || omsi_cfg::flags::OPENXR.is_set())
+        cfg!(windows)
+            && self.graphics != GraphicsMode::Vanilla
+            && (self.vr || omsi_cfg::flags::OPENXR.is_set())
+    }
+
+    /// Whether the window spans three screens: the setting, never with VR and never in
+    /// Vanilla, which opens without it (the saved value is kept for the other modes).
+    pub fn triple_screen(&self) -> bool {
+        self.triple.enabled && self.graphics != GraphicsMode::Vanilla && !self.vr_requested()
+    }
+
+    /// The line the log gets once when Vanilla opens without the VR or the triple screen the
+    /// settings ask for (`None`: nothing left out).
+    pub fn left_out_by_vanilla(&self) -> Option<&'static str> {
+        if self.graphics != GraphicsMode::Vanilla {
+            return None;
+        }
+        let vr = self.vr || omsi_cfg::flags::OPENXR.is_set();
+        match (vr, self.triple.enabled) {
+            (true, true) => Some("Vanilla opens without VR and without the triple screen (kept in the settings for the other modes)"),
+            (true, false) => Some("Vanilla opens without VR (kept in the settings for the other modes)"),
+            (false, true) => Some("Vanilla opens without the triple screen (kept in the settings for the other modes)"),
+            (false, false) => None,
+        }
     }
 
     /// `~/.depot/settings.cfg` (or `%USERPROFILE%` on Windows).
@@ -720,15 +746,15 @@ impl Settings {
             text.push_str(&format!("\ngraphics={g}\n"));
         }
         let mut s = Self::from_text(&text);
-        // "DirectX9 (D3D9Ex)" draws the picture as OMSI 2 does and no more: Vanilla, whatever
-        // the file says (it keeps the choice for the other graphics APIs)
-        s = s.locked_for_api();
+        // each graphics mode draws only what it offers (the file keeps the choices for the
+        // other modes)
+        s = s.fitted_to_mode();
         // OMSI_SAFE_GPU=<n>: the game was started again after its graphics device was lost
         // (see `App::restart_after_device_loss`): lighter on the card each time
         if let Some(n) = omsi_cfg::flags::SAFE_GPU.number::<u32>().filter(|n| *n > 0) {
             s.apply_safe_gpu(n);
         }
-        log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics, s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
+        log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics.as_str(), s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
         s
     }
 
@@ -736,7 +762,11 @@ impl Settings {
     pub fn from_text(text: &str) -> Settings {
         let mut s = Settings::default();
         let mut version = 0u32;
-        let mut graphics: Option<String> = None;
+        let mut graphics: Option<GraphicsMode> = None;
+        // (the old key of files from before `graphics`)
+        let mut enhanced = false;
+        // (a file that chose the old "DirectX9 (D3D9Ex)" API, which drew Vanilla)
+        let mut dx9_api = false;
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
@@ -769,8 +799,8 @@ impl Settings {
                 "boarding" => s.boarding = v.to_ascii_lowercase(),
                 "detail_textures" | "fractal" => s.detail_textures = b(v),
                 "exact_fare" => s.exact_fare = b(v),
-                "enhanced" => s.enhanced = b(v),
-                "graphics" | "renderer" => graphics = Some(graphics_mode(v).to_string()),
+                "enhanced" => enhanced = b(v),
+                "graphics" | "renderer" => graphics = Some(GraphicsMode::parse(v)),
                 "vr" => s.vr = b(v),
                 "vr_scale" => {
                     s.vr_scale = v
@@ -948,7 +978,8 @@ impl Settings {
                 "clouds" => s.clouds = b(v),
                 "windy_trees" => s.windy_trees = b(v),
                 "sun_glow" => s.sun_glow = b(v),
-                "dx9_snow" => s.dx9_snow = b(v),
+                "rain_reflections" => s.rain_reflections = b(v),
+                "humans_in_rain_reflections" => s.humans_in_rain_reflections = b(v),
                 "fewer_night_lights" => s.fewer_night_lights = b(v),
                 "dx9_upscale" => {
                     s.dx9_upscale = match v.to_ascii_lowercase().as_str() {
@@ -1150,7 +1181,11 @@ impl Settings {
                 "graphics_api" => {
                     s.graphics_api = match v.trim().to_ascii_lowercase().as_str() {
                         x @ ("vulkan" | "dx12" | "gl") => x.to_string(),
-                        "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9".to_string(),
+                        // (the old "DirectX9 (D3D9Ex)" API: Vanilla now, see below)
+                        "d3d9" | "d3d9ex" | "dx9" => {
+                            dx9_api = cfg!(windows);
+                            "auto".to_string()
+                        }
                         _ => "auto".to_string(),
                     }
                 }
@@ -1464,23 +1499,25 @@ impl Settings {
         }
         // `graphics` decides; a file without it (older builds) says only `enhanced`, and
         // its vanilla renderer is what is now called Vanilla+
-        s.graphics = graphics.unwrap_or_else(|| {
-            if s.enhanced {
-                "enhanced"
-            } else {
-                "vanilla_plus"
-            }
-            .to_string()
+        s.graphics = graphics.unwrap_or(if enhanced {
+            GraphicsMode::Enhanced
+        } else {
+            GraphicsMode::VanillaPlus
         });
-        s.enhanced = s.graphics == "enhanced" || s.graphics == "enhanced_plus";
-        // Enhanced+ is Enhanced with ray tracing: its shadows, ambient occlusion and
-        // reflections are traced and belong to it - they cannot be switched off apart
-        if s.ray_tracing() {
-            s.shadows = true;
-            s.ssao = true;
-            s.reflections = true;
+        // the old "DirectX9 (D3D9Ex)" API showed Vanilla whatever `graphics` said: it is
+        // what the player saw, and Vanilla is that renderer now (the file is rewritten only
+        // when the player saves)
+        if dx9_api {
+            static NOTED: std::sync::Once = std::sync::Once::new();
+            NOTED.call_once(|| {
+                log::info!(
+                    "settings: graphics_api=d3d9 read as graphics=vanilla (was {}) and graphics_api=auto",
+                    s.graphics.as_str()
+                )
+            });
+            s.graphics = GraphicsMode::Vanilla;
         }
-        if s.classic() {
+        if s.graphics == GraphicsMode::Vanilla {
             s.shadows = false;
             s.ssao = false;
             s.detail_textures = false;
@@ -1506,12 +1543,6 @@ impl Settings {
         s
     }
 
-    /// Enhanced+ graphics: Enhanced with ray-traced sun shadows, ambient occlusion and
-    /// reflections (and the graded look that goes with them).
-    pub fn ray_tracing(&self) -> bool {
-        self.graphics == "enhanced_plus"
-    }
-
     /// Windy trees, unless `OMSI_WINDY_TREES=0`/`1` says otherwise (A/B renders).
     pub fn windy_trees(&self) -> bool {
         match omsi_cfg::flags::WINDY_TREES.text() {
@@ -1535,10 +1566,17 @@ impl Settings {
         }
     }
 
-    /// Whether the falling snow of "DirectX9 (D3D9Ex)" is drawn: its own option, and only
-    /// under that API (the other renderers draw their own snowfall).
+    /// Whether Vanilla's Direct3D 9Ex renderer draws the falling snow (as OMSI 2 does, it
+    /// follows the weather alone; the other renderers draw their own snowfall).
     pub fn dx9_snowfall(&self) -> bool {
-        self.dx9_snow && self.backend() == crate::output::Backend::D3d9
+        self.backend() == crate::output::Backend::D3d9
+    }
+
+    /// The rain reflection to draw: under "DirectX9 (D3D9Ex)" with the option on, whether
+    /// the people show in it (`None`: none is drawn; the other APIs draw their own puddles).
+    pub fn rain_reflection(&self) -> Option<bool> {
+        (self.rain_reflections && self.backend() == crate::output::Backend::D3d9)
+            .then_some(self.humans_in_rain_reflections)
     }
 
     /// The fraction of the window the "DirectX9 (D3D9Ex)" renderer draws the scene at (0 =
@@ -1574,56 +1612,44 @@ impl Settings {
         self.backend() != crate::output::Backend::D3d9
     }
 
-    /// These settings as the chosen graphics API takes them: Vanilla under "DirectX9 (D3D9Ex)".
-    pub fn locked_for_api(mut self) -> Self {
-        if self.backend() == crate::output::Backend::D3d9 {
-            self.lock_vanilla();
-        }
+    /// These settings as the graphics mode draws them (`omsi_cfg::graphics_options::fit`): an
+    /// option the mode fixes takes its fixed value, one it offers with fewer choices the nearest
+    /// of them, one it draws without its "off". The file keeps the choices for the other modes.
+    pub fn fitted_to_mode(mut self) -> Self {
+        self.fit_to_mode();
         self
     }
 
-    /// Vanilla graphics, whatever was set: the "same as OMSI 2" mode of "DirectX9 (D3D9Ex)"
-    /// has no graphics improvements to choose.
-    pub fn lock_vanilla(&mut self) {
-        self.graphics = "vanilla".into();
-        self.enhanced = false;
-        // (what a Vanilla file is loaded without, see `from_text`)
-        self.shadows = false;
-        self.ssao = false;
-        self.detail_textures = false;
-        // (the other limits of the table in `api_limits`: what DirectX9 does not draw yet;
-        // the render scale it does, see `dx9_render_scale`: kept as saved)
-        self.post_aa = "off".into();
-        // (a scale saved under Vulkan or DirectX12 carries over, fitted to the steps this API
-        // offers: 0.6 becomes 0.67; Auto stays Auto)
-        if self.render_scale > 0.0 {
-            if let Some(l) = crate::api_limits::d3d9("render_scale") {
-                let fitted = l.fit(&self.render_scale_text());
-                if let Ok(x) = fitted.parse::<f32>() {
-                    self.render_scale = x;
-                }
-            }
-        }
-        // (flat mirrors are drawn, in the sizes OMSI 2 offers and on or off: no economical
-        // refresh, no picture beyond 512; the corner copies of the mirrors are ours too)
-        if let Some(l) = crate::api_limits::d3d9("mirror_size") {
-            self.mirror_size = l.fit(&self.mirror_size.to_string()).parse().unwrap_or(0);
-        }
-        if let Some(l) = crate::api_limits::d3d9("mirror_refresh") {
-            self.mirror_refresh = l.fit(&self.mirror_refresh);
-        }
-        self.mirror_hud = 0;
-        self.windy_trees = false;
-        // (OMSI 2's sky: the weather's own clouds, none added to a clear sky, see
+    /// `fitted_to_mode` in place.
+    pub fn fit_to_mode(&mut self) {
+        use omsi_cfg::graphics_options::fit;
+        let mode = self.graphics;
+        let on = |key: &str, v: bool| fit(key, mode, if v { "true" } else { "false" }) == "true";
+        self.shadows = on("shadows", self.shadows);
+        self.ssao = on("ssao", self.ssao);
+        self.detail_textures = on("detail_textures", self.detail_textures);
+        self.shadow_blobs = on("shadow_blobs", self.shadow_blobs);
+        self.windy_trees = on("windy_trees", self.windy_trees);
+        // (OMSI 2's sky in Vanilla: the weather's own clouds, none added to a clear sky, see
         // `fair_weather_clouds`)
-        self.clouds = true;
-        // (the sun's own light only: Enhanced's brighter night is an improvement)
-        self.night_brightness = 0.0;
-    }
-
-    /// Vanilla graphics: the picture as OMSI 2 draws it.
-    pub fn classic(&self) -> bool {
-        self.graphics == "vanilla"
+        self.clouds = on("clouds", self.clouds);
+        let number = |key: &str, v: f32| fit(key, mode, &format!("{v}")).parse().unwrap_or(v);
+        self.night_brightness = number("night_brightness", self.night_brightness);
+        // (a scale saved in another mode carries over, fitted to the steps the mode offers:
+        // 0.6 becomes 0.67 in Vanilla; Auto stays Auto)
+        if self.render_scale > 0.0 {
+            self.render_scale = number("render_scale", self.render_scale);
+        }
+        self.mirror_size = fit("mirror_size", mode, &self.mirror_size.to_string())
+            .parse()
+            .unwrap_or(self.mirror_size);
+        self.mirror_refresh = fit("mirror_refresh", mode, &self.mirror_refresh);
+        // (settings of the file alone, with no row on any page: Vanilla draws without FXAA
+        // and without the corner copies of the mirrors, which are ours)
+        if mode == GraphicsMode::Vanilla {
+            self.post_aa = "off".into();
+            self.mirror_hud = 0;
+        }
     }
 
     /// How far objects are drawn (m, 0 = no limit): `max_obj_dist`, or when that is `auto`
@@ -1698,25 +1724,8 @@ impl Settings {
             shadow_blobs: self.shadow_blobs,
             reflections: self.reflections,
             smoke_in_mirrors: self.smoke_in_mirrors,
-            no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"),
-            ray_tracing: self.ray_tracing()
-                || crate::core::startup::ENHANCED_PLUS.load(std::sync::atomic::Ordering::Relaxed),
+            no_enhanced: self.graphics != GraphicsMode::Enhanced,
         }
-    }
-}
-
-/// `vanilla`, `vanilla_plus`, `enhanced` or `enhanced_plus` from the ways a file may spell them.
-pub fn graphics_mode(v: &str) -> &'static str {
-    match v
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', ' '], "_")
-        .as_str()
-    {
-        "enhanced_plus" | "enhanced+" | "enhancedplus" | "enhanced_+" | "2" => "enhanced_plus",
-        "enhanced" | "1" => "enhanced",
-        "vanilla" | "classic" | "original" | "omsi" | "omsi2" | "omsi_2" => "vanilla",
-        _ => "vanilla_plus",
     }
 }
 

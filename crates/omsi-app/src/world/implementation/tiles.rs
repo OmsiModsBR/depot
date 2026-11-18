@@ -223,16 +223,21 @@ impl MapIndex {
                 let mut part = MapIndex::default();
                 part.traffic_light_parents = traffic_light_parents(&tile, |file| {
                     let key = file.replace('/', "\\").to_ascii_lowercase();
-                    *signal_types.lock().entry(key).or_insert_with(|| {
-                        let path = omsi_cfg::resolve_path(root, file);
-                        match omsi_scenery::SceneryObject::load(&path) {
-                            Ok(sco) => sco.is_traffic_light,
-                            Err(e) => {
-                                log::warn!("reading traffic light type: {e}");
-                                false
-                            }
+                    if let Some(&known) = signal_types.lock().get(&key) {
+                        return known;
+                    }
+                    // (read outside the lock: held while the file was read, the tiles read on
+                    // the other threads waited for it; two threads reading the same file at
+                    // once get the same answer)
+                    let path = omsi_cfg::resolve_path(root, file);
+                    let is_light = match omsi_scenery::SceneryObject::load(&path) {
+                        Ok(sco) => sco.is_traffic_light,
+                        Err(e) => {
+                            log::warn!("reading traffic light type: {e}");
+                            false
                         }
-                    })
+                    };
+                    *signal_types.lock().entry(key).or_insert(is_light)
                 });
                 let lights: LightParts = {
                     let named = light_naming_parents(&tile);

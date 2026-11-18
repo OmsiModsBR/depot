@@ -198,8 +198,6 @@ pub struct Launcher {
     map_rect: Option<Rect>,
     map_tex: Option<usize>,
     map_gen: u64,
-    /// The content reading the Maps and Vehicles pages' lists are of (`State::content_gen`).
-    catalog_gen: u64,
     /// The window has the keyboard / is hidden: without focus it is drawn ten times a
     /// second, hidden not at all (a game started from it is being played).
     focused: bool,
@@ -310,7 +308,6 @@ impl Launcher {
             map_rect: None,
             map_tex: None,
             map_gen: 0,
-            catalog_gen: 0,
             focused: true,
             occluded: false,
             tucked: None,
@@ -2047,21 +2044,13 @@ impl Launcher {
         })
     }
 
-    /// Give the Vehicles and Maps pages the host's catalogs when those differ from what the
-    /// pages show (the host reads them again after Setup or an install, and fills them as its
-    /// scan goes on).
+    /// Give the Vehicles and Maps pages the host's catalogs whenever those changed (the host
+    /// reads them again after Setup or an install, fills them as its first scan goes on and
+    /// reads some buses again after a depot file sync).
     fn refresh_catalogs(&mut self) {
-        // (as many as before, but other ones: another content folder chosen under Setup)
-        let other = self.catalog_gen != self.state.content_gen;
-        self.catalog_gen = self.state.content_gen;
-        let host = self.state.vehicles.len();
-        if host > 0 && (other || self.vehicles.catalog_len() != Some(host)) {
-            self.vehicles.set_catalog(self.state.vehicles.clone());
-        }
-        let host = self.state.maps.len();
-        if host > 0 && (other || self.maps.catalog_len() != Some(host)) {
-            self.maps.set_catalog(self.state.maps.clone());
-        }
+        self.vehicles
+            .follow_host(self.state.vehicles_gen, &self.state.vehicles);
+        self.maps.follow_host(self.state.maps_gen, &self.state.maps);
     }
 
     /// The Vehicles page; "Drive this bus" takes the bus and its paint to the Drive page.
@@ -2090,6 +2079,7 @@ impl Launcher {
         self.vehicles.set_picture(has_bus.then_some(picture));
         let none = !self.root_ok();
         self.vehicles.set_no_folder(none);
+        self.vehicles.set_host_reading(self.state.loading_content);
         self.vehicles.draw(&mut self.ui, body);
         if self.vehicles.take_open_setup() {
             self.go(Page::Setup);
@@ -2242,6 +2232,7 @@ impl Launcher {
         let body = Rect::new(area.x, area.y - 28.0, area.w, area.h + 28.0);
         let none = !self.root_ok();
         self.maps.set_no_folder(none);
+        self.maps.set_host_reading(self.state.loading_content);
         self.maps.draw(&mut self.ui, body);
         if self.maps.take_open_setup() {
             self.go(Page::Setup);

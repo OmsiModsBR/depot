@@ -5,7 +5,7 @@
 
 use glam::{DVec3, Mat4, Vec2, Vec3};
 use omsi_geometry::MeshData;
-use omsi_render::{AlphaMode, Camera, Lighting, RenderOptions, Renderer};
+use omsi_render::{AlphaMode, Camera, Lighting, RenderOptions, Renderer, ShadingPath};
 
 /// A quad from `a` along `u` and `v`, facing `n`.
 fn quad(a: Vec3, u: Vec3, v: Vec3, n: Vec3) -> MeshData {
@@ -110,7 +110,11 @@ fn render(ssao: bool, layer: bool, enhanced: bool) -> Vec<i32> {
         far: 100.0,
     };
     let lighting = Lighting {
-        enhanced,
+        path: if enhanced {
+            ShadingPath::Hdr
+        } else {
+            ShadingPath::Linear
+        },
         shadows: false,
         fog_density: 0.0,
         ..Default::default()

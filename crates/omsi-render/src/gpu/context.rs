@@ -21,10 +21,6 @@ pub(crate) struct GpuContext {
     pub(crate) format: wgpu::TextureFormat,
     /// Set by the device's error handler when something failed with multisampling on.
     pub(crate) gpu_error: Arc<std::sync::atomic::AtomicBool>,
-    /// A GPU error while Enhanced+ traces rays: its ray tracing is left out from the next
-    /// frame on (a frame whose commands the device refused shows nothing at all - left to
-    /// go on, the picture stood still on the loading screen while the game ran behind it).
-    pub(crate) rt_error: Arc<std::sync::atomic::AtomicBool>,
     /// The card ran out of memory since the last `take_out_of_memory`.
     pub(crate) out_of_memory: Arc<std::sync::atomic::AtomicBool>,
     /// Why the graphics device was lost (a driver reset, the card removed), once it was.
@@ -40,14 +36,9 @@ pub(crate) struct GpuContext {
 impl GpuContext {
     /// Sets the device's error and loss handlers (see `Renderer::build`), the encoding workers and
     /// the poller.
-    pub(crate) fn open(
-        device: &wgpu::Device,
-        format: wgpu::TextureFormat,
-        msaa: u32,
-        ray_tracing: bool,
-    ) -> Self {
+    pub(crate) fn open(device: &wgpu::Device, format: wgpu::TextureFormat, msaa: u32) -> Self {
         // (what an error does: see `GpuErrors`)
-        let errors = Arc::new(GpuErrors::new(msaa, ray_tracing));
+        let errors = Arc::new(GpuErrors::new(msaa));
         let device_lost = LostFlag::default();
         {
             let lost = device_lost.clone();
@@ -61,17 +52,12 @@ impl GpuContext {
                 errors.on_error(&e);
             }));
         }
-        let (gpu_error, rt_error, out_of_memory) = (
-            errors.gpu_error.clone(),
-            errors.rt_error.clone(),
-            errors.out_of_memory.clone(),
-        );
+        let (gpu_error, out_of_memory) = (errors.gpu_error.clone(), errors.out_of_memory.clone());
         Self {
             _device_poller: DevicePoller::start(device, device_lost.clone()),
             errors,
             format,
             gpu_error,
-            rt_error,
             out_of_memory,
             device_lost,
             encoding_pool: if omsi_cfg::flags::NO_RENDER_POOL.is_set() {
@@ -92,8 +78,8 @@ impl GpuContext {
 }
 
 impl GpuContext {
-    /// What this context, made anew for the same device (the fallbacks without
-    /// multisampling or ray tracing), takes over from `old`: an "out of memory" not yet
+    /// What this context, made anew for the same device (the fallback without
+    /// multisampling), takes over from `old`: an "out of memory" not yet
     /// taken (the error that switched the multisampling off was often that one, and the
     /// game's textures were then never cut) and a loss already known.
     pub(crate) fn inherit(&self, old: &GpuContext) {
@@ -204,10 +190,10 @@ mod tests {
     fn a_context_made_anew_takes_over_a_shortage_and_a_loss() {
         let device = noop_device();
         let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let old = GpuContext::open(&device, format, 4, false);
+        let old = GpuContext::open(&device, format, 4);
         old.out_of_memory.store(true, Ordering::Relaxed);
         mark_lost(&old.device_lost, "Unknown: before the fallback");
-        let new = GpuContext::open(&device, format, 1, false);
+        let new = GpuContext::open(&device, format, 1);
         old.errors.fake_out_of_memory_once();
         new.inherit(&old);
         assert!(new.out_of_memory.load(Ordering::Relaxed));
@@ -225,8 +211,8 @@ mod tests {
     fn a_context_made_anew_after_nothing_went_wrong_starts_clean() {
         let device = noop_device();
         let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let old = GpuContext::open(&device, format, 4, false);
-        let new = GpuContext::open(&device, format, 1, false);
+        let old = GpuContext::open(&device, format, 4);
+        let new = GpuContext::open(&device, format, 1);
         new.inherit(&old);
         assert!(!new.out_of_memory.load(Ordering::Relaxed));
         assert!(!new.errors.fake_oom_sent.load(Ordering::Relaxed));
@@ -238,7 +224,7 @@ mod tests {
         // the error handler set on the device is the context's: an "out of memory" from
         // the device is noted
         let device = noop_device();
-        let ctx = GpuContext::open(&device, wgpu::TextureFormat::Rgba8UnormSrgb, 1, false);
+        let ctx = GpuContext::open(&device, wgpu::TextureFormat::Rgba8UnormSrgb, 1);
         assert!(ctx.errors.fake_out_of_memory_once());
         assert!(ctx.out_of_memory.load(Ordering::Relaxed));
     }

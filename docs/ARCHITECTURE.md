@@ -1083,7 +1083,7 @@ Matched to the observable behaviour of OMSI 2 and put in place of our own guesse
 * **Enhanced paint**: a `[matl_envmap]` body is a clear coat (f0 0.04, its factor x mask its
   smoothness: 1 and up polished, 0.05..0.2 satin trim, unmasked parts rough); bodies painted
   through a `[matl_transmap]` (most mod buses and cars) reflect too - they were left out
-  and showed matte paint beside reflecting windows. Enhanced+ traces the coat like glass.
+  and showed matte paint beside reflecting windows.
 * **Night adaptation (Enhanced)**: the lamp meter (`view_lamp_light`) takes the ground where
   a grid of rays through the picture meets the street (the player's vehicle's height), not
   points 1.6 m under the camera (in the air from any higher camera: a moonless night was

@@ -7,8 +7,7 @@ use super::super::domain::cli::Args;
 use super::super::interface::output::Settings;
 use super::applog;
 use super::startup::{
-    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLASSIC, CLOUDS, ENHANCED,
-    ENHANCED_PLUS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
+    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLOUDS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
 use crate::frame::domain::session::Session;
 use crate::gameplay::duty_start::place_on_duty;
@@ -31,11 +30,6 @@ pub(crate) enum ServerCfg {}
 /// The showroom is drawn the way the game will be.
 pub(crate) fn launcher_statics() {
     let s = Settings::load();
-    ENHANCED.store(
-        startup::enhanced_wanted(&s, false, false).0,
-        std::sync::atomic::Ordering::Relaxed,
-    );
-    CLASSIC.store(s.classic(), std::sync::atomic::Ordering::Relaxed);
     CLOUDS.store(
         s.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(),
         std::sync::atomic::Ordering::Relaxed,
@@ -165,14 +159,18 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     }
     let settings = Settings::load();
     applog::log_system(&settings);
+    if let Some(line) = settings.left_out_by_vanilla() {
+        log::info!("settings: {line}");
+    }
     if args.drive_keys.eq_ignore_ascii_case("simple")
         && !settings.drive_keys.eq_ignore_ascii_case("simple")
     {
         args.drive_keys = settings.drive_keys.clone();
     }
-    let (enhanced, plus) = startup::enhanced_wanted(&settings, args.enhanced, args.enhanced_plus);
-    ENHANCED_PLUS.store(plus, std::sync::atomic::Ordering::Relaxed);
-    ENHANCED.store(enhanced, std::sync::atomic::Ordering::Relaxed);
+    if args.enhanced_plus {
+        log::info!("--enhanced-plus ignored: Enhanced+ graphics were removed");
+    }
+    let graphics = startup::resolved_graphics(&settings, args.enhanced);
     CLOUDS.store(
         settings.clouds && !omsi_cfg::flags::NO_CLOUDS.is_set(),
         std::sync::atomic::Ordering::Relaxed,
@@ -193,10 +191,6 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
     omsi_audio::DOPPLER.store(settings.doppler, std::sync::atomic::Ordering::Relaxed);
     omsi_audio::MUFFLE_OUTSIDE.store(
         settings.muffle_outside,
-        std::sync::atomic::Ordering::Relaxed,
-    );
-    CLASSIC.store(
-        settings.classic() && !ENHANCED.load(std::sync::atomic::Ordering::Relaxed),
         std::sync::atomic::Ordering::Relaxed,
     );
     let _ = server_cfg;
@@ -266,6 +260,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         mirror_budget: 1.0,
         mirrors_seen: 2,
         mirror_turn: 0,
+        rain_reflection: None,
         frozen_mirrors: None,
         mirror_hud: Default::default(),
         hover_key: None,
@@ -322,6 +317,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         steer_cursor: None,
         center_cursor: false,
         cursor_hidden: None,
+        cursor_confined: false,
         last_ctl_steer: None,
         mouse_pedals: (0.0, 0.0),
         mouse_kmh: 0.0,
@@ -394,6 +390,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         metar_next: 0.0,
         cursor_kind: 0,
         settings,
+        graphics,
         spikes: 0,
         worst_ms: 0.0,
         governor: (0.0, 0, 0.0),

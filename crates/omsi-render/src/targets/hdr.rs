@@ -4,7 +4,7 @@
 use super::PuddleTargets;
 use super::{GroupParts, TargetCache};
 use crate::assets::AssetStore;
-use crate::gpu::{rt_gbuf, target_2d, AUX_FORMAT, GBUF_FORMAT, MASK_FORMAT};
+use crate::gpu::{target_2d, MASK_FORMAT};
 
 /// High-range colour targets of the enhanced path for one size: the multisampled one the
 /// scene is drawn into, the single-sampled one it resolves into, the glow's levels, the
@@ -15,9 +15,6 @@ pub(crate) struct HdrTargets {
     /// The screen mask (`MASK_FORMAT`), multisampled and resolved like the picture.
     pub(crate) mask_msaa: Option<wgpu::TextureView>,
     pub(crate) mask: wgpu::TextureView,
-    /// Enhanced+: the reflections' surfaces (`GBUF_FORMAT`, `AUX_FORMAT`): (multisampled,
-    /// resolved) each.
-    pub(crate) gbuf: Option<[(Option<wgpu::TextureView>, wgpu::TextureView); 2]>,
     /// Glow levels at 1/2, 1/4, ... of the size, and the upsampled sums per level.
     pub(crate) down: Vec<wgpu::TextureView>,
     pub(crate) up: Vec<wgpu::TextureView>,
@@ -89,14 +86,6 @@ impl TargetCache {
         let mask_msaa =
             (samples > 1).then(|| target("screen mask msaa", w, h, MASK_FORMAT, samples));
         let mask = target("screen mask", w, h, MASK_FORMAT, 1);
-        let gbuf = rt_gbuf().then(|| {
-            [GBUF_FORMAT, AUX_FORMAT].map(|f| {
-                (
-                    (samples > 1).then(|| target("rt surfaces msaa", w, h, f, samples)),
-                    target("rt surfaces", w, h, f, 1),
-                )
-            })
-        });
         // the glow: halving until the smallest level is a few dozen pixels across
         let levels = GLOW_LEVELS
             .min((w.min(h).max(16) as f32).log2() as usize - 3)
@@ -186,7 +175,6 @@ impl TargetCache {
                 view,
                 mask_msaa,
                 mask,
-                gbuf,
                 down,
                 up,
                 ldr,

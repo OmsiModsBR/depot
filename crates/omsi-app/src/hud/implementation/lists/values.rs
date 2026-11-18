@@ -52,7 +52,7 @@ pub fn set_camera_fov(
     } else {
         value.round().min(120.0)
     };
-    if settings.triple.enabled && !settings.vr_requested() {
+    if settings.triple_screen() {
         settings.triple.fov_deg = value;
         ("triple_fov_deg", value.to_string())
     } else {
@@ -100,7 +100,7 @@ pub(in crate::hud) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32
         "triple_right_angle_deg" => s.triple.right_angle_deg,
         "triple_eye_height_mm" => s.triple.eye_height_mm,
         "fov" => {
-            if s.triple.enabled && !s.vr_requested() {
+            if s.triple_screen() {
                 s.triple.fov_deg
             } else {
                 s.fov
@@ -503,7 +503,8 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
         "sun_glow" => s.sun_glow,
-        "dx9_snow" => s.dx9_snow,
+        "rain_reflections" => s.rain_reflections,
+        "humans_in_rain_reflections" => s.humans_in_rain_reflections,
         "fewer_night_lights" => s.fewer_night_lights,
         "dx9_glass_rain" => s.dx9_glass_rain,
         "dx9_coronas" => s.dx9_coronas,
@@ -795,9 +796,13 @@ pub(in crate::hud) fn toggle_set(
             app.settings.sun_glow = on;
             Some(("sun_glow", bit))
         }
-        "dx9_snow" => {
-            app.settings.dx9_snow = on;
-            Some(("dx9_snow", bit))
+        "rain_reflections" => {
+            app.settings.rain_reflections = on;
+            Some(("rain_reflections", bit))
+        }
+        "humans_in_rain_reflections" => {
+            app.settings.humans_in_rain_reflections = on;
+            Some(("humans_in_rain_reflections", bit))
         }
         "fewer_night_lights" => {
             app.settings.fewer_night_lights = on;

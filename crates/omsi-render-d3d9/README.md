@@ -166,7 +166,19 @@ picture, draws the scene without smoke (the pass says so once in the log).
 
 A vehicle's shadow blob (surface code `scene::BLOB_SURFACE_CODE`) is drawn blended by its picture's alpha; a blob whose picture has no alpha (`SceneTexture::alpha_in_use`) or whose material is opaque would be a solid box on the road, so the backend leaves it out.
 
-Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees, weather (the wet sheen, the snowfall pass),
+The wet road: a pass of its own (`d3d9::wet_road`, `shaders/wet_road.hlsl`) over the surfaces whose texture carries
+`[moisture]` or `[puddles]` (material uniform vector 3, z), drawn with the scene's vertex shader after the scene's
+batches, so the scene's pixel shader keeps its slots. Under rain (`SceneLight::weather`, x; none under snow) such a
+surface darkens by up to a quarter of its light, takes a Fresnel sheen of the sky, and gathers pools of standing water
+from a fixed pattern on the map (about a fifth of a soaked road) that mirror the sky almost fully at grazing angles, as
+the default renderer's vanilla wet road; the fog takes it away with the distance. The pass blends ONE, INVSRCALPHA
+on the stored colour. Painted ground layers are not wetted (the ground below them is). With the rain reflections on,
+`SceneFrame::rain_reflection` names the scene texture the game drew the street into from the camera mirrored under
+the road, and that camera's view-projection: the pass projects each spot of a pool with it (sampler 1, clamped) and
+the pool mirrors that picture instead of the sky's colour, faded to the sheen at the picture's border. A device that
+cannot make the pass draws the world dry.
+
+Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
 default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 

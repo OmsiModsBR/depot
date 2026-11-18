@@ -23,6 +23,7 @@ impl State {
                     return;
                 }
                 self.maps = maps;
+                self.maps_gen += 1;
                 self.weathers = weathers;
                 self.pick_map();
                 self.load_lines();
@@ -38,12 +39,14 @@ impl State {
                         *old = v;
                     }
                 }
+                self.vehicles_gen += 1;
             }
             Msg::VehiclesRead { batch, done, total } => {
                 if !self.content_first {
                     return;
                 }
                 self.vehicles.extend(batch);
+                self.vehicles_gen += 1;
                 self.set_status(omsi_ui::tr("%{maps} maps, %{buses} buses - reading the vehicle folders: %{done} of %{total}").replace("%{maps}", &self.maps.len().to_string()).replace("%{buses}", &self.vehicles.len().to_string()).replace("%{done}", &done.to_string()).replace("%{total}", &total.to_string()), false);
             }
             Msg::Content(Ok((maps, vehicles, weathers))) => {
@@ -89,21 +92,16 @@ impl State {
                         .replace("%{weathers}", &weathers.len().to_string()),
                     false,
                 );
-                // (other files than before - another content folder chosen under Setup: the
-                // Maps and Vehicles pages take the new lists even when as many came)
-                let same = self
-                    .maps
-                    .iter()
-                    .map(|m| &m.file)
-                    .eq(maps.iter().map(|m| &m.file))
-                    && self
-                        .vehicles
-                        .iter()
-                        .map(|v| &v.file)
-                        .eq(vehicles.iter().map(|v| &v.file));
-                if !same {
-                    self.content_gen += 1;
-                }
+                // (the Maps and Vehicles pages take the lists again: a reading that found as
+                // many as before, but other ones or other paints, changes them too)
+                self.maps_gen += 1;
+                self.vehicles_gen += 1;
+                log::info!(
+                    "launcher: content read, {} maps, {} buses, {} weathers",
+                    maps.len(),
+                    vehicles.len(),
+                    weathers.len()
+                );
                 self.maps = maps;
                 self.vehicles = vehicles;
                 self.weathers = weathers;

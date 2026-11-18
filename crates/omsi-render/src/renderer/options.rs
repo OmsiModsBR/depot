@@ -46,10 +46,6 @@ pub struct RenderOptions {
     /// Mali and Adreno drivers before the first frame, #364, #333, #316, #371). Asked for,
     /// they are built on every device and graphics API; a computer always builds them.
     pub no_enhanced: bool,
-    /// Enhanced+: the enhanced path with ray-traced sun shadows, ambient occlusion and
-    /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
-    /// enhanced picture as it is.
-    pub ray_tracing: bool,
     /// The smoke systems show in the mirrors' pictures (OMSI's option "no smoke in
     /// reflections", off).
     pub smoke_in_mirrors: bool,
@@ -71,7 +67,6 @@ impl Default for RenderOptions {
             shadow_blobs: true,
             reflections: true,
             no_enhanced: false,
-            ray_tracing: false,
             smoke_in_mirrors: true,
         }
     }

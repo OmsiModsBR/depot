@@ -651,35 +651,27 @@ pub(crate) fn window_icon() -> Option<winit::window::Icon> {
     winit::window::Icon::from_rgba(img.into_raw(), w, h).ok()
 }
 
-/// (Enhanced, Enhanced+) wanted by the settings, the flags and the environment. "DirectX9 (D3D9Ex)"
-/// is the "as OMSI 2" renderer: it ignores all of them.
-pub fn enhanced_wanted(
+/// The graphics mode of this run: the settings' (the file, or `OMSI_GRAPHICS`), or Enhanced
+/// with `--enhanced` (`enhanced_flag`). A Vanilla that the Direct3D 9Ex renderer draws stays
+/// Vanilla: its window is opened from the settings before the arguments are read.
+pub fn resolved_graphics(
     settings: &crate::settings::Settings,
-    flag: bool,
-    flag_plus: bool,
-) -> (bool, bool) {
-    let plus = flag_plus || omsi_cfg::flags::ENHANCED_PLUS.is_set();
-    let enhanced = settings.enhanced || flag || plus || omsi_cfg::flags::ENHANCED.is_set();
+    enhanced_flag: bool,
+) -> omsi_cfg::GraphicsMode {
+    use omsi_cfg::GraphicsMode;
     if settings.backend() == Backend::D3d9 {
-        if enhanced || plus {
-            log::info!("Enhanced graphics ignored: DirectX9 (D3D9Ex) draws Vanilla only");
+        if enhanced_flag {
+            log::info!("--enhanced ignored: the mode is Vanilla, drawn by Direct3D 9Ex (choose Enhanced in the launcher, or OMSI_GRAPHICS=enhanced)");
         }
-        return (false, false);
+        return GraphicsMode::Vanilla;
     }
-    (enhanced, plus)
+    if enhanced_flag {
+        GraphicsMode::Enhanced
+    } else {
+        settings.graphics
+    }
 }
 
-/// Enhanced graphics wanted (from the settings, `--enhanced`, or OMSI_ENHANCED=1).
-pub(crate) static ENHANCED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-/// Enhanced+ (ray tracing) asked for by `--enhanced-plus` or OMSI_ENHANCED_PLUS=1 whatever
-/// the settings say (see `Settings::render_options`).
-pub(crate) static ENHANCED_PLUS: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-/// Vanilla graphics: the picture as OMSI 2 draws it (no Vanilla+ extras, see
-/// `omsi_render::Lighting::classic`).
-pub(crate) static CLASSIC: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
 /// Volume of the AI vehicles and of the scenery's own sounds (OMSI's `sound_ai` and
 /// `sound_scenery`), as the bits of an f32.
 pub(crate) static SOUND_AI: std::sync::atomic::AtomicU32 =

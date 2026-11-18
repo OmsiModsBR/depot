@@ -40,12 +40,7 @@ pub(in crate::hud) fn same_value(a: &str, b: &str) -> bool {
 
 pub(in crate::hud) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
-        "graphics" => vec![
-            ("vanilla", "Vanilla (as OMSI 2)"),
-            ("vanilla_plus", "Vanilla+"),
-            ("enhanced", "Enhanced"),
-            ("enhanced_plus", "Enhanced+"),
-        ],
+        "graphics" => omsi_cfg::GraphicsMode::CHOICES.to_vec(),
         "msaa" => vec![
             ("1", "Off"),
             ("2", "2x MSAA"),
@@ -265,12 +260,13 @@ pub fn select_state(
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
     let mut options = select_options(key);
-    // (under DirectX9 an option may leave some choices out, see `api_limits`)
-    if omsi_launcher_lib::settings::d3d9_fixes_vanilla(file) {
-        if let Some(l) = crate::api_limits::d3d9(key) {
-            options.retain(|o| l.allows(o.0));
-        }
-    }
+    // (a graphics mode may leave some choices out, `omsi_cfg::graphics_options`)
+    let mode = omsi_cfg::GraphicsMode::parse(
+        file.get("graphics")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(""),
+    );
+    options.retain(|o| omsi_cfg::graphics_options::allows(key, mode, o.0));
     let mut cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     // anisotropy 0 is off, the same entry as 1
     if key == "anisotropy" && cur == "0" {

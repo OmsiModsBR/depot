@@ -9,7 +9,7 @@ mod light_map;
 mod model;
 
 pub use model::{
-    Corona, LightMode, Lighting, PointLight, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
+    Corona, LightMode, Lighting, PointLight, ShadingPath, SmokeParticle, LM_ATLAS_TILES, LM_TILE_PX,
 };
 
 #[cfg(test)]

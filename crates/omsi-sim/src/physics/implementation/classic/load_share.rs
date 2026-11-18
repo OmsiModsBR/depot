@@ -1,6 +1,7 @@
 //! `K-1`: the weight shared about the model's origin, as OMSI 2's struts turn the body.
 
 use crate::physics::domain::params::MIN_LOAD_SHARE;
+use crate::physics::domain::Payload;
 use crate::physics::implementation::spec::{kinematic_mass_kg, mass_kg, rest_loads};
 use glam::Vec3;
 use omsi_vehicle::Vehicle;
@@ -26,4 +27,11 @@ pub(in crate::physics) fn strut_reference_torque(cog: Vec3, n: f32) -> Vec3 {
 /// sag the scripts read, worked out once when the vehicle appears).
 pub(in crate::physics) fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> {
     rest_loads(def, kinematic_mass_kg(def), MIN_LOAD_SHARE, 0.0)
+}
+
+/// The body's centre of gravity and inertia with what it carries, from the empty body's
+/// (`[cog]`, mass in kg, `[momentofintertia]`): the empty body's, wherever the payload sits -
+/// the payload adds only its mass.
+pub(in crate::physics) fn loaded_body(empty: (Vec3, f32, Vec3), _load: Payload) -> (Vec3, Vec3) {
+    (empty.0, empty.2)
 }

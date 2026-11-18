@@ -13,7 +13,7 @@ use crate::gameplay::player::Player;
 use crate::gameplay::schedule;
 use crate::gameplay::spawn::spawn_player;
 use crate::gameplay::traffic;
-use crate::gameplay::traffic_link::{lay_down_poles, own_outlines, traffic_inputs};
+use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::input::actions::dump_display_textures;
@@ -52,6 +52,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         .unwrap_or((1600, 900));
     let view_aspect = w as f32 / h.max(1) as f32;
     let settings = settings::Settings::load();
+    let graphics = crate::core::startup::resolved_graphics(&settings, args.enhanced);
     let instance = graphics_instance();
     let mut renderer = pollster::block_on(Renderer::new_with(
         &instance,
@@ -463,6 +464,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         cloud_drift_at(&weather, run_clock.time),
                         0.0,
                         settings.shadows,
+                        graphics,
                     );
                     let pixels =
                         renderer.render_to_image(&mut scene, w, h, &view_cam, &lighting)?;
@@ -505,9 +507,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                 }
             }
-            let others = Vec::new();
-            t.others = others;
-            t.others.extend(own_outlines(player.as_ref(), &[]));
+            session::traffic_others(t, player.as_ref(), &[]);
             session::traffic_step(t, &world, player.as_ref(), dt, None);
             if let Some(p) = player.as_mut() {
                 p.vehicle.dynamic_boxes = t.boxes(p.vehicle.position, 80.0);
@@ -1077,7 +1077,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                 }
                 if lights::smoke_active() {
-                    spray.sprites(cam.position, &mut scene.smoke);
+                    spray.sprites(cam.position, graphics, &mut scene.smoke);
                 }
                 let rate = precip_of(&weather).1;
                 let mut lighting = weather_lighting(
@@ -1090,6 +1090,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                         0.0
                     },
                     settings.shadows,
+                    graphics,
                 );
                 lighting.inside = player.as_ref().and_then(|p| {
                     p.vehicle
@@ -2477,6 +2478,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         cloud_drift_at(&weather, clock.time),
         wetness,
         settings.shadows,
+        graphics,
     );
     // the player's vehicle has moved into `player_ref` by now (after --drive): without
     // this the offscreen picture had no cab box, unlike the window
@@ -2633,7 +2635,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         // the tyres' spray as the drive left it (OMSI_DRIVE_V0=S moves the bus without a
         // full engine-start sequence)
         if lights::smoke_active() {
-            spray.sprites(camera.position, &mut scene.smoke);
+            spray.sprites(camera.position, graphics, &mut scene.smoke);
         }
         log::info!(
             "spray: {} puffs; at the end {} tyres threw water, {} of them in a puddle",
@@ -3049,7 +3051,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         panels.push(&mut scene, &world, viewport[2], viewport[3], (0.0, 0.0));
         crate::hud::shift_overlays(&mut scene, start, viewport[0]);
     }
-    let pixels = if settings.triple.enabled && !settings.vr_requested() {
+    let pixels = if settings.triple_screen() {
         renderer.render_triple_to_image(&mut scene, w, h, &camera, &lighting, &settings.triple)?
     } else {
         renderer.render_to_image(&mut scene, w, h, &camera, &lighting)?
@@ -3116,7 +3118,7 @@ fn triple_extent(
     w: u32,
     h: u32,
 ) -> Option<(f64, f64)> {
-    (settings.triple.enabled && !settings.vr_requested()).then(|| {
+    settings.triple_screen().then(|| {
         let (x, y) = settings.triple.view_extent(cam, w, h);
         (x as f64, y as f64)
     })

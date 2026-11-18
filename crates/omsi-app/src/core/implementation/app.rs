@@ -11,7 +11,7 @@ use crate::gameplay::spawn::spawn_player;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
-use crate::output::Backend;
+use crate::output::{vanilla_cannot_open, Backend};
 use crate::settings;
 use crate::situation::start_clock;
 use crate::weather::ambience;
@@ -140,10 +140,7 @@ impl App {
                     .and_then(|_| crate::core::startup::window_monitor(event_loop, monitor_at)),
             )));
         }
-        if self.settings.triple.enabled
-            && self.settings.triple_span
-            && !self.settings.vr_requested()
-        {
+        if self.settings.triple_screen() && self.settings.triple_span {
             let mut monitors: Vec<_> = event_loop.available_monitors().collect();
             monitors.sort_by_key(|m| m.position().x);
             let row = monitors.windows(3).find(|row| {
@@ -204,6 +201,11 @@ impl App {
         };
         let mut renderer = match opened {
             Ok(r) => r,
+            Err(e) if backend == Backend::D3d9 => {
+                fatal_message(&vanilla_cannot_open(&format!("{e:#}")));
+                crate::core::platform::exit(event_loop);
+                return;
+            }
             Err(e) => {
                 fatal_message(&format!("The game cannot draw on this computer: {e:#}"));
                 crate::core::platform::exit(event_loop);
@@ -218,9 +220,7 @@ impl App {
                 (self.settings.msaa, u32::from(self.settings.anisotropy)),
                 self.settings.dx9_effects(),
             ) {
-                fatal_message(&format!(
-                    "{e:#}. Choose another graphics API in the options."
-                ));
+                fatal_message(&vanilla_cannot_open(&format!("{e:#}")));
                 crate::core::platform::exit(event_loop);
                 return;
             }
@@ -305,6 +305,8 @@ impl App {
         let renderer = self.renderer.take().expect("renderer");
         self.output.new_scene();
         let mut scene = renderer.new_scene();
+        // (the puddles' picture was the old scene's texture)
+        self.rain_reflection = None;
         self.envir = omsi_content::Envir::load(&self.args.root.join("envir.cfg")).ok();
         // the weather cycle: a first weather that suits the month, the others after it
         if crate::weather::weather_cycle::is_cycle(self.args.weather.as_deref()) {

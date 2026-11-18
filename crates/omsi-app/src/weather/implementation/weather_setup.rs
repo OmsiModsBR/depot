@@ -1,7 +1,7 @@
 //! The weather of a session: its `.owt` file, the sky and clouds it makes, and how wet the streets are.
 
 use crate::core::cli::Args;
-use crate::core::startup::{CLASSIC, CLOUDS, ENHANCED, FAIR_CLOUDS};
+use crate::core::startup::{CLOUDS, FAIR_CLOUDS};
 use crate::lights;
 use crate::world::scene;
 pub(crate) use omsi_content::weather::psychro::{
@@ -481,10 +481,15 @@ pub(crate) fn weather_lighting(
     cloud_drift: [f32; 2],
     wetness: f32,
     shadows: bool,
+    graphics: omsi_cfg::GraphicsMode,
 ) -> omsi_render::Lighting {
     let mut lighting = lights::lighting_from(daylight, w.fog.0);
-    lighting.enhanced = ENHANCED.load(std::sync::atomic::Ordering::Relaxed);
-    lighting.classic = CLASSIC.load(std::sync::atomic::Ordering::Relaxed);
+    // (Vanilla's Direct3D 9Ex renderer takes the plain path's plan)
+    lighting.path = if graphics == omsi_cfg::GraphicsMode::Enhanced {
+        omsi_render::ShadingPath::Hdr
+    } else {
+        omsi_render::ShadingPath::Linear
+    };
     let (density, offset) = clouds_of(w, cloud_drift);
     lighting.cloud_density = density;
     lighting.cloud_offset = offset;
@@ -508,7 +513,7 @@ pub(crate) fn weather_lighting(
         // whatever the weather's brightness, so there it only takes the sun away. The
         // mirrors, drawn with the plain shading and graded by no exposure, went dark with
         // the light instead - black at 0 % beside a window still in daylight, #1018.)
-        if !lighting.enhanced {
+        if !lighting.hdr() {
             lighting.secondary *= k;
             lighting.ambient *= k;
             lighting.sky_color *= k;
@@ -536,7 +541,7 @@ pub(crate) fn weather_lighting(
     lighting.lamp_shadows = shadows;
     // the physical model: how much of which cloud there is and what the air holds, which
     // the enhanced atmosphere turns into light (the `.owt` values above stay for the rest)
-    if let Some(m) = model_sky.filter(|_| lighting.enhanced) {
+    if let Some(m) = model_sky.filter(|_| lighting.hdr()) {
         let closed = ((m.deck - 0.85) / 0.15).clamp(0.0, 1.0);
         if CLOUDS.load(std::sync::atomic::Ordering::Relaxed) {
             lighting.cloud_density = m.cumulus.max(m.deck * 0.95);

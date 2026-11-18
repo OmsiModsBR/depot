@@ -616,13 +616,7 @@ impl Pipelines {
                 origins.len() as f32,
                 w as f32,
                 h as f32,
-                if enhanced {
-                    1.0
-                } else if lighting.classic {
-                    0.0
-                } else {
-                    -1.0
-                },
+                if enhanced { 1.0 } else { -1.0 },
             ],
             vehicle_parts: parts,
         };
@@ -864,6 +858,7 @@ fn reflection_glass(u: &MaterialUniform) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lighting::ShadingPath;
 
     #[test]
     fn reflection_preserves_clearance_at_any_height_grade_and_floating_origin() {
@@ -929,7 +924,7 @@ mod tests {
             far: 100.0,
         };
         let mut lighting = Lighting {
-            enhanced: true,
+            path: ShadingPath::Hdr,
             wetness: 1.0,
             shadows: false,
             ..Default::default()
@@ -1158,10 +1153,9 @@ mod tests {
                 near: 0.1,
                 far: 100.0,
             };
-            for (enhanced, classic) in [(false, true), (false, false), (true, false)] {
+            for path in [ShadingPath::Linear, ShadingPath::Hdr] {
                 let lighting = Lighting {
-                    enhanced,
-                    classic,
+                    path,
                     wetness: 1.0,
                     rain: 0.8,
                     shadows: false,
@@ -1188,7 +1182,7 @@ mod tests {
                         .sum();
                     assert!(
                         red_change > 1000,
-                        "missing reflection: {red_change}; MSAA={msaa}, enhanced={enhanced}, classic={classic}, glass={glass}"
+                        "missing reflection: {red_change}; MSAA={msaa}, path={path:?}, glass={glass}"
                     );
                     reflection.push(red_change);
                 }
@@ -1211,7 +1205,7 @@ mod tests {
                 let clean = r
                     .render_to_image(&mut scene, 128, 128, &camera, &steady)
                     .unwrap();
-                let behind = refraction_source(&r, enhanced);
+                let behind = refraction_source(&r, path == ShadingPath::Hdr);
                 r.set_params(&mut scene, rain, &[1.0], true, &[]);
                 for _ in 0..4 {
                     let wet = r
@@ -1221,7 +1215,7 @@ mod tests {
                         image_difference(&wet, &clean) > 300,
                         "rain film was not exercised"
                     );
-                    let current = refraction_source(&r, enhanced);
+                    let current = refraction_source(&r, path == ShadingPath::Hdr);
                     let drift = current
                         .iter()
                         .zip(&behind)
@@ -1230,7 +1224,7 @@ mod tests {
                         / current.len() as f32;
                     assert!(
                         drift < 0.002,
-                        "rain/wiper feedback: {drift}; MSAA={msaa}, enhanced={enhanced}, classic={classic}"
+                        "rain/wiper feedback: {drift}; MSAA={msaa}, path={path:?}"
                     );
                 }
                 r.set_params(&mut scene, rain, &[0.0], true, &[]);
@@ -1241,24 +1235,6 @@ mod tests {
                     image_difference(&wiped, &clean) < 128 * 128,
                     "wiper left old film colour"
                 );
-
-                if classic {
-                    r.set_params(&mut scene, window, &[], false, &[]);
-                    let fog = Lighting {
-                        fog_color: Vec3::splat(0.5),
-                        fog_density: 20.0,
-                        inside: None,
-                        ..steady
-                    };
-                    let picture = r
-                        .render_to_image(&mut scene, 128, 128, &camera, &fog)
-                        .unwrap();
-                    let pixel = &picture[(80 * 128 + 64) * 4..][..3];
-                    assert!(
-                        pixel.iter().all(|v| (126..=129).contains(v)),
-                        "double-encoded Vanilla fog: {pixel:?}"
-                    );
-                }
             }
         }
     }

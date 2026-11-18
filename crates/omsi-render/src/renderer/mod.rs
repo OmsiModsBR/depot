@@ -3,11 +3,10 @@
 
 mod assets;
 mod build;
-mod effects;
 mod encode;
 mod frame;
 mod lights;
-mod lists;
+pub(crate) mod lists;
 mod mirror;
 mod open;
 mod options;

@@ -3,7 +3,6 @@
 
 use super::options::RenderOptions;
 use super::state::Renderer;
-use crate::assets::RT_BUFFERS;
 use crate::gpu::{array_path, sixteen_texture_units, ArrayPath, GpuArray};
 use crate::scene::{Scene, ENHANCED_CAMERA_TEXTURES};
 
@@ -45,13 +44,11 @@ impl Renderer {
             },
             wgpu::BindGroupEntry {
                 binding: 8,
-                // (Enhanced+: the traced lighting, full size, in place of the SSAO)
                 resource: wgpu::BindingResource::TextureView(
-                    self.rt
+                    self.targets
+                        .ao
                         .as_ref()
-                        .and_then(|r| r.targets.as_ref())
-                        .map(|t| &t.out)
-                        .or(self.targets.ao.as_ref().map(|a| &a.blur_view))
+                        .map(|a| &a.blur_view)
                         .unwrap_or(&self.assets.white_texture.view),
                 ),
             },
@@ -162,27 +159,6 @@ impl Renderer {
         }
     }
 
-    /// Rebuild without the ray tracing after a GPU error while it was on (see `rt_error`).
-    pub(crate) fn fall_back_without_ray_tracing(&mut self, scene: &mut Scene) {
-        log::error!(
-            "ray tracing failed on {}; Enhanced+ draws as Enhanced from now on",
-            self.adapter_name
-        );
-        let options = RenderOptions {
-            ray_tracing: false,
-            ..self.options
-        };
-        RT_BUFFERS.store(false, std::sync::atomic::Ordering::Relaxed);
-        let rebuilt = Self::build(
-            self.device.clone(),
-            self.queue.clone(),
-            self.adapter_name.clone(),
-            self.gpu.format,
-            options,
-        );
-        self.take_over(rebuilt, scene);
-    }
-
     /// Rebuild the pipelines and targets without multisampling after a GPU error with it.
     /// The scene's materials stay valid (the device hands out the same bind group layout
     /// for identical entries); its per-draw buffers and camera bind group are made anew,
@@ -280,35 +256,27 @@ mod fallback_tests {
             rgba: vec![255; 16],
             has_alpha: true,
         };
-        for rt in [false, true] {
-            let mut r = noop_renderer();
-            let mut scene = r.new_scene();
-            r.set_corona_texture(3, &img);
-            r.set_light_map_tile((1, 2), Some(&img));
-            r.set_light_map_place(100.0, 200.0, 300.0);
-            r.set_dynamic_scale(0.7);
-            r.set_env_heading(Some(12.0));
-            r.shadow_blobs = !r.shadow_blobs;
-            r.blend_by_origin = true;
-            let blobs = r.shadow_blobs;
-            if rt {
-                r.fall_back_without_ray_tracing(&mut scene);
-            } else {
-                r.fall_back_to_single_sample(&mut scene);
-            }
-            assert!(
-                r.sprites
-                    .corona_textures
-                    .get(3)
-                    .is_some_and(|t| t.is_some()),
-                "rt {rt}"
-            );
-            assert_eq!(r.light_map.lm_place.get(), (100.0, 200.0, 300.0));
-            assert_eq!(r.dynamic_scale(), 0.7);
-            assert_eq!(r.env_heading.get(), Some(12.0));
-            assert_eq!(r.shadow_blobs, blobs);
-            assert!(r.blend_by_origin);
-            assert!(scene.dirty && scene.camera_bind_group.is_none());
-        }
+        let mut r = noop_renderer();
+        let mut scene = r.new_scene();
+        r.set_corona_texture(3, &img);
+        r.set_light_map_tile((1, 2), Some(&img));
+        r.set_light_map_place(100.0, 200.0, 300.0);
+        r.set_dynamic_scale(0.7);
+        r.set_env_heading(Some(12.0));
+        r.shadow_blobs = !r.shadow_blobs;
+        r.blend_by_origin = true;
+        let blobs = r.shadow_blobs;
+        r.fall_back_to_single_sample(&mut scene);
+        assert!(r
+            .sprites
+            .corona_textures
+            .get(3)
+            .is_some_and(|t| t.is_some()));
+        assert_eq!(r.light_map.lm_place.get(), (100.0, 200.0, 300.0));
+        assert_eq!(r.dynamic_scale(), 0.7);
+        assert_eq!(r.env_heading.get(), Some(12.0));
+        assert_eq!(r.shadow_blobs, blobs);
+        assert!(r.blend_by_origin);
+        assert!(scene.dirty && scene.camera_bind_group.is_none());
     }
 }

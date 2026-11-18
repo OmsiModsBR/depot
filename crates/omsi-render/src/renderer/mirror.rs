@@ -180,12 +180,25 @@ pub struct FramePlan {
     /// The light model as this renderer's shaders read it (`CameraUniform`).
     pub sun_dir: [f32; 4],
     pub sun_color: [f32; 4],
+    /// The weather's ambient light (xyz) and the snow (w). Unlike the camera's, without the
+    /// moonlight Vanilla+ adds: the renderer that takes the plan draws OMSI 2's nights.
     pub ambient: [f32; 4],
     pub fog: [f32; 4],
     pub sky_color: [f32; 4],
     /// The camera's right and up axes (xyz), which lay out the sphere maps of `[matl_envmap]`.
     pub cam_right: [f32; 4],
     pub cam_up: [f32; 4],
+    /// The render origin's map position modulo the procedural patterns' period (xy, metres),
+    /// for patterns laid on the map that must not jump when the origin moves.
+    pub world_origin: [f32; 4],
+    /// How wet the outdoor surfaces are (0 dry .. 1 soaked): what a road with `[moisture]`
+    /// darkens, shines and gathers puddles by.
+    pub wetness: f32,
+    /// The rain reflection a second renderer lays on the puddles of the window's picture:
+    /// the texture the mirrored camera's picture was drawn into this frame and that camera's
+    /// view-projection (column-major, relative to `render_origin`). `None` in the pictures
+    /// drawn into textures and when no reflection was drawn.
+    pub rain_reflection: Option<(TextureId, [[f32; 4]; 4])>,
     /// Where the lamps' grid lies: x, y its south-west corner (render-origin relative), z a
     /// cell's side, w the cells per side (see [`crate::Scene::frame_lights`]).
     pub light_grid: [f32; 4],
@@ -246,11 +259,19 @@ pub(crate) fn plan_of(
         cam_pos: cu.cam_pos,
         sun_dir: cu.sun_dir,
         sun_color: cu.sun_color,
-        ambient: cu.ambient,
+        // (the weather's own ambient light: the moonlight Vanilla+ adds is not OMSI 2's)
+        ambient: f
+            .lighting
+            .ambient
+            .extend(f.lighting.snow.clamp(0.0, 1.0))
+            .to_array(),
         fog: cu.fog,
         sky_color: cu.sky_color,
         cam_right: cu.cam_right,
         cam_up: cu.cam_up,
+        world_origin: cu.world_origin,
+        wetness: cu.shadow[3],
+        rain_reflection: None,
         light_grid: cu.light_grid,
         light_map,
         clear: f.lighting.sky_color.extend(1.0).to_array(),

@@ -22,6 +22,7 @@ pub mod timetable;
 pub mod weather;
 
 use anyhow::{anyhow, Context, Result};
+use omsi_cfg::GraphicsMode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -210,6 +211,9 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(x) = o.str("performance_realreflexions") {
         v["mirror_refresh"] = json!(mirror_refresh(x));
     }
+    // (flags without a value: their presence switches the reflections off)
+    v["rain_reflections"] = json!(!o.flag("no_rain_refl"));
+    v["humans_in_rain_reflections"] = json!(!o.flag("no_humans_on_rain_refl"));
     if let Some(x) = num("sound_vol_master") {
         v["volume"] = json!(x.clamp(0.0, 1.0));
     }
@@ -1196,12 +1200,18 @@ pub fn vehicle_type_label(type_name: &str, path: &Path) -> String {
     }
 }
 
-/// The vehicle packs whose parts a model file names and that are installed nowhere.
-fn missing_packs_of(model: &Path) -> Vec<String> {
-    let Ok(text) = omsi_cfg::vfs::read(model) else {
-        return Vec::new();
-    };
-    let text = omsi_cfg::decode_text(&text);
+/// The model file `model` read once: what it says and the vehicle packs it borrows parts from
+/// that are installed nowhere. None when it cannot be read.
+fn read_model(model: &Path) -> Option<(omsi_model::Model, Vec<String>)> {
+    let bytes = omsi_cfg::vfs::read(model).ok()?;
+    let parsed = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_bytes(model, &bytes));
+    let packs = missing_packs_of(model, &omsi_cfg::decode_text(&bytes));
+    Some((parsed, packs))
+}
+
+/// The vehicle packs whose parts the model file `model` (its text `text`) names and that are
+/// installed nowhere.
+fn missing_packs_of(model: &Path, text: &str) -> Vec<String> {
     let dir = model.parent().unwrap_or(Path::new("."));
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -1227,16 +1237,12 @@ fn missing_packs_of(model: &Path) -> Vec<String> {
 
 /// `[item]` names of every `.cti` in the model's `[CTC]` folders (in every content root):
 /// the paint schemes, and the folders they were read from.
-fn paint_schemes(vehicle: &omsi_vehicle::Vehicle) -> (Vec<String>, Vec<PathBuf>) {
+fn paint_schemes(
+    vehicle: &omsi_vehicle::Vehicle,
+    model: &omsi_model::Model,
+) -> (Vec<String>, Vec<PathBuf>) {
     let mut names: Vec<String> = Vec::new();
     let mut dirs_read: Vec<PathBuf> = Vec::new();
-    let Some(model_rel) = vehicle.model.as_ref() else {
-        return (names, dirs_read);
-    };
-    let model_path = omsi_cfg::resolve_path(vehicle.dir(), model_rel);
-    let Ok(model) = omsi_model::Model::load(&model_path) else {
-        return (names, dirs_read);
-    };
     for c in &model.ctc {
         let dir = omsi_cfg::resolve_path(vehicle.dir(), &c.path);
         let mut files: Vec<PathBuf> = Vec::new();
@@ -1420,6 +1426,22 @@ pub fn reread_vehicles(folders: &[String]) -> Vec<VehicleInfo> {
     out
 }
 
+/// What the content index's entries of vehicle folders begin with: the saves that drop the
+/// entries of folders gone use it, so it must be the start of every key `vehicle_folder_key`
+/// makes.
+pub const VEHICLE_KEYS: &str = "bus5|";
+
+/// The content index's key of a vehicle folder (all its copies `dirs`) read in language `lang`.
+pub fn vehicle_folder_key(lang: &str, dirs: &[PathBuf]) -> String {
+    format!(
+        "{VEHICLE_KEYS}{lang}|{}",
+        dirs.iter()
+            .map(|d| d.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("|")
+    )
+}
+
 pub fn list_vehicles() -> Result<Vec<VehicleInfo>> {
     list_vehicles_progress(|_, _, _| {})
 }
@@ -1470,15 +1492,7 @@ pub fn list_vehicles_progress(
     let shared_hofs = shared_depot_names();
     let keys: Vec<String> = folders
         .iter()
-        .map(|(_, dirs)| {
-            format!(
-                "bus5|{lang}|{}",
-                dirs.iter()
-                    .map(|d| d.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("|")
-            )
-        })
+        .map(|(_, dirs)| vehicle_folder_key(&lang, dirs))
         .collect();
     let read = |(folder, dirs): &(String, Vec<PathBuf>), key: &String| -> Vec<VehicleInfo> {
         // the stamp covers every copy of the folder and their direct entries (Model/,
@@ -1544,13 +1558,13 @@ pub fn list_vehicles_progress(
         // what was read is kept every few seconds: a first reading left half-way (the
         // launcher closed) starts from there the next time
         if saved.elapsed().as_secs() >= 10 {
-            index::save("bus4|", None);
+            index::save(VEHICLE_KEYS, None);
             saved = std::time::Instant::now();
         }
         progress(&batch, done, total);
         out.extend(batch);
     }
-    index::save("bus4|", Some(&keys));
+    index::save(VEHICLE_KEYS, Some(&keys));
     if out.is_empty() {
         log_empty("Vehicles", ".bus file");
     }
@@ -1680,14 +1694,19 @@ fn read_vehicle_folder(
         let name = format!("{} {}", v.manufacturer.trim(), v.type_name.trim())
             .trim()
             .to_string();
-        let (paints, paint_dirs) = paint_schemes(&v);
+        // (the model file read once for its paint folders and the packs it borrows from)
+        let read = model.as_deref().and_then(read_model);
+        let (paints, paint_dirs) = read
+            .as_ref()
+            .map(|(m, _)| paint_schemes(&v, m))
+            .unwrap_or_default();
         deps.extend(paint_dirs);
         // `<bus>_ENG.dsc` beside the bus file (the language of the settings) describes it
         let description = omsi_content::Dsc::find(f, lang)
             .map(|x| x.description)
             .filter(|t| !t.is_empty())
             .unwrap_or_else(|| v.description.trim().to_string());
-        let missing_packs = model.as_deref().map(missing_packs_of).unwrap_or_default();
+        let missing_packs = read.map(|(_, packs)| packs).unwrap_or_default();
         if !missing_packs.is_empty() {
             log_line(&format!(
                 "vehicles: {} borrows parts from packs that are not installed: {}",
@@ -3109,22 +3128,6 @@ pub fn language_iso(code: &str) -> &'static str {
         .unwrap_or("")
 }
 
-/// `vanilla` (as OMSI 2), `vanilla_plus`, `enhanced` or `enhanced_plus`, from the ways a file
-/// may spell them (as the game's `settings::graphics_mode`).
-pub fn graphics_mode(v: &str) -> &'static str {
-    match v
-        .trim()
-        .to_ascii_lowercase()
-        .replace(['-', ' '], "_")
-        .as_str()
-    {
-        "enhanced_plus" | "enhanced+" | "enhancedplus" | "enhanced_+" | "2" => "enhanced_plus",
-        "enhanced" | "1" => "enhanced",
-        "vanilla" | "classic" | "original" | "omsi" | "omsi2" | "omsi_2" => "vanilla",
-        _ => "vanilla_plus",
-    }
-}
-
 /// How often the mirrors are drawn: `off`, `eco` or `full`, also from OMSI's
 /// `performance_realreflexions` (none, economy, full).
 fn mirror_refresh(x: &str) -> &'static str {
@@ -3252,8 +3255,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["windy_trees"] = json!(true);
     // the glow around the sun (DirectX9 (D3D9Ex) only)
     v["sun_glow"] = json!(true);
-    // DirectX9 (D3D9Ex) only: falling snow, off unless chosen
-    v["dx9_snow"] = json!(false);
+    // DirectX9 (D3D9Ex) only: the puddles mirror the street, the people in it too
+    v["rain_reflections"] = json!(true);
+    v["humans_in_rain_reflections"] = json!(true);
     // DirectX9 (D3D9Ex) only: fewer map lamps a spot, off unless chosen
     v["fewer_night_lights"] = json!(false);
     // DirectX9 (D3D9Ex) only: how a render scale below 100 % is brought up
@@ -3393,7 +3397,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["head_idle_pace"] = json!(1.0);
     let Some(t) = text else { return v };
     let mut version = 0;
-    let mut graphics: Option<&str> = None;
+    let mut graphics: Option<GraphicsMode> = None;
+    // (a file that chose the old "DirectX9 (D3D9Ex)" API, which drew Vanilla)
+    let mut dx9_api = false;
     for line in t.lines() {
         let line = line.trim();
         if line.starts_with('#') || line.starts_with(';') {
@@ -3746,7 +3752,11 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                     "vulkan" => "vulkan",
                     "dx12" => "dx12",
                     "gl" => "gl",
-                    "d3d9" | "d3d9ex" | "dx9" if cfg!(windows) => "d3d9",
+                    // (the old "DirectX9 (D3D9Ex)" API: Vanilla now, see below)
+                    "d3d9" | "d3d9ex" | "dx9" => {
+                        dx9_api = cfg!(windows);
+                        "auto"
+                    }
                     _ => "auto",
                 })
             }
@@ -4089,7 +4099,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             "ui_dimming" => v[&k] = json!(dimming_of(&json!(val))),
             "windy_trees" => v[&k] = json!(b(val)),
             "sun_glow" => v[&k] = json!(b(val)),
-            "dx9_snow" => v[&k] = json!(b(val)),
+            "rain_reflections" => v[&k] = json!(b(val)),
+            "humans_in_rain_reflections" => v[&k] = json!(b(val)),
             "fewer_night_lights" => v[&k] = json!(b(val)),
             // (bilinear or fsr1, as the game reads it)
             "dx9_upscale" => {
@@ -4127,7 +4138,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             }
             "language" => v[&k] = json!(language_code(val)),
             "physics" => v[&k] = json!(omsi_cfg::PhysicsMode::parse(val).as_str()),
-            "graphics" | "renderer" => graphics = Some(graphics_mode(val)),
+            "graphics" | "renderer" => graphics = Some(GraphicsMode::parse(val)),
             // whole metres, as the page's select has them ("1500"); anything else (auto) is
             // the game's default
             "view_distance" => {
@@ -4148,13 +4159,25 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     }
     // a file without `graphics` (older builds) says only `enhanced`; its vanilla renderer is
     // what is now Vanilla+
-    let g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
-        "enhanced"
+    let mut g = graphics.unwrap_or(if v["enhanced"] == json!(true) {
+        GraphicsMode::Enhanced
     } else {
-        "vanilla_plus"
+        GraphicsMode::VanillaPlus
     });
-    v["graphics"] = json!(g);
-    v["enhanced"] = json!(g == "enhanced" || g == "enhanced_plus");
+    // the old "DirectX9 (D3D9Ex)" API showed Vanilla whatever `graphics` said, and Vanilla is
+    // that renderer now (written so when the player saves)
+    if dx9_api {
+        static NOTED: std::sync::Once = std::sync::Once::new();
+        NOTED.call_once(|| {
+            log::info!(
+                "settings: graphics_api=d3d9 read as graphics=vanilla (was {}) and graphics_api=auto",
+                g.as_str()
+            )
+        });
+        g = GraphicsMode::Vanilla;
+    }
+    v["graphics"] = json!(g.as_str());
+    v["enhanced"] = json!(g == GraphicsMode::Enhanced);
     // before version 2 the launcher wrote its old default `boarding=pay` for everybody
     // (passengers then waited at the cash desk for the driver): the game reads that as auto
     if version < 2 && v["boarding"] == "pay" {
@@ -4419,7 +4442,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     };
     let f = |k: &str, d: f64| v.get(k).and_then(|x| x.as_f64()).unwrap_or(d);
     let text = format!(
-        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# Project Depot settings (written by the launcher)\nversion=3\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\ntexture_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4431,8 +4454,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         v.get("boarding").and_then(|x| x.as_str()).unwrap_or("auto"),
         b("detail_textures", true),
         b("exact_fare", true),
-        matches!(graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")), "enhanced" | "enhanced_plus") as u8,
-        graphics_mode(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("vanilla_plus")),
+        GraphicsMode::parse(v.get("graphics").and_then(|x| x.as_str()).unwrap_or("")).as_str(),
         b("fullscreen", false),
         b("vsync", true),
         f("volume", 0.6),
@@ -4532,7 +4554,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             "vulkan" => "vulkan",
             "dx12" => "dx12",
             "gl" => "gl",
-            "d3d9" if cfg!(windows) => "d3d9",
             _ => "auto",
         },
         v.get("ctrl_off").and_then(|x| x.as_str()).unwrap_or("").replace(['\n', '\r'], " "),
@@ -4754,7 +4775,11 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     ));
     text.push_str(&format!("windy_trees={}\n", b("windy_trees", true)));
     text.push_str(&format!("sun_glow={}\n", b("sun_glow", true)));
-    text.push_str(&format!("dx9_snow={}\n", b("dx9_snow", false)));
+    text.push_str(&format!(
+        "rain_reflections={}\nhumans_in_rain_reflections={}\n",
+        b("rain_reflections", true),
+        b("humans_in_rain_reflections", true)
+    ));
     text.push_str(&format!(
         "fewer_night_lights={}\n",
         b("fewer_night_lights", false)
@@ -5635,20 +5660,10 @@ mod tests {
             "[mesh]\r\n..\\..\\..\\Sceneryobjects\\X\\a.o3d\r\n..\\..\\..\\Other\\b.o3d\r\n",
         )
         .unwrap();
-        let packs = super::missing_packs_of(&model);
+        let packs = super::read_model(&model).unwrap().1;
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(packs, vec!["Other".to_string()]);
-    }
-
-    /// "DirectX9 (D3D9Ex)" survives the launcher's save on Windows only.
-    #[test]
-    fn d3d9_is_kept_on_windows_only() {
-        let want = if cfg!(windows) { "d3d9" } else { "auto" };
-        let v = super::settings_from_text(Some("graphics_api=D3D9Ex\n"));
-        assert_eq!(v["graphics_api"], want);
-        let text = super::settings_to_text(&v, None);
-        assert!(text.contains(&format!("graphics_api={want}\n")));
     }
 
     #[test]

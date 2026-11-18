@@ -23,6 +23,7 @@ pub(crate) const GLASS_RAIN: &str = include_str!("shaders/glass_rain.hlsl");
 pub(crate) const SKY: &str = include_str!("shaders/sky.hlsl");
 pub(crate) const SMOKE: &str = include_str!("shaders/smoke.hlsl");
 pub(crate) const UPSCALE: &str = include_str!("shaders/upscale.hlsl");
+pub(crate) const WET_ROAD: &str = include_str!("shaders/wet_road.hlsl");
 
 /// The stage a shader is compiled for. Shader Model 3.0 is the renderer's floor.
 #[derive(Debug, Clone, Copy)]
@@ -246,6 +247,20 @@ mod tests {
         let slots = reported_slots(&ps).unwrap();
         println!("corona pixel shader: {slots} instruction slots");
         assert!(slots <= 460, "the corona pixel shader takes {slots} slots");
+    }
+
+    #[test]
+    fn wet_road_pixel_shader_compiles_for_sm3_in_few_slots() {
+        let ps = compile(WET_ROAD, "wet_road.hlsl", "ps_main", Stage::Pixel).unwrap();
+        assert_eq!(ps[0], 0xFFFF_0300);
+        // (a pass of its own: its pixel shader has its own 512 slots, with room to spare; the
+        // scene's pixel shader keeps its slots)
+        let slots = reported_slots(&ps).unwrap();
+        println!("wet road pixel shader: {slots} instruction slots");
+        assert!(
+            slots <= 460,
+            "the wet road pixel shader takes {slots} slots"
+        );
     }
 
     #[test]

@@ -4,7 +4,9 @@
 
 use super::super::interface::output::{core, Choice};
 use super::modules::Asks;
-use omsi_launcher_lib::settings::{d3d9_fixes_vanilla, RESOLUTIONS};
+use omsi_cfg::graphics_options::{self, Applies};
+use omsi_cfg::GraphicsMode;
+use omsi_launcher_lib::settings::{vanilla_on_d3d9, RESOLUTIONS};
 use omsi_ui::widgets::matches;
 use serde_json::{json, Value};
 
@@ -78,7 +80,7 @@ pub const PERFORMANCE_OPTS: &[(&str, &str)] = &[
 
 /// Whether the Performance section is offered with the settings `s` (the Depot's DirectX9 only).
 pub fn performance_offered(s: &Value, omsi2: bool) -> bool {
-    !omsi2 && d3d9_fixes_vanilla(s)
+    !omsi2 && vanilla_on_d3d9(s)
 }
 
 /// Whether section `sec` is listed: Modules only while OMSI 2 is the engine, Developer only
@@ -912,12 +914,7 @@ pub static OPTS: &[Opt] = &[
         "graphics",
         "Graphics",
         "Vanilla draws what OMSI 2 draws",
-        &[
-            ("vanilla", "Vanilla (as OMSI 2)"),
-            ("vanilla_plus", "Vanilla+"),
-            ("enhanced", "Enhanced"),
-            ("enhanced_plus", "Enhanced+"),
-        ],
+        &GraphicsMode::CHOICES,
     ),
     pick(
         GRAPHICS,
@@ -1135,9 +1132,17 @@ pub static OPTS: &[Opt] = &[
     toggle(
         GRAPHICS,
         "Effects",
-        "dx9_snow",
-        "Snow",
-        "Snowflakes fall in snow weather",
+        "rain_reflections",
+        "Rain reflections",
+        "The puddles on a wet road mirror the street; off, they mirror the sky alone",
+    ),
+    // (DirectX9 only, with the rain reflections on, see `shown`)
+    toggle(
+        GRAPHICS,
+        "Effects",
+        "humans_in_rain_reflections",
+        "People in rain reflections",
+        "The people in the street show in the puddles' reflections",
     ),
     // (DirectX9 only, see `shown`)
     toggle(
@@ -2180,13 +2185,10 @@ pub fn changed(o: &Opt, st: &Store) -> bool {
     !v.is_null() && default_in(st, o.key).is_some_and(|d| !same(v, &d))
 }
 
-/// The limit the chosen graphics API puts on the option `key` (see `api_limits`).
-pub(crate) fn api_limit(s: &Value, key: &str) -> Option<&'static crate::api_limits::ApiLimit> {
-    if d3d9_fixes_vanilla(s) {
-        crate::api_limits::d3d9(key)
-    } else {
-        None
-    }
+/// The graphics mode the settings choose: it decides which graphics options are offered
+/// (`omsi_cfg::graphics_options`).
+pub(crate) fn mode_of(st: &Store) -> GraphicsMode {
+    GraphicsMode::parse(st.get("graphics").as_str().unwrap_or(""))
 }
 
 /// How an option shows with the settings as they are.
@@ -2202,44 +2204,34 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     if st.omsi2 && !crate::omsi2_map::setting_in_omsi2(o.key, o.sec == INTERFACE) {
         return Shown::Hidden;
     }
-    // (the Depot's graphics API limits are not OMSI 2's)
-    let depot_api = !st.omsi2;
-    if let Some(l) = api_limit(st.s, o.key).filter(|l| depot_api && !l.is_row()) {
-        return match l.text() {
-            Some(t) => Shown::Locked(t),
-            None => Shown::Hidden,
-        };
+    // (the table of the graphics modes is the Depot's, not OMSI 2's)
+    let depot = !st.omsi2;
+    let mode = mode_of(st);
+    if depot {
+        match graphics_options::applies(o.key, mode) {
+            Applies::NotOffered { .. } => return Shown::Hidden,
+            Applies::Fixed { shown, reason, .. } => {
+                return Shown::Locked(format!("{shown} - {}", omsi_ui::tr(reason)))
+            }
+            Applies::Offered | Applies::Choices { .. } => {}
+        }
     }
-    let fixed = depot_api && d3d9_fixes_vanilla(st.s);
-    let graphics = st.get("graphics").as_str().unwrap_or("");
-    // (Vanilla draws what OMSI 2 draws: no sun shadows, ambient occlusion or detail grain;
-    // Enhanced+ traces its shadows, occlusion and reflections: always on there)
-    let classic = fixed || graphics == "vanilla";
-    let traced = !fixed && graphics == "enhanced_plus";
-    let triple = st.on("triple_screen") && !st.on("vr");
+    let triple = mode != GraphicsMode::Vanilla && st.on("triple_screen") && !st.on("vr");
     let visible = match o.key {
         "graphics_api" => !cfg!(target_os = "macos"),
-        "shadow_size" | "shadow_casters" | "detail_textures" | "night_brightness" | "led_glow"
-        | "led_mips" => !classic,
-        "ssao" | "shadows" => !classic && !traced,
-        "reflections" => !traced,
+        "preset" => !depot || preset_keys(mode).len() >= 2,
         "fov" => !triple,
         "triple_fov_deg" => triple,
-        // (the falling snow DirectX9 draws on request: the other APIs draw their own)
-        "dx9_snow" => fixed,
-        "fewer_night_lights" => fixed,
-        // (the picture DirectX9 draws smaller is brought up: only when a scale below 100 % is chosen)
+        "humans_in_rain_reflections" => st.on("rain_reflections"),
+        // (the picture Vanilla draws smaller is brought up: only when a scale below 100 % is chosen)
         "dx9_upscale" => {
             let scale = st.get("render_scale");
             let scale = scale
                 .as_str()
                 .and_then(|t| t.trim().parse::<f64>().ok())
                 .or_else(|| scale.as_f64());
-            fixed && scale.is_some_and(|x| x > 0.0 && x < 0.995)
+            scale.is_some_and(|x| x > 0.0 && x < 0.995)
         }
-        // (and our own ways to ease its work: DirectX9 draws what they leave out)
-        "dx9_glass_rain" | "dx9_coronas" | "dx9_stars" | "dx9_cloud_picture"
-        | "dx9_texture_limit" => fixed,
         "vr" => cfg!(windows),
         k if k.starts_with("vr_") => cfg!(windows) && st.on("vr"),
         k if k.starts_with("triple_") && k != "triple_screen" => st.on("triple_screen"),
@@ -2256,6 +2248,53 @@ pub fn shown(o: &Opt, st: &Store) -> Shown {
     } else {
         Shown::Hidden
     }
+}
+
+/// The keys a quality preset sets in `mode`: those the mode offers (FR-017).
+pub(crate) fn preset_keys(mode: GraphicsMode) -> Vec<&'static str> {
+    const KEYS: [&str; 14] = [
+        "msaa",
+        "anisotropy",
+        "shadow_size",
+        "ssao",
+        "shadows",
+        "detail_textures",
+        "clouds",
+        "view_distance",
+        "min_obj_size",
+        "max_obj_dist",
+        "mirror_size",
+        "mirror_refresh",
+        "render_scale",
+        "texture_memory",
+    ];
+    KEYS.into_iter()
+        .filter(|k| {
+            matches!(
+                graphics_options::applies(k, mode),
+                Applies::Offered | Applies::Choices { .. }
+            )
+        })
+        .collect()
+}
+
+/// The value preset `p` gives `key` in `mode` (fitted to the choices the mode offers), or
+/// `None` where the preset does not set it there.
+fn preset_value(p: &Value, key: &str, mode: GraphicsMode) -> Option<Value> {
+    let v = p.get(key)?;
+    if !preset_keys(mode).contains(&key) {
+        return None;
+    }
+    let text = value_text(v);
+    let fitted = graphics_options::fit(key, mode, &text);
+    Some(if fitted == text {
+        v.clone()
+    } else {
+        fitted
+            .parse::<i64>()
+            .map(|n| json!(n))
+            .unwrap_or_else(|_| json!(fitted))
+    })
 }
 
 /// The quality presets: they set most of the graphics options. (OMSI's own option_presets/*.oop
@@ -2283,15 +2322,13 @@ pub(crate) fn presets() -> [(&'static str, Value); 4] {
 
 pub(crate) fn api_options() -> &'static [(&'static str, &'static str)] {
     // (a Mac has Metal only; elsewhere a driver's Vulkan that misbehaves, or a card without
-    // it, is got round here; "DirectX9 (D3D9Ex)" is the game window's own Direct3D 9Ex
-    // renderer, Windows only and never chosen by "Automatic")
+    // it, is got round here; Vanilla's Direct3D 9Ex renderer is chosen by the mode, not here)
     if cfg!(windows) {
         &[
             ("auto", "Automatic"),
             ("vulkan", "Vulkan"),
             ("dx12", "DirectX 12"),
             ("gl", "OpenGL"),
-            ("d3d9", "DirectX9 (D3D9Ex)"),
         ]
     } else {
         &[
@@ -2320,10 +2357,10 @@ pub fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
     match &o.kind {
         Kind::Pick(_) if st.omsi2 && o.key == "boarding" => own(&crate::omsi2_map::TICKET_SELLING),
         Kind::Pick(list) => {
-            // (under DirectX9 an option may leave some choices out, see `api_limits`)
-            let limit = api_limit(st.s, o.key).filter(|_| !st.omsi2);
+            // (a graphics mode may leave some choices out, `omsi_cfg::graphics_options`)
+            let mode = mode_of(st);
             list.iter()
-                .filter(|(v, _)| limit.is_none_or(|l| l.allows(v)))
+                .filter(|(v, _)| st.omsi2 || graphics_options::allows(o.key, mode, v))
                 .filter(|(v, _)| !st.omsi2 || crate::omsi2_map::pick_allowed(o.key, v))
                 .map(|(v, t)| (v.to_string(), t.to_string()))
                 .collect()
@@ -2362,9 +2399,13 @@ pub fn options_of(o: &Opt, st: &Store) -> Vec<(String, String)> {
 
 /// Which preset the settings match now (`None`: Custom).
 pub(crate) fn preset_now(st: &Store) -> Option<usize> {
+    let mode = mode_of(st);
     presets().iter().position(|p| {
-        p.1.as_object()
-            .is_some_and(|o| o.iter().all(|(k, v)| same(st.get(k), v)))
+        p.1.as_object().is_some_and(|o| {
+            o.keys()
+                .filter_map(|k| preset_value(&p.1, k, mode).map(|v| (k, v)))
+                .all(|(k, v)| same(st.get(k), &v))
+        })
     })
 }
 
@@ -2374,9 +2415,9 @@ pub fn chosen(o: &Opt, st: &Store, options: &mut Vec<(String, String)>) -> usize
         return preset_now(st).unwrap_or(options.len() - 1);
     }
     let mut cur = value_text(st.get(o.key));
-    // (a saved value DirectX9 does not offer shows as the choice it takes, see `api_limits`)
-    if let Some(l) = api_limit(st.s, o.key).filter(|_| !st.omsi2) {
-        cur = l.fit(&cur);
+    // (a saved value the graphics mode does not offer shows as the choice it takes)
+    if !st.omsi2 {
+        cur = graphics_options::fit(o.key, mode_of(st), &cur);
     }
     // (anisotropy 0 is off, the same entry as 1)
     if o.key == "anisotropy" && cur == "0" {
@@ -2396,8 +2437,11 @@ pub fn chosen(o: &Opt, st: &Store, options: &mut Vec<(String, String)>) -> usize
 pub(crate) fn choose(o: &Opt, st: &mut Store, value: &str) {
     if matches!(o.kind, Kind::Preset) {
         if let Some(p) = presets().into_iter().find(|p| p.0 == value) {
-            for (k, v) in p.1.as_object().into_iter().flatten() {
-                st.set(k, v.clone());
+            let mode = mode_of(st);
+            for k in p.1.as_object().into_iter().flatten().map(|(k, _)| k) {
+                if let Some(v) = preset_value(&p.1, k, mode) {
+                    st.set(k, v);
+                }
             }
         }
         return;
@@ -2421,9 +2465,10 @@ pub(crate) fn choose(o: &Opt, st: &mut Store, value: &str) {
             .unwrap_or(json!(value)),
         _ => json!(value),
     };
-    // (DirectX9 is for older hardware: choosing it brings the anti-aliasing and anisotropic
-    // filtering down to 2x and 4x, which the player may raise again)
-    if o.key == "graphics_api" && v == json!("d3d9") && cfg!(windows) {
+    // (Vanilla's Direct3D 9Ex renderer is for older hardware: choosing the mode brings the
+    // anti-aliasing and anisotropic filtering down to 2x and 4x, which the player may raise
+    // again)
+    if o.key == "graphics" && v == json!("vanilla") && cfg!(windows) {
         for (key, most) in [("msaa", 2), ("anisotropy", 4)] {
             if st.get(key).as_i64().is_some_and(|n| n > most) {
                 st.set(key, json!(most));
@@ -2477,7 +2522,7 @@ pub fn listed<'a>(sec: usize, query: &str, changed_only: bool, st: &Store) -> Ve
         })
         .filter(|o| match shown(o, st) {
             Shown::Hidden => false,
-            // (a row fixed by the graphics API cannot be taken back here: "changed" leaves it out)
+            // (a row fixed by the graphics mode cannot be taken back here: "changed" leaves it out)
             Shown::Locked(_) => !changed_only,
             Shown::Row => !changed_only || changed(o, st),
         })

@@ -36,18 +36,15 @@ pub fn catch<R>(f: impl FnOnce() -> R) -> Option<R> {
 
 /// What the device's error handler does with an error wgpu did not hand to anyone else
 /// (`GpuContext::open`): a GPU error while multisampling is on is logged and switches
-/// multisampling off at the next frame (`render_inner`); one with ray tracing on switches the
-/// ray tracing off; otherwise it is logged and the game goes on: wgpu's own handler ends the
+/// multisampling off at the next frame (`render_inner`); otherwise it is logged and the game goes on: wgpu's own handler ends the
 /// process, and one call a driver refused (a limit of that card, a bigger map than the last)
 /// closed the game a few seconds into the drive - a wrong picture for a frame is better than
 /// no game. The first errors and then every thousandth reach the log. Running out of memory
 /// is also noted (`out_of_memory`), so that the game keeps fewer textures.
 pub(crate) struct GpuErrors {
     pub(crate) gpu_error: Arc<AtomicBool>,
-    pub(crate) rt_error: Arc<AtomicBool>,
     pub(crate) out_of_memory: Arc<AtomicBool>,
     pub(crate) msaa: u32,
-    pub(crate) ray_tracing: bool,
     count: AtomicU64,
     /// The `oom` test hook sent its error.
     pub(crate) fake_oom_sent: AtomicBool,
@@ -56,8 +53,6 @@ pub(crate) struct GpuErrors {
 /// What `GpuErrors::on_error` did with an error (for the tests).
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ErrorOutcome {
-    /// The first with ray tracing on: it is switched off.
-    RayTracingOff,
     /// The first with multisampling on: it is switched off.
     MsaaOff,
     /// Logged; the game goes on.
@@ -67,13 +62,11 @@ pub(crate) enum ErrorOutcome {
 }
 
 impl GpuErrors {
-    pub(crate) fn new(msaa: u32, ray_tracing: bool) -> Self {
+    pub(crate) fn new(msaa: u32) -> Self {
         Self {
             gpu_error: Default::default(),
-            rt_error: Default::default(),
             out_of_memory: Default::default(),
             msaa,
-            ray_tracing,
             count: AtomicU64::new(0),
             fake_oom_sent: AtomicBool::new(false),
         }
@@ -95,17 +88,6 @@ impl GpuErrors {
             self.out_of_memory.store(true, Ordering::Relaxed);
         }
         let n = self.count.fetch_add(1, Ordering::Relaxed);
-        if self.ray_tracing {
-            // (the ray tracing goes first: the likelier cause, and the dearer feature)
-            if !self.rt_error.swap(true, Ordering::Relaxed) {
-                log::error!(
-                    "GPU error with ray tracing (Enhanced+ draws as Enhanced from now on): {}",
-                    gpu_error_text(e)
-                );
-                return ErrorOutcome::RayTracingOff;
-            }
-            return ErrorOutcome::Quiet;
-        }
         if self.msaa > 1 && !self.gpu_error.swap(true, Ordering::Relaxed) {
             log::error!(
                 "GPU error with {}x MSAA (drawing without it from now on): {}",
@@ -155,18 +137,18 @@ mod tests {
 
     #[test]
     fn running_out_of_memory_is_noted_for_the_textures() {
-        let errors = GpuErrors::new(1, false);
+        let errors = GpuErrors::new(1);
         assert_eq!(errors.on_error(&fake_out_of_memory()), ErrorOutcome::Logged);
         assert!(errors.out_of_memory.load(Ordering::Relaxed));
         // (an error of another kind does not say so)
-        let errors = GpuErrors::new(1, false);
+        let errors = GpuErrors::new(1);
         errors.on_error(&validation());
         assert!(!errors.out_of_memory.load(Ordering::Relaxed));
     }
 
     #[test]
     fn the_oom_hook_reports_once_through_the_handler() {
-        let errors = GpuErrors::new(1, false);
+        let errors = GpuErrors::new(1);
         assert!(errors.fake_out_of_memory_once());
         assert!(errors.out_of_memory.swap(false, Ordering::Relaxed));
         assert!(!errors.fake_out_of_memory_once());
@@ -174,18 +156,8 @@ mod tests {
     }
 
     #[test]
-    fn with_ray_tracing_the_first_error_switches_it_off_and_the_others_are_quiet() {
-        let errors = GpuErrors::new(4, true);
-        assert_eq!(errors.on_error(&validation()), ErrorOutcome::RayTracingOff);
-        assert!(errors.rt_error.load(Ordering::Relaxed));
-        assert_eq!(errors.on_error(&validation()), ErrorOutcome::Quiet);
-        // (multisampling stays: the ray tracing was the likelier cause)
-        assert!(!errors.gpu_error.load(Ordering::Relaxed));
-    }
-
-    #[test]
     fn with_msaa_the_first_error_switches_it_off_then_errors_are_logged() {
-        let errors = GpuErrors::new(4, false);
+        let errors = GpuErrors::new(4);
         assert_eq!(errors.on_error(&validation()), ErrorOutcome::MsaaOff);
         assert!(errors.gpu_error.load(Ordering::Relaxed));
         assert_eq!(errors.on_error(&validation()), ErrorOutcome::Logged);
@@ -193,7 +165,7 @@ mod tests {
 
     #[test]
     fn without_msaa_the_first_twenty_and_every_thousandth_are_logged() {
-        let errors = GpuErrors::new(1, false);
+        let errors = GpuErrors::new(1);
         let outcomes: Vec<ErrorOutcome> =
             (0..1001).map(|_| errors.on_error(&validation())).collect();
         assert!(outcomes[..20].iter().all(|o| *o == ErrorOutcome::Logged));

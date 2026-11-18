@@ -43,8 +43,9 @@ pub(crate) struct CameraUniform {
     pub(crate) inside_a: [f32; 4],
     pub(crate) inside_b: [f32; 4],
     pub(crate) inside_c: [f32; 4],
-    /// x procedural detail texturing (0/1), y soft shadow penumbra (0/1), z aerial
-    /// perspective strength, w the close shadow cascade's half range
+    /// x procedural detail texturing (0/1), y enhanced graphics (0/1), z -1 when the rain
+    /// films have the clean current picture to look through, w the close shadow cascade's
+    /// half range
     pub(crate) flags: [f32; 4],
     /// The close shadow cascade (right half of the near map).
     pub(crate) light_view_proj_close: [[f32; 4]; 4],

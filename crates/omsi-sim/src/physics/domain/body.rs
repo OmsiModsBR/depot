@@ -31,6 +31,20 @@ pub struct CoupledPart {
     pub load: f32,
 }
 
+/// What a body carries (the people aboard a section): its mass and where that mass is
+/// centred in the body.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Payload {
+    /// Mass (kg).
+    pub kg: f32,
+    /// Where the mass is centred (m, right, forward, up from the model origin).
+    pub centre: Vec3,
+    /// How the mass spreads about `centre` along each axis: the sum of each part's mass times
+    /// its squared distance from `centre` along x, y and z (kg m²). With the mass and the
+    /// centre it gives the payload's share of the body's inertia.
+    pub spread: Vec3,
+}
+
 #[derive(Debug, Clone)]
 pub struct RigidBody {
     /// The rules the body follows where the engines differ (see [`Engine`]).
@@ -41,10 +55,16 @@ pub struct RigidBody {
     /// people aboard the section), which weighs on it as its own does.
     pub(crate) empty_mass: f32,
     pub(crate) payload: f32,
-    /// Body-frame inertia (diagonal, kg m²).
+    /// Body-frame inertia (diagonal, kg m²) about the centre of gravity: the empty body's
+    /// (`empty_inertia`, the file's `[momentofintertia]`) with the payload's where the engine
+    /// says so (see [`RigidBody::set_payload`]).
     pub(crate) inertia: Vec3,
-    /// Centre of gravity relative to the model origin (m).
+    pub(crate) empty_inertia: Vec3,
+    /// Centre of gravity relative to the model origin (m): the empty body's (`empty_cog`, the
+    /// file's `[cog]` and `[schwerpunkt]`), moved by the payload where the engine says so (see
+    /// [`RigidBody::set_payload`]).
     pub(crate) cog: Vec3,
+    pub(crate) empty_cog: Vec3,
     /// World position of the centre of gravity.
     pub(crate) position: DVec3,
     pub(crate) orientation: Quat,
@@ -73,6 +93,11 @@ pub struct RigidBody {
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
     pub(crate) holding: bool,
+    /// The yaw acceleration the body's turning asked of the tyres (rad/s², body z), smoothed
+    /// over the tyres' relaxation, and the yaw rate it was measured from (`D-3`, Project Depot
+    /// Physics only).
+    pub(crate) yaw_accel: f32,
+    pub(crate) last_yaw_rate: f32,
     /// The force (N) a joint pushed the body with across it over the last substep (to its
     /// right): the tyres take it besides the bend's pull while they hold.
     pub(crate) joint_across: f32,
@@ -118,6 +143,16 @@ impl RigidBody {
     /// The mass the body carries (kg, see [`RigidBody::set_payload`]).
     pub fn payload(&self) -> f32 {
         self.payload
+    }
+
+    /// The empty body's inertia (diagonal, kg m²): the file's.
+    pub fn empty_inertia(&self) -> Vec3 {
+        self.empty_inertia
+    }
+
+    /// The empty body's centre of gravity relative to the model origin (m): the file's.
+    pub fn empty_cog(&self) -> Vec3 {
+        self.empty_cog
     }
 
     /// The body's own frequency on its springs (1/s, see `body_freq`), with its payload.
@@ -223,6 +258,11 @@ impl RigidBody {
     /// Sets the velocity of the centre of gravity (m/s, world).
     pub fn set_velocity(&mut self, v: Vec3) {
         self.velocity = v;
+    }
+
+    /// Sets the angular velocity (rad/s, body frame).
+    pub fn set_omega(&mut self, omega: Vec3) {
+        self.omega = omega;
     }
 
     /// Sets the grip of the road under the body.

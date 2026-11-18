@@ -258,6 +258,8 @@ impl DriverFigure {
             }
             let id = renderer.add_mesh(scene, &hm.data);
             let inst = renderer.add_instance(scene, id, v.position, Mat4::IDENTITY, mats);
+            // (a person: left out of the puddles' reflection with that option off)
+            renderer.set_human(scene, inst, true);
             // (hidden until `update` has posed and placed it: drawn as loaded, the figure
             // stood in the file's T-pose at the bus's origin, in the middle of the aisle)
             renderer.set_params(scene, inst, &[], false, &[]);
