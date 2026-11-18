@@ -4,11 +4,12 @@
 
 use super::ground::{track_walls, tyre_line};
 use super::wheel::{sign, TyreFrame};
+use super::{classic, depot};
 use crate::physics::domain::params::{
     AIR_DENSITY, CLIMB, DRAG_COEFFICIENT, FRONT_AREA_MAX, FRONT_AREA_MIN, GRAVITY, GRIPPED_ACROSS,
     GRIPPED_ALONG, HUB_REACH, MASS_PER_FRONT_AREA, REHOLD_SPEED, STANDING, WALL_HEIGHT,
 };
-use crate::physics::domain::{GroundProbe, Impact, RigidBody};
+use crate::physics::domain::{Engine, GroundProbe, Impact, RigidBody};
 use glam::{Quat, Vec2, Vec3};
 
 /// A wheel on the ground in one substep, before its tyre forces are settled.
@@ -412,7 +413,27 @@ impl RigidBody {
             .dot(right)
             .signum();
         let across = m * v_fwd * v_fwd * kappa * inward - self.joint_across;
-        if self.holding && (across.abs() > grip_all || slipping || airborne || knocked) {
+        // (and, in Project Depot Physics, axle by axle with the force it takes to start or
+        // stop the body turning: `D-3`)
+        let holds = match self.engine {
+            Engine::Classic => classic::grip::holds_across(grip_all, across),
+            Engine::Depot => {
+                self.yaw_accel = depot::grip::yaw_accel(
+                    self.yaw_accel,
+                    self.omega.z,
+                    self.last_yaw_rate,
+                    v_fwd,
+                    h,
+                );
+                self.last_yaw_rate = self.omega.z;
+                let tyres = lat.iter().map(|&k| {
+                    let c = &contacts[k];
+                    (rot.inverse().mul_vec3(c.r).y, self.friction * c.grip)
+                });
+                depot::grip::holds_across(tyres, across, self.inertia.z * self.yaw_accel)
+            }
+        };
+        if self.holding && (!holds || slipping || airborne || knocked) {
             self.holding = false;
         }
         // (holding, the tyres take whatever keeps them rolling where they point: the body

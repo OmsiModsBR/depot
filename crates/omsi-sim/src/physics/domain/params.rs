@@ -106,6 +106,11 @@ pub const GRIPPED_ACROSS: f32 = 0.5;
 pub const GRIPPED_ALONG: f32 = 1.0;
 /// The tyres hold again once the sideways speed at every tyre is under this (m/s). *OMSI*
 pub const REHOLD_SPEED: f32 = 0.1;
+/// How far a tyre rolls before the side force it builds follows a change of its slip (m, the
+/// relaxation length of a bus tyre): Project Depot Physics smooths the turning the tyres must
+/// start or stop over the time this takes (`D-3`), so a steering key that sets the full bend
+/// in one step does not ask an endless force of them. *tuned*
+pub const RELAXATION_LENGTH: f32 = 0.6;
 
 // The ground under a tyre.
 

@@ -93,6 +93,11 @@ pub struct RigidBody {
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
     pub(crate) holding: bool,
+    /// The yaw acceleration the body's turning asked of the tyres (rad/s², body z), smoothed
+    /// over the tyres' relaxation, and the yaw rate it was measured from (`D-3`, Project Depot
+    /// Physics only).
+    pub(crate) yaw_accel: f32,
+    pub(crate) last_yaw_rate: f32,
     /// The force (N) a joint pushed the body with across it over the last substep (to its
     /// right): the tyres take it besides the bend's pull while they hold.
     pub(crate) joint_across: f32,

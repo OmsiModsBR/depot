@@ -302,3 +302,115 @@ fn a_crowd_higher_up_leans_the_bus_further_in_a_bend_under_depot() {
     let (low, high) = (roll(0.6), roll(2.0));
     assert!(high > low * 1.1, "low {low} deg, high {high} deg");
 }
+
+/// A bus under `engine` rolling at `v` m/s, its yaw inertia raised by `yaw_spread` (kg m²) of
+/// payload centred at its centre of gravity.
+fn rolling(engine: Engine, v: f32, yaw_spread: f32) -> RigidBody {
+    let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+    rb.place(DVec3::ZERO, 0.0);
+    let centre = rb.cog();
+    rb.set_payload(Payload {
+        kg: 1.0,
+        centre,
+        spread: Vec3::new(yaw_spread / 2.0, yaw_spread / 2.0, 0.0),
+    });
+    rb.set_velocity(Vec3::new(0.0, v, 0.0));
+    for w in rb.wheels_mut() {
+        let spin = v / w.radius();
+        w.set_spin(spin);
+    }
+    let brakes = vec![0.0; rb.wheels().len()];
+    for _ in 0..60 {
+        let torque = 0.47 * ((v - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
+        rb.step(1.0 / 60.0, torque, &brakes, 0.0, &flat);
+    }
+    rb
+}
+
+/// Whether the tyres let go within two seconds of the steering swung to `steer` and back
+/// (half a second each way) at `v` m/s.
+fn lets_go(engine: Engine, v: f32, yaw_spread: f32, steer: f32) -> bool {
+    let mut rb = rolling(engine, v, yaw_spread);
+    let brakes = vec![0.0; rb.wheels().len()];
+    for i in 0..120 {
+        let t = i as f32 / 60.0;
+        let s = if t < 0.5 {
+            steer * t / 0.5
+        } else if t < 1.0 {
+            steer * (1.0 - t) / 0.5
+        } else {
+            0.0
+        };
+        let torque = 0.47 * ((v - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
+        rb.step(1.0 / 60.0, torque, &brakes, s, &flat);
+        if !rb.holding() {
+            return true;
+        }
+    }
+    false
+}
+
+/// The smallest steering swing (of 0.02 steps) that makes the tyres let go.
+fn least_swing_that_lets_go(engine: Engine, v: f32, yaw_spread: f32) -> f32 {
+    (1..=50)
+        .map(|i| i as f32 * 0.02)
+        .find(|&s| lets_go(engine, v, yaw_spread, s))
+        .unwrap_or(f32::INFINITY)
+}
+
+/// `D-3`: under Depot, a bus that turns harder (a larger yaw inertia) lets go at a smaller
+/// swing of the steering: its tyres must also start and stop it turning. Under Classic the
+/// inertia changes nothing while the tyres hold.
+#[test]
+fn a_heavier_turning_bus_lets_go_sooner_in_a_quick_swing_under_depot_only() {
+    let v = 14.0;
+    let (light, heavy) = (0.0, 600_000.0);
+    let depot = (
+        least_swing_that_lets_go(Engine::Depot, v, light),
+        least_swing_that_lets_go(Engine::Depot, v, heavy),
+    );
+    assert!(depot.1 < depot.0, "depot: light {} heavy {}", depot.0, depot.1);
+    let classic = (
+        least_swing_that_lets_go(Engine::Classic, v, light),
+        least_swing_that_lets_go(Engine::Classic, v, heavy),
+    );
+    assert_eq!(classic.0, classic.1, "classic");
+}
+
+/// `D-3`: a steady bend lets go at the same speed under both engines: with the weight shared
+/// about `[cog]`, each axle is asked the same share of its grip as all tyres together.
+#[test]
+fn a_steady_bend_lets_go_at_the_same_steering_under_both_engines() {
+    let steady = |engine: Engine| {
+        (1..=50)
+            .map(|i| i as f32 * 0.02)
+            .find(|&s| {
+                let mut rb = rolling(engine, 12.0, 0.0);
+                let brakes = vec![0.0; rb.wheels().len()];
+                // eased in over three seconds, then held
+                (0..360).any(|i| {
+                    let k = (i as f32 / 180.0).min(1.0);
+                    let torque = 0.47
+                        * ((12.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
+                    rb.step(1.0 / 60.0, torque, &brakes, s * k, &flat);
+                    !rb.holding()
+                })
+            })
+            .unwrap_or(f32::INFINITY)
+    };
+    let (classic, depot) = (steady(Engine::Classic), steady(Engine::Depot));
+    assert!((classic - depot).abs() <= 0.02 + 1e-6, "classic {classic} depot {depot}");
+}
+
+/// `D-3`: a steering key that sets a full lock in one frame at walking pace does not make the
+/// tyres let go: the turning they must start follows their relaxation.
+#[test]
+fn a_steering_key_at_walking_pace_does_not_let_the_tyres_go() {
+    let mut rb = rolling(Engine::Depot, 2.0, 0.0);
+    let brakes = vec![0.0; rb.wheels().len()];
+    for _ in 0..120 {
+        let torque = 0.47 * ((2.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
+        rb.step(1.0 / 60.0, torque, &brakes, 1.0, &flat);
+        assert!(rb.holding());
+    }
+}
