@@ -274,6 +274,9 @@ pub(crate) fn people_to_traffic(h: &mut Humans, t: &mut Traffic) {
     for (id, doors) in h.take_ai_requests() {
         t.set_pax_requests(id, &doors);
     }
+    for id in std::mem::take(&mut h.ai_stop_requests) {
+        t.stop_request(id);
+    }
     t.set_payloads(&h.ai_payloads());
 }
 

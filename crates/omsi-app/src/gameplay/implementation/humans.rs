@@ -1523,6 +1523,7 @@ impl Humans {
             under_bus: hashbrown::HashSet::new(),
             ticket_blocks: None,
             stop_request: false,
+            ai_stop_requests: hashbrown::HashSet::new(),
             empty_bus: hashbrown::HashSet::new(),
             tickets_sold: 0,
             ticket_cash: 0.0,
@@ -3120,11 +3121,15 @@ impl Humans {
                 // bus drove off with riders beyond them) serves its timetable's stop all the
                 // same: without it the doors stayed shut for its riders, and the one on the
                 // way to an exit held the bus at the stop for good (#1593).
-                let served = match near_stop {
+                // The same when the bus's stop is near enough for the doors but not among the
+                // passengers' stops (out of their range, or no pavement under it): its riders
+                // walked to the open exits and stood there, and the bus waited out `MAX_HELD`
+                // at every stop.
+                let stop = match near_stop {
                     None if boarding => c.bus.as_ref().and_then(|b| b.stops.front()).map(|s| s.id),
-                    _ => None,
+                    s => s,
                 };
-                let stop = near_stop.or(served);
+                let served = stop.filter(|s| boarding && !self.stops.contains_key(s));
                 let since = match stop {
                     Some(s) => {
                         let v = match self.ai_visits.get(&c.id) {
