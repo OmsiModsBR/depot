@@ -606,6 +606,18 @@ fn yaw_of(d: DVec2) -> f64 {
 }
 
 impl Humans {
+    /// A rider presses the stop button of `bus`: the player's bus takes it from
+    /// `stop_request`, a timetable bus from `ai_stop_requests` (as in OMSI, where the
+    /// passengers of an AI bus ask for its exits the same way).
+    pub(crate) fn press_stop_button(&mut self, bus: BusId) {
+        match bus {
+            BusId::Player => self.stop_request = true,
+            BusId::Ai(id) => {
+                self.ai_stop_requests.insert(id);
+            }
+        }
+    }
+
     /// The player's "Make everyone get off": everyone on board `bus` heads for an exit and
     /// leaves by the doors once they are open and the bus stands, at a stop or not. It ends
     /// by itself when the bus is empty. Returns how many were on board.
@@ -1569,9 +1581,7 @@ impl Humans {
                     return;
                 };
                 // the stop button
-                if bn.id == BusId::Player {
-                    self.stop_request = true;
-                }
+                self.press_stop_button(bn.id);
                 let seat = self.pax(i).unwrap().seat;
                 let all = bn.cabin.all_points();
                 let from = seat
@@ -2251,9 +2261,7 @@ impl Humans {
         let out = p.st == 7 && bn.speed.abs() < 1.0 && may_leave;
         if !out {
             if reg.next.is_none() && !reg.forced {
-                if bn.id == BusId::Player {
-                    self.stop_request = true;
-                }
+                self.press_stop_button(bn.id);
                 return;
             }
             if p.timer < 0.0 {
@@ -2302,9 +2310,7 @@ impl Humans {
                     .pt_target
                     .and_then(|t| exits.iter().position(|e| *e == Some(t)));
             }
-            if bn.id == BusId::Player {
-                self.stop_request = true;
-            }
+            self.press_stop_button(bn.id);
             if let Some(d) = self.pax(i).unwrap().door {
                 if let Some((_, x)) = self.pax_req.get_mut(&b) {
                     if let Some(r) = x.get_mut(d) {

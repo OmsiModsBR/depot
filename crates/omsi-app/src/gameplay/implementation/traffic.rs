@@ -7863,6 +7863,14 @@ impl Traffic {
         self.stop_wishes = Some((alighting, waiting));
     }
 
+    /// A rider of AI bus `id` pressed its stop button: the trigger OMSI fires
+    /// (`int_haltewunsch`), which the stock door scripts need to open the exits.
+    pub fn stop_request(&mut self, id: u64) {
+        if let Some(c) = self.cars.iter_mut().find(|c| c.id == id) {
+            c.vehicle.trigger("int_haltewunsch");
+        }
+    }
+
     pub fn hold_boarding(&mut self, id: u64, stop: Option<i64>, secs: f32) {
         if let Some(c) = self.cars.iter_mut().find(|c| c.id == id) {
             if let Some(b) = c.bus.as_mut() {
