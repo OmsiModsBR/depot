@@ -3305,6 +3305,10 @@ impl Humans {
         let kept = self.seats.remove(&BusId::Player);
         self.player_cabin = None;
         self.served_stop = None;
+        // the desk's coins are drawn in the driven bus's frame: left behind, not carried over
+        if let Some(m) = self.money.as_mut() {
+            m.clear_all();
+        }
         self.set_cabin(new_vehicle);
         if let (Some(k), Some(now)) = (kept, self.seats.get_mut(&BusId::Player)) {
             if k.len() == now.len() {
@@ -4853,6 +4857,14 @@ impl Humans {
     pub fn take_change_tray(&mut self) {
         if let Some(m) = self.money.as_mut() {
             m.clear(true);
+        }
+    }
+
+    /// The driven bus is gone (removed, the player on foot): its desk's coins go with it.
+    pub fn drop_money(&mut self, renderer: &Renderer, scene: &mut Scene) {
+        if let Some(m) = self.money.as_mut() {
+            m.clear_all();
+            m.hide_removed(renderer, scene);
         }
     }
 

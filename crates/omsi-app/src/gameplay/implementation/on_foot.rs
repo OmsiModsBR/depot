@@ -561,6 +561,7 @@ impl App {
             }
             if let Some(h) = self.session.humans.as_mut() {
                 h.evict(BusId::Player, &w);
+                h.drop_money(r, scene);
             }
             w.release_vehicle(r, scene, p.render);
             for t in p.trailer_renders {
