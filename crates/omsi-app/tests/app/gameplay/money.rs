@@ -25,3 +25,27 @@ fn coins_lie_flat_on_the_point_not_stacked() {
     // 80 coins: all at the point's height (they were 80 * 3 mm = 24 cm high before)
     assert!((top - point.z).abs() < 1e-6, "{top}");
 }
+
+#[test]
+fn leaving_the_bus_takes_payment_and_change_off_the_desk() {
+    let mut m = Money {
+        currency: None,
+        dir: PathBuf::new(),
+        meshes: HashMap::new(),
+        // two coins paid, one handed out as change
+        placed: vec![
+            (10, glam::Mat4::IDENTITY, 0, false, None),
+            (11, glam::Mat4::IDENTITY, 1, false, None),
+            (12, glam::Mat4::IDENTITY, 2, true, Some("tray".into())),
+        ],
+        hidden: Vec::new(),
+        rng: 1,
+    };
+    m.clear_all();
+    // nothing left to draw in the next bus's frame; all three are hidden on the next sync
+    assert!(m.placed.is_empty());
+    let mut hidden = m.hidden.clone();
+    hidden.sort();
+    assert_eq!(hidden, vec![10, 11, 12]);
+    assert_eq!(m.change_value(), 0.0);
+}

@@ -260,15 +260,26 @@ impl Money {
         self.placed = keep;
     }
 
+    /// Remove everything on the desk, payment and change: the driver left this bus, and the
+    /// coins stay with it instead of following the player into the next one.
+    pub fn clear_all(&mut self) {
+        self.hidden.extend(self.placed.drain(..).map(|p| p.0));
+    }
+
+    /// Hide the removed coins now (`sync` does it too, but only while a bus is driven).
+    pub fn hide_removed(&mut self, renderer: &Renderer, scene: &mut Scene) {
+        for inst in self.hidden.drain(..) {
+            renderer.set_params(scene, inst, &[], false, &[]);
+        }
+    }
+
     pub fn change_value(&self) -> f32 {
         let coins: Vec<usize> = self.placed.iter().filter(|p| p.3).map(|p| p.2).collect();
         self.value_of(&coins)
     }
 
     pub fn sync(&mut self, renderer: &Renderer, scene: &mut Scene, bus: &VehicleInstance) {
-        for inst in self.hidden.drain(..) {
-            renderer.set_params(scene, inst, &[], false, &[]);
-        }
+        self.hide_removed(renderer, scene);
         let rot = bus.body_rotation();
         let mesh_of = |name: &str| -> Mat4 {
             let defs = &bus.ty.model.meshes;
