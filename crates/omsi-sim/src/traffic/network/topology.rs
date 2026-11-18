@@ -13,6 +13,20 @@ pub const REACH_MAX: f32 = 600.0;
 
 /// A way on that ends within this distance is a dead end to a driver who has a choice (m).
 pub const DEAD_END: f32 = 500.0;
+
+/// Whether lane `b` runs beside the end of lane `a` rather than on from it: its start lies
+/// behind `a`'s end and its own end lies at `a`'s end too. Two short paths laid over each
+/// other (a road piece of a metre and an invisible street on the same spot, at the exit of
+/// the Piraporinha terminal on Projeto Metropole) each started within reach of the other's
+/// end, the two linked into a ring a metre long, and a car that took it drove round it at
+/// speed without getting anywhere while the traffic of three streets queued behind it.
+fn runs_beside(a: &Lane, b: &Lane, tol: f64) -> bool {
+    let e = a.end();
+    let h = (a.end_heading() as f64).to_radians();
+    let fwd = glam::DVec2::new(h.sin(), h.cos());
+    let behind = (b.start() - e).truncate().dot(fwd) < -0.5;
+    behind && (b.end() - e).truncate().length() <= tol
+}
 impl Network {
     /// Connect lane ends to lane starts that lie within `tol` metres with a compatible heading.
     pub fn link(&mut self, tol: f64) {
@@ -97,7 +111,11 @@ impl Network {
                             }
                             let d = (l.start() - e).truncate().length();
                             let dh = wrap_deg(l.start_heading() - eh).abs();
-                            if d <= tol && dh < 40.0 && (l.start().z - e.z).abs() < 3.0 {
+                            if d <= tol
+                                && dh < 40.0
+                                && (l.start().z - e.z).abs() < 3.0
+                                && !runs_beside(&self.lanes[i], l, tol)
+                            {
                                 found.push(j);
                             }
                         }
@@ -255,7 +273,10 @@ impl Network {
             }
             let (e, s) = (a.end(), b.start());
             let dh = ((b.start_heading() - a.end_heading() + 540.0) % 360.0 - 180.0).abs();
-            (s - e).truncate().length() <= tol && dh < 40.0 && (s.z - e.z).abs() < 3.0
+            (s - e).truncate().length() <= tol
+                && dh < 40.0
+                && (s.z - e.z).abs() < 3.0
+                && !runs_beside(a, b, tol)
         };
         let near = |net: &Network, p: DVec3| -> Vec<usize> {
             let c = (
