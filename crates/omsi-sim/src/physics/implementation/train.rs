@@ -98,7 +98,11 @@ impl Joint {
         let ball_f = at(follow, self.anchor_follow);
         let link = if self.pitch_offset > 0.0 {
             let a = lead.orientation.mul_vec3(Vec3::X);
-            let to = (ball_f - hinge).as_vec3();
+            // the link is part of the follower: it points from the hinge back to the ball
+            // as the follower stands (not as the ball's place says, which left the link's
+            // angle to the follower unchecked: it drifted, and with it the follower's pitch)
+            let ahead = if self.anchor_lead.y < 0.0 { 1.0 } else { -1.0 };
+            let to = follow.orientation.mul_vec3(Vec3::new(0.0, -ahead, 0.0));
             let back = to - a * to.dot(a);
             let back = if back.length() > 1e-3 {
                 back.normalize()

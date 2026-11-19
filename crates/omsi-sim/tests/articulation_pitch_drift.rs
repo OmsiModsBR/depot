@@ -98,10 +98,10 @@ fn a_ball_joint_keeps_its_rest_pitch_after_weaving() {
     }
 }
 
-/// A pusher (hinge ahead of the ball) must too. Fails today: the rear section's pitch walks
-/// some 0.03 deg per round of weaving, in both engines, and never comes back.
+/// A pusher (hinge ahead of the ball) must too. It used to fail: the rear section's pitch walked
+/// some 0.03 deg per round of weaving, in both engines, and never comes back (fixed: the
+/// pusher's link is held to the follower's pitch, see `Joint::ball`).
 #[test]
-#[ignore = "known drift of the pusher joint, see the thread on the rear section's pitch"]
 fn a_pushers_joint_keeps_its_rest_pitch_after_weaving() {
     for engine in [Engine::Classic, Engine::Depot] {
         let b = beta_after_weaving(engine, Some(0.8), 12);
