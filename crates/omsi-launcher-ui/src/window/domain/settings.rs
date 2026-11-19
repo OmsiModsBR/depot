@@ -10,6 +10,16 @@ use omsi_launcher_lib::settings::{vanilla_on_d3d9, RESOLUTIONS};
 use omsi_ui::widgets::matches;
 use serde_json::{json, Value};
 
+/// What each graphics mode draws, one line each in the graphics mode card (FR-020a).
+pub const MODE_LINES: [(GraphicsMode, &str); 3] = [
+    (GraphicsMode::Vanilla, "the OMSI 2 picture, nothing added"),
+    (
+        GraphicsMode::VanillaPlus,
+        "the OMSI 2 picture with conservative improvements",
+    ),
+    (GraphicsMode::Enhanced, "the advanced graphics"),
+];
+
 /// The line under the "Physics" list (spec 002, FR-003).
 pub const PHYSICS_NOTICE: &str = "A bus with [depot_physics] in its file runs Project Depot Physics when you drive it, whatever is chosen here. Mods tuned for OMSI 2 may stand or handle differently in Project Depot Physics";
 
@@ -891,14 +901,15 @@ pub static OPTS: &[Opt] = &[
         "Put the bus into service on start",
         "Shift+U",
     ),
-    // Graphics
-    special(
+    // Graphics (the mode first, as a card of its own across the page: it decides which other
+    // graphics options are offered)
+    pick(
         GRAPHICS,
-        "Graphics API",
-        "graphics_api",
-        "Graphics API",
-        "Decides what the other graphics options can do",
-        Kind::Api,
+        "Graphics mode",
+        "graphics",
+        "Graphics mode",
+        "Decides which other graphics options are offered",
+        &GraphicsMode::CHOICES,
     ),
     special(
         GRAPHICS,
@@ -908,13 +919,13 @@ pub static OPTS: &[Opt] = &[
         "Sets many options at once",
         Kind::Preset,
     ),
-    pick(
+    special(
         GRAPHICS,
         "Picture",
-        "graphics",
-        "Graphics",
-        "Vanilla draws what OMSI 2 draws",
-        &GraphicsMode::CHOICES,
+        "graphics_api",
+        "Graphics API",
+        "The interface Vanilla+ and Enhanced draw with",
+        Kind::Api,
     ),
     pick(
         GRAPHICS,
@@ -944,7 +955,7 @@ pub static OPTS: &[Opt] = &[
             ("0.5", "50%"),
         ],
     ),
-    // (DirectX9 only, and only below 100 %, see `shown`)
+    // (Vanilla only, and only below 100 %, see `shown`)
     pick(
         GRAPHICS,
         "Picture",
@@ -1128,7 +1139,7 @@ pub static OPTS: &[Opt] = &[
         "Smoke in mirrors",
         "Smoke and particles also show in the mirrors",
     ),
-    // (DirectX9 only, see `shown`)
+    // (Vanilla only, see `shown`)
     toggle(
         GRAPHICS,
         "Effects",
@@ -1136,7 +1147,7 @@ pub static OPTS: &[Opt] = &[
         "Rain reflections",
         "The puddles on a wet road mirror the street; off, they mirror the sky alone",
     ),
-    // (DirectX9 only, with the rain reflections on, see `shown`)
+    // (Vanilla only, with the rain reflections on, see `shown`)
     toggle(
         GRAPHICS,
         "Effects",
@@ -1144,7 +1155,7 @@ pub static OPTS: &[Opt] = &[
         "People in rain reflections",
         "The people in the street show in the puddles' reflections",
     ),
-    // (DirectX9 only, see `shown`)
+    // (Vanilla only, see `shown`)
     toggle(
         GRAPHICS,
         "Effects",
@@ -1152,7 +1163,7 @@ pub static OPTS: &[Opt] = &[
         "Fewer night lights",
         "Fewer street and building lamps light each spot, which saves a weak graphics card work; the night looks different from OMSI 2",
     ),
-    // (DirectX9 only, our own ways to ease its work, see `shown`)
+    // (Vanilla only, our own ways to ease its work, see `shown`)
     toggle(
         GRAPHICS,
         "Effects",
@@ -1190,7 +1201,7 @@ pub static OPTS: &[Opt] = &[
         "How much the textures may take",
         Kind::TexMem,
     ),
-    // (DirectX9 only, see `shown`)
+    // (Vanilla only, see `shown`)
     pick(
         ADVANCED,
         "Textures",

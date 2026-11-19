@@ -138,10 +138,10 @@ observable effect; every in-game option acts in the session (quickstart Q7, Q8).
 
 ### The launcher's Graphics page `feat/launcher-graphics-mode-section`
 
-- [ ] T035 [US2] [ph B2] In `crates/omsi-launcher-ui/src/window/domain/settings.rs` and `crates/omsi-launcher-ui/src/window/implementation/settings.rs`: the top highlighted section becomes "Graphics mode" and holds `graphics` with one line per mode and "decides which other graphics options are offered"; its text about the API limiting options goes (FR-020a)
-- [ ] T036 [US2] [ph B2] Move `graphics_api` into the "Picture" group at the row `graphics` had, offered in Vanilla+ and Enhanced only (FR-020b); changing the mode redraws the page for the new mode at once
-- [ ] T037 [P] [US2] [ph B2] Relabel Vanilla's own options by what they do in `crates/omsi-launcher-ui/src/window/domain/settings.rs` (no "DirectX9" in a label or hint; the keys keep their names, FR-018); add the new and changed texts to the locale files and run `.github/scripts/check_locales.py`
-- [ ] T038 [P] [US2] [ph B2] Tests in `crates/omsi-launcher-ui/tests/`: the top section holds `graphics`; `graphics_api` is in "Picture" in Vanilla+ and Enhanced and absent in Vanilla; VR and triple screen absent in Vanilla; search finds only offered options ([contracts/graphics-options.md](contracts/graphics-options.md))
+- [x] T035 [US2] [ph B2] In `crates/omsi-launcher-ui/src/window/domain/settings.rs` and `crates/omsi-launcher-ui/src/window/implementation/settings.rs`: the top highlighted section becomes "Graphics mode" and holds `graphics` with one line per mode and "decides which other graphics options are offered"; its text about the API limiting options goes (FR-020a)
+- [x] T036 [US2] [ph B2] Move `graphics_api` into the "Picture" group at the row `graphics` had, offered in Vanilla+ and Enhanced only (FR-020b); changing the mode redraws the page for the new mode at once
+- [x] T037 [P] [US2] [ph B2] Relabel Vanilla's own options by what they do in `crates/omsi-launcher-ui/src/window/domain/settings.rs` (no "DirectX9" in a label or hint; the keys keep their names, FR-018); add the new and changed texts to the locale files and run `.github/scripts/check_locales.py`
+- [x] T038 [P] [US2] [ph B2] Tests in `crates/omsi-launcher-ui/tests/`: the top section holds `graphics`; `graphics_api` is in "Picture" in Vanilla+ and Enhanced and absent in Vanilla; VR and triple screen absent in Vanilla; search finds only offered options ([contracts/graphics-options.md](contracts/graphics-options.md))
 
 ### The in-game menu `feat/ingame-live-options`
 
