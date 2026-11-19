@@ -475,6 +475,57 @@ enum Tok {
     Brace(String),
 }
 
+/// Whether `line` ends inside a string literal: a `"` opened and not closed (a `'` outside a
+/// string starts a comment).
+fn ends_in_string(line: &str) -> bool {
+    let mut inside = false;
+    for c in line.chars() {
+        match c {
+            '"' => inside = !inside,
+            '\'' if !inside => return false,
+            _ => {}
+        }
+    }
+    inside
+}
+
+/// The script's lines with each string literal that runs over several lines joined into the
+/// line it starts on, its line breaks kept as `\n`; each with the number (from 1) of the line
+/// it starts on. A pmon's display texts are written this way, a line of the screen a line of
+/// the file. A quote that no later line closes, or whose text would run into a line starting
+/// a block (`{`), is a mistake of the file's and ends at its own line, as before.
+fn logical_lines(lines: &[String]) -> Vec<(usize, std::borrow::Cow<'_, str>)> {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut i = 0;
+    while i < lines.len() {
+        let start = i;
+        i += 1;
+        if ends_in_string(&lines[start]) {
+            let mut joined = lines[start].clone();
+            let mut j = start + 1;
+            let closed = loop {
+                let Some(next) = lines.get(j) else { break None };
+                if next.trim_start().starts_with('{') {
+                    break None;
+                }
+                joined.push('\n');
+                joined.push_str(next);
+                j += 1;
+                if !ends_in_string(&joined) {
+                    break Some(j);
+                }
+            };
+            if let Some(end) = closed {
+                out.push((start + 1, std::borrow::Cow::Owned(joined)));
+                i = end;
+                continue;
+            }
+        }
+        out.push((start + 1, std::borrow::Cow::Borrowed(lines[start].as_str())));
+    }
+    out
+}
+
 /// Tokenize one script line. `'` starts a comment (outside a string literal).
 fn tokenize(line: &str) -> Vec<Tok> {
     let mut out = Vec::new();
@@ -590,9 +641,8 @@ impl<'a> Compiler<'a> {
         // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
         // Procity's dashboard blanked its odometer every frame through such an `{else}`
         let mut orphan_elses: Vec<usize> = Vec::new();
-        for (ln, raw) in f.lines.iter().enumerate() {
-            let line_no = ln + 1;
-            let toks = tokenize(raw);
+        for (line_no, raw) in logical_lines(&f.lines) {
+            let toks = tokenize(&raw);
             for t in toks {
                 match t {
                     Tok::Brace(b) => {
