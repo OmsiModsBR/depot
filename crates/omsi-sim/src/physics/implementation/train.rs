@@ -105,8 +105,8 @@ impl Joint {
             // (read off the follower's up axis, which the joint's yaw does not turn: its
             // forward axis, projected, would reverse the link as the yaw crosses 90 degrees)
             let up = follow.orientation.mul_vec3(Vec3::Z);
-            let to = up.cross(a) * -ahead;
-            let back = to - a * to.dot(a);
+            // (`up x a` is square to `a` already)
+            let back = up.cross(a) * -ahead;
             let back = if back.length() > 1e-3 {
                 back.normalize()
             } else {
