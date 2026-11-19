@@ -102,7 +102,10 @@ impl Joint {
             // as the follower stands (not as the ball's place says, which left the link's
             // angle to the follower unchecked: it drifted, and with it the follower's pitch)
             let ahead = if self.anchor_lead.y < 0.0 { 1.0 } else { -1.0 };
-            let to = follow.orientation.mul_vec3(Vec3::new(0.0, -ahead, 0.0));
+            // (read off the follower's up axis, which the joint's yaw does not turn: its
+            // forward axis, projected, would reverse the link as the yaw crosses 90 degrees)
+            let up = follow.orientation.mul_vec3(Vec3::Z);
+            let to = up.cross(a) * -ahead;
             let back = to - a * to.dot(a);
             let back = if back.length() > 1e-3 {
                 back.normalize()

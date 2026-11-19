@@ -109,3 +109,27 @@ fn a_pushers_joint_keeps_its_rest_pitch_after_weaving() {
         assert!(drift < 0.05, "{engine:?}: beta walked {drift} deg: {b:?}");
     }
 }
+
+/// A pusher's link follows the rear section through any yaw: put down turned 120 degrees
+/// to the front section (a yaw limit above 90 degrees), the joint's ball and hinge still
+/// meet (the link once reversed past 90 degrees and opened the joint by twice its length).
+#[test]
+fn a_pushers_link_holds_through_ninety_degrees_of_yaw() {
+    let (front, rear) = gn92(false);
+    let rear = Vehicle {
+        coupling_pitch_offset: Some(0.8),
+        ..rear
+    };
+    for heading in [0.0, 45.0, 89.0, 91.0, 120.0, 170.0, -120.0] {
+        let mut bodies = vec![
+            RigidBody::for_engine(&front, &[], Engine::Depot),
+            RigidBody::for_engine(&rear, &[], Engine::Depot),
+        ];
+        let back = Vec3::from(front.coupling_back.as_ref().unwrap().pos);
+        let at = Vec3::from(rear.coupling_front.as_ref().unwrap().pos);
+        let joints = vec![Joint::new(0, 1, &rear, back, at)];
+        place_train(&mut bodies, &joints, DVec3::ZERO, &[0.0, heading]);
+        let gap = joints[0].gap(&bodies);
+        assert!(gap < 0.01, "heading {heading}: the joint is open by {gap} m");
+    }
+}
