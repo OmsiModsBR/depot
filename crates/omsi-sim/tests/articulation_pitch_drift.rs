@@ -130,6 +130,9 @@ fn a_pushers_link_holds_through_ninety_degrees_of_yaw() {
         let joints = vec![Joint::new(0, 1, &rear, back, at)];
         place_train(&mut bodies, &joints, DVec3::ZERO, &[0.0, heading]);
         let gap = joints[0].gap(&bodies);
-        assert!(gap < 0.01, "heading {heading}: the joint is open by {gap} m");
+        assert!(
+            gap < 0.01,
+            "heading {heading}: the joint is open by {gap} m"
+        );
     }
 }
