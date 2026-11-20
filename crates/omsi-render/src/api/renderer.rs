@@ -2,8 +2,8 @@
 //! frame's entry points (the window, a triple screen, a headset's eyes, an image or a texture).
 use crate::assets::{fit_size, next_gen, texture_bytes, GpuTexture};
 use crate::gpu::{
-    fake_poll_loss, gl_backend, guarded_poll, let_go, lost_why, read_buffer_with, target_2d,
-    wait_poll, wait_with, GpuWaitError,
+    fault_due, gl_backend, guarded_poll, let_go, lost_why, read_buffer_with, target_2d, wait_poll,
+    wait_with, FaultHook, GpuWaitError,
 };
 use crate::lighting::Lighting;
 use crate::output::Output;
@@ -88,7 +88,7 @@ impl Renderer {
     /// (#48); either way `device_lost` then says why. (`OMSI_FAKE_GPU_ERROR=lost-poll`: lost
     /// here three seconds in.)
     pub fn wait_gpu(&self, submission: Option<wgpu::SubmissionIndex>) -> Result<(), GpuWaitError> {
-        let fake = fake_poll_loss(self.started);
+        let fake = fault_due(FaultHook::LostPoll, self.started);
         wait_with(gl_backend(), |timeout| {
             guarded_poll(Some(&self.gpu.device_lost), fake, || {
                 self.device.poll(wait_poll(submission.clone(), timeout))
@@ -98,7 +98,7 @@ impl Renderer {
 
     /// Let the device run what has finished, without waiting; guarded as `wait_gpu`.
     pub fn poll_gpu(&self) -> Result<(), GpuWaitError> {
-        let fake = fake_poll_loss(self.started);
+        let fake = fault_due(FaultHook::LostPoll, self.started);
         guarded_poll(Some(&self.gpu.device_lost), fake, || {
             self.device.poll(wgpu::PollType::Poll)
         })

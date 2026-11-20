@@ -80,29 +80,6 @@ impl std::fmt::Display for GpuWaitError {
 
 impl std::error::Error for GpuWaitError {}
 
-/// The test hook `OMSI_FAKE_GPU_ERROR=lost-poll`: from three seconds after the renderer was
-/// made (`started`), the device is lost the way a driver loses it while the game runs - its
-/// loss handler is told, and the poll of it panics inside wgpu as on Vulkan (at the start of
-/// a frame, or in the game's own waits for the device). Unlike `lost` (which only raises the
-/// flag), this goes through the panic that ended the game.
-pub(crate) fn fake_poll_loss(started: std::time::Instant) -> bool {
-    fake_poll_loss_for(
-        omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref(),
-        started.elapsed().as_secs_f32(),
-    )
-}
-
-/// `fake_poll_loss` for a given mode and the seconds since the renderer was made.
-pub(crate) fn fake_poll_loss_for(mode: Option<&str>, seconds: f32) -> bool {
-    fake_due(mode, "lost-poll", seconds)
-}
-
-/// Whether the `OMSI_FAKE_GPU_ERROR` test hook `mode` is `name`, three seconds in (the
-/// session has drawn its first frames by then).
-pub(crate) fn fake_due(mode: Option<&str>, name: &str, seconds: f32) -> bool {
-    mode == Some(name) && seconds > 3.0
-}
-
 /// One poll of the device (`poll`), guarded: a panic in it is taken as the device lost and
 /// marked on `flag` when there is one. A device already known lost is not polled at all
 /// (on Vulkan that poll is the panic). `fake`: the `lost-poll` test hook loses it now.
@@ -246,14 +223,15 @@ mod tests {
 
     #[test]
     fn the_lost_poll_hook_waits_three_seconds_and_only_for_its_mode() {
-        assert!(!fake_poll_loss_for(None, 10.0));
-        assert!(!fake_poll_loss_for(Some("lost"), 10.0));
-        assert!(!fake_poll_loss_for(Some("lost-poll"), 2.0));
-        assert!(fake_poll_loss_for(Some("lost-poll"), 3.5));
+        use super::super::fault::{due, is_due, Hook};
+        assert!(!is_due(None, Hook::LostPoll, 10.0));
+        assert!(!is_due(Some("lost"), Hook::LostPoll, 10.0));
+        assert!(!is_due(Some("lost-poll"), Hook::LostPoll, 2.0));
+        assert!(is_due(Some("lost-poll"), Hook::LostPoll, 3.5));
         // (nothing set in the test's environment: the hook is off)
-        assert!(!fake_poll_loss(std::time::Instant::now()));
-        assert!(fake_due(Some("oom"), "oom", 3.5));
-        assert!(!fake_due(Some("oom"), "lost-poll", 3.5));
+        assert!(!due(Hook::LostPoll, std::time::Instant::now()));
+        assert!(is_due(Some("oom"), Hook::Oom, 3.5));
+        assert!(!is_due(Some("oom"), Hook::LostPoll, 3.5));
     }
 
     #[test]

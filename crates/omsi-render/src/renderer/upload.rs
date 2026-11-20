@@ -75,7 +75,7 @@ impl Renderer {
         if !scene.dirty {
             // only what moved or changed since the last frame
             if !scene.changed.is_empty() {
-                if omsi_cfg::flags::DEBUG_DRAWS.is_set() {
+                if crate::gpu::debug().debug_draws {
                     log::info!(
                         "prepare: {} changed instances of {}",
                         scene.changed.len(),

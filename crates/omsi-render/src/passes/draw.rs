@@ -430,9 +430,8 @@ pub(crate) fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
 /// instance is mirrored (a negative determinant turns the winding round).
 /// `OMSI_NO_CULL=1` draws every mesh from both sides, for comparison.
 pub(crate) fn culls_back_faces(scene: &Scene, inst: &Instance) -> bool {
-    static NO_CULL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     scene.meshes[inst.mesh].one_sided
-        && !*NO_CULL.get_or_init(|| omsi_cfg::flags::NO_CULL.is_set())
+        && !crate::gpu::debug().no_cull
         && glam::Mat3::from_mat4(inst.transform).determinant() > 0.0
 }
 

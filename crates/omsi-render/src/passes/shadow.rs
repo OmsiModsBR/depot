@@ -470,7 +470,7 @@ impl ShadowResources {
                 || near_m == Mat4::IDENTITY
                 || near_origin != render_origin
                 || near_sun.dot(sun) < 0.99999
-                || omsi_cfg::flags::SHADOW_NEAR_EVERY_FRAME.is_set());
+                || crate::gpu::debug().shadow_near_every_frame);
         let light_view_proj = if let Some((_, _, near, _, _)) = shared_xr_shadows {
             near
         } else if !shadows {
@@ -502,8 +502,8 @@ impl ShadowResources {
                 || far_m == Mat4::IDENTITY
                 || far_origin != render_origin
                 || far_sun.dot(sun) < 0.99999
-                || omsi_cfg::flags::SHADOW_FAR_EVERY_FRAME.is_set());
-        if redraw_far && omsi_cfg::flags::DEBUG_SHADOW_FAR.is_set() {
+                || crate::gpu::debug().shadow_far_every_frame);
+        if redraw_far && crate::gpu::debug().debug_shadow_far {
             log::info!(
                 "far shadow redrawn: age {far_age} moved {far_moved} origin {} sun {:.6}",
                 far_origin != render_origin,

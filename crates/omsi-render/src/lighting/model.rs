@@ -531,6 +531,5 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3, enhanced: bool) -> GpuPointLigh
 /// shows its values as if it were opaque: an invisible layer round the player's bus hides
 /// the bus in these views.
 pub(crate) fn debug_view() -> f32 {
-    static VIEW: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *VIEW.get_or_init(|| omsi_cfg::flags::DEBUG_ENHANCED.number().unwrap_or(0.0))
+    crate::gpu::debug().debug_enhanced.unwrap_or(0.0)
 }

@@ -74,8 +74,7 @@ pub fn gl_backend() -> bool {
 /// (vanilla and vanilla+ draw as everywhere). OMSI_GL_TEXTURE_UNITS=1 takes this layout on
 /// any device (with OMSI_GPU_ARRAYS, to try it without such a chip).
 pub(crate) fn sixteen_texture_units() -> bool {
-    array_path() != ArrayPath::Storage
-        && (gl_backend() || omsi_cfg::flags::GL_TEXTURE_UNITS.is_set())
+    array_path() != ArrayPath::Storage && (gl_backend() || crate::gpu::debug().gl_texture_units)
 }
 
 /// Wait until the GPU has done `submission` (None: everything submitted so far).

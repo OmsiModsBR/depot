@@ -107,8 +107,8 @@ impl Renderer {
         f: &FrameContext,
         clock: &mut FrameClock,
     ) -> DrawLists {
-        let debug_draws = omsi_cfg::flags::DEBUG_DRAWS.is_set();
-        let debug_cull = omsi_cfg::flags::DEBUG_CULL.is_set();
+        let debug_draws = crate::gpu::debug().debug_draws;
+        let debug_cull = crate::gpu::debug().debug_cull.is_some();
         let with_overlays = f.with_overlays;
         let prepass_on = f.features.prepass_on;
         let glass_on = f.features.glass_on;
@@ -124,7 +124,7 @@ impl Renderer {
         let shadow_batches = self.shadow_casters(scene, f, &mut list);
         clock.stage(self, "shadow items", "mirror.shadow items");
         let visible = self.visibility(scene, f, clock, debug_cull);
-        let only_surfaces = omsi_cfg::flags::ONLY_SURFACES.is_set();
+        let only_surfaces = crate::gpu::debug().only_surfaces;
         let visible: Vec<(usize, f32, bool)> = if only_surfaces {
             visible
                 .into_iter()
@@ -187,7 +187,7 @@ impl Renderer {
         // tested, 2 blended, 3 blended without depth writes, 4 surface depth, 5 terrain
         // paint; 3 includes its specialized terrain variant) - with
         // OMSI_GPU_TIMERS_RAW, what each kind costs the GPU
-        if let Some(skip) = omsi_cfg::flags::SKIP_PIPE.text() {
+        if let Some(skip) = crate::gpu::debug().skip_pipe.clone() {
             let skip: Vec<u8> = skip
                 .split(',')
                 .filter_map(|x| x.trim().parse().ok())
@@ -296,7 +296,7 @@ impl Renderer {
         f: &FrameContext,
         list: &mut Vec<u32>,
     ) -> [Vec<Batch>; 4] {
-        let debug_draws = omsi_cfg::flags::DEBUG_DRAWS.is_set();
+        let debug_draws = crate::gpu::debug().debug_draws;
         let camera = f.camera;
         let cam_rel = f.cam_rel;
         let lamp_shadows = &f.lamp_shadows;
@@ -342,9 +342,10 @@ impl Renderer {
             (SHADOW_RANGE_FAR, light_view_proj_far, 6.0),
             (SHADOW_RANGE_CLOSE, light_view_proj_close, 0.1),
         ];
-        let dbg_shadow = omsi_cfg::flags::DEBUG_SHADOW.is_set();
-        let dbg_r: f32 = omsi_cfg::flags::DEBUG_SHADOW
-            .text()
+        let dbg_shadow = crate::gpu::debug().debug_shadow.is_some();
+        let dbg_r: f32 = crate::gpu::debug()
+            .debug_shadow
+            .as_deref()
             .and_then(|v| v.trim().parse().ok())
             .unwrap_or(3.0);
         let casters = |span: std::ops::Range<usize>| -> [Vec<DrawItem>; 4] {
@@ -912,7 +913,7 @@ impl Renderer {
         } else {
             camera.far
         };
-        if let Some(p) = omsi_cfg::flags::DEBUG_CULL.text().and_then(|v| {
+        if let Some(p) = crate::gpu::debug().debug_cull.clone().and_then(|v| {
             let f: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
             (f.len() == 3).then(|| (DVec3::new(f[0], f[1], 0.0), f[2]))
         }) {
@@ -1142,7 +1143,7 @@ impl Renderer {
         }
         // OMSI_DEBUG_FLICKER: a near instance in view in two frames running that is drawn in
         // one and not in the other - the objects blinking in and out as the view moves
-        if with_overlays && omsi_cfg::flags::DEBUG_FLICKER.is_set() {
+        if with_overlays && crate::gpu::debug().debug_flicker {
             let drawn: std::collections::HashSet<usize> = visible.iter().map(|v| v.0).collect();
             let mut prev = self.culling.flicker.borrow_mut();
             let mut now: HashMap<usize, bool> = HashMap::new();

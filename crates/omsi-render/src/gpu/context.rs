@@ -60,7 +60,7 @@ impl GpuContext {
             gpu_error,
             out_of_memory,
             device_lost,
-            encoding_pool: if omsi_cfg::flags::NO_RENDER_POOL.is_set() {
+            encoding_pool: if crate::gpu::debug().no_render_pool {
                 None
             } else {
                 let workers = std::thread::available_parallelism()
