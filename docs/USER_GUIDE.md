@@ -387,7 +387,7 @@ and the options marked "next start" are changed in the launcher. This table is p
 | `shadows` | no | yes | yes | at once |
 | `shadow_size` | no | yes | yes | next start |
 | `shadow_casters` | no | yes | yes | next start |
-| `ssao` | no | yes | yes | next start |
+| `ssao` | no | yes | yes | at once |
 | `shadow_blobs` | fixed: On | yes | yes | next start |
 | `night_brightness` | no | no | yes | at once |
 | `reflections` | yes | yes | yes | next start |
