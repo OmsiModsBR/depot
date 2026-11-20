@@ -433,30 +433,32 @@ fn a_vehicle_is_found_by_its_bus_file_and_its_carrier_by_its_part() {
         registry_path: None,
     };
     let root = "C:\\Games\\OMSI 2\\";
-    let (d, carrier) = find_declaration(&c, &format!("{root}vehicles\\t\\RIGID.bus"), &[])
-        .unwrap()
-        .unwrap();
+    let (d, carrier) =
+        find_declaration(&c, &format!("{root}vehicles\\t\\RIGID.bus"), &[], |_| None)
+            .unwrap()
+            .unwrap();
     assert_eq!((d.entry.as_str(), carrier), ("rigid", 0));
     let (d, carrier) = find_declaration(
         &c,
         &format!("{root}Vehicles/T/front.bus"),
         &[&format!("{root}Vehicles\\T\\rear.bus")],
+        |_| None,
     )
     .unwrap()
     .unwrap();
     assert_eq!((d.entry.as_str(), carrier), ("artic", 1));
     assert!(
-        find_declaration(&c, &format!("{root}Vehicles\\T\\front.bus"), &[])
+        find_declaration(&c, &format!("{root}Vehicles\\T\\front.bus"), &[], |_| None)
             .unwrap()
             .is_err(),
         "rear part missing"
     );
     assert!(
-        find_declaration(&c, &format!("{root}Vehicles\\T\\other.bus"), &[]).is_none(),
+        find_declaration(&c, &format!("{root}Vehicles\\T\\other.bus"), &[], |_| None).is_none(),
         "disabled"
     );
     assert!(
-        find_declaration(&c, &format!("{root}Vehicles\\T2\\rigid.bus"), &[]).is_none(),
+        find_declaration(&c, &format!("{root}Vehicles\\T2\\rigid.bus"), &[], |_| None).is_none(),
         "another folder"
     );
 }
@@ -742,4 +744,91 @@ fn a_model_whose_poles_work_is_a_trolleybus_with_its_poles_where_it_draws_them()
     // a model with one pole only, or none, is no trolleybus
     assert!(omsi_trolley::poles_in_model(anims[..4].iter().copied()).is_none());
     assert!(omsi_trolley::poles_in_model([("door_0", [0.0; 3])]).is_none());
+}
+
+/// The poles of the model in the test above: (foot, shoe pivot), left then right.
+fn model_poles() -> [(DVec3, DVec3); 2] {
+    [
+        (DVec3::new(-0.3, 2.0, 3.4), DVec3::new(-0.3, -4.0, 5.3)),
+        (DVec3::new(0.3, 2.1, 3.5), DVec3::new(0.3, -4.1, 5.4)),
+    ]
+}
+
+#[test]
+fn an_entry_that_places_the_poles_keeps_them_and_one_that_does_not_takes_the_model_s() {
+    let entries = parse_registry(REGISTRY);
+    let model = model_poles();
+    // (the entry places them: the model is not even looked at)
+    let d = omsi_trolley::declaration_with_model(&entries[0], &params(), || {
+        panic!("the model is not needed")
+    })
+    .unwrap();
+    assert_eq!(d.poles, decl().poles);
+    // an entry with no pole keys: the model's, each foot and shoe as drawn
+    let bare =
+        &parse_registry("[vehicle:bare]\nbus_file=Vehicles\\T\\rigid.bus\npitch_factor=0.9\n")[0];
+    let d = omsi_trolley::declaration_with_model(bare, &params(), || Some(model)).unwrap();
+    assert_eq!(d.poles.map(|p| (p.base, p.rest_shoe)), model);
+    assert_eq!(d.params.pitch_factor, 0.9, "the entry tunes the rest");
+    // with no model either, or with only some of the keys, it cannot be used
+    let e = omsi_trolley::declaration_with_model(bare, &params(), || None).unwrap_err();
+    assert_eq!(e.to_string(), "[vehicle:bare] has no pole_base_forward");
+    let part = &parse_registry("[vehicle:part]\nbus_file=x.bus\npole_base_height=3.4\n")[0];
+    assert!(omsi_trolley::declaration_with_model(part, &params(), || Some(model)).is_err());
+    // found in the registry: the model asked for is the carrier's
+    let c = Convention {
+        params: params(),
+        entries: parse_registry(
+            "[vehicle:artic]\nbus_file=Vehicles\\T\\front.bus\npole_carrier_bus_file=Vehicles\\T\\rear.bus\n",
+        ),
+        params_path: Default::default(),
+        registry_path: None,
+    };
+    let (d, carrier) = find_declaration(
+        &c,
+        "Vehicles\\T\\front.bus",
+        &["Vehicles\\T\\rear.bus"],
+        |i| (i == 1).then_some(model),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(carrier, 1);
+    assert_eq!(d.poles[1].rest_shoe, model[1].1);
+}
+
+/// A shoe drawn about its pivot `p`: a 10 cm long body whose two cheeks stand 15 mm either
+/// side of the pivot's line up to `cheek` over the pivot, with the groove's floor between
+/// them at `floor`; and the pole's end 20 cm behind, higher than all of it.
+fn shoe_points(p: DVec3, cheek: f64, floor: f64) -> Vec<DVec3> {
+    let mut out = Vec::new();
+    for y in [-0.05, 0.0, 0.05] {
+        for x in [-0.015, 0.015] {
+            out.push(p + DVec3::new(x, y, cheek));
+            out.push(p + DVec3::new(x, y, -0.02));
+        }
+        out.push(p + DVec3::new(0.0, y, floor));
+    }
+    out.push(p + DVec3::new(0.0, -0.2, 0.3));
+    out
+}
+
+#[test]
+fn the_wire_runs_on_a_shoe_as_its_mesh_is_drawn() {
+    use omsi_trolley::{shoe_contact, SHOE_SEAT, WIRE_RADIUS};
+    let p = DVec3::new(0.3, -4.0, 5.3);
+    // cheeks 15 mm up, the groove 3 mm up: the wire's top level with the cheeks' tops
+    let fit = shoe_contact(p, shoe_points(p, 0.015, 0.003)).unwrap();
+    assert!((fit.contact.z - (p.z + 0.015 - WIRE_RADIUS)).abs() < 1e-12);
+    assert_eq!(
+        (fit.contact.x, fit.contact.y),
+        (p.x, p.y),
+        "straight above the pivot"
+    );
+    assert_eq!(fit.points, 15, "the pole's end is not the shoe");
+    // a shallow groove (cheeks 6 mm over its floor): the wire seats in it, 2 mm over the floor
+    let fit = shoe_contact(p, shoe_points(p, 0.009, 0.003)).unwrap();
+    assert!((fit.contact.z - (p.z + 0.003 + SHOE_SEAT)).abs() < 1e-12);
+    // no points near the pivot, or none within reach of it: no place for the wire
+    assert!(shoe_contact(p, [p + DVec3::new(0.0, -0.3, 0.0)]).is_none());
+    assert!(shoe_contact(p, [p + DVec3::new(0.0, 0.0, 0.5)]).is_none());
 }
