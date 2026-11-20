@@ -497,6 +497,7 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "nav_arrows" => app.navigator.as_ref().map_or(s.nav_arrows, |n| n.arrows),
         "exact_fare" => s.exact_fare,
         "collision_pedestrians" => s.collision_pedestrians,
+        "ssao" => s.ssao,
         "detail_textures" => s.detail_textures,
         "windy_trees" => s.windy_trees,
         "sun_glow" => s.sun_glow,
@@ -766,6 +767,13 @@ pub(in crate::hud) fn toggle_set(
         "collision_pedestrians" => {
             app.settings.collision_pedestrians = on;
             Some(("collision_pedestrians", bit))
+        }
+        "ssao" => {
+            app.settings.ssao = on;
+            if let Some(r) = app.renderer.as_mut() {
+                r.set_ssao(on);
+            }
+            Some(("ssao", bit))
         }
         "detail_textures" => {
             app.settings.detail_textures = on;
