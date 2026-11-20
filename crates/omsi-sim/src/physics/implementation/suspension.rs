@@ -176,6 +176,7 @@ impl RigidBody {
                 v_long,
                 lateral: true,
                 wheel: Some(i),
+                mu: w.mu,
             });
         }
     }

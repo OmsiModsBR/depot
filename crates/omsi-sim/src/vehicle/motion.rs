@@ -2,7 +2,6 @@
 
 use super::physics_bridge::{body_wheel_shown, driven_rpm, script_speed, DriveInputs};
 use super::trailer::{body_heading, TrailerPart};
-use super::weather::road_grip;
 use super::VehicleInstance;
 use crate::physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 use glam::{DVec3, Vec3};
@@ -457,7 +456,10 @@ impl VehicleInstance {
         let mut hits: Vec<(crate::physics::Impact, crate::collision::Obb)> = Vec::new();
         // the tyres' grip on the road as it is this frame (set after the step, it took hold a
         // frame late: the first frame on a frozen road still had the dry road's grip)
-        rb.friction = road_grip(self.host.street_cond, self.host.temperature);
+        rb.set_road(&crate::physics::RoadWeather::from_street(
+            self.host.street_cond,
+            self.host.temperature,
+        ));
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }

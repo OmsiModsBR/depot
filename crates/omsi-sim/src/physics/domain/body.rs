@@ -1,6 +1,6 @@
 //! The body ([`RigidBody`]) and the parts it tows ([`CoupledPart`]), with what reading them gives.
 
-use super::{Engine, Impact, RigidWheel};
+use super::{Engine, Impact, RigidWheel, RoadWeather};
 use glam::{DVec3, Quat, Vec3};
 
 /// A part towed behind the body (the rear section of an articulated bus). The parts follow
@@ -106,6 +106,9 @@ pub struct RigidBody {
     /// Body-frame acceleration of the last step (m/s²), for `A_Trans_*`.
     pub(crate) accel_body: Vec3,
     pub(crate) friction: f32,
+    /// The road's weather its tyres' grip was last worked out from ([`RigidBody::set_road`]);
+    /// None while the body has one grip for all ([`RigidBody::set_friction`]).
+    pub(crate) road: Option<RoadWeather>,
     /// Wheels a face stopped during the last step, one entry per wheel.
     pub(crate) wheel_impacts: Vec<Impact>,
     /// The parts coupled behind (see [`CoupledPart`]); `drive_torque` is shared by their
@@ -231,7 +234,7 @@ impl RigidBody {
         self.rolling_resistance
     }
 
-    /// The grip of the road under the body (the surface's friction).
+    /// The grip of the road under the body: the one value of its tyres, or their mean.
     pub fn friction(&self) -> f32 {
         self.friction
     }
@@ -244,6 +247,20 @@ impl RigidBody {
     /// The obstacles (by id) the body was put down inside, `None` until the first collision check after `place`.
     pub fn spawned_inside(&self) -> Option<&[i64]> {
         self.spawned_inside.as_deref()
+    }
+
+    /// Sets one grip for every tyre of the body, whatever it stands on.
+    pub fn set_friction(&mut self, friction: f32) {
+        self.friction = friction;
+        for w in self.wheels.iter_mut() {
+            w.mu = friction;
+        }
+        self.road = None;
+    }
+
+    /// The road's weather the tyres' grip was last worked out from, if it was.
+    pub fn road(&self) -> Option<RoadWeather> {
+        self.road
     }
 }
 
@@ -264,11 +281,6 @@ impl RigidBody {
     /// Sets the angular velocity (rad/s, body frame).
     pub fn set_omega(&mut self, omega: Vec3) {
         self.omega = omega;
-    }
-
-    /// Sets the grip of the road under the body.
-    pub fn set_friction(&mut self, friction: f32) {
-        self.friction = friction;
     }
 
     /// The trailers' parts towed by the body, to change their brakes.

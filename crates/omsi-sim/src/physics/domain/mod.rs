@@ -12,7 +12,7 @@ mod vehicle;
 mod wheel;
 
 pub use body::{CoupledPart, Payload, RigidBody};
-pub use ground::{Ground, GroundProbe, WallFace};
+pub use ground::{Ground, GroundProbe, RoadWeather, WallFace};
 pub use impact::Impact;
 pub use kinematic::KinematicModel;
 pub use spec::{AiSpec, AiWheelSpec, AxleSpec, PhysicsSpec};

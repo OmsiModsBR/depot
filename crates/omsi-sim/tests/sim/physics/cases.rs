@@ -867,7 +867,8 @@ fn holds_on_a_slope_and_brakes_to_a_stand() {
 }
 
 /// The same full braking from 50 km/h on a dry road and on black ice: the tyres cannot
-/// pass the brakes' 5.9 m/s² on to the ice, and the bus slides about five times as far.
+/// pass the brakes' 5.9 m/s² on to the ice (μ 0.155, 1.5 m/s²), and the bus slides
+/// about 3.6 times as far.
 #[test]
 fn brakes_slide_on_ice() {
     let stop = |mu: f32| {
@@ -886,12 +887,12 @@ fn brakes_slide_on_ice() {
         rb.origin().y - y0
     };
     let (dry, ice) = (
-        stop(omsi_sim::vehicle::road_grip(0.0, 15.0)),
-        stop(omsi_sim::vehicle::road_grip(0.4, -6.0)),
+        stop(omsi_sim::vehicle::route_grip(0.0, 15.0)),
+        stop(omsi_sim::vehicle::route_grip(2.0, -1.0)),
     );
     eprintln!("50 km/h to a stand: {dry:.1} m dry, {ice:.1} m on ice");
     assert!(dry > 12.0 && dry < 20.0, "dry {dry}");
-    assert!(ice > dry * 4.0, "ice {ice} dry {dry}");
+    assert!(ice > dry * 3.0 && ice < 70.0, "ice {ice} dry {dry}");
 }
 
 /// A drive torque, steering or brake force that is no number (a script's 0/0) is taken

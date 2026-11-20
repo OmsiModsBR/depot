@@ -217,12 +217,15 @@ impl VehicleInstance {
             .iter()
             .map(|t| self.part_brakes(t).collect())
             .collect();
-        let friction = bodies[0].friction;
+        let (friction, road) = (bodies[0].friction, bodies[0].road);
         for (b, (_, vars)) in bodies[1..].iter_mut().zip(&meta) {
             for (w, v) in b.wheels.iter_mut().zip(vars) {
                 w.spring_factor = self.part_spring_factor(v);
             }
-            b.friction = friction;
+            match &road {
+                Some(road) => b.set_road(road),
+                None => b.set_friction(friction),
+            }
             b.wheel_walls = self.wheel_walls;
         }
         let mut inputs = vec![BodyInputs {

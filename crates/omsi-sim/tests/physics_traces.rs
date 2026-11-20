@@ -24,7 +24,7 @@ use omsi_sim::physics::{
     place_train, step_train, support_rest_loads, BodyInputs, Ground, GroundProbe, Impact, Joint,
     RigidBody,
 };
-use omsi_sim::vehicle::{road_grip, AiFrame};
+use omsi_sim::vehicle::AiFrame;
 use omsi_sim::{Controls, SimClock, VehicleHost, VehicleInstance, VehicleType};
 use omsi_vehicle::vehicle::Coupling;
 use omsi_vehicle::{Axle, Vehicle};
@@ -392,7 +392,7 @@ mod scenarios {
     pub fn t04_spins_on_ice() -> String {
         let mut t = Trace::default();
         let mut rb = placed(&bus());
-        rb.set_friction(road_grip(1.0, -5.0));
+        rb.set_friction(0.12); // ice (C-5 gives 0.15 to 0.2: kept for the comparison)
         run(&mut t, &mut rb, 30, 1.0 / 60.0, &flat, |_| {
             (0.0, 5000.0, 0.0)
         });
