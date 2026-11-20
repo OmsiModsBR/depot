@@ -9,7 +9,8 @@ mod support;
 
 use omsi_sim::physics::Engine;
 use support::model::{
-    articulation_angles, braking_distance, follower_axle_steering, installed_sag, pull_away,
+    alpha_limit_lets_the_tyres_go, articulation_angles, braking_distance, follower_axle_steering,
+    follower_kappa_is_its_turn, installed_sag, joints_closed_after_every_frame, pull_away,
     release_by_speed, static_balance_train, static_sag_solo, steady_turn,
 };
 use support::vehicles::{
@@ -293,4 +294,34 @@ fn static_sag_installed_bus() {
             i + 1
         );
     }
+}
+
+/// Checks: K-2
+#[test]
+fn joints_closed_v3_articulated_6x2() {
+    joints_closed_after_every_frame(v3_articulated_6x2());
+}
+
+/// Checks: K-2
+#[test]
+fn joints_closed_v4_biarticulated() {
+    joints_closed_after_every_frame(v4_biarticulated());
+}
+
+/// Checks: K-4
+#[test]
+fn follower_kappa_v3_articulated_6x2() {
+    follower_kappa_is_its_turn(v3_articulated_6x2());
+}
+
+/// Checks: K-4
+#[test]
+fn follower_kappa_v4_biarticulated() {
+    follower_kappa_is_its_turn(v4_biarticulated());
+}
+
+/// Checks: K-3
+#[test]
+fn alpha_limit_v3_articulated_6x2() {
+    alpha_limit_lets_the_tyres_go(v3_articulated_6x2());
 }

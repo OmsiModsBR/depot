@@ -82,6 +82,9 @@ pub struct RigidBody {
     /// a section behind a joint its own `[rot_pnt_long]`) and `[inv_min_turnradius]`, the
     /// curvature of the full lock.
     pub(crate) rot_pnt_long: f32,
+    /// The file's own `[rot_pnt_long]` (m), not counted from `[cog]`: where OMSI Classic
+    /// measures the lead's arm to a joint when it bends the section behind (`K-4`).
+    pub(crate) file_rot_pnt_long: f32,
     pub(crate) inv_min_turn_radius: f32,
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
     /// sin(x)/x a frame with x = 1.5 of it times the frame.
