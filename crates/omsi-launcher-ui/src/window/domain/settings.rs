@@ -733,6 +733,13 @@ pub static OPTS: &[Opt] = &[
     toggle(
         GENERAL,
         "On screen",
+        "info_item_pedals",
+        "Pedals",
+        "Shown in the Custom bar layout",
+    ),
+    toggle(
+        GENERAL,
+        "On screen",
         "notes",
         "Notes in the top-left corner",
         "",

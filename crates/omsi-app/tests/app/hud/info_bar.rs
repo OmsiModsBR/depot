@@ -1,7 +1,8 @@
 use openomsi_game::testing::hud::{
-    delay_item, distance_driven, grouped, odometer_reading, passengers_aboard, temperatures,
-    InfoTone,
+    delay_item, distance_driven, grouped, odometer_reading, passengers_aboard, pedals_item,
+    temperatures, InfoTone,
 };
+use openomsi_game::testing::settings::INFO_ITEM_KEYS;
 
 #[test]
 fn the_distance_driven_is_written_in_kilometres() {
@@ -61,6 +62,30 @@ fn the_delay_chip_says_late_early_or_on_time() {
     assert!(late.tip.is_some());
 }
 
+/// The pedals are bars with no text, in the order the pedals stand (clutch, brake,
+/// throttle), each in whole percent of how far it is pressed; "Pedals" under the mouse.
+#[test]
+fn the_pedals_are_three_bars_in_the_order_of_the_pedals() {
+    let it = pedals_item(omsi_sim::Controls {
+        throttle: 0.42,
+        brake: 1.0,
+        clutch: 0.0,
+        steering: -0.3,
+    });
+    assert_eq!(it.tone, InfoTone::Pedals([0, 100, 42]));
+    assert!(it.text.is_empty());
+    assert_eq!(it.icon, None);
+    assert_eq!(it.tip.as_deref(), Some("Pedals"));
+    // (a value out of its range - a device that reads past its ends - stays in the bar)
+    let past = pedals_item(omsi_sim::Controls {
+        throttle: 1.3,
+        brake: -0.2,
+        clutch: 0.996,
+        steering: 0.0,
+    });
+    assert_eq!(past.tone, InfoTone::Pedals([100, 0, 100]));
+}
+
 #[test]
 fn the_layout_is_read_from_the_setting() {
     use openomsi_game::testing::hud::InfoMode;
@@ -85,7 +110,7 @@ fn the_custom_layout_leaves_out_what_is_switched_off() {
         metres: 0.0,
         limit: None,
         fps: None,
-        items: [true; 9],
+        items: [true; INFO_ITEM_KEYS.len()],
         labels: true,
         low_fuel: false,
         collapsed: false,
@@ -111,7 +136,7 @@ fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
         metres: 0.0,
         limit: None,
         fps: Some((74.0, Some(52.0))),
-        items: [true; 9],
+        items: [true; INFO_ITEM_KEYS.len()],
         labels: true,
         low_fuel: false,
         collapsed: false,
@@ -147,7 +172,7 @@ fn the_two_tier_layouts_have_a_second_tier_that_folds_away() {
         metres: 0.0,
         limit: None,
         fps: Some((74.0, Some(52.0))),
-        items: [true; 9],
+        items: [true; INFO_ITEM_KEYS.len()],
         labels: true,
         low_fuel: true,
         collapsed: false,

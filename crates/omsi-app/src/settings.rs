@@ -19,7 +19,7 @@ pub const NIGHT_LIGHT_CAP: u32 = 8;
 
 /// The items of the information bar the `custom` layout can switch one by one (settings
 /// keys `info_item_<name>`).
-pub const INFO_ITEM_KEYS: [&str; 9] = [
+pub const INFO_ITEM_KEYS: [&str; 10] = [
     "info_item_time",
     "info_item_speed",
     "info_item_trip",
@@ -29,6 +29,7 @@ pub const INFO_ITEM_KEYS: [&str; 9] = [
     "info_item_pax",
     "info_item_line",
     "info_item_next",
+    "info_item_pedals",
 ];
 
 /// Where `key` (`info_item_<name>`) stands among the items of the information bar.
@@ -221,7 +222,7 @@ pub struct Settings {
     /// Marks the tank (red meter and cell) once it is under 15 %.
     pub info_bar_lowfuel: bool,
     /// Which items the `custom` layout shows, in the order of [`INFO_ITEM_KEYS`].
-    pub info_items: [bool; 9],
+    pub info_items: [bool; INFO_ITEM_KEYS.len()],
     /// Minutes of play between the automatic saves of the last situation (`laststn.osn`); 0 switches them off.
     pub autosave_minutes: u32,
     /// The interface's accent colour (`omsi_ui::theme::Accent`, by name), in the launcher and
@@ -677,7 +678,7 @@ impl Settings {
             info_bar_collapsed: false,
             info_bar_labels: true,
             info_bar_lowfuel: false,
-            info_items: [true; 9],
+            info_items: [true; INFO_ITEM_KEYS.len()],
             autosave_minutes: 5,
             ui_accent: "Amber".into(),
             ui_corners: "rounded".into(),

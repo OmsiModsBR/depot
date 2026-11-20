@@ -181,6 +181,7 @@ const BEFORE: &[&str] = &[
     "info_item_pax",
     "info_item_line",
     "info_item_next",
+    "info_item_pedals",
     "notes",
     "navigator",
     "nav_arrows",
