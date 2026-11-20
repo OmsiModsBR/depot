@@ -86,7 +86,8 @@ pub struct RigidBody {
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
     /// sin(x)/x a frame with x = 1.5 of it times the frame.
     pub(crate) body_freq: f32,
-    /// `body_freq` with the body empty (the springs stay, the mass grows with the payload).
+    /// `body_freq` with the body empty (the springs stay, the mass grows with the payload);
+    /// OMSI Classic keeps it under any payload (`K-5`).
     pub(crate) empty_body_freq: f32,
     /// OMSI's two states of the tyres across: holding - the bus follows
     /// its wheels however quickly they are turned, as long as the bend asks no more than

@@ -143,6 +143,22 @@ fn the_ingame_graphics_list_offers_only_the_modes_live_options() {
     }
 }
 
+/// Ambient occlusion is changed at once in the modes that draw it (`Renderer::set_ssao`).
+#[test]
+fn ambient_occlusion_is_a_live_row_where_the_mode_draws_it() {
+    use omsi_cfg::GraphicsMode;
+    let has_ssao = |mode| {
+        let mut settings = testing::settings::Settings::default();
+        settings.graphics = mode;
+        testing::hud::lists::ingame_graphics_options(&settings)
+            .iter()
+            .any(|o| o.key == "ssao")
+    };
+    assert!(!has_ssao(GraphicsMode::Vanilla));
+    assert!(has_ssao(GraphicsMode::VanillaPlus));
+    assert!(has_ssao(GraphicsMode::Enhanced));
+}
+
 /// The list follows the mode the game runs in: a mode saved since (for the next start) does
 /// not change it.
 #[test]

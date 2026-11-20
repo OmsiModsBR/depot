@@ -178,8 +178,9 @@ impl RigidBody {
 
     /// What the body carries (the people aboard): its mass weighs on the body as the body's own
     /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes to
-    /// speed it up, brake it and turn it. The body's pitch and roll damping follows the heavier
-    /// body on the same springs (`body_freq`). Where the payload sits moves the centre of
+    /// speed it up, brake it and turn it. The body's pitch and roll damping (`body_freq`) stays
+    /// the empty body's under Classic (`K-5`); under Depot it follows the heavier body on the
+    /// same springs. Where the payload sits moves the centre of
     /// gravity and adds to the inertia by the engine's rule (`loaded_body`: Classic keeps
     /// `[cog]` and `[momentofintertia]`, Depot sums the people into the body); the model
     /// origin stays where it is and the body keeps its motion.
@@ -192,10 +193,12 @@ impl RigidBody {
         let load = Payload { kg, ..load };
         self.payload = kg;
         self.mass = self.empty_mass + kg;
-        self.body_freq = if self.mass > 0.0 {
-            self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
-        } else {
-            self.empty_body_freq
+        self.body_freq = match self.engine {
+            Engine::Classic => self.empty_body_freq,
+            Engine::Depot if self.mass > 0.0 => {
+                self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
+            }
+            Engine::Depot => self.empty_body_freq,
         };
         let empty = (self.empty_cog, self.empty_mass, self.empty_inertia);
         let (cog, inertia) = match self.engine {

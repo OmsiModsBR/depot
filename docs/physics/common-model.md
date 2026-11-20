@@ -275,6 +275,9 @@ x        = 1.5 · f_body / 30
 rate    ← rate · ( sin x / x )^( dt / (1/30 s) )      (clamped to 0.1 … 1 per frame)
 ```
 
+`m` is the empty `[mass]` under Classic (`K-5` of [classic-model.md](classic-model.md)); under Depot
+it includes the people aboard.
+
 A body whose up axis leans past 72.5° is set back on its wheels (a safety net on bad ground, *tuned*,
 not a model rule).
 
