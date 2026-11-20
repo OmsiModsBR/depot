@@ -222,6 +222,47 @@ fn wire_objects_are_found_by_file_name() {
 }
 
 #[test]
+fn the_wire_objects_near_a_point_are_those_of_the_loaded_tiles_within_reach() {
+    let crossing =
+        |id, x: f64, y: f64| object(id, "Sceneryobjects\\Net\\TwoKrest.sco", [x, y, 0.0], 0.0);
+    let p = params("wire_x");
+    let mut net = WireNetwork::default();
+    // (one by a cell's edge, one across it, one too far, one on the next tile)
+    net.insert_tile(build_tile_wires(
+        (0, 0),
+        DVec2::ZERO,
+        &tile(
+            vec![],
+            vec![
+                crossing(1, 19.5, 10.0),
+                crossing(2, 20.5, 10.0),
+                crossing(3, 23.0, 10.0),
+            ],
+        ),
+        &p,
+    ));
+    net.insert_tile(build_tile_wires(
+        (1, 0),
+        DVec2::new(300.0, 0.0),
+        &tile(vec![], vec![crossing(4, -280.0, 10.0)]),
+        &p,
+    ));
+    let near = |net: &WireNetwork| {
+        let mut xs: Vec<f64> = net
+            .objects_near(DVec3::new(20.0, 10.0, 5.8), 1.0)
+            .map(|o| o.position.x)
+            .collect();
+        xs.sort_by(f64::total_cmp);
+        xs
+    };
+    assert_eq!(near(&net), [19.5, 20.0, 20.5]);
+    net.remove_tile((1, 0));
+    assert_eq!(near(&net), [19.5, 20.5]);
+    net.remove_tile((0, 0));
+    assert!(near(&net).is_empty());
+}
+
+#[test]
 fn the_joints_do_not_depend_on_the_order_tiles_load_in() {
     let p = params("wire_x");
     let tiles = [

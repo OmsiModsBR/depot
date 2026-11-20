@@ -65,12 +65,8 @@ impl PoleSim {
         if let Some(s) = decl.sound {
             // a switch sounds as a shoe touches its object, whichever way it is passed; the
             // way taken through it (left or right, leaving its entry or coming in to it)
-            // picks the recording
-            let switches: Vec<(DVec3, WireObjectKind)> = net
-                .objects()
-                .filter(|o| o.kind.is_switch())
-                .map(|o| (o.position, o.kind))
-                .collect();
+            // picks the recording (only the objects near where a way was taken, or near a
+            // shoe, are looked at)
             let flat = |a: DVec3, b: DVec3| (a - b).truncate().length();
             let events = std::mem::take(&mut self.events);
             for e in &events {
@@ -88,10 +84,11 @@ impl PoleSim {
                     } => (WireSoundKind::SwitchMerge { left }, at),
                     _ => continue,
                 };
-                let Some(&(object, _)) = switches
-                    .iter()
-                    .filter(|(p, _)| flat(*p, at) <= SWITCH_REACH)
-                    .min_by(|a, b| flat(a.0, at).total_cmp(&flat(b.0, at)))
+                let Some(object) = net
+                    .objects_near(at, SWITCH_REACH)
+                    .filter(|o| o.kind.is_switch())
+                    .map(|o| o.position)
+                    .min_by(|a, b| flat(*a, at).total_cmp(&flat(*b, at)))
                 else {
                     continue;
                 };
@@ -115,7 +112,15 @@ impl PoleSim {
             // touched now: the switch sounds - with the way's recording; a shoe coming in
             // from one of its ways (whose way is known only past the object) with that one's
             // merge; else with its own side's
-            for &(p, k) in &switches {
+            let mut touching: Vec<(DVec3, WireObjectKind)> = Vec::new();
+            for (_, shoe) in &shoes {
+                for o in net.objects_near(*shoe, s.cross_trigger_radius) {
+                    if o.kind.is_switch() && !touching.iter().any(|t| t.0 == o.position) {
+                        touching.push((o.position, o.kind));
+                    }
+                }
+            }
+            for (p, k) in touching {
                 if self.switch_touched.contains(&p) {
                     continue;
                 }
@@ -175,15 +180,14 @@ impl PoleSim {
             // crossings and sound markers: the middle of the two shoes on the wire passing one
             let near = if out.poles.iter().all(|p| p.on_wire) {
                 let mid = (world(out.poles[0].shoe_pos) + world(out.poles[1].shoe_pos)) / 2.0;
-                net.objects()
-                    .filter(|o| {
+                net.objects_near(mid, s.cross_trigger_radius)
+                    .find(|o| {
                         matches!(
                             o.kind,
                             WireObjectKind::Crossing | WireObjectKind::SoundMarker
                         )
                     })
                     .map(|o| o.position)
-                    .find(|p| (*p - mid).truncate().length() <= s.cross_trigger_radius)
             } else {
                 None
             };

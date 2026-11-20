@@ -137,6 +137,10 @@ impl WireNetwork {
             }
         }
         self.tile_cells.insert(key, used.into_iter().collect());
+        for (i, o) in wires.objects.iter().enumerate() {
+            let c = cell_of(o.position, GRID_CELL);
+            self.object_grid.entry(c).or_default().push((key, i));
+        }
         let ends: Vec<(SpanId, usize, SpanEnd)> = wires
             .spans
             .iter()
@@ -202,6 +206,15 @@ impl WireNetwork {
                 refs.retain(|r| r.span.0 != tile);
                 if refs.is_empty() {
                     self.grid.remove(&c);
+                }
+            }
+        }
+        for o in &old.objects {
+            let c = cell_of(o.position, GRID_CELL);
+            if let Some(list) = self.object_grid.get_mut(&c) {
+                list.retain(|(t, _)| *t != tile);
+                if list.is_empty() {
+                    self.object_grid.remove(&c);
                 }
             }
         }
@@ -382,6 +395,16 @@ impl WireNetwork {
 
     pub fn objects(&self) -> impl Iterator<Item = &WireObject> {
         self.tiles.values().flat_map(|t| t.objects.iter())
+    }
+
+    /// The wire objects standing within `radius` (metres, along the ground) of `p`.
+    pub fn objects_near(&self, p: DVec3, radius: f64) -> impl Iterator<Item = &WireObject> {
+        cells(p, p, radius)
+            .into_iter()
+            .filter_map(|c| self.object_grid.get(&c))
+            .flatten()
+            .filter_map(|&(t, i)| self.tiles.get(&t)?.objects.get(i))
+            .filter(move |o| (o.position - p).truncate().length() <= radius)
     }
 
     pub fn joints(&self) -> &[WireJoint] {

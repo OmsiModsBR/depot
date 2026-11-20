@@ -141,6 +141,9 @@ impl TileWires {
     }
 }
 
+/// A wire object of the network: its tile and its index in that tile's objects.
+pub type ObjectId = ((i32, i32), usize);
+
 /// A span of the network: its tile and its index in that tile's spans.
 pub type SpanId = ((i32, i32), usize);
 
@@ -178,4 +181,6 @@ pub struct WireNetwork {
     pub(crate) tile_cells: HashMap<(i32, i32), Vec<(i64, i64)>>,
     /// Span ends by cell of [`JOIN_TOLERANCE`] size, to find the ends a new tile's ends meet.
     pub(crate) end_grid: HashMap<(i64, i64), Vec<(SpanId, usize)>>,
+    /// The switches, crossings and sound markers by grid cell: their tile and index there.
+    pub(crate) object_grid: HashMap<(i64, i64), Vec<ObjectId>>,
 }
