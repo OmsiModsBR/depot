@@ -283,8 +283,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 .ok()
                 .as_ref(),
         );
-        t.night = daylight.brightness < 0.75;
-        t.daylight = Some(daylight);
+        session::traffic_lights(t, daylight, session::gloomy(&weather));
         t.populate(&world, &renderer, &mut scene, center);
     }
     // OMSI_GROUND_SAMPLE=<csv>: what the wheels stand on every metre along the street lanes
@@ -507,6 +506,8 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                     );
                 }
             }
+            let daylight = omsi_sim::Daylight::compute(&run_clock, envir.as_ref());
+            session::traffic_lights(t, daylight, session::gloomy(&weather));
             session::traffic_others(t, player.as_ref(), &[]);
             session::traffic_step(t, &world, player.as_ref(), dt, None);
             if let Some(p) = player.as_mut() {
