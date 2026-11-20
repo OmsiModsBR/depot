@@ -369,7 +369,12 @@ fn a_heavier_turning_bus_lets_go_sooner_in_a_quick_swing_under_depot_only() {
         least_swing_that_lets_go(Engine::Depot, v, light),
         least_swing_that_lets_go(Engine::Depot, v, heavy),
     );
-    assert!(depot.1 < depot.0, "depot: light {} heavy {}", depot.0, depot.1);
+    assert!(
+        depot.1 < depot.0,
+        "depot: light {} heavy {}",
+        depot.0,
+        depot.1
+    );
     let classic = (
         least_swing_that_lets_go(Engine::Classic, v, light),
         least_swing_that_lets_go(Engine::Classic, v, heavy),
@@ -390,8 +395,8 @@ fn a_steady_bend_lets_go_at_the_same_steering_under_both_engines() {
                 // eased in over three seconds, then held
                 (0..360).any(|i| {
                     let k = (i as f32 / 180.0).min(1.0);
-                    let torque = 0.47
-                        * ((12.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
+                    let torque =
+                        0.47 * ((12.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
                     rb.step(1.0 / 60.0, torque, &brakes, s * k, &flat);
                     !rb.holding()
                 })
@@ -399,7 +404,10 @@ fn a_steady_bend_lets_go_at_the_same_steering_under_both_engines() {
             .unwrap_or(f32::INFINITY)
     };
     let (classic, depot) = (steady(Engine::Classic), steady(Engine::Depot));
-    assert!((classic - depot).abs() <= 0.02 + 1e-6, "classic {classic} depot {depot}");
+    assert!(
+        (classic - depot).abs() <= 0.02 + 1e-6,
+        "classic {classic} depot {depot}"
+    );
 }
 
 /// `D-3`: a steering key that sets a full lock in one frame at walking pace does not make the

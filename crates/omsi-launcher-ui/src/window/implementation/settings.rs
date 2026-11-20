@@ -11,6 +11,7 @@ use super::omsi2_modules::module_card;
 use super::omsi2_plugins::plugins_card as omsi2_plugins_card;
 use crate::Page as UiPage;
 use glam::Vec2;
+use omsi_cfg::GraphicsMode;
 use omsi_ui::paint::Align;
 use omsi_ui::theme::*;
 use omsi_ui::widgets::{id_of, ButtonKind, Ui};
@@ -25,7 +26,8 @@ const HEAD_H: f32 = 44.0;
 /// The page's cards: a group of options, or one of the page's own.
 enum Card<'a> {
     Group(String, Vec<&'a Opt>),
-    Api(&'a Opt),
+    /// The graphics mode, across the page above the other graphics options.
+    Mode(&'a Opt),
     /// The accent colour as swatches (a search lists it as a dropdown row).
     Accent(&'a Opt),
     Own(&'static str),
@@ -35,14 +37,14 @@ impl Card<'_> {
     fn wide(&self) -> bool {
         matches!(
             self,
-            Card::Api(_) | Card::Own("plugins" | "performance" | "omsi2-plugins")
+            Card::Mode(_) | Card::Own("plugins" | "performance" | "omsi2-plugins")
         )
     }
 
     fn height(&self) -> f32 {
         match self {
             Card::Group(_, rows) => HEAD_H + rows.len() as f32 * ROW_H + 6.0,
-            Card::Api(_) => 148.0,
+            Card::Mode(_) => 148.0,
             Card::Accent(_) => 312.0,
             Card::Own(name) => OWN_H.with(|h| h.borrow().get(name).copied().unwrap_or(200.0)),
         }
@@ -58,8 +60,8 @@ thread_local! {
 fn cards<'a>(opts: &[&'a Opt], sec: usize, mixed: bool, omsi2: bool) -> Vec<Card<'a>> {
     let mut out: Vec<Card> = Vec::new();
     for o in opts {
-        if !mixed && matches!(o.kind, Kind::Api) {
-            out.push(Card::Api(o));
+        if !mixed && o.key == "graphics" {
+            out.push(Card::Mode(o));
             continue;
         }
         if !mixed && o.key == "ui_accent" {
@@ -379,7 +381,7 @@ pub fn section_body(
             };
             match c {
                 Card::Group(title, rows) => group_card(ui, r, title, rows, st),
-                Card::Api(o) => api_card(ui, r, o, st),
+                Card::Mode(o) => mode_card(ui, r, o, st),
                 Card::Accent(o) => accent_card(ui, r, o, st),
                 Card::Own(name) => {
                     let used = own_card(ui, r, name, st, out, root, host);
@@ -685,28 +687,30 @@ thread_local! {
         const { std::cell::RefCell::new((0, String::new())) };
 }
 
-/// The graphics API first, as a card of its own across the page: it decides what the other
-/// graphics options can do.
-fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
+/// The graphics mode first, as a card of its own across the page: it decides which other
+/// graphics options are offered. Choosing another redraws the page for it at once (the game
+/// takes it at its next start).
+fn mode_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
     ui.panel(r);
     ui.p().rounded(r, RADIUS, accent().alpha(0.08));
     ui.p().rounded_border(r, RADIUS, 1.0, accent().alpha(0.55));
     let top = card_frame_plain(
         ui,
         r,
-        "Graphics API",
-        "decides what the other graphics options can do",
+        "Graphics mode",
+        "decides which other graphics options are offered",
     );
     let fw = (r.w * 0.36).clamp(220.0, 320.0);
     let field = Rect::new(r.x + 16.0, top, fw, 40.0);
     let mut options = options_of(o, st);
     let mut sel = chosen(o, st, &mut options);
     let labels: Vec<String> = options.iter().map(|x| x.1.clone()).collect();
-    if ui.select("opt-graphics_api", field, &mut sel, &labels) {
+    if ui.select("opt-graphics", field, &mut sel, &labels) {
         let value = options[sel].0.clone();
         choose(o, st, &value);
+        after(o.key, st);
     }
-    let names = api_options()
+    let names = GraphicsMode::CHOICES
         .iter()
         .map(|x| omsi_ui::tr(x.1).into_owned())
         .collect::<Vec<_>>()
@@ -727,17 +731,21 @@ fn api_card(ui: &mut Ui, r: Rect, o: &Opt, st: &mut Store) {
         TEXT_DIM,
         Align::Left,
     );
+    // (one line per mode, what it draws)
     let tx = field.right() + 24.0;
-    // (not offered in Vanilla, whose Direct3D 9Ex renderer the mode chooses)
-    let text = "The interface Vanilla+ and Enhanced draw with. Vanilla is drawn by Direct3D 9Ex, as close to the real OMSI 2 as it can, whatever is chosen here.";
-    ui.paragraph(
-        text,
-        Vec2::new(tx, top + 2.0),
-        (r.right() - 16.0 - tx).max(100.0),
-        13.0,
-        Weight::Regular,
-        TEXT_SOFT,
-    );
+    let tw = (r.right() - 16.0 - tx).max(100.0);
+    let mut y = top + 2.0;
+    for (mode, what) in MODE_LINES {
+        let line = format!("{}: {}", omsi_ui::tr(mode.label()), omsi_ui::tr(what));
+        y += ui.paragraph(
+            &line,
+            Vec2::new(tx, y),
+            tw,
+            13.0,
+            Weight::Regular,
+            TEXT_SOFT,
+        ) + 4.0;
+    }
 }
 
 /// A card's title with a quiet note at its right. Returns the top of its body.
