@@ -24,6 +24,62 @@ impl From<PhysicsMode> for Engine {
     }
 }
 
+impl From<Engine> for PhysicsMode {
+    fn from(engine: Engine) -> PhysicsMode {
+        match engine {
+            Engine::Classic => PhysicsMode::Classic,
+            Engine::Depot => PhysicsMode::Depot,
+        }
+    }
+}
+
+/// The engine a body follows and what only that engine keeps of it between steps: the rules
+/// themselves are in `implementation/engine.rs`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum EngineState {
+    /// OMSI Classic, with the file's own `[rot_pnt_long]` (m, not counted from `[cog]`): where
+    /// it measures the lead's arm to a joint when it bends the section behind (`K-4`).
+    Classic { file_rot_pnt_long: f32 },
+    /// Project Depot Physics, with the yaw its tyres were asked for (`D-3`).
+    Depot { yaw: YawLag },
+}
+
+/// The yaw acceleration the body's turning asked of the tyres (rad/s², body z), smoothed over
+/// the tyres' relaxation, and the yaw rate it was measured from (`D-3`).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct YawLag {
+    pub(crate) accel: f32,
+    pub(crate) last_rate: f32,
+}
+
+impl EngineState {
+    /// The state a new body of `engine` starts with; `file_rot_pnt_long` the `.bus` file's
+    /// `[rot_pnt_long]` (m).
+    pub(crate) fn new(engine: Engine, file_rot_pnt_long: f32) -> EngineState {
+        match engine {
+            Engine::Classic => EngineState::Classic { file_rot_pnt_long },
+            Engine::Depot => EngineState::Depot {
+                yaw: YawLag::default(),
+            },
+        }
+    }
+
+    /// The engine.
+    pub(crate) fn engine(&self) -> Engine {
+        match self {
+            EngineState::Classic { .. } => Engine::Classic,
+            EngineState::Depot { .. } => Engine::Depot,
+        }
+    }
+
+    /// Forgets what the body's motion left behind (the body was put down anew).
+    pub(crate) fn reset(&mut self) {
+        if let EngineState::Depot { yaw } = self {
+            *yaw = YawLag::default();
+        }
+    }
+}
+
 /// Driver inputs, all in `0..1` except steering in `-1..1` (positive = right).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Controls {

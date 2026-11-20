@@ -1,12 +1,12 @@
 //! A rail vehicle: its outermost axles on the track.
 
-use super::AiBody;
+use super::depot::AiBody;
 use glam::DVec3;
 
 impl AiBody {
     /// A rail vehicle: its outermost axles stand on the track, the body is the line
     /// between them.
-    pub(super) fn ride(&mut self, way: &dyn Fn(f32) -> DVec3) {
+    pub(in crate::ai) fn ride(&mut self, way: &dyn Fn(f32) -> DVec3) {
         let f = way(self.front_long);
         let r = way(self.rear_long);
         let d = f - r;

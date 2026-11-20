@@ -1,7 +1,7 @@
 //! `K-2` to `K-4`: the joints of articulated vehicles as OMSI Classic runs them, where they
 //! differ from Project Depot Physics (see `docs/physics/classic-model.md`).
 
-use crate::physics::domain::{Engine, Joint, JointKind, RigidBody};
+use crate::physics::domain::{Joint, JointKind, RigidBody};
 use glam::{Quat, Vec3};
 
 /// The most the direction of travel at a joint may lean from a section's axis before the
@@ -46,7 +46,7 @@ pub(in crate::physics) fn at_alpha_limit(joint: &Joint, bodies: &[RigidBody]) ->
         && joint.angles(bodies).0.abs() >= joint.alpha_max - LIMIT_SLACK
 }
 
-/// `K-2`: every section behind a joint run by OMSI Classic put back on its joint at the end of
+/// `K-2`: every section behind a joint put back on its joint at the end of
 /// the step, the joints in order from the front. A turntable's section is turned to the lead's
 /// attitude with its own yaw and pitch against it, held to the joint's angles, and no roll
 /// against it; a hitch's section is swung about its `[rot_pnt_long]` point until its joint
@@ -54,9 +54,6 @@ pub(in crate::physics) fn at_alpha_limit(joint: &Joint, bodies: &[RigidBody]) ->
 /// sections keep their velocities.
 pub(in crate::physics) fn seat_followers(bodies: &mut [RigidBody], joints: &[Joint]) {
     for j in joints {
-        if bodies[j.follow].engine != Engine::Classic {
-            continue;
-        }
         let lead_rot = bodies[j.lead].orientation;
         let (_, _, err) = j.ball(&bodies[j.lead], &bodies[j.follow]);
         let f = &mut bodies[j.follow];

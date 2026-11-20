@@ -1,14 +1,11 @@
-//! The Depot engine's AI body (`DA-1` to `DA-6` of `docs/physics/depot-model.md`): what the
-//! launcher's Classic and Depot settings both run until the Classic AI is built (spec 002).
+//! Project Depot Physics' AI body (`DA-1` to `DA-6` of `docs/physics/depot-model.md`), which
+//! also carries every engine's rail vehicles and aircraft (`ai/rail.rs`, `ai/air.rs`).
 //!
 //! How the body of an AI vehicle follows the way its planner lays out
 //! (`traffic::AiState::way_point`): a road vehicle is a bicycle model steered by pure
-//! pursuit and sitting on its springs, a rail vehicle rides on its two outer axles, an
-//! aircraft flies along its path and banks into its turns.
+//! pursuit and sitting on its springs.
 
-mod air;
 mod planner;
-mod rail;
 mod road;
 
 pub use planner::{
@@ -29,7 +26,7 @@ fn dir(h: f64) -> DVec2 {
     DVec2::new(r.sin(), r.cos())
 }
 
-fn wrap(d: f64) -> f64 {
+pub(super) fn wrap(d: f64) -> f64 {
     (d + 180.0).rem_euclid(360.0) - 180.0
 }
 
@@ -38,8 +35,8 @@ pub struct AiBody {
     pub kind: MotionKind,
     rot_long: f32,
     wheelbase: f32,
-    front_long: f32,
-    rear_long: f32,
+    pub(super) front_long: f32,
+    pub(super) rear_long: f32,
     /// Largest front wheel angle (deg) and how fast the driver turns towards it (deg/s).
     max_steer: f32,
     steer_rate: f32,
@@ -52,7 +49,7 @@ pub struct AiBody {
     /// Stiffness and damping of the body in heave (N/m), pitch and roll (Nm/rad).
     spring: [f32; 3],
     damper: [f32; 3],
-    started: bool,
+    pub(super) started: bool,
     /// World position of the rotation point (x east, y north).
     pub(crate) rear: DVec2,
     /// Heading (deg, clockwise from north).

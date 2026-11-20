@@ -2,4 +2,5 @@
 //! them does is in the model document `docs/physics/depot-model.md`.
 
 pub(super) mod grip;
+pub(super) mod joint;
 pub(super) mod load_share;

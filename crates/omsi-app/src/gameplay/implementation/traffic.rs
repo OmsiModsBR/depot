@@ -130,7 +130,7 @@ const BODY_LEVEL: f64 = 3.0;
 impl AiCar {
     /// Knocked off its route, on its rigid body (OMSI Classic, `KA-6`).
     pub fn is_loose(&self) -> bool {
-        matches!(&self.body, AiMotion::Classic(ai) if ai.is_loose())
+        self.body.is_loose()
     }
 
     /// A timetable bus (in service or on its way off after its trip).
@@ -6985,7 +6985,7 @@ impl Traffic {
                     let t0 = std::time::Instant::now();
                     let ground = vehicle.ground.clone();
                     let contact = vehicle.contact.clone();
-                    if matches!(body, AiMotion::Classic(ai) if ai.is_loose()) {
+                    if body.is_loose() {
                         // knocked off its route: fully braked, the hazard lights on (`KA-6`)
                         frame.blinker = 3;
                         frame.brake = true;
@@ -7757,9 +7757,7 @@ impl Traffic {
             .collect();
         for &i in &loose {
             let c = &mut self.cars[i];
-            if let AiMotion::Classic(ai) = &mut c.body {
-                ai.settle(&mut c.vehicle);
-            }
+            c.body.settle(&mut c.vehicle);
             // back on the way it was taken off, standing; a bus goes back empty and waits
             // for the next trip of its timetable
             c.state.speed = 0.0;
@@ -7803,14 +7801,12 @@ impl Traffic {
             if !keys.contains(&c.id) {
                 continue;
             }
-            if let AiMotion::Classic(ai) = &mut c.body {
-                if ai.release(&mut c.vehicle) {
-                    log::info!(
-                        "Crash: car {} ({}) left its path",
-                        c.id,
-                        c.vehicle.ty.def.type_name
-                    );
-                }
+            if c.body.release(&mut c.vehicle) {
+                log::info!(
+                    "Crash: car {} ({}) left its path",
+                    c.id,
+                    c.vehicle.ty.def.type_name
+                );
             }
         }
     }

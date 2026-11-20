@@ -102,7 +102,7 @@ impl VehicleInstance {
             self.ty.program.as_ref(),
             first_axle,
             self.trailers.len(),
-            Engine::from(self.physics_mode()),
+            self.engine(),
         );
         self.trailers.push(t);
     }
@@ -402,6 +402,8 @@ impl TrailerPart {
         self.ground_lift
     }
 
+    /// A part of an OMSI Classic vehicle (the tests' way to build one).
+    #[cfg(feature = "test-support")]
     pub fn new(
         ty: Arc<VehicleType>,
         main: &VehicleType,
@@ -418,6 +420,32 @@ impl TrailerPart {
             0,
             Engine::Classic,
         )
+    }
+
+    /// Each axle's static pose under `engine`: the hub's lift, the wheel's rest load (N) and
+    /// the spring that carries it.
+    fn rest_of(ty: &VehicleType, first_axle: usize, engine: Engine) -> Vec<(f32, f32, f32)> {
+        let loads = crate::physics::kinematic_wheel_rest_loads(&ty.def, engine);
+        ty.def
+            .axles
+            .iter()
+            .zip(ty.hub_heights(first_axle, engine))
+            .enumerate()
+            .map(|(a, (axle, z))| {
+                let axle = crate::physics::AxleSpec::of(axle);
+                let r = axle.kinematic_radius;
+                (
+                    r - z.unwrap_or(r),
+                    loads.get(a).copied().unwrap_or(0.0),
+                    axle.sag_spring,
+                )
+            })
+            .collect()
+    }
+
+    /// Puts the part under `engine`: its static pose is the engine's own.
+    pub(crate) fn set_engine(&mut self, engine: Engine) {
+        self.rest = Self::rest_of(&self.ty, self.first_axle, engine);
     }
 
     /// `joint`: which joint of the train this part hangs on (0 behind the leading vehicle).
@@ -478,23 +506,7 @@ impl TrailerPart {
             .map(|a| crate::physics::AxleSpec::of(a).shown_radius)
             .unwrap_or(0.5);
         let n = ty.meshes.len();
-        let loads = crate::physics::kinematic_wheel_rest_loads(&ty.def, engine);
-        let rest = ty
-            .def
-            .axles
-            .iter()
-            .zip(ty.hub_heights(first_axle, engine))
-            .enumerate()
-            .map(|(a, (axle, z))| {
-                let axle = crate::physics::AxleSpec::of(axle);
-                let r = axle.kinematic_radius;
-                (
-                    r - z.unwrap_or(r),
-                    loads.get(a).copied().unwrap_or(0.0),
-                    axle.sag_spring,
-                )
-            })
-            .collect();
+        let rest = Self::rest_of(&ty, first_axle, engine);
         let v_brakes = (0..ty.def.axles.len())
             .flat_map(|a| {
                 ["L", "R"]

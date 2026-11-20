@@ -82,7 +82,7 @@ The Depot engine replaces this rule with `D-1`.
 - **Inputs**: the joint (`C-9`): its points, its type, `α_max`, `β_min`, `β_max`; the poses of the
   two sections after the frame. **Outputs**: the pose of the section behind. **Module**:
   `physics/implementation/classic/joint.rs` (`seat_followers`), called at the end of the step in
-  `train.rs`.
+  `train.rs` through `Engine::after_step` (`physics/implementation/engine.rs`).
 - **Basis**: *OMSI*. **Status**: **to validate**. **Check**: drive an articulated bus over
   uneven ground and through a hard stop, in OMSI 2 and in the game, and watch the joint and the
   bellows: no gap opens at the joint and the sections do not lean against each other.
@@ -137,14 +137,13 @@ of `C-9`.
 
 - **Inputs**: `[mass]`, `achse_feder` (`k_i`), the people aboard. **Outputs**: `f_body`, the
   frequency in OMSI's damping of the body's pitch and roll (`C-8`). **Module**:
-  `physics/implementation/body.rs` (`set_payload`).
+  `physics/implementation/classic/load_share.rs` (`loaded_body_freq`), through `set_payload`.
 - **Basis**: *OMSI*. **Status**: **to validate**: the decay of the body's pitch after a kerb drop,
   empty and full, in OMSI 2 and in the game.
 
 Classic takes `f_body` of `C-8` with the empty `[mass]` whatever the people aboard weigh: a full bus
 is damped as the empty one is. The people still weigh in the gravity, the springs, the tyres and the
-acceleration. Under Depot, `f_body` follows the heavier body on the same springs,
-`f_body · sqrt(m_empty / (m_empty + payload))`.
+acceleration. Depot follows the heavier body instead (`D-4`).
 
 ## The AI road vehicle
 

@@ -4,7 +4,8 @@
 //! vehicle is a bicycle model steered by pure pursuit and sitting on its springs, a rail
 //! vehicle rides on its two outer axles, an aircraft flies along its path and banks into its
 //! turns. `classic` is OMSI Classic's body for road vehicles (`KA-1` to `KA-11`); rail vehicles and
-//! aircraft keep the `depot` body in both engines.
+//! aircraft keep the `depot` body in both engines, riding (`rail`) and flying (`air`) as no
+//! engine of its own decides.
 //!
 //! Placing the vehicle *on* the lane every frame, turned to the lane's heading, is what made
 //! the traffic look wrong: the heading jumped at every lane sample and joint (the steering
@@ -13,8 +14,10 @@
 //! made-up yaw. In `depot` the heading only ever changes by speed × tan(steering) / wheelbase,
 //! the rear axle never moves sideways, and the steering itself is rate limited.
 
+mod air;
 mod classic;
 mod depot;
+mod rail;
 mod sweep;
 
 pub use classic::{
@@ -68,6 +71,32 @@ impl AiMotion {
         match self {
             AiMotion::Classic(b) => Some(b),
             AiMotion::Depot(_) => None,
+        }
+    }
+
+    /// Knocked off its route, on its rigid body (`KA-6`; only OMSI Classic's body leaves its
+    /// route).
+    pub fn is_loose(&self) -> bool {
+        match self {
+            AiMotion::Classic(b) => b.is_loose(),
+            AiMotion::Depot(_) => false,
+        }
+    }
+
+    /// Lets the vehicle `v` go off its route onto its rigid body, when its engine does
+    /// (`KA-6`); whether it went.
+    pub fn release(&mut self, v: &mut VehicleInstance) -> bool {
+        match self {
+            AiMotion::Classic(b) => b.release(v),
+            AiMotion::Depot(_) => false,
+        }
+    }
+
+    /// Puts a loose vehicle `v` back on its route's terms (`KA-6`); nothing for one on its
+    /// route.
+    pub fn settle(&mut self, v: &mut VehicleInstance) {
+        if let AiMotion::Classic(b) = self {
+            b.settle(v);
         }
     }
 

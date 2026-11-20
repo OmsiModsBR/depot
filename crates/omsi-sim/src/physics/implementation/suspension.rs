@@ -4,11 +4,10 @@
 
 use super::tyre::Contact;
 use super::wheel::{sign, TyreFrame};
-use super::{classic, depot};
 use crate::physics::domain::params::{
     BUMP, CLIMB, DROOP, OMSI_PROBE_HEIGHT, STEP_LOAD_MAX, WALL_C, WALL_K,
 };
-use crate::physics::domain::{Engine, GroundProbe, RigidBody};
+use crate::physics::domain::{GroundProbe, RigidBody};
 use glam::{DVec3, Vec3};
 
 impl RigidBody {
@@ -113,10 +112,7 @@ impl RigidBody {
             *torque += Vec3::new(0.0, -w.lever * n, 0.0);
             // the strut's force turns the body about the model's origin (Classic) or about
             // `[cog]` (Depot): see `classic::load_share`
-            *torque += match self.engine {
-                Engine::Classic => classic::load_share::strut_reference_torque(self.cog, n),
-                Engine::Depot => depot::load_share::strut_reference_torque(self.cog, n),
-            };
+            *torque += self.rules.engine().strut_reference_torque(self.cog, n);
             let Some((slope, contact_dx)) = found[i].filter(|_| tyre_f > 0.0) else {
                 // off the ground the wheel keeps its turning (a brake stops it)
                 let (drive_w, brake_w) = (

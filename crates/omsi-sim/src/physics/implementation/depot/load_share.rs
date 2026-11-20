@@ -58,6 +58,16 @@ pub(in crate::physics) fn loaded_body(empty: (Vec3, f32, Vec3), load: Payload) -
     (cog, inertia)
 }
 
+/// `D-4`: the body's pitch and roll frequency (1/s) with `mass` (kg) aboard: the empty body's
+/// `empty_freq` on the same springs, slower by sqrt(empty mass / mass).
+pub(in crate::physics) fn loaded_body_freq(empty_freq: f32, empty_mass: f32, mass: f32) -> f32 {
+    if mass > 0.0 {
+        empty_freq * (empty_mass / mass).max(0.0).sqrt()
+    } else {
+        empty_freq
+    }
+}
+
 /// What second moments along x, y and z (kg m²) give about the body's x (pitch), y (roll) and
 /// z (yaw) axes: about each axis, the two along the other axes.
 fn about_axes(m: Vec3) -> Vec3 {

@@ -2,11 +2,13 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are three overrides: `D-1`
-(the plan's decision D2), `D-2` and `D-3`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are four overrides: `D-1`
+(the plan's decision D2), `D-2`, `D-3` and `D-4`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
-Module paths are under `crates/omsi-sim/src/`.
+Module paths are under `crates/omsi-sim/src/`. Every rule that differs between the engines is chosen
+in one place, `physics/implementation/engine.rs` (one method of `Engine` per rule); the Depot rules
+themselves are in `physics/implementation/depot/`.
 
 ## Index
 
@@ -16,6 +18,7 @@ Module paths are under `crates/omsi-sim/src/`.
 | [D-1](#d-1-static-load-share-about-cog) | the weight is shared about `[cog]` | physics |
 | [D-2](#d-2-the-people-aboard-move-cog-and-add-to-the-inertia) | the people aboard move `[cog]` and add to the inertia | physics |
 | [D-3](#d-3-the-tyres-hold-axle-by-axle-with-the-turning-they-must-start) | the tyres hold axle by axle, with the turning they must start | physics, tuned |
+| [D-4](#d-4-the-payload-slows-the-body-damping) | the payload slows the body's damping | physics |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -228,6 +231,20 @@ bus at 50 km/h, a swing to and back from the steering's position in one second l
 accelerating in a bend moves load between the axles and lets the lighter one go first. A
 `[momentofintertia]` far larger than the bus's real one (about `m · (L² + W²) / 12`) now shows as a
 bus that lets go too easily in quick manoeuvres; the value belongs fixed in the file (Principle III).
+
+## D-4. The payload slows the body damping
+
+- **Inputs**: `f_body` of the empty body (`C-8`), `[mass]`, the people aboard. **Outputs**: `f_body`
+  with the payload. **Module**: `physics/implementation/depot/load_share.rs` (`loaded_body_freq`),
+  through `set_payload`.
+- **Basis**: *physics*. **Status**: checked by unit tests; no claim is made here about OMSI 2.
+  Classic keeps the empty body's (`K-5`).
+
+The springs stay and the mass grows, so the body's pitch and roll follow the heavier body:
+
+```
+f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
+```
 
 ## Further `D-*`
 

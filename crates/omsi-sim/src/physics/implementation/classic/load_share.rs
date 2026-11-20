@@ -35,3 +35,8 @@ pub(in crate::physics) fn kinematic_wheel_rest_loads(def: &Vehicle) -> Vec<f32> 
 pub(in crate::physics) fn loaded_body(empty: (Vec3, f32, Vec3), _load: Payload) -> (Vec3, Vec3) {
     (empty.0, empty.2)
 }
+
+/// `K-5`: the body's pitch and roll frequency (1/s) with a payload: the empty body's.
+pub(in crate::physics) fn loaded_body_freq(empty_freq: f32) -> f32 {
+    empty_freq
+}

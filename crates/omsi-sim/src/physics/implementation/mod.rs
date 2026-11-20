@@ -2,13 +2,16 @@
 //! `.bus` file's values mean, the one place a file's physics is read), `ground` (what a tyre
 //! stands on), `suspension` (the static loads and each wheel on its strut), `wheel` (each
 //! wheel's own turning), `tyre` (the tyres' forces along and across), `body` (the body and its
-//! motion), `classic` and `depot` (what the two engines do their own way), `collide` (hits against obstacles), `train` (the stages in order for one body or an
-//! articulated train) and `kinematic` (the kinematic model's step).
+//! motion), `surface` (a tyre's grip on the ground under it), `engine` (where the two engines
+//! differ, each rule choosing the engine's own in `classic` or `depot`), `collide` (hits
+//! against obstacles), `train` (the stages in order for one body or an articulated train) and
+//! `kinematic` (the kinematic model's step).
 
 pub(crate) mod body;
 mod classic;
 mod collide;
 mod depot;
+mod engine;
 pub(crate) mod ground;
 mod kinematic;
 pub(crate) mod spec;

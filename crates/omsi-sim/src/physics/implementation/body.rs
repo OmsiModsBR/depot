@@ -5,14 +5,13 @@
 use super::surface::surface_grip;
 use super::train::step_train;
 use super::tyre::Substep;
-use super::{classic, depot};
 use crate::collision::Obb;
 use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
 use crate::physics::domain::{
-    BodyInputs, Engine, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
-    RoadWeather,
+    BodyInputs, Engine, EngineState, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody,
+    RigidWheel, RoadWeather,
 };
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -81,7 +80,7 @@ impl RigidBody {
             w.rest_load = spec.rest_loads.get(*a).copied().unwrap_or(0.0);
         }
         RigidBody {
-            engine,
+            rules: EngineState::new(engine, spec.rot_pnt_long),
             mass,
             empty_mass: mass,
             payload: 0.0,
@@ -99,13 +98,10 @@ impl RigidBody {
             kappa: 0.0,
             max_steer_deg: spec.max_steer_deg,
             rot_pnt_long: spec.turn_line,
-            file_rot_pnt_long: spec.rot_pnt_long,
             inv_min_turn_radius: spec.inv_min_turn_radius,
             body_freq: spec.body_freq,
             empty_body_freq: spec.body_freq,
             holding: true,
-            yaw_accel: 0.0,
-            last_yaw_rate: 0.0,
             joint_across: 0.0,
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
@@ -129,7 +125,7 @@ impl RigidBody {
         self.position = origin + self.orientation.mul_vec3(self.cog).as_dvec3();
         self.velocity = Vec3::ZERO;
         self.omega = Vec3::ZERO;
-        (self.yaw_accel, self.last_yaw_rate) = (0.0, 0.0);
+        self.rules.reset();
         self.spawned_inside = None;
         self.unstepped = 0.0;
         (self.last_position, self.last_orientation) = (self.position, self.orientation);
@@ -194,18 +190,10 @@ impl RigidBody {
         let load = Payload { kg, ..load };
         self.payload = kg;
         self.mass = self.empty_mass + kg;
-        self.body_freq = match self.engine {
-            Engine::Classic => self.empty_body_freq,
-            Engine::Depot if self.mass > 0.0 => {
-                self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
-            }
-            Engine::Depot => self.empty_body_freq,
-        };
-        let empty = (self.empty_cog, self.empty_mass, self.empty_inertia);
-        let (cog, inertia) = match self.engine {
-            Engine::Classic => classic::load_share::loaded_body(empty, load),
-            Engine::Depot => depot::load_share::loaded_body(empty, load),
-        };
+        let engine = self.engine();
+        self.body_freq = engine.loaded_body_freq(self.empty_body_freq, self.empty_mass, self.mass);
+        let (cog, inertia) =
+            engine.loaded_body((self.empty_cog, self.empty_mass, self.empty_inertia), load);
         self.inertia = inertia;
         self.move_cog(cog);
     }

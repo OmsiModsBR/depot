@@ -1,6 +1,6 @@
 //! The body ([`RigidBody`]) and the parts it tows ([`CoupledPart`]), with what reading them gives.
 
-use super::{Engine, Impact, RigidWheel, RoadWeather};
+use super::{Engine, EngineState, Impact, RigidWheel, RoadWeather};
 use glam::{DVec3, Quat, Vec3};
 
 /// A part towed behind the body (the rear section of an articulated bus). The parts follow
@@ -47,8 +47,9 @@ pub struct Payload {
 
 #[derive(Debug, Clone)]
 pub struct RigidBody {
-    /// The rules the body follows where the engines differ (see [`Engine`]).
-    pub(crate) engine: Engine,
+    /// The rules the body follows where the engines differ (see [`Engine`]), and what only
+    /// that engine keeps of the body.
+    pub(crate) rules: EngineState,
     /// The mass the body moves with (kg): its own and what it carries (`payload`).
     pub(crate) mass: f32,
     /// The body's own mass (kg, the `.bus` file's `[mass]`) and the mass it carries (kg: the
@@ -82,9 +83,6 @@ pub struct RigidBody {
     /// a section behind a joint its own `[rot_pnt_long]`) and `[inv_min_turnradius]`, the
     /// curvature of the full lock.
     pub(crate) rot_pnt_long: f32,
-    /// The file's own `[rot_pnt_long]` (m), not counted from `[cog]`: where OMSI Classic
-    /// measures the lead's arm to a joint when it bends the section behind (`K-4`).
-    pub(crate) file_rot_pnt_long: f32,
     pub(crate) inv_min_turn_radius: f32,
     /// sqrt(sum of the springs / mass) (1/s): OMSI damps the body's pitch and roll by
     /// sin(x)/x a frame with x = 1.5 of it times the frame.
@@ -97,11 +95,6 @@ pub struct RigidBody {
     /// the grip of all its tyres and no wheel spins or locks - or sliding, each tyre giving
     /// at most its own grip until the sideways speed at every tyre is under 0.1 m/s again.
     pub(crate) holding: bool,
-    /// The yaw acceleration the body's turning asked of the tyres (rad/s², body z), smoothed
-    /// over the tyres' relaxation, and the yaw rate it was measured from (`D-3`, Project Depot
-    /// Physics only).
-    pub(crate) yaw_accel: f32,
-    pub(crate) last_yaw_rate: f32,
     /// The force (N) a joint pushed the body with across it over the last substep (to its
     /// right): the tyres take it besides the bend's pull while they hold.
     pub(crate) joint_across: f32,
@@ -139,7 +132,7 @@ pub struct RigidBody {
 impl RigidBody {
     /// The rules the body follows where the engines differ.
     pub fn engine(&self) -> Engine {
-        self.engine
+        self.rules.engine()
     }
 
     /// The body's mass (kg): its own and its payload's.
