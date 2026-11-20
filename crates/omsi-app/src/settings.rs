@@ -1599,7 +1599,8 @@ impl Settings {
     pub(crate) fn dx9_effects(&self) -> crate::output::Dx9Effects {
         crate::output::Dx9Effects {
             glass_rain: self.dx9_glass_rain,
-            coronas: self.dx9_coronas,
+            coronas: self.dx9_coronas && !omsi_cfg::flags::NO_CORONAS.is_set(),
+            smoke: !omsi_cfg::flags::NO_SMOKE.is_set(),
             stars: self.dx9_stars,
             cloud_picture: self.dx9_cloud_picture,
             texture_limit: self.dx9_texture_limit,
@@ -1708,7 +1709,7 @@ impl Settings {
             msaa: self.msaa,
             anisotropy: self.anisotropy,
             shadow_size: self.shadow_size,
-            ssao: self.ssao,
+            ssao: self.ssao && !omsi_cfg::flags::NO_AO.is_set(),
             // ("DirectX9 (D3D9Ex)" scales its own picture, see `dx9_render_scale`; the renderer
             // behind it draws on a device that shows nothing)
             render_scale: if self.backend() == crate::output::Backend::D3d9 {
@@ -1717,7 +1718,7 @@ impl Settings {
                 self.render_scale
             },
             compress_textures: self.texture_compression,
-            fxaa: self.post_aa != "off",
+            fxaa: self.post_aa != "off" && !omsi_cfg::flags::NO_FXAA.is_set(),
             min_obj_size: self.min_obj_size,
             max_obj_dist: self.object_distance(),
             omsi_shadow_casters: self.shadow_casters == "omsi",
@@ -1725,6 +1726,14 @@ impl Settings {
             reflections: self.reflections,
             smoke_in_mirrors: self.smoke_in_mirrors,
             no_enhanced: self.graphics != GraphicsMode::Enhanced,
+            // (what the environment leaves out: the game reads it here, once)
+            sun_shadows: !omsi_cfg::flags::NO_SHADOWS.is_set(),
+            coronas: !omsi_cfg::flags::NO_CORONAS.is_set(),
+            smoke: !omsi_cfg::flags::NO_SMOKE.is_set(),
+            snowfall: !omsi_cfg::flags::NO_SNOWFALL.is_set(),
+            glass_picture: !omsi_cfg::flags::NO_GLASS_PICTURE.is_set(),
+            puddle_reflections: !omsi_cfg::flags::NO_PUDDLE_REFLECTIONS.is_set(),
+            mirror_enhanced: omsi_cfg::flags::MIRROR_ENHANCED.is_set(),
         }
     }
 }

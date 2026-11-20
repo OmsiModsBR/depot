@@ -409,6 +409,7 @@ impl ShadowResources {
     pub(crate) fn schedule(
         &self,
         shadow_size: u32,
+        sun_shadows: bool,
         render_origin: DVec3,
         lighting: &Lighting,
         cam_rel: Vec3,
@@ -419,14 +420,14 @@ impl ShadowResources {
     ) -> ShadowSchedule {
         // sun shadow map: an orthographic box around the camera, looking along the sun (by
         // night along the moon, see `Lighting::casts_moon_shadows`)
-        let moon_shadows = enhanced_frame && lighting.casts_moon_shadows();
+        let moon_shadows = sun_shadows && enhanced_frame && lighting.casts_moon_shadows();
         let sun = if moon_shadows {
             lighting.moon_dir.normalize_or_zero()
         } else {
             lighting.sun_dir.normalize_or_zero()
         };
         let shadows = (with_overlays || projection.is_some())
-            && (lighting.casts_sun_shadows() || moon_shadows);
+            && ((sun_shadows && lighting.casts_sun_shadows()) || moon_shadows);
         let shared_xr_shadows = if second_eye && shadows {
             self.xr_shadow_cache
                 .get()

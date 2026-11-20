@@ -87,9 +87,14 @@ fn a_mirror_in_enhanced_uses_the_base_shading() {
     assert!(!f.enhanced && !f.masked_frame);
     assert!(!f.with_overlays && !f.ao_on && !f.prepass_on && !f.xr_view);
     // OMSI_MIRROR_ENHANCED draws them enhanced again
-    let mut i = inputs(ViewKind::Mirror);
-    i.switches.mirror_enhanced = true;
-    let f = decide(ShadingPath::Hdr, &options(), &i);
+    let f = decide(
+        ShadingPath::Hdr,
+        &RenderOptions {
+            mirror_enhanced: true,
+            ..options()
+        },
+        &inputs(ViewKind::Mirror),
+    );
     assert!(f.enhanced && f.masked_frame);
     // (still without the occlusion and the overlays of the window's picture)
     assert!(!f.ao_on && !f.with_overlays);
@@ -188,9 +193,11 @@ fn puddles_wait_for_what_they_need() {
     let mut i = wet();
     i.switches.debug_view = true;
     assert!(!wanted(&options(), &i));
-    let mut i = wet();
-    i.switches.no_puddle_reflections = true;
-    assert!(!wanted(&options(), &i));
+    let no_puddles = RenderOptions {
+        puddle_reflections: false,
+        ..options()
+    };
+    assert!(!wanted(&no_puddles, &wet()));
     // not in a mirror
     let mut i = inputs(ViewKind::Mirror);
     i.wetness = 0.5;
@@ -203,13 +210,16 @@ fn puddles_wait_for_what_they_need() {
 }
 
 #[test]
-fn the_switches_of_the_environment_turn_a_pass_off() {
+fn the_options_turn_a_pass_off() {
     let mut i = inputs(ViewKind::Window);
     i.rain = 0.5;
-    i.switches.no_ao = true;
-    i.switches.no_fxaa = true;
-    i.switches.no_glass_picture = true;
-    let f = decide(ShadingPath::Linear, &options(), &i);
+    let off = RenderOptions {
+        ssao: false,
+        fxaa: false,
+        glass_picture: false,
+        ..options()
+    };
+    let f = decide(ShadingPath::Linear, &off, &i);
     assert!(!f.ao_on && !f.fxaa_without_msaa && !f.glass_on && !f.scaled && !f.prepass_on);
 }
 

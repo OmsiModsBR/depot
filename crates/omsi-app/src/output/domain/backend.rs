@@ -27,6 +27,8 @@ pub struct Dx9Effects {
     pub glass_rain: bool,
     /// The glow round the lights.
     pub coronas: bool,
+    /// OMSI's own particles (the smoke of exhausts and chimneys).
+    pub smoke: bool,
     /// The night's stars.
     pub stars: bool,
     /// The weather's clouds drawn over the sky (their light on the scene stays).
@@ -40,6 +42,7 @@ impl Default for Dx9Effects {
         Self {
             glass_rain: true,
             coronas: true,
+            smoke: true,
             stars: true,
             cloud_picture: true,
             texture_limit: 0,

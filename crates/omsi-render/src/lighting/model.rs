@@ -373,7 +373,7 @@ impl Lighting {
 
     /// Whether the sun shadow map is drawn with this light (not once the sun is about a
     /// degree below the horizon - Omsi.exe's cutoff, sun z -0.02 in sub_754c80 - nor with
-    /// the sun dim, nor with OMSI_NO_SHADOWS).
+    /// the sun dim).
     /// By night the moon casts the shadows the sun casts by day (the enhanced path): the
     /// sun well down, the moon up and more than a quarter lit - a full moon's 0.3 lux leave
     /// sharp shadows on a road beyond the lamps.
@@ -383,14 +383,10 @@ impl Lighting {
             && self.sun_dir.normalize_or_zero().z < -0.1
             && self.moon_dir.normalize_or_zero().z > 0.1
             && self.moon_illum > 0.25
-            && !omsi_cfg::flags::NO_SHADOWS.is_set()
     }
 
     pub fn casts_sun_shadows(&self) -> bool {
-        self.shadows
-            && self.sun_dir.normalize_or_zero().z > -0.02
-            && self.sun_intensity > 0.05
-            && !omsi_cfg::flags::NO_SHADOWS.is_set()
+        self.shadows && self.sun_dir.normalize_or_zero().z > -0.02 && self.sun_intensity > 0.05
     }
 }
 

@@ -216,7 +216,7 @@ impl Inner {
             main: &self.main,
             cab: &self.cab,
             surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
-            coronas: if omsi_cfg::flags::NO_CORONAS.is_set() || !self.effects.coronas {
+            coronas: if !self.effects.coronas {
                 SceneCoronas::default()
             } else {
                 SceneCoronas {
@@ -226,7 +226,7 @@ impl Inner {
             },
             // (OMSI's own particles; the renderer leaves the mirrors' out when the options say
             // so, and the game's tyre spray is no OMSI smoke: it is not among them)
-            smoke: if omsi_cfg::flags::NO_SMOKE.is_set() {
+            smoke: if !self.effects.smoke {
                 SceneSmoke::default()
             } else {
                 SceneSmoke {
