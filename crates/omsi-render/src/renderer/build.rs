@@ -5,8 +5,8 @@ use super::state::Renderer;
 use crate::assets::{AssetStore, TexAddressing};
 use crate::effects::puddles;
 use crate::gpu::{
-    basic_pipelines, color_targets, sixteen_texture_units, target_2d, uniform_entry, GpuContext,
-    Samplers, DEPTH_FORMAT, GL_BACKEND,
+    basic_pipelines, color_targets, fault_is, sixteen_texture_units, target_2d, uniform_entry,
+    FaultHook, GpuContext, Samplers, DEPTH_FORMAT, GL_BACKEND,
 };
 use crate::lighting::{GpuCorona, LightMapAtlas};
 use crate::output::{Diagnostics, Presenter};
@@ -33,7 +33,7 @@ impl Renderer {
     ) -> Renderer {
         let (msaa, shadow_size) = (options.msaa, options.shadow_size);
         let gpu = GpuContext::open(&device, format, msaa);
-        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("build") && msaa > 1 {
+        if fault_is(FaultHook::Build) && msaa > 1 {
             // test hook for the fallback in `new_with`: a sample count no device takes
             let _ = target_2d(
                 &device,
@@ -151,7 +151,7 @@ impl Renderer {
                 cache: None,
             })
         };
-        let bias: i32 = omsi_cfg::flags::SURFACE_BIAS.number().unwrap_or(-24);
+        let bias: i32 = crate::gpu::debug().surface_bias.unwrap_or(-24);
         // one pipeline per `pipe_code`: the kind decides blending and the depth write
         let scene_pipelines =
             |f: wgpu::TextureFormat, fs: &str, samples: u32| -> Vec<wgpu::RenderPipeline> {
@@ -491,8 +491,9 @@ impl Renderer {
             // stills of moving things, the windy trees, at different moments)
             started: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs_f64(
-                    omsi_cfg::flags::RENDER_CLOCK
-                        .text()
+                    crate::gpu::debug()
+                        .render_clock
+                        .as_deref()
                         .and_then(|v| v.trim().parse::<f64>().ok())
                         .filter(|s| s.is_finite() && *s >= 0.0)
                         .unwrap_or(0.0),

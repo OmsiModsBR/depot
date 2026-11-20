@@ -6,7 +6,9 @@ mod arrays;
 mod buffers;
 mod caps;
 mod context;
+mod debug;
 mod errors;
+mod fault;
 mod formats;
 mod lost;
 mod open;
@@ -31,12 +33,11 @@ pub(crate) use caps::{
     dedicated_vram_mb, gl_worker_turn, sixteen_texture_units, vulkan_vram_mb, GL_BACKEND,
 };
 pub(crate) use context::{GpuContext, Samplers};
+pub(crate) use debug::debug;
 pub(crate) use errors::{gpu_error_text, CATCHING};
+pub(crate) use fault::{due as fault_due, is as fault_is, Hook as FaultHook};
 pub(crate) use formats::{color_targets, HDR_FORMAT, MASK_FORMAT};
-pub(crate) use lost::{
-    fake_due, fake_poll_loss, guarded_poll, let_go, lost_why, read_buffer_with, wait_poll,
-    wait_with,
-};
+pub(crate) use lost::{guarded_poll, let_go, lost_why, read_buffer_with, wait_poll, wait_with};
 pub(crate) use open::{basic_pipelines, fallback_load, fallback_store, BASIC_PIPELINES};
 pub(crate) use timers::{pass_timer, GPU_TIMER_PASSES};
 pub(crate) use util::{

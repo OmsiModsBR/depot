@@ -127,10 +127,10 @@ pub(crate) fn encode_main_pass(
         && !single
         && prepass_on
         && needs_msaa_prepass
-        && !omsi_cfg::flags::NO_MSAA_PREPASS.is_set();
+        && !crate::gpu::debug().no_msaa_prepass;
     let parts = if !cfg!(any(target_os = "macos", target_os = "ios"))
         && main_bundles.len() >= 2
-        && !omsi_cfg::flags::NO_MAIN_SPLIT.is_set()
+        && !crate::gpu::debug().no_main_split
     {
         main_bundles.len().min(2)
     } else {
