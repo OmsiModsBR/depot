@@ -142,13 +142,14 @@ code, **to validate** with the rest of the row).
 
 - **Inputs**: a fixed road surface and the weather (wet, snow, ice). **Outputs**: one `μ` per
   vehicle, bounding the AI's acceleration, braking and comfortable braking. **Module**: `ai/classic/`
-  (phase 8), the values of `C-5`.
+  (phase 8); the value from `vehicle/weather.rs` (`route_grip`).
 - **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11): the
   grip does not change with the surface under the wheels. **Check**: an AI bus pulling away and
   stopping on a wet and a dry road, and on a gravel patch.
 
 The grip is not read from the surface under each wheel, as in `C-5` for the player's vehicle: it is
-the grip of a road (`C-5`'s values) in the current weather. It bounds the change of speed of a
+`C-5`'s grip of a plain asphalt road that gets wet (ground byte `0x20`, a choice of this code) in
+the current weather. It bounds the change of speed of a
 frame (`KA-2`); the comfortable braking stays the shared traffic planner's.
 
 ## KA-4. No body dynamics on the route

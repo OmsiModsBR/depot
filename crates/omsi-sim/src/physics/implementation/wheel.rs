@@ -22,10 +22,10 @@ impl RigidWheel {
     /// on (`f_long`, before the friction circle cut it) is more than the road takes; a
     /// slipping one turns by its drive, its brake and the sliding friction, locks when the
     /// brake stops it, and grips again when its speed crosses the ground's.
-    pub(super) fn advance_spin(&mut self, c: &Contact, f_long_wanted: f32, friction: f32, h: f32) {
+    pub(super) fn advance_spin(&mut self, c: &Contact, f_long_wanted: f32, h: f32) {
         let r = self.radius.max(0.05);
         let ground = c.v_long / r;
-        let mu_n = friction * c.grip;
+        let mu_n = c.mu * c.grip;
         if !self.slipping {
             let wanted = if c.v_long.abs() > STANDING {
                 c.drive - c.brake * c.v_long.signum()
