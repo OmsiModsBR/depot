@@ -464,3 +464,29 @@ distances and the texture options rebuild resources and stay launcher-only.
 **Alternatives considered**: `shadow_size` and `msaa` live: rejected for this feature (they rebuild
 targets and pipelines; FR-020e excludes that). If one of the three turns out to need a rebuild when
 its task starts, it is dropped from the set with a note here, not forced.
+
+### `reflections` dropped from the set (2026-11-20, T043/T045)
+
+Read at the start of T043: the table above was wrong about this key. `RenderOptions::reflections`
+is not read per frame for the materials; `Renderer::add_material_inner` reads it when a material
+is made and, with it off, makes the material *without* its reflection map: the map's texture
+slot, its factor, its mask and its bump map are never stored (`renderer/assets.rs`), so
+"materials keep their maps loaded either way" does not hold. Only the puddles' read
+(`renderer/frame.rs`, `puddles_wanted`) is per frame.
+
+What switching it at once would take, and why it is not done:
+
+- Keeping the maps in every material and gating them in the shaders: the factor
+  (`material.params2.y`) is read at about ten places in `scene/shader.wgsl` and
+  `scene/enhanced.wgsl`, and Enhanced also takes "has a reflection map" as a sign for classifying
+  glass and paint (`has_env`, the bump relief, the metal guess), so a plain multiplication would
+  not draw what a fresh start without the maps draws (the FR-020e test).
+- Or making the scene's materials again (the callers hold the maps, the renderer does not): that
+  re-uploads every material's uniform and bind group of a loaded map, and the scene would have to
+  keep the recipe of each material.
+
+Both are a rebuild of materials, not the per-frame switch this section assumed, and neither can be
+checked without a graphics adapter in the loop. Per T045 the key stays launcher-only (`NextStart`),
+with its row in the launcher's Picture page. `ssao` (merged) and `clouds` (T044) are unaffected. If
+reflections should be live later, it is its own feature: keep the maps in the material and move the
+"has a reflection map" decisions of the shaders to one place first.
