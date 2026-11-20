@@ -145,9 +145,9 @@ observable effect; every in-game option acts in the session (quickstart Q7, Q8).
 
 ### The in-game menu `feat/ingame-live-options`
 
-- [ ] T039 [US2] [ph B3] Generate the in-game graphics list in `crates/omsi-app/src/hud/implementation/lists/pages.rs` from the launcher's option list filtered by `offered_in_game(key, running mode)`, in place of the hand-written list; `graphics`, `graphics_api`, the preset and every `NextStart` option are absent; the `later` hints go (FR-020c)
-- [ ] T040 [US2] [ph B3] For every `Live` row, check that its setter in `crates/omsi-app/src/hud/implementation/lists/values.rs` changes a value the frame reads (`crates/omsi-app/src/frame/implementation/app_events.rs`); correct the table's `effect` where it does not (FR-020d); a group or page left without rows is not shown
-- [ ] T041 [P] [US2] [ph B3] Tests in `crates/omsi-app/tests/app/hud/`: per mode the in-game list equals `offered_in_game`; it never contains `graphics` or `graphics_api`; the list follows the running mode when `OMSI_GRAPHICS` differs from the file; `CHANGELOG.md`, `docs/USER_GUIDE.md`
+- [x] T039 [US2] [ph B3] Generate the in-game graphics list in `crates/omsi-app/src/hud/implementation/lists/pages.rs` from the launcher's option list filtered by `offered_in_game(key, running mode)`, in place of the hand-written list; `graphics`, `graphics_api`, the preset and every `NextStart` option are absent; the `later` hints go (FR-020c)
+- [x] T040 [US2] [ph B3] For every `Live` row, check that its setter in `crates/omsi-app/src/hud/implementation/lists/values.rs` changes a value the frame reads (`crates/omsi-app/src/frame/implementation/app_events.rs`); correct the table's `effect` where it does not (FR-020d); a group or page left without rows is not shown
+- [x] T041 [P] [US2] [ph B3] Tests in `crates/omsi-app/tests/app/hud/`: per mode the in-game list equals `offered_in_game`; it never contains `graphics` or `graphics_api`; the list follows the running mode when `OMSI_GRAPHICS` differs from the file; `CHANGELOG.md`, `docs/USER_GUIDE.md`
 
 ### Options made live `feat/live-ssao`, `feat/live-reflections`, `feat/live-clouds`
 

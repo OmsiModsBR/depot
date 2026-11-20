@@ -1,9 +1,7 @@
 //! The drop-downs over a settings row, with the weather's.
 
 use super::chooser::LIST_DIRTY;
-use super::select::{
-    preset_now, presets, reload_settings, select_state, settings_file, store_with, sync_live,
-};
+use super::select::{reload_settings, select_state, settings_file, store_with, sync_live};
 use super::store::remember_setting;
 use super::values::{cloud_index, set_precip};
 use super::vehicles::bus_cmp;
@@ -97,14 +95,6 @@ pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> 
                 .iter()
                 .enumerate()
                 .map(|(i, n)| (tr(*n), format!("precip {i}")))
-                .collect()
-        }
-        "preset" => {
-            current = preset_now(&settings_file());
-            presets()
-                .iter()
-                .enumerate()
-                .map(|(i, p)| (tr(p.0), format!("preset {i}")))
                 .collect()
         }
         "gfxprofile" => omsi_launcher_lib::graphics_profiles()
@@ -202,22 +192,6 @@ pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
             if let Some((key, value)) = arg.split_once(' ') {
                 remember_setting(key, value);
                 reload_settings(app);
-            }
-        }
-        "preset" => {
-            if let Some(p) = arg
-                .trim()
-                .parse::<usize>()
-                .ok()
-                .and_then(|i| presets().into_iter().nth(i))
-            {
-                store_with(app, |v| {
-                    if let Some(o) = p.1.as_object() {
-                        for (k, x) in o {
-                            v[k.as_str()] = x.clone();
-                        }
-                    }
-                });
             }
         }
         "gfxprofile" => {

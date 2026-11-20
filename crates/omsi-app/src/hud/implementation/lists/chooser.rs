@@ -664,9 +664,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     app.vr_nav_adjust("reset", 1.0);
                     LIST_DIRTY.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
-                // (the preset, the clouds and the precipitation are picked from a drop-down: `App::chooser_pick`)
-                "weather" | "cloudkind" | "precipkind" | "metar_src" | "sel" | "preset"
-                | "gfxprofile" | "reset" => {}
+                // (the clouds and the precipitation are picked from a drop-down: `App::chooser_pick`)
+                "weather" | "cloudkind" | "precipkind" | "metar_src" | "sel" | "gfxprofile"
+                | "reset" => {}
                 "metar_icao_edit" if step => {
                     if app.menu_edit_icao {
                         app.apply_icao_edit();
