@@ -125,7 +125,18 @@ fn drive(
     kmh: f64,
     weather: WireWeather,
 ) -> Drive {
-    let d = decl();
+    drive_with(&decl(), n, path, demand, kmh, weather)
+}
+
+/// [`drive`] with the declaration `d`.
+fn drive_with(
+    d: &TrolleyDeclaration,
+    n: &WireNetwork,
+    path: &[(f64, f64)],
+    demand: f64,
+    kmh: f64,
+    weather: WireWeather,
+) -> Drive {
     let mut sim = PoleSim::default();
     let heading = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0).atan2(b.1 - a.1).to_degrees();
     let at = body(path[0].0, path[0].1, heading(path[0], path[1]));
@@ -133,9 +144,9 @@ fn drive(
         grab: [true, true],
         ..Default::default()
     };
-    sim.step(&d, n, &at, press, 1.0 / 60.0);
+    sim.step(d, n, &at, press, 1.0 / 60.0);
     for _ in 0..100 {
-        sim.step(&d, n, &at, PoleInputs::default(), 1.0 / 60.0);
+        sim.step(d, n, &at, PoleInputs::default(), 1.0 / 60.0);
     }
     assert!(
         sim.poles.iter().all(|p| p.phase == PolePhase::OnWire),
@@ -156,7 +167,7 @@ fn drive(
             s = (s + step).min(len);
             let p = a.lerp(b, s / len);
             let o = sim.step(
-                &d,
+                d,
                 n,
                 &body(p.x, p.y, h),
                 PoleInputs {
@@ -326,6 +337,12 @@ fn a_crossing_sounds_once_as_the_shoes_pass_it() {
     );
     let d = drive(&n, &[(0.0, 20.0), (0.0, 80.0)], 0.0, 10.0, WireWeather::Dry);
     assert_eq!(kinds(&d), [WireSoundKind::Cross]);
+    // (heard from the wire above it, as a switch is)
+    let at = d.sounds[0].position;
+    assert!(
+        (at.y - 50.0).abs() < 1e-9 && at.z > 5.0,
+        "at the crossing, up at the wire: {at}"
+    );
 }
 
 #[test]
@@ -350,6 +367,25 @@ fn shoes_spark_now_and_then_under_power_and_more_often_in_the_rain() {
     assert!(dry.spark_frames > 0, "the sparks flash");
     assert_eq!(sparks(&coasting), 0, "no spark without power");
     assert_eq!(coasting.spark_frames, 0);
+}
+
+#[test]
+fn a_weather_whose_spark_gain_is_zero_has_no_sparks() {
+    let n = net(
+        vec![spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 700.0, 0.0)],
+        vec![],
+    );
+    let text = PARAMS.replace("rain_frequency_gain=2.5", "rain_frequency_gain=0");
+    let d = declaration_from(&parse_registry(REGISTRY)[0], &parse_params(&text).unwrap()).unwrap();
+    let rain = drive_with(
+        &d,
+        &n,
+        &[(0.0, 20.0), (0.0, 620.0)],
+        1.0,
+        30.0,
+        WireWeather::Rain,
+    );
+    assert_eq!(rain.spark_frames, 0, "no spark in the rain");
 }
 
 #[test]
