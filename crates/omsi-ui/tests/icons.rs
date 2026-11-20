@@ -5,10 +5,12 @@ use omsi_ui::icons;
 
 /// Every icon of the family, by the group the information bar and the maps use them in.
 const FAMILY: &[&str] = &[
-    // vehicles: the standard bus (side view), the bus on a slope and the variations of its body
+    // vehicles: the standard bus (side view, on a slope, skidding) and the variations of its body
     "hud-bus",
     "hud-bus-front",
     "hud-bus-slope",
+    "hud-bus-skid-dark",
+    "hud-bus-skid-white",
     "hud-articulated",
     "hud-tram",
     "hud-metro",
