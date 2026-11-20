@@ -2,6 +2,7 @@
 //! it tows ([`CoupledPart`]), and its motion over a substep (semi-implicit Euler) with OMSI's
 //! damping of pitch and roll ([`body_damping`]).
 
+use super::surface::surface_grip;
 use super::train::step_train;
 use super::tyre::Substep;
 use super::{classic, depot};
@@ -11,6 +12,7 @@ use crate::physics::domain::params::{
 };
 use crate::physics::domain::{
     BodyInputs, Engine, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
+    RoadWeather,
 };
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -68,6 +70,7 @@ impl RigidBody {
                     ground_z: 0.0,
                     ground_seen: false,
                     surface: 0,
+                    mu: DRY_GRIP,
                     walls: Vec::new(),
                     step_force: 0.0,
                 });
@@ -96,6 +99,7 @@ impl RigidBody {
             kappa: 0.0,
             max_steer_deg: spec.max_steer_deg,
             rot_pnt_long: spec.turn_line,
+            file_rot_pnt_long: spec.rot_pnt_long,
             inv_min_turn_radius: spec.inv_min_turn_radius,
             body_freq: spec.body_freq,
             empty_body_freq: spec.body_freq,
@@ -106,6 +110,7 @@ impl RigidBody {
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
             friction: DRY_GRIP,
+            road: None,
             wheel_impacts: Vec::new(),
             coupled: Vec::new(),
             spawned_inside: None,
@@ -139,6 +144,20 @@ impl RigidBody {
             w.ground_seen = false;
             w.walls.clear();
         }
+    }
+
+    /// Each tyre's grip from the ground it last stood on and the road's weather `road` (`C-5`,
+    /// [`surface_grip`]); the body's own value, for the parts coupled behind it, is the mean of
+    /// its tyres'.
+    pub fn set_road(&mut self, road: &RoadWeather) {
+        for w in self.wheels.iter_mut() {
+            w.mu = surface_grip(w.surface, road);
+        }
+        if !self.wheels.is_empty() {
+            self.friction =
+                self.wheels.iter().map(|w| w.mu).sum::<f32>() / self.wheels.len() as f32;
+        }
+        self.road = Some(*road);
     }
 
     /// The ground byte under each wheel that found the ground this step: the road face at

@@ -57,8 +57,8 @@ pub const BODY_DAMPING: f32 = 1.5;
 /// The body is set back on its wheels when its up axis leans further than this (its z, the
 /// cosine of 72.5°): the safety net against tipping over on bad ground. *tuned*
 pub const TIP_OVER: f32 = 0.3;
-/// The grip of a dry road (μ), the body's until the vehicle sets the road's own (the dry
-/// value of `vehicle::road_grip`). *tuned*
+/// The grip of a road (μ), the body's until the vehicle sets the road's own (`C-5`,
+/// `RigidBody::set_road`). *tuned*
 pub const DRY_GRIP: f32 = 0.85;
 
 // Steering.

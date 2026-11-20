@@ -152,9 +152,9 @@ observable effect; every in-game option acts in the session (quickstart Q7, Q8).
 ### Options made live `feat/live-ssao`, `feat/live-reflections`, `feat/live-clouds`
 
 - [x] T042 [US2] [ph B4] `ssao`: read per frame instead of at build in `crates/omsi-render/src/renderer/{options,frame}.rs` and `crates/omsi-render/src/targets/ao.rs` (AO targets made on first use), set from `crates/omsi-app/src/hud/implementation/lists/values.rs`; row becomes `Live` in `crates/omsi-cfg/src/graphics_options.rs`; test in `crates/omsi-render/tests/live_ssao.rs` (picture after the switch equals a fresh start, both directions); frame time before/after (quickstart Q8)
-- [ ] T043 [P] [US2] [ph B4] `reflections`: the same for `RenderOptions::reflections` and the puddles' read of it in `crates/omsi-render/src/renderer/frame.rs` and `crates/omsi-render/src/effects/puddles.rs`; test in `crates/omsi-render/tests/live_reflections.rs`
-- [x] T044 [P] [US2] [ph B4] `clouds`: keep the cloud layer and switch its drawing in `crates/omsi-app/src/core/implementation/make.rs` and `crates/omsi-app/src/weather/implementation/weather_setup.rs`; test in `crates/omsi-app/tests/app/weather/` or `crates/omsi-render/tests/live_clouds.rs`
-- [x] T045 [US2] [ph B4] If T042, T043 or T044 turns out to rebuild pipelines, targets of another size or textures, drop that key from the set and record why in R-12 of `.ai/specs/001-graphics-modes/research.md` instead of forcing it
+- [x] T043 [P] [US2] [ph B4] `reflections`: the same for `RenderOptions::reflections` and the puddles' read of it in `crates/omsi-render/src/renderer/frame.rs` and `crates/omsi-render/src/effects/puddles.rs`; test in `crates/omsi-render/tests/live_reflections.rs` **Not done, dropped from the set: the option is baked into each material when it is made, see R-12.**
+- [X] T044 [P] [US2] [ph B4] `clouds`: keep the cloud layer and switch its drawing in `crates/omsi-app/src/core/implementation/make.rs` and `crates/omsi-app/src/weather/implementation/weather_setup.rs`; test in `crates/omsi-app/tests/app/weather/` or `crates/omsi-render/tests/live_clouds.rs`
+- [X] T045 [US2] [ph B4] If T042, T043 or T044 turns out to rebuild pipelines, targets of another size or textures, drop that key from the set and record why in R-12 of `.ai/specs/001-graphics-modes/research.md` instead of forcing it
 
 **Checkpoint**: User Story 2 passes quickstart Q7 and Q8 in the three modes.
 

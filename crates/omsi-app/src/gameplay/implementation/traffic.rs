@@ -6837,7 +6837,7 @@ impl Traffic {
                             .is_some_and(|v| v.abs() > 0.5);
                     let regime = Regime::of(near, serving);
                     let forces = car.vehicle.ai_drive_forces(car.payload_kg);
-                    let mu = omsi_sim::vehicle::road_grip(
+                    let mu = omsi_sim::vehicle::route_grip(
                         car.vehicle.host.street_cond,
                         car.vehicle.host.temperature,
                     );

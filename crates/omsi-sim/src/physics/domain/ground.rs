@@ -45,3 +45,34 @@ pub struct WallFace {
     pub point: DVec2,
     pub normal: Vec2,
 }
+
+/// The weather on the road, as the tyres' grip takes it (`C-5`): how wet the road is and how
+/// full its puddles are (0 … 1 each), whether snow lies on it, and the air temperature (°C).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RoadWeather {
+    pub wet: f32,
+    pub puddles: f32,
+    pub snow: bool,
+    pub temperature: f32,
+}
+
+impl RoadWeather {
+    /// From the road's state as the weather sets it for the scripts (`StreetCond`: 0 dry … 1
+    /// wet, 1 … 2 snow from packed to fresh over a road wet as far as it goes past 1) and the
+    /// air temperature. The puddles are taken as full as the road is wet.
+    pub fn from_street(street_cond: f32, temperature: f32) -> RoadWeather {
+        let c = if street_cond.is_finite() {
+            street_cond.clamp(0.0, 2.0)
+        } else {
+            0.0
+        };
+        let snow = c > 1.0;
+        let wet = if snow { c - 1.0 } else { c };
+        RoadWeather {
+            wet,
+            puddles: wet,
+            snow,
+            temperature,
+        }
+    }
+}

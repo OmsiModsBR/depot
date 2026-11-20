@@ -38,7 +38,7 @@ pub use trailer::{
 };
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
-pub use weather::{relative_humidity, road_grip};
+pub use weather::{relative_humidity, route_grip};
 
 use physics_bridge::OmsiFrames;
 

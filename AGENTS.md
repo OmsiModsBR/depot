@@ -26,6 +26,7 @@ Skills disponíveis hoje em `.ai/skills/`:
 | `speckit-implement` | Executar as tarefas |
 | `speckit-taskstoissues` | Converter tarefas em issues do GitHub |
 | `caveman` | Terse reply style for threads (see the AI section) |
+| `rust-skills` | Use for any Rust code development, best practices, refactoring and code review |
 
 ## AI
 

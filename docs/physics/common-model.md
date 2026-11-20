@@ -155,19 +155,41 @@ road without the brakes, compared in OMSI 2 and in the game (candidate V3 for th
 
 ## C-5. Grip
 
-- **Inputs**: the road under the vehicle (its condition and the temperature); the load `N` of each
-  strut. **Outputs**: `μ`, and the most a tyre can pass on. **Module**: `vehicle/weather.rs`
-  (`road_grip`) sets `μ` on the body (`RigidBody::friction`, 0.85 on a dry road until set).
-- **Basis**: *tuned* for the values of `μ`; *OMSI* for the rule below.
+- **Inputs**: each wheel's ground byte (`C-12`); the road's weather (the street condition `c` and the
+  temperature `T`); the load `N` of each strut. **Outputs**: each tyre's `μ`, and the most it can pass
+  on. **Module**: `physics/implementation/surface.rs` (`surface_grip`), set on the wheels by
+  `RigidBody::set_road` each frame (from `vehicle/motion.rs`); the body's `friction` is the mean of
+  its tyres' `μ` (0.85 until the first frame sets it).
+- **Basis**: *OMSI* for the table and the rule below; the way the weather is read from the street
+  condition is Depot's (see the end of this entry).
 
 ```
-μ        = grip of the road: dry 0.85, wet 0.6, snow 0.3, ice 0.12, blended by the road's condition
+kind     = byte & 0x1f        wet = road wetness if the byte has 0x20, else 0
+                              puddle = road puddles if the byte has 0x40, else 0
+icy      = wet > 0.1 and T < 0 °C while it snows, or wet > 0.1 and T < −5 °C
+
+the first row that applies gives μ:
+  kind 6 or 7          snow: 0.15; else 0.3 at −5 °C to 0.2 at +5 °C
+  kind 8               snow: 0.15; else 0.2 at −5 °C to 0.26 at +5 °C
+  byte 9, or icy on a paved kind (0, 1, 2, 15, 16)
+                       0.2 at −10 °C to 0.15 at 0 °C
+  wet > 0.1, kind 2 or 15                     0.4
+  byte 10, or puddle > 0.2 on kind 0, 1, 16   0.65
+  wet > 0.1, kind 0, 1, 16                    0.73
+  kind 2 or 15  0.7      kind 1 or 16  0.85      kind 0  0.78      kind 5  0.65      other  0.5
+
 grip_i   = min( N_i , F_max,i )                 a tyre works with at most its rated load
-F_i max  = μ · grip_i
+F_i max  = μ_i · grip_i                         the same μ along and across the tyre
 ```
 
-**Status**: that a tyre carries at most `μ · min(N, F_max)` is **to validate** (a brake stop at a
-rising load on a dry and a wet road); the values of `μ` are Depot's.
+The ramps are linear and held at their ends. Depot has no puddle depth map yet, so the frozen road
+always takes the ramp above; and it reads the weather from the street condition `c` (0 dry, 1 wet,
+2 snow): it snows while `c > 1`, the wetness is `c` (`c − 1` while it snows), and the puddles are the
+wetness. Both engines use the same table.
+
+**Status**: **to validate**: a brake stop from 50 km/h on dry asphalt, wet asphalt, cobbles and dirt,
+and on a frozen wet road, in OMSI 2 and in the game; and that a tyre carries at most
+`μ · min(N, F_max)` (a brake stop at a rising load).
 
 ## C-6. Steering geometry
 
@@ -281,7 +303,8 @@ The sections are rigid bodies joined by a ball at the two coupling points: a vel
 solved with the tyres' (16 passes), with a correction of 20 % of the position error per substep, at
 most 1 m/s or 1 rad/s. A hitch (no `[coupling_front_character]`, or type 0) is free about every axis;
 a turntable (any other type) lets the sections not roll against each other and stops at `α_max`,
-`β_min` and `β_max`. The section behind turns on the curvature its joint gives it:
+`β_min` and `β_max`. The section behind turns on the curvature its joint gives it (OMSI Classic replaces this with
+`K-4`, and adds `K-2` and `K-3` for the joint):
 
 ```
 κ_follow = sin α / max( | y_ball − y_turn,follow | , 0.5 m )       y_turn,follow: its own turning line
@@ -370,8 +393,7 @@ SurfaceID     = byte & 0x1f
 After each step, every wheel that found the ground takes the byte of the road face at the height it
 stands on, under its point on the model's origin plane (where `C-3` measures the spring). A wheel on
 the terrain, or with nothing under it, keeps the byte it had; a new body starts at 0. Both engines
-hand the kind to the scripts as `Axle_SurfaceID`; the grip does not use it yet (it still comes from
-the weather alone, `C-5`). A wheel without a body of its own (the kinematic model, the AI on its
+hand the kind to the scripts as `Axle_SurfaceID`, and each tyre takes its grip from the byte (`C-5`). A wheel without a body of its own (the kinematic model, the AI on its
 route) leaves `Axle_SurfaceID` alone.
 
 **Status**: **to validate**: drive from asphalt onto a cobbled or dirt road in OMSI 2 and in the game
