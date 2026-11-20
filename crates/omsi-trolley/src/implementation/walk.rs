@@ -438,15 +438,31 @@ pub(crate) fn ways_on(net: &WireNetwork, c: &WireCursor, end: usize) -> Option<V
 /// `from` is the left of the two ways that meet there, seen from the entry (None: no other
 /// way meets it).
 fn merge_side(net: &WireNetwork, from: (SpanId, usize), w: &Way) -> Option<bool> {
-    let into = (w.cursor.span, usize::from(w.dir < 0));
+    merge_left(
+        net,
+        from,
+        (w.cursor.span, usize::from(w.dir < 0)),
+        w.heading,
+    )
+}
+
+/// Coming from the span end `from` across a gap into the span end `into`, the entry of a
+/// switch: whether `from` is the left of the ways that meet there, seen from the entry
+/// looking along its ways (`heading`, out of the entry). None: no other way meets it.
+pub(crate) fn merge_left(
+    net: &WireNetwork,
+    from: (SpanId, usize),
+    into: (SpanId, usize),
+    heading: DVec3,
+) -> Option<bool> {
     let ours = net.span(from.0)?.ends[from.1].point;
     let theirs = net
         .joints_at(into.0, into.1)
+        .filter(|j| j.via.is_some())
         .map(|j| if j.a == into { j.b } else { j.a })
         .filter(|o| *o != from)
         .find_map(|(s, e)| net.span(s).map(|sp| sp.ends[e].point))?;
-    // (left as seen from the entry, looking along its ways)
-    Some(w.heading.cross(ours - theirs).z < 0.0)
+    Some(heading.cross(ours - theirs).z < 0.0)
 }
 
 fn other(s: WireSide) -> WireSide {

@@ -4,6 +4,7 @@
 
 use glam::DVec3;
 
+use super::walk::merge_left;
 use crate::domain::declaration::TrolleyDeclaration;
 use crate::domain::network::{SpanId, WireNetwork, WireObjectKind};
 use crate::domain::pole::{BodyPose, PoleEvent, PoleOutputs, PoleSim};
@@ -23,27 +24,12 @@ fn merging(net: &WireNetwork, span: SpanId, shoe: DVec3) -> Option<bool> {
     let here = net.span(span)?;
     let end = usize::from(here.ends[1].point.distance(shoe) < here.ends[0].point.distance(shoe));
     let from = (span, end);
-    let other_end = |j: &crate::domain::network::WireJoint, e: (SpanId, usize)| {
-        if j.a == e {
-            j.b
-        } else {
-            j.a
-        }
-    };
     net.joints_at(span, end)
         .filter(|j| j.via.is_some_and(|k| k.is_switch()))
         .find_map(|j| {
-            let into = other_end(j, from);
-            let theirs = net
-                .joints_at(into.0, into.1)
-                .filter(|k| k.via.is_some())
-                .map(|k| other_end(k, into))
-                .find(|o| *o != from)?;
-            let ours = here.ends[end].point;
-            let theirs = net.span(theirs.0)?.ends[theirs.1].point;
-            // (left as seen from the entry, looking along its ways)
+            let into = if j.a == from { j.b } else { j.a };
             let heading = -net.span(into.0)?.ends[into.1].outward;
-            Some(heading.cross(ours - theirs).z < 0.0)
+            merge_left(net, from, into, heading)
         })
 }
 
