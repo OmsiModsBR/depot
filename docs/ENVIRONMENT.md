@@ -18,14 +18,14 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_MAX_FPS` | number | `omsi-app::app_events` | yes | The frame rate limit, in place of the setting. |
 | `OMSI_MOBILE` | switch | `omsi-app::ui` | yes | The phone's layout on a computer (the rail kept clear of a camera hole). |
 | `OMSI_MUTE` | switch | `omsi-audio::mixer` | yes | Silence: the mixer plays nothing. |
-| `OMSI_NO_AO` | switch | `omsi-render::renderer::frame` | yes | No ambient occlusion. |
+| `OMSI_NO_AO` | switch | `omsi-app::settings` | yes | No ambient occlusion. |
 | `OMSI_NO_BC` | switch | `omsi-render::api::renderer` | yes | Textures uploaded as RGBA, not compressed on the GPU. |
 | `OMSI_NO_BUMP` | switch | `omsi-app::scene` | yes | No bump maps on vehicles and objects. |
 | `OMSI_NO_CLOUDS` | switch | `omsi-app` | yes | No clouds. |
-| `OMSI_NO_CORONAS` | switch | `omsi-render::passes::main` | yes | No coronas round the lamps. |
+| `OMSI_NO_CORONAS` | switch | `omsi-app::settings` | yes | No coronas round the lamps. |
 | `OMSI_NO_ENVMAP` | switch | `omsi-app::scene` | yes | No environment maps (reflections) on vehicles and objects. |
-| `OMSI_NO_FXAA` | switch | `omsi-render::renderer::frame` | yes | No FXAA. |
-| `OMSI_NO_SHADOWS` | switch | `omsi-render::lighting::model` | yes | No shadows. |
+| `OMSI_NO_FXAA` | switch | `omsi-app::settings` | yes | No FXAA. |
+| `OMSI_NO_SHADOWS` | switch | `omsi-app::settings` | yes | No shadows. |
 | `OMSI_NO_SURF` | switch | `omsi-app::scene` | yes | Roads without the bumps of their textures' `.surf` maps. |
 | `OMSI_NO_TEXCOMPRESS` | switch | `omsi-render::api::renderer` | yes | No compression of loose pictures. |
 | `OMSI_OPENXR` | switch | `omsi-app::settings` |  | VR through OpenXR, whatever the setting says (Windows; the old switch, kept for existing VR runs). |
@@ -181,7 +181,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_LANES_NEAR` | text | `omsi-app::offscreen` |  | Offscreen: list the driving lanes passing near this point (`x,y,r`). |
 | `OMSI_LIST_ALIGNED` | switch | `omsi-app::scene` |  | Log the splines that align the terrain, with their mode. |
 | `OMSI_METER` | text | `omsi-render::lighting::exposure` |  | The exposure meter's settings, up to six comma-separated numbers. |
-| `OMSI_MIRROR_ENHANCED` | switch | `omsi-app::camera_util` |  | The mirrors drawn with the window's light in the enhanced renderer, not darkened at dusk. |
+| `OMSI_MIRROR_ENHANCED` | switch | `omsi-app::settings, omsi-app::camera_util` |  | The mirrors drawn with the window's light in the enhanced renderer, not darkened at dusk. |
 | `OMSI_MIRROR_HUD` | number | `omsi-app::offscreen` |  | Offscreen: lay the mirror panels (1 to 3) over the picture. |
 | `OMSI_NAV_MAP` | switch | `omsi-app::offscreen` |  | Offscreen: the navigator shows its map. |
 | `OMSI_NAV_MAP_MPP` | number | `omsi-app::navigator` |  | The navigator's city map at this many metres per pixel (0.25 to 20), for pictures to compare. |
@@ -194,7 +194,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_BUNDLES` | switch | `omsi-render::renderer::encode` |  | The main pass encoded directly, without render bundles. |
 | `OMSI_NO_CULL` | switch | `omsi-render::passes::draw` | yes | One-sided faces drawn from both sides. |
 | `OMSI_NO_GLARE` | switch | `omsi-render::passes::fog_lamps` |  | No glare from the sun. |
-| `OMSI_NO_GLASS_PICTURE` | switch | `omsi-render::renderer::frame` |  | No rain drawn on the glass. |
+| `OMSI_NO_GLASS_PICTURE` | switch | `omsi-app::settings` |  | No rain drawn on the glass. |
 | `OMSI_NO_GROUND_PAINT` | switch | `omsi-app::scene` |  | No painted ground layers on the tiles. |
 | `OMSI_NO_GROUND_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The ground splines drawn one by one. |
 | `OMSI_NO_LIGHT_MAP` | switch | `omsi-app::scene` |  | The tiles' night light maps left out. |
@@ -205,11 +205,11 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_PBR` | switch | `omsi-app::scene` |  | No PBR maps on the textures. |
 | `OMSI_NO_POLL_THREAD` | switch | `omsi-render::gpu::open` |  | No thread that keeps the GPU's work moving between frames. |
 | `OMSI_NO_PUDDLE_GLASS_DEPTH` | switch | `omsi-render::effects::puddles` |  | Puddles reflect glass without its depth. |
-| `OMSI_NO_PUDDLE_REFLECTIONS` | switch | `omsi-render::renderer::frame` |  | Wet roads reflect no scene. |
+| `OMSI_NO_PUDDLE_REFLECTIONS` | switch | `omsi-app::settings` |  | Wet roads reflect no scene. |
 | `OMSI_NO_PUDDLE_VEHICLE` | switch | `omsi-render::effects::puddles` |  | Puddles reflect no vehicles. |
 | `OMSI_NO_RENDER_POOL` | switch | `omsi-render::gpu::context` |  | The draw lists encoded on the frame's own thread, not on a pool. |
-| `OMSI_NO_SMOKE` | switch | `omsi-render::passes::main, omsi-app::output::d3d9` |  | No smoke. |
-| `OMSI_NO_SNOWFALL` | switch | `omsi-render::passes::main` |  | No falling snow. |
+| `OMSI_NO_SMOKE` | switch | `omsi-app::settings` |  | No smoke. |
+| `OMSI_NO_SNOWFALL` | switch | `omsi-app::settings` |  | No falling snow. |
 | `OMSI_NO_SPLINE_BATCHING` | switch | `omsi-app::scene` |  | The splines drawn one by one. |
 | `OMSI_NO_SPLINE_HOLES` | switch | `omsi-app::scene` |  | No holes cut into the terrain by the splines. |
 | `OMSI_NO_SPRAY` | switch | `omsi-app::app_events` |  | No spray from the tyres on wet roads. |

@@ -55,14 +55,9 @@ pub struct BuiltPasses {
     pub ssao: bool,
 }
 
-/// The switches of the environment the frame reads (`OMSI_NO_*`, `OMSI_MIRROR_ENHANCED`).
+/// What a diagnostic switch of the environment says about the frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameSwitches {
-    pub no_fxaa: bool,
-    pub no_glass_picture: bool,
-    pub no_puddle_reflections: bool,
-    pub no_ao: bool,
-    pub mirror_enhanced: bool,
     /// A debug view of the shading is on (the puddles do not draw over it).
     pub debug_view: bool,
 }
@@ -70,11 +65,6 @@ pub struct FrameSwitches {
 impl FrameSwitches {
     pub(crate) fn from_environment() -> Self {
         Self {
-            no_fxaa: omsi_cfg::flags::NO_FXAA.is_set(),
-            no_glass_picture: omsi_cfg::flags::NO_GLASS_PICTURE.is_set(),
-            no_puddle_reflections: omsi_cfg::flags::NO_PUDDLE_REFLECTIONS.is_set(),
-            no_ao: omsi_cfg::flags::NO_AO.is_set(),
-            mirror_enhanced: omsi_cfg::flags::MIRROR_ENHANCED.is_set(),
             debug_view: crate::lighting::debug_view() != 0.0,
         }
     }
@@ -120,14 +110,13 @@ impl FrameFeatures {
             && i.picture_size == i.full_size
             && options.fxaa
             && options.msaa <= 1
-            && !enhanced_path
-            && !i.switches.no_fxaa;
+            && !enhanced_path;
         // Rain films are drawn after copying the clean current-frame scene. Classic graphics
         // need a sampleable scene target too, even without puddles or scaling.
         let glass_on = with_overlays
             && i.has_glass_slot
             && (i.rain > 0.001 || i.wetness > 0.02)
-            && !i.switches.no_glass_picture;
+            && options.glass_picture;
         let scaled =
             i.picture_size != i.full_size || fxaa_without_msaa || (glass_on && !enhanced_path);
         // The mirrors are drawn with the plain shading even in Enhanced: without the depth
@@ -137,20 +126,20 @@ impl FrameFeatures {
         // difference worth that. `OMSI_MIRROR_ENHANCED=1` draws them enhanced again. The
         // headset's eyes are the real picture as much as the window is (#784: VR showed the
         // plain graphics with Enhanced on).
-        let enhanced = enhanced_path && (with_overlays || xr_view || i.switches.mirror_enhanced);
+        let enhanced = enhanced_path && (with_overlays || xr_view || options.mirror_enhanced);
         // Rain reflections belong to all graphics modes. Classic shading uses the same
         // scene/mask targets, then presents their linear colour without Enhanced grading.
         let puddles_wanted = with_overlays
             && i.built.puddles
             && options.reflections
+            && options.puddle_reflections
             && puddle_weather(i.wetness, i.snow)
             && i.has_puddle_material
-            && !i.switches.debug_view
-            && !i.switches.no_puddle_reflections;
+            && !i.switches.debug_view;
         let reflection_frame = !enhanced && puddles_wanted && i.built.reflections;
         let masked_frame = enhanced || reflection_frame;
         // ambient occlusion only for the real picture, not for the mirrors
-        let ao_on = with_overlays && options.ssao && i.built.ssao && !i.switches.no_ao;
+        let ao_on = with_overlays && options.ssao && i.built.ssao;
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling)
         let prepass_on =

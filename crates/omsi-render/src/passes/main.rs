@@ -49,6 +49,10 @@ pub(crate) struct MainParts<'a> {
     pub(crate) overlay_pipeline: &'a wgpu::RenderPipeline,
     /// Seconds since the renderer started (the snowfall's drift).
     pub(crate) seconds: f32,
+    /// What the pass leaves out when the options say so.
+    pub(crate) smoke: bool,
+    pub(crate) snowfall: bool,
+    pub(crate) coronas: bool,
 }
 
 /// The main pass: the scene over the sky, with its depth from the prepass where it can
@@ -406,7 +410,7 @@ pub(crate) fn encode_main_pass(
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
         }
         // smoke, blended over the scene
-        if scene.smoke_count > 0 && !omsi_cfg::flags::NO_SMOKE.is_set() {
+        if scene.smoke_count > 0 && ctx.smoke {
             if let Some(sb) = &scene.smoke_buf {
                 pass.set_pipeline(&pp.smoke_pipeline);
                 pass.set_bind_group(1, &ctx.sprites.smoke_bind_group, &[]);
@@ -419,7 +423,7 @@ pub(crate) fn encode_main_pass(
         if let Some(snow) = pp
             .snow_pipeline
             .as_ref()
-            .filter(|_| lighting.snowfall > 0.01 && !omsi_cfg::flags::NO_SNOWFALL.is_set())
+            .filter(|_| lighting.snowfall > 0.01 && ctx.snowfall)
         {
             let (counts, mean) = snowfall_flakes(lighting.snowfall);
             let u = SnowUniform {
@@ -435,7 +439,7 @@ pub(crate) fn encode_main_pass(
         }
         // light coronas, additive: the world's, then the vehicle the camera is in -
         // drawn over them as Omsi.exe draws it last (see `cab_items`) - then its own
-        let coronas_on = scene.corona_count > 0 && !omsi_cfg::flags::NO_CORONAS.is_set();
+        let coronas_on = scene.corona_count > 0 && ctx.coronas;
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);

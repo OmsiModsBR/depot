@@ -223,7 +223,7 @@ pub(crate) fn encode_enhanced_post(
         ctx.queue
             .write_buffer(&ctx.post.post_buf, 0, bytemuck::bytes_of(&pu));
         // (a mirror's small picture goes without FXAA)
-        let fxaa = with_overlays && ctx.fxaa && ctx.msaa <= 1 && !omsi_cfg::flags::NO_FXAA.is_set();
+        let fxaa = with_overlays && ctx.fxaa && ctx.msaa <= 1;
         if let Some(h) = ctx.targets.hdr_targets.get(&(width, height)) {
             let puddles = h.puddles.as_ref().filter(|_| puddles_on);
             let levels = h.down.len();

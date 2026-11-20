@@ -473,7 +473,7 @@ flags! {
     DEBUG_MIRRORS = "OMSI_DEBUG_MIRRORS", Switch, Diagnostic, "omsi-app::camera_util";
     /// The mirrors drawn with the window's light in the enhanced renderer, not darkened at
     /// dusk.
-    MIRROR_ENHANCED = "OMSI_MIRROR_ENHANCED", Switch, Diagnostic, "omsi-app::camera_util";
+    MIRROR_ENHANCED = "OMSI_MIRROR_ENHANCED", Switch, Diagnostic, "omsi-app::settings, omsi-app::camera_util";
     /// Log the camera's arm (1, or a higher number for more).
     DEBUG_CAMERA = "OMSI_DEBUG_CAMERA", Number, Diagnostic, "omsi-app::camera_arm";
     /// Offscreen: follow the vehicle with this camera (`dx,dy,dz,yaw,pitch[,1]`).
@@ -577,9 +577,9 @@ flags! {
     /// Time each pass on the GPU (with `OMSI_PROFILE`).
     GPU_TIMERS = "OMSI_GPU_TIMERS", Switch, Diagnostic, "omsi-render::api::renderer", env_txt;
     /// No shadows.
-    NO_SHADOWS = "OMSI_NO_SHADOWS", Switch, User, "omsi-render::lighting::model", env_txt;
+    NO_SHADOWS = "OMSI_NO_SHADOWS", Switch, User, "omsi-app::settings", env_txt;
     /// No coronas round the lamps.
-    NO_CORONAS = "OMSI_NO_CORONAS", Switch, User, "omsi-render::passes::main", env_txt;
+    NO_CORONAS = "OMSI_NO_CORONAS", Switch, User, "omsi-app::settings", env_txt;
     /// One-sided faces drawn from both sides.
     NO_CULL = "OMSI_NO_CULL", Switch, Diagnostic, "omsi-render::passes::draw", env_txt;
     /// Textures uploaded as RGBA, not compressed on the GPU.
@@ -587,9 +587,9 @@ flags! {
     /// No compression of loose pictures.
     NO_TEXCOMPRESS = "OMSI_NO_TEXCOMPRESS", Switch, User, "omsi-render::api::renderer", env_txt;
     /// No FXAA.
-    NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-render::renderer::frame", env_txt;
+    NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-app::settings", env_txt;
     /// No ambient occlusion.
-    NO_AO = "OMSI_NO_AO", Switch, User, "omsi-render::renderer::frame", env_txt;
+    NO_AO = "OMSI_NO_AO", Switch, User, "omsi-app::settings", env_txt;
 
     // --- omsi-render: its own settings and diagnostics
 
@@ -654,13 +654,13 @@ flags! {
     /// No glare from the sun.
     NO_GLARE = "OMSI_NO_GLARE", Switch, Diagnostic, "omsi-render::passes::fog_lamps";
     /// No smoke.
-    NO_SMOKE = "OMSI_NO_SMOKE", Switch, Diagnostic, "omsi-render::passes::main, omsi-app::output::d3d9";
+    NO_SMOKE = "OMSI_NO_SMOKE", Switch, Diagnostic, "omsi-app::settings";
     /// No falling snow.
-    NO_SNOWFALL = "OMSI_NO_SNOWFALL", Switch, Diagnostic, "omsi-render::passes::main";
+    NO_SNOWFALL = "OMSI_NO_SNOWFALL", Switch, Diagnostic, "omsi-app::settings";
     /// No rain drawn on the glass.
-    NO_GLASS_PICTURE = "OMSI_NO_GLASS_PICTURE", Switch, Diagnostic, "omsi-render::renderer::frame";
+    NO_GLASS_PICTURE = "OMSI_NO_GLASS_PICTURE", Switch, Diagnostic, "omsi-app::settings";
     /// Wet roads reflect no scene.
-    NO_PUDDLE_REFLECTIONS = "OMSI_NO_PUDDLE_REFLECTIONS", Switch, Diagnostic, "omsi-render::renderer::frame";
+    NO_PUDDLE_REFLECTIONS = "OMSI_NO_PUDDLE_REFLECTIONS", Switch, Diagnostic, "omsi-app::settings";
     /// Puddles reflect no vehicles.
     NO_PUDDLE_VEHICLE = "OMSI_NO_PUDDLE_VEHICLE", Switch, Diagnostic, "omsi-render::effects::puddles";
     /// Puddles reflect glass without its depth.

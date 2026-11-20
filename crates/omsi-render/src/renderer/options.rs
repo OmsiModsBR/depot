@@ -49,6 +49,19 @@ pub struct RenderOptions {
     /// The smoke systems show in the mirrors' pictures (OMSI's option "no smoke in
     /// reflections", off).
     pub smoke_in_mirrors: bool,
+    /// The sun's (and at night the moon's) shadow maps are drawn when the light allows it.
+    pub sun_shadows: bool,
+    /// The light coronas round the lamps, the smoke and the falling snow are drawn.
+    pub coronas: bool,
+    pub smoke: bool,
+    pub snowfall: bool,
+    /// The rain's picture on the glass (what is behind the panes drawn first).
+    pub glass_picture: bool,
+    /// The wet roads reflect the scene (`reflections` must be on as well).
+    pub puddle_reflections: bool,
+    /// The mirrors are drawn by the Enhanced path as the window is, not with the base
+    /// shading.
+    pub mirror_enhanced: bool,
 }
 
 impl Default for RenderOptions {
@@ -68,6 +81,13 @@ impl Default for RenderOptions {
             reflections: true,
             no_enhanced: false,
             smoke_in_mirrors: true,
+            sun_shadows: true,
+            coronas: true,
+            smoke: true,
+            snowfall: true,
+            glass_picture: true,
+            puddle_reflections: true,
+            mirror_enhanced: false,
         }
     }
 }

@@ -288,11 +288,13 @@ impl Renderer {
             condensation: lighting.condensation,
             moon_light: st
                 .moon_light
-                .extend(if lighting.casts_moon_shadows() {
-                    1.0
-                } else {
-                    0.0
-                })
+                .extend(
+                    if self.options.sun_shadows && lighting.casts_moon_shadows() {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                )
                 .to_array(),
             moon_disc: st
                 .moon_disc

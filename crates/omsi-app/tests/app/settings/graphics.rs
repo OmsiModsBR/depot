@@ -58,7 +58,10 @@ fn a_file_without_graphics_follows_the_old_enhanced_key() {
         // (`graphics` decides when both are there)
         ("graphics=enhanced\nenhanced=0\n", GraphicsMode::Enhanced),
         ("graphics=vanilla\nenhanced=1\n", GraphicsMode::Vanilla),
-        ("enhanced=1\ngraphics=vanilla_plus\n", GraphicsMode::VanillaPlus),
+        (
+            "enhanced=1\ngraphics=vanilla_plus\n",
+            GraphicsMode::VanillaPlus,
+        ),
     ] {
         assert_eq!(Settings::from_text(text).graphics, want, "{text:?}");
         let v = settings_from_text(Some(text));
@@ -181,7 +184,23 @@ fn a_removed_variable_in_env_txt_is_skipped_not_an_error() {
 #[test]
 fn the_enhanced_plus_argument_is_still_taken() {
     use clap::Parser;
-    let args = openomsi_game::testing::core::cli::Args::try_parse_from(["depot", "--enhanced-plus"])
-        .expect("an old shortcut still starts the game");
+    let args =
+        openomsi_game::testing::core::cli::Args::try_parse_from(["depot", "--enhanced-plus"])
+            .expect("an old shortcut still starts the game");
     assert!(args.enhanced_plus && !args.enhanced);
+}
+
+/// What the renderer leaves out is set once, here, from the settings and the environment
+/// (`OMSI_NO_*`): with none of them set, nothing is left out, and the occlusion and the FXAA
+/// follow the settings.
+#[test]
+fn the_render_options_draw_everything_the_environment_does_not_leave_out() {
+    let mut s = Settings::default();
+    let o = s.render_options();
+    assert!(o.sun_shadows && o.coronas && o.smoke && o.snowfall);
+    assert!(o.glass_picture && o.puddle_reflections && !o.mirror_enhanced);
+    s.ssao = false;
+    assert!(!s.render_options().ssao);
+    s.ssao = true;
+    assert!(s.render_options().ssao);
 }

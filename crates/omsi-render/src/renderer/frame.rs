@@ -388,6 +388,7 @@ impl Renderer {
             light_view_proj_close,
         } = self.shadows.schedule(
             self.options.shadow_size,
+            self.options.sun_shadows,
             scene.render_origin,
             lighting,
             cam_rel,

@@ -772,7 +772,7 @@ pub(in crate::hud) fn toggle_set(
         "ssao" => {
             app.settings.ssao = on;
             if let Some(r) = app.renderer.as_mut() {
-                r.set_ssao(on);
+                r.set_ssao(app.settings.render_options().ssao);
             }
             Some(("ssao", bit))
         }
