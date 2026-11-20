@@ -277,7 +277,8 @@ The sections are rigid bodies joined by a ball at the two coupling points: a vel
 solved with the tyres' (16 passes), with a correction of 20 % of the position error per substep, at
 most 1 m/s or 1 rad/s. A hitch (no `[coupling_front_character]`, or type 0) is free about every axis;
 a turntable (any other type) lets the sections not roll against each other and stops at `α_max`,
-`β_min` and `β_max`. The section behind turns on the curvature its joint gives it:
+`β_min` and `β_max`. The section behind turns on the curvature its joint gives it (OMSI Classic replaces this with
+`K-4`, and adds `K-2` and `K-3` for the joint):
 
 ```
 κ_follow = sin α / max( | y_ball − y_turn,follow | , 0.5 m )       y_turn,follow: its own turning line

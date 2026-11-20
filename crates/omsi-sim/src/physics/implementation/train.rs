@@ -13,13 +13,16 @@
 //! the joint's load on the axles, the lever of its pull and the inertia of the part behind.
 //! A body alone is a train of one, solved exactly as before.
 
+use super::classic;
 use super::spec::{split, wheel_rest_loads_supported};
 use super::tyre::{lin, Lateral, Substep, Work};
 use crate::physics::domain::params::{
     BAUMGARTE, BUMP, FRAME_DT_MAX, JOINT_PASSES, LIMIT_WINDOW, MAX_BIAS, PASSES, SLICE_DT,
     SUBSTEP_DT,
 };
-use crate::physics::domain::{BodyInputs, GroundProbe, Impact, Joint, JointKind, RigidBody};
+use crate::physics::domain::{
+    BodyInputs, Engine, GroundProbe, Impact, Joint, JointKind, RigidBody,
+};
 use glam::{DVec3, Mat3, Quat, Vec3};
 use omsi_geometry::util::wrap_deg;
 use omsi_vehicle::Vehicle;
@@ -92,7 +95,11 @@ impl Joint {
 
     /// The hinge (world), the link from it to the ball as the lead holds it (world; zero at a
     /// puller's ball) and how far the follower's ball stands off that.
-    fn ball(&self, lead: &RigidBody, follow: &RigidBody) -> (Vec3, Vec3, Vec3) {
+    pub(in crate::physics) fn ball(
+        &self,
+        lead: &RigidBody,
+        follow: &RigidBody,
+    ) -> (Vec3, Vec3, Vec3) {
         let at = |b: &RigidBody, p: Vec3| b.position + b.orientation.mul_vec3(p - b.cog).as_dvec3();
         let hinge = at(lead, self.hinge());
         let ball_f = at(follow, self.anchor_follow);
@@ -121,12 +128,22 @@ impl Joint {
     }
 
     /// The curvature (1/m, positive to the right) the joint, bent by `alpha`, makes the
-    /// follower turn on about its `[rot_pnt_long]` line: sin alpha over the distance from the
-    /// ball to that line. The follower's axles show it (`axle_steer`); its tyres do not steer.
+    /// follower turn on about its `[rot_pnt_long]` line: in Project Depot Physics sin alpha over
+    /// the distance from the ball to that line; in OMSI Classic the way the lead carries the
+    /// joint as well (`K-4`). The follower's axles show it (`axle_steer`); its tyres do not
+    /// steer.
     fn kappa(&self, bodies: &[RigidBody]) -> f32 {
         let (alpha, _) = self.angles(bodies);
-        let f = &bodies[self.follow];
-        alpha.sin() / (self.anchor_follow.y - f.rot_pnt_long).abs().max(0.5)
+        let (l, f) = (&bodies[self.lead], &bodies[self.follow]);
+        match f.engine {
+            Engine::Classic => classic::joint::follower_kappa(
+                alpha,
+                self.anchor_lead.y - l.file_rot_pnt_long,
+                l.kappa,
+                self.anchor_follow.y - f.rot_pnt_long,
+            ),
+            Engine::Depot => alpha.sin() / (self.anchor_follow.y - f.rot_pnt_long).abs().max(0.5),
+        }
     }
 }
 
@@ -514,6 +531,10 @@ pub fn step_train_with(
             }
         }
     }
+    // (OMSI Classic: the sections behind put back on their joints, `K-2`)
+    if substeps > 0 {
+        classic::joint::seat_followers(bodies, joints);
+    }
     for ((b, impacts), a) in bodies.iter_mut().zip(impacts).zip(accel) {
         b.wheel_impacts = impacts;
         // the acceleration the body felt over the frame (a frame that ran no substep keeps
@@ -626,6 +647,16 @@ fn slice(
                 &mut subs[i],
                 &mut works[i],
             );
+        }
+        // (OMSI Classic: a turntable at its alpha_max lets the tyres of both its sections go,
+        // `K-3`)
+        for j in joints {
+            if bodies[j.follow].engine == Engine::Classic
+                && classic::joint::at_alpha_limit(j, bodies)
+            {
+                bodies[j.lead].holding = false;
+                bodies[j.follow].holding = false;
+            }
         }
         for i in 0..n {
             bodies[i].lateral_start(&subs[i], h, &mut lats[i], steers[i].is_some());

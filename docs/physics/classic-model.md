@@ -1,7 +1,8 @@
 # OMSI Classic: the player's weight sharing (`K-*`) and the AI (`KA-*`)
 
 OMSI Classic is the default engine. For the player's road vehicle it runs every shared rule of
-[common-model.md](common-model.md) with one rule of its own, `K-1`. Its AI road vehicles run a body
+[common-model.md](common-model.md) with rules of its own: `K-1` for the weight, `K-2` to `K-4`
+for the joints of articulated vehicles. Its AI road vehicles run a body
 brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
@@ -17,6 +18,9 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 |---|---|---|
 | `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
+| [K-2](#k-2-a-section-behind-a-joint-put-back-on-it) | a section behind a joint is put back on it every frame | to validate |
+| [K-3](#k-3-a-turntable-at-its-limit-lets-the-tyres-go) | a turntable at its limit lets the tyres of both sections go | to validate |
+| [K-4](#k-4-the-curvature-of-a-section-behind-a-joint) | the curvature of a section behind a joint | to validate |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |
 | [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
@@ -71,7 +75,63 @@ and the compression of axle `i` does not depend on `[cog]`. `[cog]` still sets t
 (`C-6`), the centre the body turns about (`C-8`) and the lever of the load shifts in braking and
 cornering.
 
-The Depot engine replaces only this rule, with `D-1`.
+The Depot engine replaces this rule with `D-1`.
+
+## K-2. A section behind a joint put back on it
+
+- **Inputs**: the joint (`C-9`): its points, its type, `α_max`, `β_min`, `β_max`; the poses of the
+  two sections after the frame. **Outputs**: the pose of the section behind. **Module**:
+  `physics/implementation/classic/joint.rs` (`seat_followers`), called at the end of the step in
+  `train.rs`.
+- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: drive an articulated bus over
+  uneven ground and through a hard stop, in OMSI 2 and in the game, and watch the joint and the
+  bellows: no gap opens at the joint and the sections do not lean against each other.
+
+Besides the joint's constraint of `C-9`, at the end of every frame each section behind a joint is
+put back on it, in order from the front, keeping its velocities:
+
+- a turntable (any type but 0): the section takes the attitude of the section ahead turned by its
+  own yaw and pitch against it, each held to the joint's range (`|α| ≤ α_max`,
+  `β_min ≤ β ≤ β_max`), and no roll against it;
+- a hitch (type 0): the section is swung about its `[rot_pnt_long]` point until its joint point
+  lies on the line to the joint point of the section ahead;
+
+then it is moved until the two joint points meet. The joint is closed after every frame.
+
+## K-3. A turntable at its limit lets the tyres go
+
+- **Inputs**: `α` and `α_max` of a turntable. **Outputs**: whether the tyres of the two sections
+  hold (`C-7`). **Module**: `physics/implementation/classic/joint.rs` (`at_alpha_limit`), in
+  `train.rs` before the tyres' hold.
+- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: an articulated bus at full lock at
+  walking pace until the joint reaches its limit, in OMSI 2 and in the game: does the front
+  section slide on instead of turning on?
+
+While a turntable stands at `α_max` the tyres of both its sections let go (`C-7`), and hold again
+by the rule of `C-7` once the joint has left the limit. A hitch has no limit.
+
+## K-4. The curvature of a section behind a joint
+
+- **Inputs**: `α`; the curvature `κ_lead` of the section ahead; `[rot_pnt_long]` of both
+  sections (`r_lead`, `r_follow`, each the file's value) and the joint's place in each
+  (`y_lead`, `y_follow`). **Outputs**: the curvature `κ_follow` the section behind turns on: its
+  axles' angles `δ_i` for the scripts (`Axle_Steering`) and the bend's pull of its hold (`C-7`).
+  **Module**: `physics/implementation/classic/joint.rs` (`follower_kappa`).
+- **Basis**: *OMSI*. **Status**: **to validate**. **Check**: compare `Axle_Steering` of the
+  rear section's axle of an articulated bus in a steady turn, in OMSI 2 and in the game.
+
+The joint point moves the way the section ahead carries it, `atan((y_lead − r_lead) · κ_lead)`
+from that section's axis, which is `α` more from the axis of the section behind. That section
+turns about its own `[rot_pnt_long]` line so that its joint point moves that way:
+
+```
+κ_follow = tan( atan((y_lead − r_lead) · κ_lead) + α ) / (y_follow − r_follow)
+```
+
+The arm of the section ahead is counted from its file's `[rot_pnt_long]`, not from its turning line
+(`C-6`, which adds `[cog]`): for a section ahead with a `[cog]` off the origin the curvature differs
+from the one the section turns on by that much. The Depot engine keeps `sin α / |y_follow − r_follow|`
+of `C-9`.
 
 ## The AI road vehicle
 
