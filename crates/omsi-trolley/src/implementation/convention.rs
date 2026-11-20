@@ -59,26 +59,9 @@ pub fn parse_params(text: &str) -> Result<ConventionParams, ConventionError> {
             values.insert(format!("{section}.{k}"), v);
         }
     }
-    let raw = |key: &str| -> Result<&String, ConventionError> {
-        values
-            .get(&format!("{GLOBAL}.{key}"))
-            .ok_or_else(|| ConventionError::Missing {
-                section: GLOBAL.into(),
-                key: key.into(),
-            })
-    };
-    let number = |key: &str| -> Result<f64, ConventionError> {
-        let v = raw(key)?;
-        v.trim()
-            .parse::<f64>()
-            .ok()
-            .filter(|x| x.is_finite())
-            .ok_or_else(|| ConventionError::NotANumber {
-                section: GLOBAL.into(),
-                key: key.into(),
-                value: v.clone(),
-            })
-    };
+    let text = |key: &str| values.get(&format!("{GLOBAL}.{key}")).map(String::as_str);
+    let raw = |key: &str| required(GLOBAL, key, text(key));
+    let number = |key: &str| read_number(GLOBAL, key, text(key));
     let spline_keywords = raw("spline_keywords")?
         .split(',')
         .map(|k| k.trim().to_ascii_lowercase())
@@ -91,6 +74,38 @@ pub fn parse_params(text: &str) -> Result<ConventionParams, ConventionError> {
         wire_x_right: number("wire_x_right")?,
         values,
     })
+}
+
+/// The text `key` of `section` holds (missing when there is none).
+pub(crate) fn required<'a>(
+    section: &str,
+    key: &str,
+    text: Option<&'a str>,
+) -> Result<&'a str, ConventionError> {
+    text.ok_or_else(|| ConventionError::Missing {
+        section: section.into(),
+        key: key.into(),
+    })
+}
+
+/// The number `key` of `section` holds: missing when there is none, not a number when it does
+/// not read as a finite one.
+pub(crate) fn read_number(
+    section: &str,
+    key: &str,
+    text: Option<&str>,
+) -> Result<f64, ConventionError> {
+    let v = required(section, key, text)?;
+    number(v).ok_or_else(|| ConventionError::NotANumber {
+        section: section.into(),
+        key: key.into(),
+        value: v.into(),
+    })
+}
+
+/// A finite number, spaces around it allowed.
+pub(crate) fn number(v: &str) -> Option<f64> {
+    v.trim().parse::<f64>().ok().filter(|x| x.is_finite())
 }
 
 /// The `[vehicle:<name>]` sections of the registry, in file order. Other sections are

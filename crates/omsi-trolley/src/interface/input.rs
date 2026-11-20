@@ -18,6 +18,5 @@ pub use crate::implementation::convention::{
 };
 pub use crate::implementation::declaration::{
     declaration_from, declaration_from_model, find_declaration, poles_in_model, same_vehicle_file,
-    sound_params, spark_params,
 };
 pub use crate::implementation::network::build_tile_wires;

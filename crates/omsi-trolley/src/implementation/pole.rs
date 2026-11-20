@@ -474,9 +474,6 @@ fn retracting(
     }
 }
 
-/// A rising pole's wire: of the wires near the modelled shoe that the pole can reach, the
-/// one that lies on the pole's side of its pair, nearest sideways (body frame) to where the
-/// model draws the shoe; None when none is within `capture` metres of it.
 /// What the player does with a pole's rope this frame.
 #[derive(Debug, Clone, Copy)]
 struct Hand {
@@ -577,11 +574,13 @@ impl PoleSim {
             body,
             &geo,
             i == 0,
-            foot_to_wire,
-            geo.length(),
-            decl.params.capture_distance,
-            around,
-            &keep,
+            &WireSearch {
+                foot_to_wire,
+                len: geo.length(),
+                capture: decl.params.capture_distance,
+                around,
+                keep: &keep,
+            },
         );
         let Some((cursor, sideways, way)) = found else {
             let shoe = around.unwrap_or(body.position + body.rotation * geo.rest_shoe);
@@ -671,21 +670,42 @@ fn hand_pose(decl: &TrolleyDeclaration, i: usize, shoe: DVec3) -> PoleOutput {
     }
 }
 
-/// The wire a pole's shoe takes: near its hook (`around` None: as far sideways as
-/// `capture` from where the modelled shoe stands), or within [`HAND_REACH`] of the point
-/// `around` (world) where the player let it go.
-#[allow(clippy::too_many_arguments)]
+/// Where a pole looks for a wire to take.
+struct WireSearch<'a> {
+    /// From the pole's foot to the wire's height (world).
+    foot_to_wire: DVec3,
+    /// The pole's length.
+    len: f64,
+    /// How far sideways from where the model draws the shoe a wire may be, near the hook.
+    capture: f64,
+    /// Where (world) the player let the pole go; None: it rises from its hook.
+    around: Option<DVec3>,
+    /// Whether the way across a gap (from the span end, into the span) may be taken.
+    keep: &'a dyn Fn((SpanId, usize), SpanId) -> bool,
+}
+
+/// A wire found for a shoe: where on it, how far off the shoe it is, and the gap crossed to
+/// reach it (the span end and the span it leads to), if any.
+type Found = (WireCursor, f64, Option<((SpanId, usize), SpanId)>);
+
+/// The wire a pole's shoe takes, on the pole's side of its pair and behind its foot: near
+/// its hook (`around` None: as far sideways as `capture` from where the modelled shoe
+/// stands), or within [`HAND_REACH`] of the point `around` (world) where the player let it
+/// go; the nearest such, None when there is none.
 fn capture(
     net: &WireNetwork,
     body: &BodyPose,
     geo: &PoleGeometry,
     left_pole: bool,
-    foot_to_wire: DVec3,
-    len: f64,
-    capture: f64,
-    around: Option<DVec3>,
-    keep: &dyn Fn((SpanId, usize), SpanId) -> bool,
-) -> Option<(WireCursor, f64, Option<((SpanId, usize), SpanId)>)> {
+    search: &WireSearch,
+) -> Option<Found> {
+    let WireSearch {
+        foot_to_wire,
+        len,
+        capture,
+        around,
+        keep,
+    } = *search;
     let to_body = body.rotation.transpose();
     let in_body = |w: DVec3| to_body * (w - body.position);
     let shoe = around.unwrap_or(body.position + body.rotation * geo.rest_shoe);

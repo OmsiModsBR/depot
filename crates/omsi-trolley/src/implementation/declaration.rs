@@ -2,6 +2,7 @@
 
 use glam::DVec3;
 
+use super::convention::{number, read_number, required};
 use crate::domain::convention::{Convention, ConventionError, ConventionParams, RegistryEntry};
 use crate::domain::declaration::{PoleGeometry, PoleParams, TrolleyDeclaration};
 use crate::domain::sound::{SoundParams, SparkParams};
@@ -15,32 +16,9 @@ pub fn declaration_from(
     params: &ConventionParams,
 ) -> Result<TrolleyDeclaration, ConventionError> {
     let section = format!("vehicle:{}", entry.name);
-    let raw = |key: &str| -> Result<&str, ConventionError> {
-        entry.get(key).ok_or_else(|| ConventionError::Missing {
-            section: section.clone(),
-            key: key.into(),
-        })
-    };
-    let num = |key: &str| -> Result<f64, ConventionError> {
-        let v = raw(key)?;
-        number(v).ok_or_else(|| ConventionError::NotANumber {
-            section: section.clone(),
-            key: key.into(),
-            value: v.into(),
-        })
-    };
+    let num = |key: &str| read_number(&section, key, entry.get(key));
     // a value the parameter file must give (no value of Depot's own is made up for it)
-    let global = |s: &str, k: &str| -> Result<f64, ConventionError> {
-        let v = params.get(s, k).ok_or_else(|| ConventionError::Missing {
-            section: s.into(),
-            key: k.into(),
-        })?;
-        number(v).ok_or_else(|| ConventionError::NotANumber {
-            section: s.into(),
-            key: k.into(),
-            value: v.into(),
-        })
-    };
+    let global = |s: &str, k: &str| value(params, s, k);
     // the entry's own key, else the parameter file's
     let own_or_global = |key: &str| -> Result<f64, ConventionError> {
         match entry.get(key) {
@@ -74,7 +52,7 @@ pub fn declaration_from(
     };
     Ok(TrolleyDeclaration {
         entry: entry.name.clone(),
-        bus_file: raw("bus_file")?.to_string(),
+        bus_file: required(&section, "bus_file", entry.get("bus_file"))?.to_string(),
         carrier_bus_file: entry
             .get("pole_carrier_bus_file")
             .filter(|f| !f.trim().is_empty())
@@ -139,17 +117,7 @@ fn optional<T>(r: Result<Option<T>, ConventionError>) -> Option<T> {
 
 /// A value of `section` the parameter file must give once the section is there.
 fn value(params: &ConventionParams, section: &str, key: &str) -> Result<f64, ConventionError> {
-    let v = params
-        .get(section, key)
-        .ok_or_else(|| ConventionError::Missing {
-            section: section.into(),
-            key: key.into(),
-        })?;
-    number(v).ok_or_else(|| ConventionError::NotANumber {
-        section: section.into(),
-        key: key.into(),
-        value: v.into(),
-    })
+    read_number(section, key, params.get(section, key))
 }
 
 fn has_section(params: &ConventionParams, section: &str) -> bool {
@@ -158,7 +126,9 @@ fn has_section(params: &ConventionParams, section: &str) -> bool {
 }
 
 /// The `[sound]` section (None when the file has none).
-pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, ConventionError> {
+pub(crate) fn sound_params(
+    params: &ConventionParams,
+) -> Result<Option<SoundParams>, ConventionError> {
     if !has_section(params, "sound") {
         return Ok(None);
     }
@@ -181,7 +151,9 @@ pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, Co
 }
 
 /// The `[sparks]` section (None when the file has none).
-pub fn spark_params(params: &ConventionParams) -> Result<Option<SparkParams>, ConventionError> {
+pub(crate) fn spark_params(
+    params: &ConventionParams,
+) -> Result<Option<SparkParams>, ConventionError> {
     if !has_section(params, "sparks") {
         return Ok(None);
     }
@@ -202,10 +174,6 @@ pub fn spark_params(params: &ConventionParams) -> Result<Option<SparkParams>, Co
         snow_gain: v("snow_frequency_gain")?,
         ice_gain: v("ice_frequency_gain")?,
     }))
-}
-
-fn number(v: &str) -> Option<f64> {
-    v.trim().parse::<f64>().ok().filter(|x| x.is_finite())
 }
 
 /// Does the path `file` (as the game found it) name the registry's `wanted` (a path

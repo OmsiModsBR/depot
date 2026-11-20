@@ -113,7 +113,7 @@ impl WireSounds {
                 };
                 let source = carrier.transform_point3(params.interior_source.as_vec3());
                 let g = level * gain(room);
-                log::info!("trolleybus: sound {name} inside (gain {g:.2})");
+                log::debug!("trolleybus: sound {name} inside (gain {g:.2})");
                 audio.play(
                     clip,
                     VoiceParams {
@@ -128,13 +128,13 @@ impl WireSounds {
                 continue;
             }
             if distance > params.max_distance as f32 {
-                log::info!("trolleybus: sound {stem} not heard ({distance:.0} m away)");
+                log::debug!("trolleybus: sound {stem} not heard ({distance:.0} m away)");
                 continue;
             }
             let Some(clip) = self.clip(audio, stem) else {
                 continue;
             };
-            log::info!("trolleybus: sound {stem} outside, {distance:.1} m away (gain {level:.2})");
+            log::debug!("trolleybus: sound {stem} outside, {distance:.1} m away (gain {level:.2})");
             audio.play(
                 clip,
                 VoiceParams {
