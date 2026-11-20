@@ -5,8 +5,8 @@ use glam::{DMat3, DVec2, DVec3};
 use omsi_trolley::testing::{object, spline, tile};
 use omsi_trolley::{
     build_tile_wires, declaration_from, parse_params, parse_registry, BodyPose, ConventionParams,
-    PoleInputs, PolePhase, PoleSim, TrolleyDeclaration, WireNetwork, WireSound, WireSoundKind,
-    WireWeather,
+    PoleEvent, PoleInputs, PolePhase, PoleSim, TrolleyDeclaration, WireNetwork, WireSound,
+    WireSoundKind, WireWeather,
 };
 
 const WIRE: &str = "Splines\\Net\\wire_x.sli";
@@ -244,6 +244,78 @@ fn a_switch_come_in_to_from_a_way_sounds_once_on_that_side() {
         );
         assert_eq!(kinds(&d), [WireSoundKind::SwitchMerge { left }]);
     }
+}
+
+#[test]
+fn a_switch_left_with_the_poles_off_the_wire_stays_silent_when_they_go_back_elsewhere() {
+    // the Y switch, and a wire 200 m away
+    let n = net(
+        vec![
+            spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 50.0, 0.0),
+            spline(2, WIRE, [-0.5, 52.85, 0.0], -10.0, 40.0, 0.0),
+            spline(3, WIRE, [0.5, 52.85, 0.0], 10.0, 40.0, 0.0),
+            spline(4, WIRE, [200.0, 0.0, 0.0], 0.0, 100.0, 0.0),
+        ],
+        vec![object(9, Y, [0.0, 51.4, 0.0], 0.0)],
+    );
+    let d = decl();
+    let mut sim = PoleSim::default();
+    let dt = 1.0 / 60.0;
+    let idle = |sim: &mut PoleSim, at: &BodyPose, frames: usize| {
+        let mut heard = Vec::new();
+        for _ in 0..frames {
+            sim.step(&d, &n, at, PoleInputs::default(), dt);
+            heard.extend(sim.sounds.iter().map(|s| s.kind));
+        }
+        heard
+    };
+    let raise = PoleInputs {
+        grab: [true, true],
+        ..Default::default()
+    };
+    let start = body(0.0, 20.0, 0.0);
+    sim.step(&d, &n, &start, raise, dt);
+    idle(&mut sim, &start, 100);
+    assert!(sim.poles.iter().all(|p| p.phase == PolePhase::OnWire));
+    // up the line until a shoe takes a way through the switch, and a little further: not
+    // yet at its object
+    let step = 10.0 / 3.6 * dt;
+    let (mut y, mut forked) = (20.0, None);
+    while y < 70.0 {
+        y += step;
+        sim.step(&d, &n, &body(0.0, y, 0.0), PoleInputs::default(), dt);
+        assert!(sim.sounds.is_empty(), "nothing before the switch");
+        if forked.is_none()
+            && sim
+                .events
+                .iter()
+                .any(|e| matches!(e, PoleEvent::Fork { .. }))
+        {
+            forked = Some(y);
+        }
+        if forked.is_some_and(|f| y > f + 0.1) {
+            break;
+        }
+    }
+    assert!(forked.is_some(), "a shoe took a way through the switch");
+    // off the wire there, and back on the other wire
+    let here = body(0.0, y, 0.0);
+    let retract = PoleInputs {
+        retract: true,
+        ..Default::default()
+    };
+    sim.step(&d, &n, &here, retract, dt);
+    let mut heard = idle(&mut sim, &here, 600);
+    assert!(
+        sim.poles.iter().all(|p| p.phase == PolePhase::Hooked),
+        "off the wire, on the hooks"
+    );
+    let away = body(200.0, 20.0, 0.0);
+    sim.step(&d, &n, &away, raise, dt);
+    heard.extend(idle(&mut sim, &away, 200));
+    assert!(sim.poles.iter().all(|p| p.phase == PolePhase::OnWire));
+    heard.retain(|k| *k != WireSoundKind::Spark);
+    assert_eq!(heard, [], "the switch left behind sounds");
 }
 
 #[test]
