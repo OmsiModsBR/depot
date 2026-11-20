@@ -164,6 +164,7 @@ impl PoleSim {
             self.switch_touched.retain(|p| nearest(*p) <= release);
             self.events = events;
             // crossings and sound markers: the middle of the two shoes on the wire passing one
+            // (heard, as a switch is, from the wire above the object: at the shoes' height)
             let near = if out.poles.iter().all(|p| p.on_wire) {
                 let mid = (world(out.poles[0].shoe_pos) + world(out.poles[1].shoe_pos)) / 2.0;
                 net.objects_near(mid, s.cross_trigger_radius)
@@ -173,35 +174,37 @@ impl PoleSim {
                             WireObjectKind::Crossing | WireObjectKind::SoundMarker
                         )
                     })
-                    .map(|o| o.position)
+                    .map(|o| (o.position, mid.z))
             } else {
                 None
             };
-            if let Some(p) = near.filter(|p| self.near_object != Some(*p)) {
+            if let Some((p, z)) = near.filter(|(p, _)| self.near_object != Some(*p)) {
                 self.sounds.push(WireSound {
                     kind: WireSoundKind::Cross,
-                    position: p,
+                    position: p.truncate().extend(z),
                 });
             }
-            self.near_object = near;
+            self.near_object = near.map(|(p, _)| p);
         }
         let Some(sp) = decl.sparks.filter(|sp| sp.enabled) else {
             return;
         };
+        // (how many times as often as in the dry the shoes spark: none at all at 0)
         let gain = match self.weather {
             WireWeather::Dry => 1.0,
             WireWeather::Rain => sp.rain_gain,
             WireWeather::Snow => sp.snow_gain,
             WireWeather::Ice => sp.ice_gain,
-        }
-        .max(1e-3);
+        };
         let drawing = self.throttle >= sp.min_throttle;
         let powered = drawing && self.speed_kmh >= sp.min_speed_kmh;
         let audible = decl.sound.is_some();
         for i in 0..2 {
             self.spark_left[i] = (self.spark_left[i] - dt).max(0.0);
             let shoe = world(out.poles[i].shoe_pos);
-            if out.poles[i].on_wire && powered {
+            if gain <= 0.0 || gain.is_nan() {
+                self.spark_next[i] = None;
+            } else if out.poles[i].on_wire && powered {
                 let next = match self.spark_next[i] {
                     Some(t) => t - dt,
                     None => self.between(sp.interval) / gain,
