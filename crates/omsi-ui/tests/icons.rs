@@ -64,10 +64,7 @@ fn the_family_is_complete_and_nothing_else_is_named_like_it() {
     }
 }
 
-/// The few icons drawn with a thinner 1.1 px line, where the 1.5 px one fills in the details.
-const THIN: &[&str] = &["hud-bus-skid-dark", "hud-bus-skid-white"];
-
-/// One grid, one stroke: a 16 x 16 drawing of round 1.5 px lines (1.1 px for `THIN`), never
+/// One grid, one stroke: a 16 x 16 drawing of round 1.1 px lines, never
 /// filled, so the icons read as one set next to each other and take the colour they are drawn in.
 #[test]
 fn every_icon_is_a_line_drawing_on_the_16_px_grid() {
@@ -75,12 +72,7 @@ fn every_icon_is_a_line_drawing_on_the_16_px_grid() {
         let svg = icons::svg(name).unwrap();
         assert!(svg.contains(r#"viewBox="0 0 16 16""#), "{name}");
         assert!(svg.contains(r#"fill="none""#), "{name} must not be filled");
-        let width = if THIN.contains(name) {
-            r#"stroke-width="1.1""#
-        } else {
-            r#"stroke-width="1.5""#
-        };
-        assert!(svg.contains(width), "{name}");
+        assert!(svg.contains(r#"stroke-width="1.1""#), "{name}");
         assert!(svg.contains(r#"stroke-linecap="round""#), "{name}");
         // (no colour of its own, no text: the line number stays a badge, nothing to translate)
         assert!(!svg.contains("<text"), "{name} carries letters");
@@ -95,9 +87,9 @@ fn every_icon_draws_at_the_sizes_the_bars_use() {
             let a = icons::rasterize(name, size).unwrap();
             assert_eq!(a.len(), (size * size) as usize);
             let covered = a.iter().filter(|&&v| v > 96).count() as f32 / a.len() as f32;
-            // (lines: neither a speck nor a blot, at the smallest size too)
+            // (1.1 px lines: neither a speck nor a blot, at the smallest size too)
             assert!(
-                (0.04..0.62).contains(&covered),
+                (0.03..0.62).contains(&covered),
                 "{name} at {size} px covers {covered:.2}"
             );
             assert!(
