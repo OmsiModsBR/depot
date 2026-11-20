@@ -146,7 +146,7 @@ pub const GRAPHICS_OPTIONS: &[GraphicsOption] = &[
     row("shadows", modern_off(NOT_DRAWN), Live),
     row("shadow_size", modern(NOT_DRAWN), NextStart),
     row("shadow_casters", modern(NOT_DRAWN), NextStart),
-    row("ssao", modern_off(IMPROVEMENT), NextStart),
+    row("ssao", modern_off(IMPROVEMENT), Live),
     row(
         "shadow_blobs",
         [

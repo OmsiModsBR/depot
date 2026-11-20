@@ -38,27 +38,43 @@ fn loaded(mass: f32) -> RigidBody {
 }
 
 /// What a body carries weighs as its own mass: the mass it moves with is the file's and the
-/// payload's, and its pitch and roll frequency is that of the heavier body on the same
-/// springs. Nothing aboard, or a payload that is no mass, leaves the empty body.
+/// payload's. Nothing aboard, or a payload that is no mass, leaves the empty body.
 #[test]
 fn a_payload_adds_to_the_body_mass() {
-    let mut rb = RigidBody::from_definition(&bus(), &[]);
-    let (m0, f0) = (rb.mass(), rb.body_freq());
-    assert_eq!(m0, 10_200.0);
-    assert_eq!(rb.payload(), 0.0);
-    rb.set_payload(kg(3_000.0));
-    assert_eq!(rb.payload(), 3_000.0);
-    assert_eq!(rb.mass(), 13_200.0);
-    let f = f0 * (m0 / 13_200.0f32).sqrt();
-    assert!((rb.body_freq() - f).abs() < 1e-4, "{} {f}", rb.body_freq());
-    // the people get off again: the payload is set, not added
-    rb.set_payload(kg(750.0));
-    assert_eq!(rb.mass(), 10_950.0);
-    for nothing in [0.0, -80.0, f32::NAN, f32::INFINITY] {
-        rb.set_payload(kg(nothing));
-        assert_eq!((rb.mass(), rb.payload()), (m0, 0.0), "{nothing}");
-        assert_eq!(rb.body_freq(), f0);
+    for engine in [Engine::Classic, Engine::Depot] {
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        let (m0, f0) = (rb.mass(), rb.body_freq());
+        assert_eq!(m0, 10_200.0);
+        assert_eq!(rb.payload(), 0.0);
+        rb.set_payload(kg(3_000.0));
+        assert_eq!(rb.payload(), 3_000.0);
+        assert_eq!(rb.mass(), 13_200.0);
+        // the people get off again: the payload is set, not added
+        rb.set_payload(kg(750.0));
+        assert_eq!(rb.mass(), 10_950.0);
+        for nothing in [0.0, -80.0, f32::NAN, f32::INFINITY] {
+            rb.set_payload(kg(nothing));
+            assert_eq!((rb.mass(), rb.payload()), (m0, 0.0), "{engine:?} {nothing}");
+            assert_eq!(rb.body_freq(), f0);
+        }
     }
+}
+
+/// `K-5`: under OMSI Classic the pitch and roll damping is the empty body's however many people
+/// are aboard; under Depot it is that of the heavier body on the same springs.
+#[test]
+fn the_payload_damps_the_body_only_under_depot() {
+    let loaded = |engine| {
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        let f0 = rb.body_freq();
+        rb.set_payload(kg(3_000.0));
+        (f0, rb.body_freq())
+    };
+    let (f0, f) = loaded(Engine::Classic);
+    assert_eq!(f, f0);
+    let (f0, f) = loaded(Engine::Depot);
+    let heavier = f0 * (10_200.0 / 13_200.0f32).sqrt();
+    assert!((f - heavier).abs() < 1e-4, "{f} {heavier}");
 }
 
 /// A full bus sits lower on its springs: they carry the people's weight besides the bus's,
