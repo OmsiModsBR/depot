@@ -202,6 +202,13 @@ impl Renderer {
         self.upload_instances(scene);
     }
 
+    /// Screen-space ambient occlusion on or off, from the next picture on: the passes are
+    /// decided for each picture, and the occlusion textures are made the first time it is on
+    /// (so switching it on costs one frame's setup, off costs nothing).
+    pub fn set_ssao(&mut self, on: bool) {
+        self.options.ssao = on;
+    }
+
     /// One step lighter on the graphics card, for a picture the card cannot keep up with at
     /// the smallest render scale: SSAO off. What was switched off, or None when it is off.
     pub fn lighten(&mut self) -> Option<&'static str> {

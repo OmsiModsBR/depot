@@ -2,6 +2,7 @@
 //! it tows ([`CoupledPart`]), and its motion over a substep (semi-implicit Euler) with OMSI's
 //! damping of pitch and roll ([`body_damping`]).
 
+use super::surface::surface_grip;
 use super::train::step_train;
 use super::tyre::Substep;
 use super::{classic, depot};
@@ -10,7 +11,8 @@ use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
 use crate::physics::domain::{
-    BodyInputs, Engine, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
+    BodyInputs, Engine, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
+    RoadWeather,
 };
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -67,6 +69,8 @@ impl RigidBody {
                     load: 0.0,
                     ground_z: 0.0,
                     ground_seen: false,
+                    surface: 0,
+                    mu: DRY_GRIP,
                     walls: Vec::new(),
                     step_force: 0.0,
                 });
@@ -106,6 +110,7 @@ impl RigidBody {
             rolling_resistance: spec.rolling_resistance,
             accel_body: Vec3::ZERO,
             friction: DRY_GRIP,
+            road: None,
             wheel_impacts: Vec::new(),
             coupled: Vec::new(),
             spawned_inside: None,
@@ -141,10 +146,42 @@ impl RigidBody {
         }
     }
 
+    /// Each tyre's grip from the ground it last stood on and the road's weather `road` (`C-5`,
+    /// [`surface_grip`]); the body's own value, for the parts coupled behind it, is the mean of
+    /// its tyres'.
+    pub fn set_road(&mut self, road: &RoadWeather) {
+        for w in self.wheels.iter_mut() {
+            w.mu = surface_grip(w.surface, road);
+        }
+        if !self.wheels.is_empty() {
+            self.friction =
+                self.wheels.iter().map(|w| w.mu).sum::<f32>() / self.wheels.len() as f32;
+        }
+        self.road = Some(*road);
+    }
+
+    /// The ground byte under each wheel that found the ground this step: the road face at
+    /// the height it found under the wheel's point on the model's origin plane (where the
+    /// spring measures, see `suspension`). A wheel on the terrain, or with nothing under it,
+    /// keeps the byte it had, as OMSI's wheels do.
+    pub fn read_surfaces(&mut self, ground: &dyn Ground) {
+        let (rot, position, cog) = (self.orientation, self.position, self.cog);
+        for w in self.wheels.iter_mut().filter(|w| w.touch.is_some()) {
+            let at = position
+                + rot
+                    .mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog)
+                    .as_dvec3();
+            if let Some(kind) = ground.surface(at.x, at.y, w.ground_z) {
+                w.surface = kind;
+            }
+        }
+    }
+
     /// What the body carries (the people aboard): its mass weighs on the body as the body's own
     /// mass does - in the gravity on the springs and the tyres' grip, and in what it takes to
-    /// speed it up, brake it and turn it. The body's pitch and roll damping follows the heavier
-    /// body on the same springs (`body_freq`). Where the payload sits moves the centre of
+    /// speed it up, brake it and turn it. The body's pitch and roll damping (`body_freq`) stays
+    /// the empty body's under Classic (`K-5`); under Depot it follows the heavier body on the
+    /// same springs. Where the payload sits moves the centre of
     /// gravity and adds to the inertia by the engine's rule (`loaded_body`: Classic keeps
     /// `[cog]` and `[momentofintertia]`, Depot sums the people into the body); the model
     /// origin stays where it is and the body keeps its motion.
@@ -157,10 +194,12 @@ impl RigidBody {
         let load = Payload { kg, ..load };
         self.payload = kg;
         self.mass = self.empty_mass + kg;
-        self.body_freq = if self.mass > 0.0 {
-            self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
-        } else {
-            self.empty_body_freq
+        self.body_freq = match self.engine {
+            Engine::Classic => self.empty_body_freq,
+            Engine::Depot if self.mass > 0.0 => {
+                self.empty_body_freq * (self.empty_mass / self.mass).max(0.0).sqrt()
+            }
+            Engine::Depot => self.empty_body_freq,
         };
         let empty = (self.empty_cog, self.empty_mass, self.empty_inertia);
         let (cog, inertia) = match self.engine {

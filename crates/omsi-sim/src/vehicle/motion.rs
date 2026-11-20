@@ -2,7 +2,6 @@
 
 use super::physics_bridge::{body_wheel_shown, driven_rpm, script_speed, DriveInputs};
 use super::trailer::{body_heading, TrailerPart};
-use super::weather::road_grip;
 use super::VehicleInstance;
 use crate::physics::{Controls, Dynamics, KinematicModel, PhysicsState, VehicleMotion};
 use glam::{DVec3, Vec3};
@@ -395,7 +394,7 @@ impl VehicleInstance {
                     },
                     ws.suspension,
                 ];
-                self.show_wheel(ai, si, shown);
+                self.show_wheel(ai, si, &shown);
             }
         }
     }
@@ -457,7 +456,10 @@ impl VehicleInstance {
         let mut hits: Vec<(crate::physics::Impact, crate::collision::Obb)> = Vec::new();
         // the tyres' grip on the road as it is this frame (set after the step, it took hold a
         // frame late: the first frame on a frozen road still had the dry road's grip)
-        rb.friction = road_grip(self.host.street_cond, self.host.temperature);
+        rb.set_road(&crate::physics::RoadWeather::from_street(
+            self.host.street_cond,
+            self.host.temperature,
+        ));
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
@@ -667,7 +669,7 @@ impl VehicleInstance {
             for si in 0..2 {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
                     let shown = body_wheel_shown(&rb, ai * 2 + si, rw);
-                    self.show_wheel(ai, si, shown);
+                    self.show_wheel(ai, si, &shown);
                     if let Some(ws) = self.motion.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;

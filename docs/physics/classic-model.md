@@ -2,8 +2,7 @@
 
 OMSI Classic is the default engine. For the player's road vehicle it runs every shared rule of
 [common-model.md](common-model.md) with rules of its own: `K-1` for the weight, `K-2` to `K-4`
-for the joints of articulated vehicles. Its AI road vehicles run a body
-brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
+for the joints of articulated vehicles. Its AI road vehicles run a body brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`.
@@ -16,11 +15,12 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 
 | Id | Concept | Status |
 |---|---|---|
-| `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
+| `C-1` to `C-12` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
 | [K-2](#k-2-a-section-behind-a-joint-put-back-on-it) | a section behind a joint is put back on it every frame | to validate |
 | [K-3](#k-3-a-turntable-at-its-limit-lets-the-tyres-go) | a turntable at its limit lets the tyres of both sections go | to validate |
 | [K-4](#k-4-the-curvature-of-a-section-behind-a-joint) | the curvature of a section behind a joint | to validate |
+| [K-5](#k-5-the-payload-does-not-change-the-body-damping) | the payload does not change the body's damping | to validate |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |
 | [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
@@ -133,6 +133,19 @@ The arm of the section ahead is counted from its file's `[rot_pnt_long]`, not fr
 from the one the section turns on by that much. The Depot engine keeps `sin α / |y_follow − r_follow|`
 of `C-9`.
 
+## K-5. The payload does not change the body damping
+
+- **Inputs**: `[mass]`, `achse_feder` (`k_i`), the people aboard. **Outputs**: `f_body`, the
+  frequency in OMSI's damping of the body's pitch and roll (`C-8`). **Module**:
+  `physics/implementation/body.rs` (`set_payload`).
+- **Basis**: *OMSI*. **Status**: **to validate**: the decay of the body's pitch after a kerb drop,
+  empty and full, in OMSI 2 and in the game.
+
+Classic takes `f_body` of `C-8` with the empty `[mass]` whatever the people aboard weigh: a full bus
+is damped as the empty one is. The people still weigh in the gravity, the springs, the tyres and the
+acceleration. Under Depot, `f_body` follows the heavier body on the same springs,
+`f_body · sqrt(m_empty / (m_empty + payload))`.
+
 ## The AI road vehicle
 
 An AI road vehicle has two physical states, shared by all its sections: **on its route** and
@@ -202,13 +215,14 @@ code, **to validate** with the rest of the row).
 
 - **Inputs**: a fixed road surface and the weather (wet, snow, ice). **Outputs**: one `μ` per
   vehicle, bounding the AI's acceleration, braking and comfortable braking. **Module**: `ai/classic/`
-  (phase 8), the values of `C-5`.
+  (phase 8); the value from `vehicle/weather.rs` (`route_grip`).
 - **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11): the
   grip does not change with the surface under the wheels. **Check**: an AI bus pulling away and
   stopping on a wet and a dry road, and on a gravel patch.
 
 The grip is not read from the surface under each wheel, as in `C-5` for the player's vehicle: it is
-the grip of a road (`C-5`'s values) in the current weather. It bounds the change of speed of a
+`C-5`'s grip of a plain asphalt road that gets wet (ground byte `0x20`, a choice of this code) in
+the current weather. It bounds the change of speed of a
 frame (`KA-2`); the comfortable braking stays the shared traffic planner's.
 
 ## KA-4. No body dynamics on the route

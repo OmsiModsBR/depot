@@ -1,14 +1,94 @@
 use glam::{Mat4, Vec3};
-use omsi_sim::testing::vehicle::weather::road_grip;
+use omsi_sim::physics::{surface_grip, RoadWeather};
+use omsi_sim::testing::vehicle::weather::route_grip;
 use omsi_sim::VehicleHost;
 
+fn close(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-5
+}
+
+/// `C-5`: OMSI's grip by the kind of surface, its water and the weather.
 #[test]
-fn wet_snowy_and_frozen_roads_hold_less() {
-    assert_eq!(road_grip(0.0, 15.0), 0.85);
-    assert!((road_grip(1.0, 15.0) - 0.6).abs() < 1e-6);
-    assert!((road_grip(2.0, -5.0) - 0.3).abs() < 1e-6);
-    assert!(road_grip(1.0, -3.0) < 0.2, "black ice");
-    assert_eq!(road_grip(0.0, -10.0), 0.85, "a dry road does not freeze");
+fn each_surface_holds_by_its_kind_and_the_weather() {
+    let dry = RoadWeather::from_street(0.0, 15.0);
+    let wet = RoadWeather::from_street(1.0, 15.0);
+    // dry: by the kind alone
+    for (kind, mu) in [
+        (0, 0.78),
+        (1, 0.85),
+        (16, 0.85),
+        (2, 0.7),
+        (15, 0.7),
+        (5, 0.65),
+    ] {
+        assert!(close(surface_grip(kind, &dry), mu), "kind {kind}");
+    }
+    for kind in [3, 4, 11, 14] {
+        assert!(close(surface_grip(kind, &dry), 0.5), "kind {kind}");
+    }
+    // a wet road only where the texture gets wet
+    assert!(close(surface_grip(0x20, &wet), 0.73));
+    assert!(close(surface_grip(0x21, &wet), 0.73));
+    assert!(close(surface_grip(0x22, &wet), 0.4));
+    assert!(
+        close(surface_grip(0x00, &wet), 0.78),
+        "a texture that never gets wet"
+    );
+    // a puddle on asphalt
+    assert!(close(surface_grip(0x60, &wet), 0.65));
+    assert!(close(surface_grip(10, &dry), 0.65));
+    // snow kinds: in snow, and by the temperature without
+    let snowing = RoadWeather::from_street(1.5, -3.0);
+    assert!(close(surface_grip(6, &snowing), 0.15));
+    assert!(close(surface_grip(8, &snowing), 0.15));
+    assert!(close(
+        surface_grip(6, &RoadWeather::from_street(0.0, -5.0)),
+        0.3
+    ));
+    assert!(close(
+        surface_grip(6, &RoadWeather::from_street(0.0, 10.0)),
+        0.2
+    ));
+    assert!(close(
+        surface_grip(8, &RoadWeather::from_street(0.0, 0.0)),
+        0.23
+    ));
+}
+
+/// Ice forms on a wet road in snow below 0 °C, and without snow below -5 °C, on the paved
+/// kinds (and kind 9 always): 0.2 at -10 °C to 0.15 at 0 °C.
+#[test]
+fn a_wet_road_freezes() {
+    let freezing = RoadWeather::from_street(1.0, -10.0);
+    assert!(close(surface_grip(0x20, &freezing), 0.2));
+    assert!(close(surface_grip(0x30, &freezing), 0.2), "kind 16");
+    assert!(
+        close(surface_grip(0x23, &freezing), 0.5),
+        "dirt does not freeze over"
+    );
+    assert!(
+        close(surface_grip(0x00, &freezing), 0.78),
+        "a dry texture does not freeze"
+    );
+    assert!(close(
+        surface_grip(9, &RoadWeather::from_street(0.0, 0.0)),
+        0.15
+    ));
+    let slush = RoadWeather::from_street(2.0, -1.0);
+    assert!(close(surface_grip(0x20, &slush), 0.155));
+    // -5 °C without snow is not yet ice
+    assert!(close(
+        surface_grip(0x20, &RoadWeather::from_street(1.0, -5.0)),
+        0.73
+    ));
+}
+
+/// `KA-3`: an AI vehicle on its route has the grip of a plain road that gets wet.
+#[test]
+fn the_ai_takes_a_plain_roads_grip() {
+    assert!(close(route_grip(0.0, 15.0), 0.78));
+    assert!(close(route_grip(1.0, 15.0), 0.73));
+    assert!(route_grip(2.0, -1.0) < 0.2, "frozen slush");
 }
 
 /// A `[smoothskin]` vertex hung partly on an o3d bone no `[setbone]` names keeps that

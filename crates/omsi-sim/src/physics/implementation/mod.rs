@@ -12,6 +12,7 @@ mod depot;
 pub(crate) mod ground;
 mod kinematic;
 pub(crate) mod spec;
+mod surface;
 mod suspension;
 pub(crate) mod train;
 pub(crate) mod tyre;
@@ -22,6 +23,7 @@ pub use spec::{
     ai_rotation_point, kinematic_mass_kg, kinematic_rest_sag, kinematic_wheel_rest_loads, mass_kg,
     wheel_rest_loads, wheel_rest_loads_supported,
 };
+pub use surface::surface_grip;
 pub use train::{
     hang_followers, place_train, point_load_shares, step_train, step_train_with, support_rest_loads,
 };

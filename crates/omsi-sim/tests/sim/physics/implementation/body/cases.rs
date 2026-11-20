@@ -38,27 +38,43 @@ fn loaded(mass: f32) -> RigidBody {
 }
 
 /// What a body carries weighs as its own mass: the mass it moves with is the file's and the
-/// payload's, and its pitch and roll frequency is that of the heavier body on the same
-/// springs. Nothing aboard, or a payload that is no mass, leaves the empty body.
+/// payload's. Nothing aboard, or a payload that is no mass, leaves the empty body.
 #[test]
 fn a_payload_adds_to_the_body_mass() {
-    let mut rb = RigidBody::from_definition(&bus(), &[]);
-    let (m0, f0) = (rb.mass(), rb.body_freq());
-    assert_eq!(m0, 10_200.0);
-    assert_eq!(rb.payload(), 0.0);
-    rb.set_payload(kg(3_000.0));
-    assert_eq!(rb.payload(), 3_000.0);
-    assert_eq!(rb.mass(), 13_200.0);
-    let f = f0 * (m0 / 13_200.0f32).sqrt();
-    assert!((rb.body_freq() - f).abs() < 1e-4, "{} {f}", rb.body_freq());
-    // the people get off again: the payload is set, not added
-    rb.set_payload(kg(750.0));
-    assert_eq!(rb.mass(), 10_950.0);
-    for nothing in [0.0, -80.0, f32::NAN, f32::INFINITY] {
-        rb.set_payload(kg(nothing));
-        assert_eq!((rb.mass(), rb.payload()), (m0, 0.0), "{nothing}");
-        assert_eq!(rb.body_freq(), f0);
+    for engine in [Engine::Classic, Engine::Depot] {
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        let (m0, f0) = (rb.mass(), rb.body_freq());
+        assert_eq!(m0, 10_200.0);
+        assert_eq!(rb.payload(), 0.0);
+        rb.set_payload(kg(3_000.0));
+        assert_eq!(rb.payload(), 3_000.0);
+        assert_eq!(rb.mass(), 13_200.0);
+        // the people get off again: the payload is set, not added
+        rb.set_payload(kg(750.0));
+        assert_eq!(rb.mass(), 10_950.0);
+        for nothing in [0.0, -80.0, f32::NAN, f32::INFINITY] {
+            rb.set_payload(kg(nothing));
+            assert_eq!((rb.mass(), rb.payload()), (m0, 0.0), "{engine:?} {nothing}");
+            assert_eq!(rb.body_freq(), f0);
+        }
     }
+}
+
+/// `K-5`: under OMSI Classic the pitch and roll damping is the empty body's however many people
+/// are aboard; under Depot it is that of the heavier body on the same springs.
+#[test]
+fn the_payload_damps_the_body_only_under_depot() {
+    let loaded = |engine| {
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        let f0 = rb.body_freq();
+        rb.set_payload(kg(3_000.0));
+        (f0, rb.body_freq())
+    };
+    let (f0, f) = loaded(Engine::Classic);
+    assert_eq!(f, f0);
+    let (f0, f) = loaded(Engine::Depot);
+    let heavier = f0 * (10_200.0 / 13_200.0f32).sqrt();
+    assert!((f - heavier).abs() < 1e-4, "{f} {heavier}");
 }
 
 /// A full bus sits lower on its springs: they carry the people's weight besides the bus's,
@@ -420,5 +436,54 @@ fn a_steering_key_at_walking_pace_does_not_let_the_tyres_go() {
         let torque = 0.47 * ((2.0 - rb.forward_speed()) * rb.mass() + rb.rolling_resistance());
         rb.step(1.0 / 60.0, torque, &brakes, 1.0, &flat);
         assert!(rb.holding());
+    }
+}
+
+/// A road at 0 whose faces carry `road` (their texture's ground byte) right of x = 0 and
+/// the terrain (no byte) left of it.
+struct Textured {
+    road: u8,
+}
+
+impl omsi_sim::physics::Ground for Textured {
+    fn probe(&self, x: f64, y: f64, top: f64) -> omsi_sim::physics::GroundProbe {
+        flat(x, y, top)
+    }
+
+    fn surface(&self, x: f64, _y: f64, z: f64) -> Option<u8> {
+        (x > 0.0 && z.abs() < 0.01).then_some(self.road)
+    }
+}
+
+/// Each wheel standing on the ground takes the ground byte of the road face under it, and
+/// `Axle_SurfaceID` its `[surface]` kind; a wheel on the terrain keeps the byte it had, as
+/// OMSI's wheels do, and a body that has not stood on a road yet has 0.
+#[test]
+fn the_wheels_take_the_ground_of_the_road_under_them() {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &flat);
+    assert!(rb.wheels().iter().all(|w| w.surface() == 0));
+    rb.read_surfaces(&Textured { road: 0x62 });
+    for w in rb.wheels() {
+        let right = w.attach().x > 0.0;
+        assert_eq!(
+            w.surface(),
+            if right { 0x62 } else { 0 },
+            "{:?}",
+            w.attach()
+        );
+        assert_eq!(w.surface_id(), if right { 2.0 } else { 0.0 });
+    }
+    // the right wheels roll onto the terrain: they keep their road's byte
+    rb.read_surfaces(&Textured { road: 0x21 });
+    for w in rb.wheels().iter().filter(|w| w.attach().x > 0.0) {
+        assert_eq!(w.surface(), 0x21);
+    }
+    rb.place(DVec3::new(-50.0, 0.0, 0.0), 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &flat);
+    rb.read_surfaces(&Textured { road: 0x05 });
+    for w in rb.wheels().iter().filter(|w| w.attach().x > 0.0) {
+        assert_eq!(w.surface(), 0x21);
     }
 }

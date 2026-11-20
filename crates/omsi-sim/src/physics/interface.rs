@@ -17,7 +17,7 @@
 pub use super::domain::{
     AiSpec, AiWheelSpec, AxleSpec, BodyInputs, Controls, CoupledPart, Dynamics, Engine, Ground,
     GroundProbe, Impact, Joint, JointKind, KinematicModel, Payload, PhysicsSpec, PhysicsState,
-    RigidBody, RigidWheel, VehicleMotion, WallFace, WheelState,
+    RigidBody, RigidWheel, RoadWeather, VehicleMotion, WallFace, WheelState,
 };
 
 // What a `.bus` file's values come to.
@@ -28,6 +28,7 @@ pub use super::implementation::{
 };
 
 // A train of bodies.
+pub use super::implementation::surface_grip;
 pub use super::implementation::{
     hang_followers, place_train, point_load_shares, step_train, step_train_with, support_rest_loads,
 };
