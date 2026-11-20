@@ -53,6 +53,14 @@ pub struct RigidWheel {
     /// `ground_z` came from the ground (not yet after [`RigidBody::place`](crate::physics::RigidBody::place)): steps up to
     /// [`CLIMB`](crate::physics::CLIMB) radii over it are ground, higher ones walls.
     pub(crate) ground_seen: bool,
+    /// The ground byte of the last road face the wheel stood on (its texture's `[surface]`
+    /// kind in the low five bits, `0x20` wets, `0x40` puddles): OMSI keeps it while the
+    /// wheel is on the terrain or in the air, and starts from 0.
+    pub(crate) surface: u8,
+    /// The friction coefficient of the ground under the tyre (`C-5`): from its `surface` and
+    /// the road's weather ([`RigidBody::set_road`](crate::physics::RigidBody::set_road)),
+    /// or the body's one value ([`RigidBody::set_friction`](crate::physics::RigidBody::set_friction)).
+    pub(crate) mu: f32,
     /// Faces the tyre is up against.
     pub(crate) walls: Vec<WallFace>,
     /// Horizontal push (N) of a step the tyre climbs or a wall it stands against.
@@ -109,6 +117,21 @@ impl RigidWheel {
     /// The load on the tyre this step (N).
     pub fn load(&self) -> f32 {
         self.load
+    }
+
+    /// The ground byte of the last road face the wheel stood on (see the field).
+    pub fn surface(&self) -> u8 {
+        self.surface
+    }
+
+    /// `Axle_SurfaceID`: the `[surface]` kind of the last road face the wheel stood on.
+    pub fn surface_id(&self) -> f32 {
+        f32::from(self.surface & 0x1f)
+    }
+
+    /// The friction coefficient of the ground under the tyre.
+    pub fn mu(&self) -> f32 {
+        self.mu
     }
 
     /// The world height of the ground the tyre stands on this step.

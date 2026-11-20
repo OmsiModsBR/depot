@@ -1719,6 +1719,24 @@ pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::Heig
     map
 }
 
+/// The ground byte of a texture (`TextureCfg::ground_kind`): the `[surface]` kind of a road
+/// drawn with it and whether it gets wet or collects puddles, from the texture's `.cfg`, as a
+/// wheel standing on it finds it. Read once per file.
+pub fn ground_kind(texture: &str, dirs: &[&Path]) -> u8 {
+    static MEMO: std::sync::OnceLock<Mutex<HashMap<PathBuf, u8>>> = std::sync::OnceLock::new();
+    let Some(found) = omsi_texture::find_texture(texture, dirs) else {
+        return 0;
+    };
+    let memo = MEMO.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&k) = memo.lock().get(&found) {
+        return k;
+    }
+    let kind = omsi_texture::cfg_path(texture, &found)
+        .map_or(0, |c| omsi_texture::TextureCfg::load(&c).ground_kind());
+    memo.lock().insert(found, kind);
+    kind
+}
+
 impl LightSwitch {
     pub fn parse(var: &str) -> LightSwitch {
         let v = var.trim();
@@ -2592,7 +2610,17 @@ impl World {
                     .iter()
                     .map(|t| surf_map(&t.file, &dirs))
                     .collect();
-                Arc::new(SplineType { dir, def, surf })
+                let kinds = def
+                    .textures
+                    .iter()
+                    .map(|t| ground_kind(&t.file, &dirs))
+                    .collect();
+                Arc::new(SplineType {
+                    dir,
+                    def,
+                    surf,
+                    kinds,
+                })
             });
         self.spline_types
             .lock()
@@ -3602,7 +3630,7 @@ impl World {
                     out.drive.push((
                         shape.clone(),
                         bounds,
-                        omsi_geometry::SurfFaces::of(&mesh, &st.surf),
+                        omsi_geometry::SurfFaces::of(&mesh, &st.surf, &st.kinds),
                     ));
                 }
                 let drivable = st.def.paths.iter().any(|pd| pd.kind == 0 || pd.kind == 1);
@@ -5221,13 +5249,21 @@ impl World {
                                         m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect()
                                     })
                                     .unwrap_or_default();
+                                // (and their ground: what the wheels find on a plate or a stop)
+                                let kinds: Vec<u8> = ot
+                                    .meshes
+                                    .get(k)
+                                    .map(|m| {
+                                        m.1.iter().map(|m| ground_kind(&m.texture, &dirs)).collect()
+                                    })
+                                    .unwrap_or_default();
                                 ts.add_drive_mesh_surf(
                                     mesh,
                                     &pose.rot,
                                     pose.pos,
                                     tx,
                                     ty,
-                                    omsi_geometry::SurfFaces::of(mesh, &maps).as_ref(),
+                                    omsi_geometry::SurfFaces::of(mesh, &maps, &kinds).as_ref(),
                                 );
                                 wheel_meshes += 1;
                             }

@@ -404,3 +404,78 @@ pub fn installed_sag(front: &std::path::Path, engine: Engine) -> Vec<f64> {
     }
     sag
 }
+
+/// K-2: OMSI Classic puts every section behind a joint back on it at the end of each frame:
+/// weaving at 5 m/s, the joints are closed after every frame and a turntable's sections never
+/// roll against each other.
+pub fn joints_closed_after_every_frame(defs: Vec<Vehicle>) {
+    let (mut bodies, joints) = build(&defs, Engine::Classic);
+    launch(&mut bodies, 5.0);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    for frame in 0..900 {
+        let steer = (frame as f32 * DT * 1.2).sin() * 0.8;
+        step(&mut bodies, &joints, &brakes, 0.0, steer);
+        for (k, j) in joints.iter().enumerate() {
+            let gap = j.gap(&bodies);
+            assert!(gap < 1e-6, "frame {frame}, joint {k}: gap {gap} m");
+            let (lead, follow) = (&bodies[j.lead], &bodies[j.follow]);
+            let roll = lead
+                .orientation()
+                .mul_vec3(Vec3::Z)
+                .dot(follow.orientation().mul_vec3(Vec3::X));
+            assert!(roll.abs() < 1e-6, "frame {frame}, joint {k}: roll {roll}");
+        }
+    }
+}
+
+/// K-4: in a steady turn the curvature OMSI Classic gives a section behind a joint is the one it
+/// turns on: its yaw rate over its speed. (The lead's arm is counted from its own
+/// `[rot_pnt_long]`, not from its turning line, so the sections are given a `[cog]` on the model
+/// origin, where the two are the same.)
+pub fn follower_kappa_is_its_turn(mut defs: Vec<Vehicle>) {
+    for d in defs.iter_mut() {
+        if let Some(c) = d.cog.as_mut() {
+            c[1] = 0.0;
+        }
+    }
+    let (bodies, _) = steady_bend(&defs, Engine::Classic, 0.5);
+    for (k, b) in bodies.iter().enumerate().skip(1) {
+        let turn = -b.omega().z / b.forward_speed();
+        let kappa = b.kappa();
+        assert!(
+            (kappa - turn).abs() < 0.03 * turn.abs(),
+            "section {k}: kappa {kappa} 1/m, turns on {turn} 1/m"
+        );
+    }
+}
+
+/// K-3: a turntable at its alpha_max lets the tyres of both sections go in OMSI Classic: with
+/// the joint held to 15 degrees and the steering at full lock at 3 m/s, the front section's tyres
+/// keep letting go once the joint is at its limit, and the joint stays within it.
+pub fn alpha_limit_lets_the_tyres_go(mut defs: Vec<Vehicle>) {
+    for d in defs.iter_mut().skip(1) {
+        if let Some(c) = d.coupling_front_character.as_mut() {
+            c[0] = 15.0;
+        }
+    }
+    let (mut bodies, joints) = build(&defs, Engine::Classic);
+    launch(&mut bodies, 3.0);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let mut loose = 0;
+    for frame in 0..600 {
+        step(&mut bodies, &joints, &brakes, 0.0, 1.0);
+        let alpha = joints[0].angles(&bodies).0;
+        assert!(
+            alpha.abs() <= 15.5_f32.to_radians(),
+            "frame {frame}: the joint went to {} deg",
+            alpha.to_degrees()
+        );
+        if frame > 120 && !bodies[0].holding() {
+            loose += 1;
+        }
+    }
+    assert!(
+        loose > 30,
+        "the front section held its tyres at the limit ({loose} frames loose)"
+    );
+}

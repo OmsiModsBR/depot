@@ -40,7 +40,7 @@ pub use trailer::{
 pub use trolley::Trolley;
 pub use vehicle_type::{load_paint_schemes, PaintScheme, SkinBone, VehicleMesh, VehicleType};
 pub use visuals::{fit_plane, onto_plane, SHADOW_LIFT};
-pub use weather::{relative_humidity, road_grip};
+pub use weather::{relative_humidity, route_grip};
 
 use physics_bridge::OmsiFrames;
 
@@ -169,7 +169,7 @@ pub struct VehicleInstance {
     /// `clear_pax_requests`).
     v_pax_req: Vec<omsi_script::VarId>,
     v_accel: [Option<omsi_script::VarId>; 3],
-    v_wheels: Vec<[[Option<omsi_script::VarId>; 5]; 2]>,
+    v_wheels: Vec<[[Option<omsi_script::VarId>; 6]; 2]>,
     v_springfactor: Vec<[Option<omsi_script::VarId>; 2]>,
 }
 
@@ -408,6 +408,7 @@ impl VehicleInstance {
                         v(&format!("Wheel_RotationSpeed_{a}_{s}")),
                         v(&format!("Axle_Steering_{a}_{s}")),
                         v(&format!("Axle_Suspension_{a}_{s}")),
+                        v(&format!("Axle_SurfaceID_{a}_{s}")),
                         v(&format!("Axle_Brakeforce_{a}_{s}")),
                     ]
                 };

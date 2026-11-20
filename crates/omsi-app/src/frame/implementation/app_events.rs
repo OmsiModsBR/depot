@@ -533,7 +533,7 @@ impl ApplicationHandler for App {
                                 if self.governor_low >= 2 && fps < 30.0 {
                                     self.governor_low = 0;
                                     // (SSAO first, then the shadows; for this drive only)
-                                    let what = r.lighten().or_else(|| {
+                                    let what = r.lighten().inspect(|_| self.settings.ssao = false).or_else(|| {
                                         std::mem::replace(&mut self.settings.shadows, false)
                                             .then_some("shadows off")
                                     });

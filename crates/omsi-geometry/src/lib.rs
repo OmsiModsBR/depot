@@ -1547,8 +1547,8 @@ mod tests {
             ranges: vec![(0, 3, 1), (3, 3, 0)],
             ..Default::default()
         };
-        let surf = SurfFaces::of(&mesh, &[None, Some(map)]).unwrap();
-        assert!(SurfFaces::of(&mesh, &[None, None]).is_none());
+        let surf = SurfFaces::of(&mesh, &[None, Some(map)], &[]).unwrap();
+        assert!(SurfFaces::of(&mesh, &[None, None], &[]).is_none());
         // (the drive mesh keeps only the shape, as the tile loader stages it)
         let shape = MeshData {
             positions: mesh.positions.clone(),
@@ -2679,26 +2679,44 @@ impl HeightMap {
     }
 }
 
-/// The `.surf` maps a mesh's faces are drawn with: its texture coordinates and material
-/// ranges (as in its [`MeshData`]) and the map of each material slot's texture (none past
-/// the end). Kept beside a mesh whose own ranges mean something else (a spline's drive mesh).
+/// What a mesh's faces are drawn with, for the wheels: its texture coordinates and material
+/// ranges (as in its [`MeshData`]), the `.surf` map of each material slot's texture (none past
+/// the end) and the ground byte of each slot's texture (`TextureCfg::ground_kind` of
+/// omsi-texture; 0 past the end). Kept beside a mesh whose own ranges mean something else (a
+/// spline's drive mesh).
 #[derive(Debug, Clone, Default)]
 pub struct SurfFaces {
     pub uvs: Vec<Vec2>,
     pub ranges: Vec<(u32, u32, u32)>,
     pub maps: Vec<Option<std::sync::Arc<HeightMap>>>,
+    pub kinds: Vec<u8>,
 }
 
 impl SurfFaces {
-    /// Only where a texture has a map, and the mesh texture coordinates to lay it on.
-    pub fn of(mesh: &MeshData, maps: &[Option<std::sync::Arc<HeightMap>>]) -> Option<SurfFaces> {
-        (maps.iter().any(Option::is_some) && mesh.uvs.len() == mesh.positions.len()).then(|| {
-            SurfFaces {
-                uvs: mesh.uvs.clone(),
-                ranges: mesh.ranges.clone(),
-                maps: maps.to_vec(),
-            }
+    /// Only where a texture has a map (and the mesh has texture coordinates to lay it on)
+    /// or a ground other than plain 0.
+    pub fn of(
+        mesh: &MeshData,
+        maps: &[Option<std::sync::Arc<HeightMap>>],
+        kinds: &[u8],
+    ) -> Option<SurfFaces> {
+        let mapped = maps.iter().any(Option::is_some) && mesh.uvs.len() == mesh.positions.len();
+        (mapped || kinds.iter().any(|&k| k != 0)).then(|| SurfFaces {
+            uvs: if mapped { mesh.uvs.clone() } else { Vec::new() },
+            ranges: mesh.ranges.clone(),
+            maps: if mapped { maps.to_vec() } else { Vec::new() },
+            kinds: kinds.to_vec(),
         })
+    }
+
+    /// The ground byte of face `j`.
+    fn kind(&self, j: usize) -> u8 {
+        let first = (j * 3) as u32;
+        self.ranges
+            .iter()
+            .find(|r| first >= r.0 && first < r.0 + r.1)
+            .and_then(|r| self.kinds.get(r.2 as usize).copied())
+            .unwrap_or(0)
     }
 
     /// The map and corner texture coordinates of face `j` (indices `tri`).
@@ -2715,12 +2733,19 @@ impl SurfFaces {
 
     /// Bytes held on the heap (the maps are shared).
     pub fn heap_bytes(&self) -> usize {
-        self.uvs.capacity() * 8 + self.ranges.capacity() * 12 + self.maps.capacity() * 8
+        self.uvs.capacity() * 8
+            + self.ranges.capacity() * 12
+            + self.maps.capacity() * 8
+            + self.kinds.capacity()
     }
 }
 
 /// A triangle without a `.surf` map in [`DriveGrid`].
 const NO_BUMP: u32 = u32::MAX;
+
+/// How far (m) a road face may lie from the height a wheel stands at and still be the face it
+/// stands on ([`DriveGrid::kind_at`]).
+const KIND_REACH: f32 = 0.003;
 
 /// Upward-facing triangles of one tile (tile-local x/y in metres, absolute z), bucketed on a
 /// coarse grid so that a wheel asks only the few faces around it.
@@ -2732,6 +2757,8 @@ pub struct DriveGrid {
     pub ridge: Vec<bool>,
     /// Per triangle: its entry in `bumps`, or `NO_BUMP` where its texture has no `.surf`.
     bump_of: Vec<u32>,
+    /// Per triangle: the ground byte of its texture ([`SurfFaces::kinds`]).
+    kind: Vec<u8>,
     /// The `.surf` map (index into `maps`) and the texture coordinates of the corners.
     bumps: Vec<(u32, [Vec2; 3])>,
     maps: Vec<std::sync::Arc<HeightMap>>,
@@ -2753,6 +2780,7 @@ impl DriveGrid {
         self.tris.capacity() * std::mem::size_of::<[Vec3; 3]>()
             + self.ridge.capacity()
             + self.bump_of.capacity() * 4
+            + self.kind.capacity()
             + self.bumps.capacity() * std::mem::size_of::<(u32, [Vec2; 3])>()
             + self.start.capacity() * 4
             + self.items.capacity() * 4
@@ -2767,6 +2795,11 @@ impl DriveGrid {
 
     /// Add a triangle, a wall top or not.
     pub fn push_kind(&mut self, p: [Vec3; 3], ridge: bool) -> bool {
+        self.push_face(p, ridge, 0)
+    }
+
+    /// Add a triangle, a wall top or not, drawn with a texture whose ground byte is `kind`.
+    pub fn push_face(&mut self, p: [Vec3; 3], ridge: bool, kind: u8) -> bool {
         let nrm = (p[1] - p[0]).cross(p[2] - p[0]);
         let len = nrm.length();
         if len < 1e-6 || nrm.z.abs() / len < 0.3 {
@@ -2775,13 +2808,20 @@ impl DriveGrid {
         self.tris.push(p);
         self.ridge.push(ridge);
         self.bump_of.push(NO_BUMP);
+        self.kind.push(kind);
         true
     }
 
     /// Add a triangle drawn with a texture that has a `.surf` map, with the texture
-    /// coordinates of its corners.
-    pub fn push_surf(&mut self, p: [Vec3; 3], uv: [Vec2; 3], map: &std::sync::Arc<HeightMap>) {
-        if !self.push_kind(p, false) {
+    /// coordinates of its corners and the texture's ground byte.
+    pub fn push_surf(
+        &mut self,
+        p: [Vec3; 3],
+        uv: [Vec2; 3],
+        map: &std::sync::Arc<HeightMap>,
+        kind: u8,
+    ) {
+        if !self.push_face(p, false, kind) {
             return;
         }
         let m = match self
@@ -2810,13 +2850,16 @@ impl DriveGrid {
         let mut keep = Vec::with_capacity(self.tris.len());
         let mut keep_ridge = Vec::with_capacity(self.tris.len());
         let mut keep_bump = Vec::with_capacity(self.tris.len());
+        let mut keep_kind = Vec::with_capacity(self.tris.len());
         self.ridge.resize(self.tris.len(), false);
         self.bump_of.resize(self.tris.len(), NO_BUMP);
-        for ((t, r), b) in self
+        self.kind.resize(self.tris.len(), 0);
+        for (((t, r), b), g) in self
             .tris
             .iter()
             .zip(self.ridge.iter())
             .zip(self.bump_of.iter())
+            .zip(self.kind.iter())
         {
             // (bucketed with the seam tolerance round it: a point that close is on it)
             let e = SEAM_TOLERANCE;
@@ -2836,6 +2879,7 @@ impl DriveGrid {
             keep.push(*t);
             keep_ridge.push(*r);
             keep_bump.push(*b);
+            keep_kind.push(*g);
         }
         self.reach = keep
             .iter()
@@ -2844,6 +2888,7 @@ impl DriveGrid {
         self.tris = keep;
         self.ridge = keep_ridge;
         self.bump_of = keep_bump;
+        self.kind = keep_kind;
         let mut count = vec![0u32; n * n + 1];
         for &(x0, x1, y0, y1) in &ranges {
             for y in y0..=y1 {
@@ -2909,6 +2954,43 @@ impl DriveGrid {
     /// The wall tops over tile-local (x, y) alone, as [`DriveGrid::probe`] gives the rest.
     pub fn probe_walls(&self, x: f32, y: f32, z_top: f32) -> Probe {
         self.probe_kind(x, y, z_top, true)
+    }
+
+    /// The ground byte of the road face over tile-local (x, y) that lies at height `z` (within
+    /// a few millimetres, its `.surf` relief included): the face a wheel found standing there.
+    /// None where no road face lies at that height (the terrain, say).
+    pub fn kind_at(&self, x: f32, y: f32, z: f32) -> Option<u8> {
+        if self.cells == 0 || x < 0.0 || y < 0.0 {
+            return None;
+        }
+        let (cx, cy) = ((x / self.cell) as usize, (y / self.cell) as usize);
+        if cx >= self.cells || cy >= self.cells {
+            return None;
+        }
+        let k = cy * self.cells + cx;
+        let mut best: Option<(f32, u8)> = None;
+        for &i in &self.items[self.start[k] as usize..self.start[k + 1] as usize] {
+            if self.ridge.get(i as usize).copied().unwrap_or(false) || !self.reaches(i, x, y) {
+                continue;
+            }
+            let [a, b, c] = self.tris[i as usize];
+            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else {
+                continue;
+            };
+            let mut h = l1 * a.z + l2 * b.z + l3 * c.z;
+            if let Some(&(m, uv)) = self
+                .bump_of
+                .get(i as usize)
+                .and_then(|&b| self.bumps.get(b as usize))
+            {
+                h += self.maps[m as usize].lift(uv[0] * l1 + uv[1] * l2 + uv[2] * l3);
+            }
+            let off = (h - z).abs();
+            if off <= KIND_REACH && best.is_none_or(|(o, _)| off < o) {
+                best = Some((off, self.kind.get(i as usize).copied().unwrap_or(0)));
+            }
+        }
+        best.map(|(_, k)| k)
     }
 
     /// The road heights over (x, y) into `road` (their count), the highest wall top into `walls`.
@@ -3287,9 +3369,12 @@ impl TileSurface {
                     transform.transform_point3(v)
                 }) + off;
             }
+            let kind = surf.map_or(0, |s| s.kind(j));
             match surf.and_then(|s| s.face(j, tri)) {
-                Some((m, uv)) => self.drive.push_surf(p, uv, m),
-                None => self.drive.push(p),
+                Some((m, uv)) => self.drive.push_surf(p, uv, m, kind),
+                None => {
+                    self.drive.push_face(p, false, kind);
+                }
             }
         }
     }
@@ -3320,10 +3405,11 @@ impl TileSurface {
             .unwrap_or(usize::MAX);
         for (j, tri) in mesh.indices.chunks_exact(3).enumerate() {
             let p = [0, 1, 2].map(|k| mesh.positions[tri[k] as usize] + off);
+            let kind = surf.map_or(0, |s| s.kind(j));
             match surf.and_then(|s| s.face(j, tri)) {
-                Some((m, uv)) => self.drive.push_surf(p, uv, m),
+                Some((m, uv)) => self.drive.push_surf(p, uv, m, kind),
                 None => {
-                    self.drive.push_kind(p, j * 3 >= ridge_from);
+                    self.drive.push_face(p, j * 3 >= ridge_from, kind);
                 }
             }
         }

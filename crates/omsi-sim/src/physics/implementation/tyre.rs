@@ -29,6 +29,8 @@ pub(super) struct Contact {
     pub(super) lateral: bool,
     /// The wheel it is (None: a coupled part's joint).
     pub(super) wheel: Option<usize>,
+    /// The friction coefficient of the ground under it (`RigidWheel::mu`).
+    pub(super) mu: f32,
 }
 
 /// What acts on a body in one substep (see `RigidBody::prepare`): its rotation and
@@ -247,6 +249,7 @@ impl RigidBody {
                 v_long: (self.velocity + omega_world.cross(r_world)).dot(body_fwd),
                 lateral: false,
                 wheel: None,
+                mu: self.friction,
             });
         }
         // Tyre forces as OMSI has them.
@@ -264,7 +267,7 @@ impl RigidBody {
             // a slipping wheel passes on the sliding friction, whichever way the tyre
             // slides over the road (the wheel's own speed against the ground's)
             if let Some(w) = c.wheel.map(|i| &self.wheels[i]).filter(|w| w.slipping) {
-                let mu_n = self.friction * c.grip;
+                let mu_n = c.mu * c.grip;
                 let slide = w.spin * w.radius - c.v_long;
                 rolling_long[k] = mu_n * sign(slide);
                 outer += c.fwd * rolling_long[k];
@@ -305,12 +308,12 @@ impl RigidBody {
                 Some(si) => c.drive + hold_long[si],
                 None => rolling_long[k],
             };
-            let max_f = self.friction * c.grip;
+            let max_f = c.mu * c.grip;
             f_long = f_long.clamp(-max_f, max_f);
             let f_world = c.base + c.fwd * f_long;
             long_sum += f_long * c.fwd.dot(body_fwd);
             if let Some(i) = c.wheel {
-                self.wheels[i].advance_spin(c, f_long, self.friction, h);
+                self.wheels[i].advance_spin(c, f_long, h);
             }
             force += f_world;
             torque += rot
@@ -388,7 +391,7 @@ impl RigidBody {
         // holding: the bend's pull against the grip of all tyres, and
         // no wheel spinning or locked (the bend the body turns on this slice: the steering's
         // for the front section, its joint's for a section behind)
-        let grip_all: f32 = lat.iter().map(|&k| self.friction * contacts[k].grip).sum();
+        let grip_all: f32 = lat.iter().map(|&k| contacts[k].mu * contacts[k].grip).sum();
         let v_fwd = self.velocity.dot(body_fwd);
         let kappa = self.kappa.abs();
         let slipping = self.wheels.iter().any(|w| w.slipping && w.on_ground);
@@ -428,7 +431,7 @@ impl RigidBody {
                 self.last_yaw_rate = self.omega.z;
                 let tyres = lat.iter().map(|&k| {
                     let c = &contacts[k];
-                    (rot.inverse().mul_vec3(c.r).y, self.friction * c.grip)
+                    (rot.inverse().mul_vec3(c.r).y, c.mu * c.grip)
                 });
                 depot::grip::holds_across(tyres, across, self.inertia.z * self.yaw_accel)
             }
@@ -474,7 +477,7 @@ impl RigidBody {
         for (q, &k) in lat.iter().enumerate() {
             let c = &contacts[k];
             let v_lat = (*v + rot.mul_vec3(*w).cross(at[q])).dot(c.right);
-            let cap = self.friction * c.grip * h * reach;
+            let cap = c.mu * c.grip * h * reach;
             let before = j[q];
             j[q] = (before - v_lat / arms[q].1).clamp(-cap, cap);
             let dj = j[q] - before;

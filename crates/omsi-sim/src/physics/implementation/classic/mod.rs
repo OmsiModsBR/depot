@@ -2,4 +2,5 @@
 //! what each of them does is in the model document `docs/physics/classic-model.md`.
 
 pub(super) mod grip;
+pub(super) mod joint;
 pub(super) mod load_share;

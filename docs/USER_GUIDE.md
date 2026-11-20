@@ -368,7 +368,8 @@ The graphics mode decides which graphics options the launcher and the in-game me
 option a mode does not offer keeps its saved value for the other modes; one shown as fixed is
 drawn with that value whatever is saved; "only" lists the values the mode offers (a saved value
 outside them is drawn as the nearest one). The in-game menu offers only the options that take
-effect at once. This table is printed from the game's own table.
+effect at once, with the launcher's names and choices; the mode, the graphics API, the preset
+and the options marked "next start" are changed in the launcher. This table is printed from the game's own table.
 
 <!-- graphics-options:begin (printed by crates/omsi-cfg/tests/graphics_options.rs) -->
 | Setting | Vanilla | Vanilla+ | Enhanced | Takes effect |
@@ -386,7 +387,7 @@ effect at once. This table is printed from the game's own table.
 | `shadows` | no | yes | yes | at once |
 | `shadow_size` | no | yes | yes | next start |
 | `shadow_casters` | no | yes | yes | next start |
-| `ssao` | no | yes | yes | next start |
+| `ssao` | no | yes | yes | at once |
 | `shadow_blobs` | fixed: On | yes | yes | next start |
 | `night_brightness` | no | no | yes | at once |
 | `reflections` | yes | yes | yes | next start |

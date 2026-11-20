@@ -22,12 +22,13 @@ pub struct DriveInputs {
 }
 
 /// One wheel as its variables show it: `Wheel_Rotation` (rad), `Wheel_RotationSpeed` (rpm),
-/// `Axle_Steering` (rad) and `Axle_Suspension` (m).
-pub type WheelShown = [f32; 4];
+/// `Axle_Steering` (rad), `Axle_Suspension` (m) and `Axle_SurfaceID`.
+pub type WheelShown = [f32; 5];
 
-/// `Wheel_Rotation`, `Wheel_RotationSpeed`, `Axle_Steering`, `Axle_Suspension` and
-/// `Axle_Springfactor` of one wheel of a coupled part (`<axle>_L`, `<axle>_R`).
-pub type PartWheelVars = [Option<omsi_script::VarId>; 5];
+/// `Wheel_Rotation`, `Wheel_RotationSpeed`, `Axle_Steering`, `Axle_Suspension`,
+/// `Axle_SurfaceID` and `Axle_Springfactor` of one wheel of a coupled part (`<axle>_L`,
+/// `<axle>_R`).
+pub type PartWheelVars = [Option<omsi_script::VarId>; 6];
 
 impl VehicleInstance {
     /// The driver's controls into `Throttle`, `Brake` and `Clutch`, then `M_Wheel` and each
@@ -50,7 +51,7 @@ impl VehicleInstance {
         let brakes: Vec<f32> = self
             .v_wheels
             .iter()
-            .flat_map(|a| a.iter().map(|w| self.get(w[4]).max(0.0) + shared))
+            .flat_map(|a| a.iter().map(|w| self.get(w[5]).max(0.0) + shared))
             .collect();
         // Read, the brake forces go back to 0, as OMSI clears them every frame before
         // the scripts run: a script sets them each frame it brakes. Kept,
@@ -59,7 +60,7 @@ impl VehicleInstance {
         self.put(self.v_brakeforce, 0.0);
         for a in self.v_wheels.clone() {
             for w in a {
-                self.put(w[4], 0.0);
+                self.put(w[5], 0.0);
             }
         }
         DriveInputs { m_wheel, brakes }
@@ -84,7 +85,7 @@ impl VehicleInstance {
 
     /// The spring factor of a coupled part's wheel (`vars`: its variables).
     pub(super) fn part_spring_factor(&self, vars: &PartWheelVars) -> f32 {
-        vars[4]
+        vars[5]
             .filter(|_| !self.springs_full)
             .map(|i| self.state.vars[i as usize])
             .unwrap_or(1.0)
@@ -120,12 +121,14 @@ impl VehicleInstance {
             .push(scripts_acceleration(rb.accel_body, rb.orientation), dt)
     }
 
-    /// The variables of wheel `side` (0 left, 1 right) of the vehicle's axle `axle`.
-    pub(super) fn show_wheel(&mut self, axle: usize, side: usize, shown: WheelShown) {
+    /// The variables of wheel `side` (0 left, 1 right) of the vehicle's axle `axle`, from
+    /// the first, as far as `shown` goes ([`WheelShown`]; a wheel without a body of its own
+    /// leaves `Axle_SurfaceID` alone).
+    pub(super) fn show_wheel(&mut self, axle: usize, side: usize, shown: &[f32]) {
         let Some(ids) = self.v_wheels.get(axle).map(|a| a[side]) else {
             return;
         };
-        for (id, x) in ids.into_iter().zip(shown) {
+        for (id, &x) in ids.into_iter().zip(shown) {
             self.put(id, x);
         }
     }
@@ -189,11 +192,13 @@ pub fn body_wheel_shown(
     // hands over -clamp(travel, 0, maxforce / k) - a wheel in the air stays where it hangs
     // at rest.) The steering is each axle's own angle: OMSI turns every axle towards the
     // centre of the bend on the `[rot_pnt_long]` line - one angle for both sides.
+    // `Axle_SurfaceID` is the `[surface]` kind of the road face the wheel last stood on.
     [
         w.rotation_deg.to_radians(),
         w.rpm,
         rb.axle_steer(i),
         -w.compression.max(0.0),
+        w.surface_id(),
     ]
 }
 

@@ -40,6 +40,7 @@ impl PartBody {
                     "Wheel_RotationSpeed",
                     "Axle_Steering",
                     "Axle_Suspension",
+                    "Axle_SurfaceID",
                     "Axle_Springfactor",
                 ]
                 .map(|v| program.var(&format!("{v}_{axle}_{side}")))
@@ -142,6 +143,9 @@ impl VehicleInstance {
                 probe,
                 after_slice,
             );
+            if let Some(g) = self.contact.clone() {
+                lead.read_surfaces(g.as_ref());
+            }
             return lead;
         }
         lead.coupled.clear();
@@ -213,12 +217,15 @@ impl VehicleInstance {
             .iter()
             .map(|t| self.part_brakes(t).collect())
             .collect();
-        let friction = bodies[0].friction;
+        let (friction, road) = (bodies[0].friction, bodies[0].road);
         for (b, (_, vars)) in bodies[1..].iter_mut().zip(&meta) {
             for (w, v) in b.wheels.iter_mut().zip(vars) {
                 w.spring_factor = self.part_spring_factor(v);
             }
-            b.friction = friction;
+            match &road {
+                Some(road) => b.set_road(road),
+                None => b.set_friction(friction),
+            }
             b.wheel_walls = self.wheel_walls;
         }
         let mut inputs = vec![BodyInputs {
@@ -268,6 +275,12 @@ impl VehicleInstance {
                     alpha.to_degrees(),
                     beta.to_degrees()
                 );
+            }
+        }
+        let mut bodies = bodies;
+        if let Some(g) = self.contact.clone() {
+            for rb in bodies.iter_mut() {
+                rb.read_surfaces(g.as_ref());
             }
         }
         let mut bodies = bodies.into_iter();

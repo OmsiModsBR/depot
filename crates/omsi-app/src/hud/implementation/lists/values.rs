@@ -499,8 +499,6 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "collision_pedestrians" => s.collision_pedestrians,
         "ssao" => s.ssao,
         "detail_textures" => s.detail_textures,
-        "reflections" => s.reflections,
-        "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
         "sun_glow" => s.sun_glow,
         "rain_reflections" => s.rain_reflections,
@@ -512,7 +510,6 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "dx9_cloud_picture" => s.dx9_cloud_picture,
         "fullscreen" => s.fullscreen,
         "vsync" => s.vsync,
-        "texture_compression" => s.texture_compression,
         "driver" => s.driver,
         "alt_view" => s.alt_view,
         "precision_zoom" => s.precision_zoom,
@@ -520,7 +517,6 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
         "vr" => s.vr,
-        "vr_desktop_mirror" => s.vr_desktop_mirror,
         "doppler" => s.doppler,
         "muffle_outside" => s.muffle_outside,
         "steering_linear" => s.steering_linear,
@@ -774,19 +770,14 @@ pub(in crate::hud) fn toggle_set(
         }
         "ssao" => {
             app.settings.ssao = on;
+            if let Some(r) = app.renderer.as_mut() {
+                r.set_ssao(on);
+            }
             Some(("ssao", bit))
         }
         "detail_textures" => {
             app.settings.detail_textures = on;
             Some(("detail_textures", bit))
-        }
-        "reflections" => {
-            app.settings.reflections = on;
-            Some(("reflections", bit))
-        }
-        "clouds" => {
-            app.settings.clouds = on;
-            Some(("clouds", bit))
         }
         "windy_trees" => {
             app.settings.windy_trees = on;
@@ -839,10 +830,6 @@ pub(in crate::hud) fn toggle_set(
             app.settings.vsync = on;
             Some(("vsync", bit))
         }
-        "texture_compression" => {
-            app.settings.texture_compression = on;
-            Some(("texture_compression", bit))
-        }
         "driver" => {
             app.settings.driver = on;
             Some(("driver", bit))
@@ -870,10 +857,6 @@ pub(in crate::hud) fn toggle_set(
         "vr" => {
             app.settings.vr = on;
             Some(("vr", bit))
-        }
-        "vr_desktop_mirror" => {
-            app.settings.vr_desktop_mirror = on;
-            Some(("vr_desktop_mirror", bit))
         }
         "doppler" => {
             app.settings.doppler = on;
