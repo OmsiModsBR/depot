@@ -499,6 +499,7 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "collision_pedestrians" => s.collision_pedestrians,
         "ssao" => s.ssao,
         "detail_textures" => s.detail_textures,
+        "clouds" => s.clouds,
         "windy_trees" => s.windy_trees,
         "sun_glow" => s.sun_glow,
         "rain_reflections" => s.rain_reflections,
@@ -774,6 +775,14 @@ pub(in crate::hud) fn toggle_set(
                 r.set_ssao(on);
             }
             Some(("ssao", bit))
+        }
+        "clouds" => {
+            app.settings.clouds = on;
+            crate::core::startup::CLOUDS.store(
+                on && !omsi_cfg::flags::NO_CLOUDS.is_set(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            Some(("clouds", bit))
         }
         "detail_textures" => {
             app.settings.detail_textures = on;

@@ -393,7 +393,7 @@ and the options marked "next start" are changed in the launcher. This table is p
 | `reflections` | yes | yes | yes | next start |
 | `mirror_size` | only 0, 128, 256, 512 | yes | yes | next start |
 | `mirror_refresh` | only off, full | yes | yes | at once |
-| `clouds` | fixed: As OMSI 2 | yes | yes | next start |
+| `clouds` | fixed: As OMSI 2 | yes | yes | at once |
 | `sun_glow` | yes | yes | yes | at once |
 | `windy_trees` | fixed: Off | yes | yes | at once |
 | `smoke` | yes | yes | yes | next start |

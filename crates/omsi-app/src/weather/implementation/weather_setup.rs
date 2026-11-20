@@ -45,16 +45,7 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
                 w.temp
             );
             let mut w = w;
-            // No weather chosen: the clear default (#CAVOK, no cloud at all) gets a few fair-
-            // weather cumulus clouds, as long as clouds are wanted - a sky without a single
-            // cloud was the first thing that looked wrong (not under DirectX9: OMSI 2's sky)
-            if args.weather.is_none()
-                && CLOUDS.load(std::sync::atomic::Ordering::Relaxed)
-                && FAIR_CLOUDS.load(std::sync::atomic::Ordering::Relaxed)
-                && w.clouds.0.trim().starts_with("-1")
-            {
-                w.clouds = ("Cumulus 1".into(), 100.0);
-            }
+            with_fair_weather_clouds(&mut w, args.weather.is_none());
             // the vehicles ask for it while they go onto the GPU (the snow on the panes)
             scene::SNOW_WEATHER.store(w.snow, std::sync::atomic::Ordering::Relaxed);
             // and their {init} reads the temperature
@@ -69,6 +60,20 @@ pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
                 ..Default::default()
             }
         }
+    }
+}
+
+/// No weather chosen: the clear default (#CAVOK, no cloud at all) gets a few fair-weather
+/// cumulus clouds - a sky without a single cloud was the first thing that looked wrong (not
+/// under DirectX9: OMSI 2's sky). Whether clouds are drawn at all is the `clouds` setting's,
+/// read for each picture (`clouds_of`), so the weather is the same either way and the setting
+/// can change while the game runs.
+pub fn with_fair_weather_clouds(w: &mut omsi_content::weather::Weather, unchosen: bool) {
+    if unchosen
+        && FAIR_CLOUDS.load(std::sync::atomic::Ordering::Relaxed)
+        && w.clouds.0.trim().starts_with("-1")
+    {
+        w.clouds = ("Cumulus 1".into(), 100.0);
     }
 }
 
@@ -475,7 +480,7 @@ pub(crate) fn road_wetness(rate: f32, secs: f64, start: f32) -> f32 {
 
 /// The renderer's lighting for this weather at this moment: the daylight, then what the
 /// cloud cover, the rain and the snow make of it.
-pub(crate) fn weather_lighting(
+pub fn weather_lighting(
     daylight: &omsi_sim::Daylight,
     w: &omsi_content::weather::Weather,
     cloud_drift: [f32; 2],

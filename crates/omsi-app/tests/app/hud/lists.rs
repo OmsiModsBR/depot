@@ -159,6 +159,26 @@ fn ambient_occlusion_is_a_live_row_where_the_mode_draws_it() {
     assert!(has_ssao(GraphicsMode::Enhanced));
 }
 
+/// The clouds switch is offered in the game menu where the mode adds clouds of its own; in
+/// Vanilla it is the fixed "As OMSI 2" line.
+#[test]
+fn clouds_are_a_live_row_and_a_fixed_line_in_vanilla() {
+    use omsi_cfg::GraphicsMode;
+    let mut settings = testing::settings::Settings::default();
+    settings.graphics = GraphicsMode::VanillaPlus;
+    let keys = |s: &testing::settings::Settings| -> Vec<&'static str> {
+        testing::hud::lists::ingame_graphics_options(s)
+            .iter()
+            .map(|o| o.key)
+            .collect()
+    };
+    assert!(keys(&settings).contains(&"clouds"));
+    settings.graphics = GraphicsMode::Vanilla;
+    assert!(keys(&settings).contains(&"clouds"));
+    let row = testing::hud::lists::limit_row(GraphicsMode::Vanilla, "clouds", "Clouds", || None);
+    assert_eq!(row.map(|r| r.1).as_deref(), Some("noop"));
+}
+
 /// The list follows the mode the game runs in: a mode saved since (for the next start) does
 /// not change it.
 #[test]

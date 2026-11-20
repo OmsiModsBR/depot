@@ -203,7 +203,7 @@ pub const GRAPHICS_OPTIONS: &[GraphicsOption] = &[
             Offered,
             Offered,
         ],
-        NextStart,
+        Live,
     ),
     row("sun_glow", EVERY, Live),
     row(
