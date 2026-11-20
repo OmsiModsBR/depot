@@ -625,6 +625,13 @@ pub mod weather_model {
 }
 pub mod weather_setup {
     pub use crate::weather::weather_setup::*;
+
+    /// The process-wide `clouds` and fair-weather-clouds switches, as the game sets them.
+    pub fn set_clouds(clouds: bool, fair: bool) {
+        use std::sync::atomic::Ordering::Relaxed;
+        crate::core::startup::CLOUDS.store(clouds, Relaxed);
+        crate::core::startup::FAIR_CLOUDS.store(fair, Relaxed);
+    }
 }
 pub mod world_load {
     pub use crate::world::world_load::*;
