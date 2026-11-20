@@ -98,8 +98,15 @@ impl Joint {
         let ball_f = at(follow, self.anchor_follow);
         let link = if self.pitch_offset > 0.0 {
             let a = lead.orientation.mul_vec3(Vec3::X);
-            let to = (ball_f - hinge).as_vec3();
-            let back = to - a * to.dot(a);
+            // the link is part of the follower: it points from the hinge back to the ball
+            // as the follower stands (not as the ball's place says, which left the link's
+            // angle to the follower unchecked: it drifted, and with it the follower's pitch)
+            let ahead = if self.anchor_lead.y < 0.0 { 1.0 } else { -1.0 };
+            // (read off the follower's up axis, which the joint's yaw does not turn: its
+            // forward axis, projected, would reverse the link as the yaw crosses 90 degrees)
+            let up = follow.orientation.mul_vec3(Vec3::Z);
+            // (`up x a` is square to `a` already)
+            let back = up.cross(a) * -ahead;
             let back = if back.length() > 1e-3 {
                 back.normalize()
             } else {
