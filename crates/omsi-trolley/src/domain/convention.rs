@@ -8,6 +8,14 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
+/// The convention's pole variables are `shtanga_<side>_<what>` (a script's copy ends in
+/// `_v`): the two sides, left then right, and what each turns - the pole about its foot, or
+/// the shoe about its pivot at the pole's end.
+pub const POLE_VARIABLE_PREFIX: &str = "shtanga_";
+pub const POLE_SIDES: [&str; 2] = ["lev", "prav"];
+pub const POLE_TURN: &str = "rot";
+pub const SHOE_TURN: &str = "shoe_rot";
+
 /// The global parameters the wire network needs, plus every key of the file
 /// (`"section.key"`, lower case) for the later phases.
 #[derive(Debug, Clone, PartialEq)]
