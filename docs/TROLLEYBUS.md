@@ -34,15 +34,35 @@ A bus is a trolleybus when its model has working poles: meshes that the conventi
 variables animate (`shtanga_lev_rot`, `shtanga_prav_rot` and the shoes' `shtanga_lev_shoe_rot`,
 `shtanga_prav_shoe_rot`; the scripts' `_v` copies count too). Depot looks for them as the bus is
 placed, in every part of it; the part that has them carries the poles. Each pole stands where
-the model draws it: its foot at the pivot of its turn, its shoe at the pivot of the shoe's turn.
-The shoe hangs on the wire as its mesh is shaped: no part of it stands above the wire's top, and
-its groove is at least 2 mm below the wire. Nothing has to be declared, so a vehicle folder can be
-renamed or copied freely.
+the model draws it: its foot at the pivot of its turn, its shoe where the wire meets the shoe
+(see below). Nothing has to be declared, so a vehicle folder can be renamed or copied freely.
 
 An enabled `[vehicle:<name>]` section of `TrolleyWireVehicles.ini` whose `bus_file` is the bus's
-`.bus` file tunes it: its other keys apply, and it can declare a bus whose model has no such
-poles. Where the model draws the poles, its pole positions give way to the model's. The name
-after `vehicle:` is free: the log uses it.
+`.bus` file declares the bus and tunes it. The name after `vehicle:` is free: the log uses it.
+- **An entry that places the poles** (any of the `pole_base_*` and `contact_*` keys below) places
+  them as it says, all eight keys then being needed. The model is not looked at.
+- **An entry that places none of them** takes the poles from the model of the part that carries
+  them (`pole_carrier_bus_file`, else the bus itself); its other keys apply. If that model has no
+  working poles, the entry cannot be used.
+
+### Where the shoe meets the wire
+
+For a pole taken from the model, the wire runs on the shoe by one rule, the same for every model:
+- the shoe's points are those of the meshes the shoe's turn moves that lie within 6 cm of the
+  shoe's pivot, along the ground (a shoe is about 10 cm long; the pole's end, further back, is
+  not counted);
+- the wire runs straight above the pivot, its centre 6 mm (the radius of a contact wire of 85 to
+  107 mm²) below the shoe's highest point, so nothing of the shoe stands above the wire's top;
+- and the groove (the highest point within 1 cm of the pivot's line) stays at least 2 mm below the
+  wire's centre, so the wire seats in it.
+
+Mesh files keep their points Direct3D's way (y up, z forward); they are read as the model's frame
+(z up), as for drawing. If no point is found, or the place found is more than 25 cm from the pivot,
+the shoe's pivot stands for it and the log says so. `shoe_contact_height_offset` still applies
+on top.
+
+Depot finds a trolleybus by its model on its own; OMSI 2's plugin knows a trolleybus only by its
+entry.
 
 Coordinates use the bus's own frame, in metres:
 - `x` is to the right, so the left side is negative;
@@ -72,8 +92,9 @@ contact_height=3.45
 ### Keys that must be there
 
 - `bus_file`
-- `pole_base_left_x`, `pole_base_right_x`, `pole_base_forward`, `pole_base_height`
-- `contact_left_x`, `contact_right_x`, `contact_forward`, `contact_height`
+- unless the poles come from the model, all of these:
+  - `pole_base_left_x`, `pole_base_right_x`, `pole_base_forward`, `pole_base_height`
+  - `contact_left_x`, `contact_right_x`, `contact_forward`, `contact_height`
 
 ### Keys that may be left out
 
@@ -143,5 +164,5 @@ The log is `%USERPROFILE%\.depot\game.log`. Look for lines that start with `trol
 | The log does not mention trolleybuses at all | Both `Plugins\` files are in place. |
 | The bus has no poles to click | The entry's `bus_file` is the bus you are driving. The log names any key the entry lacks. |
 | A pole finds no wire | The log says where the nearest wire is. If it says there is none, the map's wire splines do not match `spline_keywords`. |
-| The shoe floats above the wire or sinks into it | The log line `trolleybus: lev shoe of ...` says how many of the shoe's points were found and where the wire lies; with none, the shoe's pivot stands for it. `shoe_contact_height_offset` in the bus's entry fine-tunes the height. |
+| The shoe floats above the wire or sinks into it | If the bus's entry places the poles, its `contact_*` keys set where the shoe meets the wire; leave them out to take it from the model. From the model, the debug log line `trolleybus: shoe 0 of ...` says how many of the shoe's points were found and where the wire lies, and a warning says when the pivot stands for it. `shoe_contact_height_offset` in the bus's entry fine-tunes the height. |
 | Switches are silent | `Sounds\AckerTroll\` is in place, and the parameter file has a `[sound]` section. |
