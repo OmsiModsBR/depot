@@ -130,18 +130,13 @@ fn weather_outside_n(world: vec3<f32>, n: vec3<f32>, terrain: bool, surface: f32
     // every car and bus below the roof's edge was cab - lit by the dim cab light in the
     // enhanced picture, dry in the rain - with a hard seam round the body 0.3 m under the
     // roof where the sky's light began, #805)
-    // (the camera's own vehicle has its box, by which its outer skin is told apart below:
-    // by the roof alone, the shoulder rounding into the roof and the cap over the destination
-    // display - faces up under the roof's top - were cab, and their envmap faded into the
-    // cab's flat grey wherever they faced the sky)
-    let in_box = inside_vehicle(world) > 0.5;
-    if (surface < -500.0 && !in_box) {
+    if (surface < -500.0) {
         let roof = -surface - 5000.0;
         if (world.z < roof - 0.3 && n.z > 0.5) {
             return 0.0;
         }
     }
-    if (!in_box) {
+    if (inside_vehicle(world) < 0.5) {
         return 1.0;
     }
     let d = world - camera.inside_a.xyz;
@@ -153,9 +148,8 @@ fn weather_outside_n(world: vec3<f32>, n: vec3<f32>, terrain: bool, surface: f32
     let nx = n.x * ch - n.y * sh;
     let ny = n.x * sh + n.y * ch;
     let h = camera.inside_b.yzw;
-    // (leaning outwards at all: a shoulder faces mostly up; the walls' inner faces lean in)
-    let skin_x = h.x - abs(x) < 0.35 && nx * sign(x) > 0.15;
-    let skin_y = h.y - abs(y) < 0.35 && ny * sign(y) > 0.15;
+    let skin_x = h.x - abs(x) < 0.35 && nx * sign(x) > 0.5;
+    let skin_y = h.y - abs(y) < 0.35 && ny * sign(y) > 0.5;
     let skin_z = h.z - z < 0.35 && n.z > 0.5;
     return select(0.0, 1.0, skin_x || skin_y || skin_z);
 }
