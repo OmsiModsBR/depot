@@ -464,6 +464,70 @@ fn the_page_offers_what_the_table_says_in_each_mode() {
     }
 }
 
+/// The Graphics page leads with the graphics mode, in a card of its own that says what it
+/// decides; the graphics API is a row of "Picture" in Vanilla+ and Enhanced and absent in
+/// Vanilla (spec 001, FR-020a, FR-020b).
+#[test]
+fn the_graphics_page_leads_with_the_mode_and_puts_the_api_in_picture() {
+    let first = OPTS.iter().find(|o| o.sec == GRAPHICS).unwrap();
+    assert_eq!((first.key, first.group), ("graphics", "Graphics mode"));
+    let api = OPTS.iter().find(|o| o.key == "graphics_api").unwrap();
+    assert_eq!((api.sec, api.group), (GRAPHICS, "Picture"));
+    let drawn = |mode: &str, id: &str| {
+        let mut s = all_rows();
+        s["graphics"] = json!(mode);
+        let mut ui = Ui::new();
+        frame(
+            &mut ui,
+            GRAPHICS,
+            "",
+            &mut s,
+            &mut start(),
+            &mut Outside::default(),
+        );
+        ui.drawn.contains_key(&id_of(id))
+    };
+    for mode in ["vanilla", "vanilla_plus", "enhanced"] {
+        assert!(drawn(mode, "opt-graphics"), "the mode in {mode}");
+    }
+    assert!(!drawn("vanilla", "opt-graphics_api"));
+    for mode in ["vanilla_plus", "enhanced"] {
+        assert_eq!(
+            drawn(mode, "opt-graphics_api"),
+            !cfg!(target_os = "macos"),
+            "the API in {mode}"
+        );
+    }
+    // (each mode has its line on the card)
+    assert_eq!(MODE_LINES.len(), GraphicsMode::ALL.len());
+}
+
+/// A search finds only the options the graphics mode offers (spec 001, contracts/graphics-options.md).
+#[test]
+fn a_search_finds_only_the_options_the_mode_offers() {
+    let (mut s, mut start) = (all_rows(), start());
+    s["graphics"] = json!("vanilla_plus");
+    let st = Store {
+        s: &mut s,
+        start: &mut start,
+        changed: false,
+        start_changed: false,
+        omsi2: false,
+        adapter_mb: 0,
+        ceiling_mb: 0,
+    };
+    let keys = |q: &str| -> Vec<&str> {
+        listed(GRAPHICS, q, false, &st)
+            .iter()
+            .map(|o| o.key)
+            .collect()
+    };
+    // (LED glow is Enhanced's; raindrops on glass Vanilla's)
+    assert!(!keys("LED glow").contains(&"led_glow"));
+    assert!(!keys("Raindrops").contains(&"dx9_glass_rain"));
+    assert!(keys("Anti-aliasing").contains(&"msaa"));
+}
+
 /// Vanilla opens without VR and the triple screen: the page does not offer them there, and
 /// keeps what was saved for the other modes (spec 001, FR-018a).
 #[test]
