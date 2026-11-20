@@ -126,7 +126,9 @@ fn has_section(params: &ConventionParams, section: &str) -> bool {
 }
 
 /// The `[sound]` section (None when the file has none).
-pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, ConventionError> {
+pub(crate) fn sound_params(
+    params: &ConventionParams,
+) -> Result<Option<SoundParams>, ConventionError> {
     if !has_section(params, "sound") {
         return Ok(None);
     }
@@ -149,7 +151,9 @@ pub fn sound_params(params: &ConventionParams) -> Result<Option<SoundParams>, Co
 }
 
 /// The `[sparks]` section (None when the file has none).
-pub fn spark_params(params: &ConventionParams) -> Result<Option<SparkParams>, ConventionError> {
+pub(crate) fn spark_params(
+    params: &ConventionParams,
+) -> Result<Option<SparkParams>, ConventionError> {
     if !has_section(params, "sparks") {
         return Ok(None);
     }
