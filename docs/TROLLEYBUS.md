@@ -39,6 +39,9 @@ The shoe hangs on the wire as its mesh is shaped: no part of it stands above the
 its groove is at least 2 mm below the wire. Nothing has to be declared, so a vehicle folder can be
 renamed or copied freely.
 
+This is Depot's own: OMSI 2's plugin knows a trolleybus only by its entry in
+`TrolleyWireVehicles.ini`, described next.
+
 An enabled `[vehicle:<name>]` section of `TrolleyWireVehicles.ini` whose `bus_file` is the bus's
 `.bus` file tunes it: its other keys apply, and it can declare a bus whose model has no such
 poles. Where the model draws the poles, its pole positions give way to the model's. The name
