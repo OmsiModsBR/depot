@@ -107,20 +107,90 @@ fn escape_fov_updates_the_active_projection_and_can_restore_geometry() {
     testing::hud::lists::set_camera_fov(&mut settings, 0.0);
     assert_eq!(settings.triple.fov_deg, 0.0);
 }
-/// The game menu offers the 16x anisotropic filtering the launcher does (#669): set
-/// there, it showed as a bare "16" here and could not be chosen again.
+/// The game menu's graphics list is the launcher's, less what the running mode does not offer
+/// or what only takes effect at the next start (spec 001, FR-020c).
 #[test]
-fn anisotropy_zero_shows_as_off() {
-    let file = serde_json::json!({ "anisotropy": 0 });
-    let (options, at, _) = testing::hud::lists::select_state(&file, "anisotropy");
-    assert_eq!(at.map(|i| options[i].1), Some("Off"));
+fn the_ingame_graphics_list_offers_only_the_modes_live_options() {
+    use omsi_cfg::graphics_options::offered_in_game;
+    use omsi_launcher_ui::window::{OPTS, SECTIONS};
+    for mode in omsi_cfg::GraphicsMode::ALL {
+        let mut settings = testing::settings::Settings::default();
+        settings.graphics = mode;
+        settings.render_scale = 0.5;
+        settings.rain_reflections = true;
+        let keys: Vec<&str> = testing::hud::lists::ingame_graphics_options(&settings)
+            .iter()
+            .map(|o| o.key)
+            .collect();
+        let want: Vec<&str> = OPTS
+            .iter()
+            .filter(|o| matches!(SECTIONS[o.sec], "Graphics" | "Advanced graphics"))
+            .filter(|o| offered_in_game(o.key, mode))
+            .map(|o| o.key)
+            .collect();
+        assert_eq!(keys, want, "{mode:?}");
+        assert!(!keys.is_empty(), "{mode:?}");
+        for key in [
+            "graphics",
+            "graphics_api",
+            "preset",
+            "msaa",
+            "anisotropy",
+            "vr",
+        ] {
+            assert!(!keys.contains(&key), "{key} in {mode:?}");
+        }
+    }
 }
 
+/// The list follows the mode the game runs in: a mode saved since (for the next start) does
+/// not change it.
 #[test]
-fn sixteen_x_anisotropy_can_be_chosen_in_the_game_menu() {
-    let file = serde_json::json!({ "anisotropy": 16 });
-    let (options, at, _) = testing::hud::lists::select_state(&file, "anisotropy");
-    assert_eq!(at.map(|i| options[i]), Some(("16", "16x")));
+fn the_ingame_graphics_list_follows_the_running_mode() {
+    use omsi_cfg::GraphicsMode;
+    let keys = |mode| {
+        let mut settings = testing::settings::Settings::default();
+        settings.graphics = mode;
+        testing::hud::lists::ingame_graphics_options(&settings)
+            .iter()
+            .map(|o| o.key)
+            .collect::<Vec<_>>()
+    };
+    assert!(keys(GraphicsMode::Vanilla).contains(&"dx9_coronas"));
+    assert!(!keys(GraphicsMode::Enhanced).contains(&"dx9_coronas"));
+    assert!(keys(GraphicsMode::Enhanced).contains(&"led_glow"));
+    assert!(!keys(GraphicsMode::Vanilla).contains(&"led_glow"));
+}
+
+/// A row that waits for another: the upscaling only below 100 % scale, the people in the
+/// rain reflections only with the reflections on.
+#[test]
+fn ingame_rows_that_wait_for_another_follow_it() {
+    let mut settings = testing::settings::Settings::default();
+    settings.graphics = omsi_cfg::GraphicsMode::Vanilla;
+    let has = |s: &testing::settings::Settings, key: &str| {
+        testing::hud::lists::ingame_graphics_options(s)
+            .iter()
+            .any(|o| o.key == key)
+    };
+    settings.render_scale = 0.0;
+    settings.rain_reflections = false;
+    assert!(!has(&settings, "dx9_upscale"));
+    assert!(!has(&settings, "humans_in_rain_reflections"));
+    settings.render_scale = 0.75;
+    settings.rain_reflections = true;
+    assert!(has(&settings, "dx9_upscale"));
+    assert!(has(&settings, "humans_in_rain_reflections"));
+}
+
+/// A drop-down takes the launcher's choices, less what the mode leaves out.
+#[test]
+fn ingame_choices_are_the_launchers_within_the_mode() {
+    let file = serde_json::json!({ "graphics": "vanilla", "mirror_refresh": "full" });
+    let (options, at, _) = testing::hud::lists::select_state(&file, "mirror_refresh");
+    let values: Vec<&str> = options.iter().map(|o| o.0).collect();
+    assert_eq!(values, ["off", "full"]);
+    assert_eq!(at, Some(1));
 }
 
 #[test]
