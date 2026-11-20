@@ -1,7 +1,7 @@
 # OMSI Classic: the player's weight sharing (`K-*`) and the AI (`KA-*`)
 
 OMSI Classic is the default engine. For the player's road vehicle it runs every shared rule of
-[common-model.md](common-model.md) with one rule of its own, `K-1`. Its AI road vehicles run a body
+[common-model.md](common-model.md) with rules of its own, `K-1` and `K-5`. Its AI road vehicles run a body
 brought in line with OMSI 2's AI, `KA-1` to `KA-11`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
@@ -17,6 +17,7 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 |---|---|---|
 | `C-1` to `C-12` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
+| [K-5](#k-5-the-payload-does-not-change-the-body-damping) | the payload does not change the body's damping | to validate |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |
 | [KA-3](#ka-3-grip) | one grip value per vehicle | confirmed |
@@ -72,6 +73,19 @@ and the compression of axle `i` does not depend on `[cog]`. `[cog]` still sets t
 cornering.
 
 The Depot engine replaces only this rule, with `D-1`.
+
+## K-5. The payload does not change the body damping
+
+- **Inputs**: `[mass]`, `achse_feder` (`k_i`), the people aboard. **Outputs**: `f_body`, the
+  frequency in OMSI's damping of the body's pitch and roll (`C-8`). **Module**:
+  `physics/implementation/body.rs` (`set_payload`).
+- **Basis**: *OMSI*. **Status**: **to validate**: the decay of the body's pitch after a kerb drop,
+  empty and full, in OMSI 2 and in the game.
+
+Classic takes `f_body` of `C-8` with the empty `[mass]` whatever the people aboard weigh: a full bus
+is damped as the empty one is. The people still weigh in the gravity, the springs, the tyres and the
+acceleration. Under Depot, `f_body` follows the heavier body on the same springs,
+`f_body · sqrt(m_empty / (m_empty + payload))`.
 
 ## The AI road vehicle
 
