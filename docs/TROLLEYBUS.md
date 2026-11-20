@@ -37,6 +37,9 @@ placed, in every part of it; the part that has them carries the poles. Each pole
 the model draws it: its foot at the pivot of its turn, its shoe where the wire meets the shoe
 (see below). Nothing has to be declared, so a vehicle folder can be renamed or copied freely.
 
+This is Depot's own: OMSI 2's plugin knows a trolleybus only by its entry in
+`TrolleyWireVehicles.ini`, described next.
+
 An enabled `[vehicle:<name>]` section of `TrolleyWireVehicles.ini` whose `bus_file` is the bus's
 `.bus` file declares the bus and tunes it. The name after `vehicle:` is free: the log uses it.
 - **An entry that places the poles** (any of the `pole_base_*` and `contact_*` keys below) places
