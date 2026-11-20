@@ -395,7 +395,7 @@ impl VehicleInstance {
                     },
                     ws.suspension,
                 ];
-                self.show_wheel(ai, si, shown);
+                self.show_wheel(ai, si, &shown);
             }
         }
     }
@@ -667,7 +667,7 @@ impl VehicleInstance {
             for si in 0..2 {
                 if let Some(rw) = rb.wheels.get(ai * 2 + si) {
                     let shown = body_wheel_shown(&rb, ai * 2 + si, rw);
-                    self.show_wheel(ai, si, shown);
+                    self.show_wheel(ai, si, &shown);
                     if let Some(ws) = self.motion.wheels.get_mut(ai).and_then(|a| a.get_mut(si)) {
                         ws.rotation_deg = rw.rotation_deg;
                         ws.rpm = rw.rpm;

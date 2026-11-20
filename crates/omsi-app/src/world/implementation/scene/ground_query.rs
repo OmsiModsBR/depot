@@ -192,6 +192,16 @@ impl omsi_sim::physics::Ground for DriveGround {
         drive_probe(&self.terrains, &self.surfaces, x, y, top)
     }
 
+    /// The ground byte of the road, crossing or surface-object face at that height: its
+    /// texture's `[surface]`, `[moisture]` and `[puddles]` (the terrain gives none).
+    fn surface(&self, x: f64, y: f64, z: f64) -> Option<u8> {
+        let key = tile_key(x, y);
+        let surface = self.surfaces.read().get(&key).cloned()?;
+        let lx = (x - key.0 as f64 * tile_size()) as f32;
+        let ly = (y - key.1 as f64 * tile_size()) as f32;
+        surface.drive.kind_at(lx, ly, z as f32)
+    }
+
     /// The tiles under the vehicle are looked up once per step, not twice for every one of
     /// the few hundred points its tyres ask for (each a lock of both maps the loader works
     /// on, two lookups and two reference counts).

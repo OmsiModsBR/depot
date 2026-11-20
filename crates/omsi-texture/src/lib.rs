@@ -95,12 +95,26 @@ pub struct TextureCfg {
     pub terrain_mapping_alpha: bool,
     pub puddles: bool,
     pub moisture: bool,
-    /// `[surface]`: 0 asphalt, 1 concrete, 2 cobblestone, 3 dirt, 4 grass, 5 gravel,
-    /// 6 snow, 7 deep snow. This is the id the scripts see as `Axle_SurfaceID_`.
+    /// `[surface]`: the kind of ground a wheel finds on a face drawn with the texture, which
+    /// the scripts see as `Axle_SurfaceID_` and the tyres' grip depends on.
     pub surface: i32,
 }
 
 impl TextureCfg {
+    /// The ground a wheel finds on a face drawn with the texture, as one byte: the
+    /// `[surface]` kind in the low five bits, `0x20` where it gets wet (`[moisture]`, or
+    /// `[puddles]`, which wets it too) and `0x40` where it collects puddles.
+    pub fn ground_kind(&self) -> u8 {
+        let kind = self.surface.clamp(0, 0x1f) as u8;
+        let wet = if self.moisture || self.puddles {
+            0x20
+        } else {
+            0
+        };
+        let puddles = if self.puddles { 0x40 } else { 0 };
+        kind | wet | puddles
+    }
+
     pub fn load(path: &Path) -> TextureCfg {
         let mut c = TextureCfg::default();
         if let Ok(f) = omsi_cfg::CfgFile::read(path) {

@@ -21,6 +21,14 @@ pub trait Ground: Send + Sync {
     fn session(&self) -> Box<dyn Fn(f64, f64, f64) -> GroundProbe + '_> {
         Box::new(move |x, y, top| self.probe(x, y, top))
     }
+
+    /// The ground byte of the road face at world (x, y) and height `z` (the face a wheel
+    /// found there): its texture's `[surface]` kind in the low five bits, `0x20` where it
+    /// gets wet, `0x40` where it collects puddles. None where no road face lies at that
+    /// height (the terrain), or where the ground knows nothing of textures.
+    fn surface(&self, _x: f64, _y: f64, _z: f64) -> Option<u8> {
+        None
+    }
 }
 
 impl<F: Fn(f64, f64, f64) -> GroundProbe + Send + Sync> Ground for F {

@@ -40,6 +40,7 @@ impl PartBody {
                     "Wheel_RotationSpeed",
                     "Axle_Steering",
                     "Axle_Suspension",
+                    "Axle_SurfaceID",
                     "Axle_Springfactor",
                 ]
                 .map(|v| program.var(&format!("{v}_{axle}_{side}")))
@@ -142,6 +143,9 @@ impl VehicleInstance {
                 probe,
                 after_slice,
             );
+            if let Some(g) = self.contact.clone() {
+                lead.read_surfaces(g.as_ref());
+            }
             return lead;
         }
         lead.coupled.clear();
@@ -268,6 +272,12 @@ impl VehicleInstance {
                     alpha.to_degrees(),
                     beta.to_degrees()
                 );
+            }
+        }
+        let mut bodies = bodies;
+        if let Some(g) = self.contact.clone() {
+            for rb in bodies.iter_mut() {
+                rb.read_surfaces(g.as_ref());
             }
         }
         let mut bodies = bodies.into_iter();

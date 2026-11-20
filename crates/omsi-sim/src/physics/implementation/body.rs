@@ -10,7 +10,7 @@ use crate::physics::domain::params::{
     BODY_DAMPING, BUMP, DRY_GRIP, GRAVITY, OMSI_FRAME, SUBSTEP_DT, TIP_OVER,
 };
 use crate::physics::domain::{
-    BodyInputs, Engine, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
+    BodyInputs, Engine, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody, RigidWheel,
 };
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -67,6 +67,7 @@ impl RigidBody {
                     load: 0.0,
                     ground_z: 0.0,
                     ground_seen: false,
+                    surface: 0,
                     walls: Vec::new(),
                     step_force: 0.0,
                 });
@@ -137,6 +138,23 @@ impl RigidBody {
         for w in self.wheels.iter_mut() {
             w.ground_seen = false;
             w.walls.clear();
+        }
+    }
+
+    /// The ground byte under each wheel that found the ground this step: the road face at
+    /// the height it found under the wheel's point on the model's origin plane (where the
+    /// spring measures, see `suspension`). A wheel on the terrain, or with nothing under it,
+    /// keeps the byte it had, as OMSI's wheels do.
+    pub fn read_surfaces(&mut self, ground: &dyn Ground) {
+        let (rot, position, cog) = (self.orientation, self.position, self.cog);
+        for w in self.wheels.iter_mut().filter(|w| w.touch.is_some()) {
+            let at = position
+                + rot
+                    .mul_vec3(Vec3::new(w.attach.x, w.attach.y, 0.0) - cog)
+                    .as_dvec3();
+            if let Some(kind) = ground.surface(at.x, at.y, w.ground_z) {
+                w.surface = kind;
+            }
         }
     }
 
