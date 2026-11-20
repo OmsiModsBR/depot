@@ -14,6 +14,7 @@ use crate::gameplay::traffic::Traffic;
 use crate::gameplay::traffic_link::own_outlines;
 use crate::settings::Settings;
 use crate::situation::{start_clock, ticket_key_name};
+use crate::weather::weather_setup::precip_of;
 use crate::world::scene::World;
 use omsi_render::{Renderer, Scene};
 
@@ -130,6 +131,26 @@ pub(crate) fn new_humans(
 /// same signal stays at stop for a scripted player's train and only AI trains clear it.
 /// The difference is kept on purpose until it is changed deliberately (see the test
 /// `window_and_offscreen_differ_in_the_rail_given_to_signal_aspects`).
+/// Whether the sky is gloomy enough for the AI's lights: fog under 600 m, rain or snow, or an
+/// overcast sky. Drivers switch their lights on in these, as in the day.
+pub(crate) fn gloomy(w: &omsi_content::weather::Weather) -> bool {
+    let (kind, rate) = precip_of(w);
+    w.fog.0 < 600.0
+        || (kind != 0 && rate > 0.05)
+        || w.clouds
+            .0
+            .trim()
+            .to_ascii_lowercase()
+            .starts_with("overcast")
+}
+
+/// The AI's lights for a frame: on below a light value of 0.75 (before the street lamps), or
+/// when the sky is gloomy.
+pub(crate) fn traffic_lights(t: &mut Traffic, daylight: omsi_sim::Daylight, gloomy: bool) {
+    t.night = daylight.brightness < 0.75 || gloomy;
+    t.daylight = Some(daylight);
+}
+
 /// The traffic's own outlines for a frame: the bus the player drives, and the vehicles
 /// placed in the world (`placed`, the window's; the offscreen run places none).
 pub(crate) fn traffic_others(t: &mut Traffic, player: Option<&Player>, placed: &[Player]) {
