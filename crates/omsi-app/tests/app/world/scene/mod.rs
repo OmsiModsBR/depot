@@ -523,16 +523,19 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
         def: def("curb.dds"),
         dir: PathBuf::new(),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let other = Arc::new(SplineType {
         def: def("other.dds"),
         dir: PathBuf::new(),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let other_dir = Arc::new(SplineType {
         def: def("curb.dds"),
         dir: PathBuf::from("another_pack"),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let mut tested = def("curb.dds");
     tested.textures[0].alpha = 1;
@@ -540,6 +543,7 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
         def: tested,
         dir: PathBuf::new(),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let mut blended = def("curb.dds");
     blended.textures[0].alpha = 2;
@@ -547,6 +551,7 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
         def: blended,
         dir: PathBuf::new(),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let mut compatible = def("curb.dds");
     compatible.path = PathBuf::from("another_profile.sli");
@@ -558,6 +563,7 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
         def: compatible,
         dir: PathBuf::new(),
         surf: Vec::new(),
+        kinds: Vec::new(),
     });
     let mesh = |x: f32, length: f32| {
         Arc::new(MeshData {

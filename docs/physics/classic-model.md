@@ -15,7 +15,7 @@ pull request once its check has been run (the plan's clarification of 2026-11-09
 
 | Id | Concept | Status |
 |---|---|---|
-| `C-1` to `C-11` | everything in [common-model.md](common-model.md), as it is there | see each entry |
+| `C-1` to `C-12` | everything in [common-model.md](common-model.md), as it is there | see each entry |
 | [K-1](#k-1-static-load-share-about-the-model-origin) | the weight is shared about the model origin | validated |
 | [KA-1](#ka-1-route-and-heading) | route following by a kinematic bicycle model | confirmed |
 | [KA-2](#ka-2-speed-near-the-camera) | speed near the camera from the scripts' drive and brakes | confirmed |

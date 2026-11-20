@@ -20,6 +20,7 @@ Where a module path says `physics/…` it is under `crates/omsi-sim/src/`.
 | [C-9](#c-9-joints) | joints of articulated vehicles |
 | [C-10](#c-10-hits) | hits against obstacles |
 | [C-11](#c-11-kinematic-model-and-followers) | kinematic model, rail and air followers |
+| [C-12](#c-12-the-ground-under-each-wheel) | the ground under each wheel (`Axle_SurfaceID`) |
 
 ## C-1. `.bus` file to model
 
@@ -348,3 +349,27 @@ dψ     = v · dt · tan(steer) / wheelbase                                     
 ```
 
 **Status**: not a rule of OMSI 2's: Depot's own, shared by both engines.
+
+## C-12. The ground under each wheel
+
+- **Inputs**: the `.cfg` of the texture of the road, crossing or surface-object face a wheel stands
+  on: `[surface]` (a whole number), `[moisture]`, `[puddles]`. **Outputs**: each wheel's ground byte
+  and `Axle_SurfaceID_<axle>_<side>`. **Module**: `physics/implementation/body.rs`
+  (`read_surfaces`); the faces' bytes in omsi-geometry (`DriveGrid::kind_at`) and omsi-app
+  (`ground_kind`, `DriveGround`).
+- **Basis**: *OMSI*.
+
+```
+byte          = [surface] (low 5 bits) + 0x20 if [moisture] or [puddles] + 0x40 if [puddles]
+SurfaceID     = byte & 0x1f
+```
+
+After each step, every wheel that found the ground takes the byte of the road face at the height it
+stands on, under its point on the model's origin plane (where `C-3` measures the spring). A wheel on
+the terrain, or with nothing under it, keeps the byte it had; a new body starts at 0. Both engines
+hand the kind to the scripts as `Axle_SurfaceID`; the grip does not use it yet (it still comes from
+the weather alone, `C-5`). A wheel without a body of its own (the kinematic model, the AI on its
+route) leaves `Axle_SurfaceID` alone.
+
+**Status**: **to validate**: drive from asphalt onto a cobbled or dirt road in OMSI 2 and in the game
+and compare `Axle_SurfaceID` (a script can show it); and on the terrain after leaving the road.

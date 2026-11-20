@@ -422,3 +422,52 @@ fn a_steering_key_at_walking_pace_does_not_let_the_tyres_go() {
         assert!(rb.holding());
     }
 }
+
+/// A road at 0 whose faces carry `road` (their texture's ground byte) right of x = 0 and
+/// the terrain (no byte) left of it.
+struct Textured {
+    road: u8,
+}
+
+impl omsi_sim::physics::Ground for Textured {
+    fn probe(&self, x: f64, y: f64, top: f64) -> omsi_sim::physics::GroundProbe {
+        flat(x, y, top)
+    }
+
+    fn surface(&self, x: f64, _y: f64, z: f64) -> Option<u8> {
+        (x > 0.0 && z.abs() < 0.01).then_some(self.road)
+    }
+}
+
+/// Each wheel standing on the ground takes the ground byte of the road face under it, and
+/// `Axle_SurfaceID` its `[surface]` kind; a wheel on the terrain keeps the byte it had, as
+/// OMSI's wheels do, and a body that has not stood on a road yet has 0.
+#[test]
+fn the_wheels_take_the_ground_of_the_road_under_them() {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &flat);
+    assert!(rb.wheels().iter().all(|w| w.surface() == 0));
+    rb.read_surfaces(&Textured { road: 0x62 });
+    for w in rb.wheels() {
+        let right = w.attach().x > 0.0;
+        assert_eq!(
+            w.surface(),
+            if right { 0x62 } else { 0 },
+            "{:?}",
+            w.attach()
+        );
+        assert_eq!(w.surface_id(), if right { 2.0 } else { 0.0 });
+    }
+    // the right wheels roll onto the terrain: they keep their road's byte
+    rb.read_surfaces(&Textured { road: 0x21 });
+    for w in rb.wheels().iter().filter(|w| w.attach().x > 0.0) {
+        assert_eq!(w.surface(), 0x21);
+    }
+    rb.place(DVec3::new(-50.0, 0.0, 0.0), 0.0);
+    run(&mut rb, 1.0, 0.0, 0.0, &flat);
+    rb.read_surfaces(&Textured { road: 0x05 });
+    for w in rb.wheels().iter().filter(|w| w.attach().x > 0.0) {
+        assert_eq!(w.surface(), 0x21);
+    }
+}

@@ -97,7 +97,7 @@ impl VehicleInstance {
                 // (the suspension: the travel `AiBody` works out on its springs, about the
                 // static sag of an AI copy - `ai_rest_offset`, already in it)
                 let shown = [ws.rotation_deg.to_radians(), ws.rpm, steer, ws.suspension];
-                self.show_wheel(ai_idx, si, shown);
+                self.show_wheel(ai_idx, si, &shown);
             }
         }
         self.show_n_wheel(driven_rpm(

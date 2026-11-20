@@ -221,6 +221,8 @@ pub struct SplineType {
     pub dir: PathBuf,
     /// The `.surf` map of each of `def.textures` (see [`surf_map`]).
     pub surf: Vec<Option<Arc<omsi_geometry::HeightMap>>>,
+    /// The ground byte of each of `def.textures` (see [`ground_kind`]).
+    pub kinds: Vec<u8>,
 }
 
 #[derive(Debug, Default)]
