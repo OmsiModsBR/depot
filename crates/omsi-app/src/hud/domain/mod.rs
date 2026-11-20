@@ -8,4 +8,4 @@ pub(crate) mod nav;
 
 pub use frame::{ChatView, DropdownView, Frame, MenuKind, Preview};
 pub use hits::{Hits, InfoTip};
-pub use info::{InfoBar, InfoCell, InfoItem, InfoTone};
+pub use info::{InfoBar, InfoCell, InfoData, InfoItem, InfoMode, InfoTone};

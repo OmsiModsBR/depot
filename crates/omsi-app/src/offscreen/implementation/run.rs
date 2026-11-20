@@ -2748,7 +2748,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 let g = nav.global_version + (1 << 40);
                 nav.set_route(&key, lanes, true, g);
             }
-            let (outside_temp, inside_temp) = crate::frame::app_events::vehicle_temperatures(p);
+            let (outside_temp, inside_temp) = p.temperatures();
             let car_line = |id: u64| schedule.as_ref().and_then(|s| s.car_line(id));
             let frame = nav::NavFrame {
                 traffic: traffic.as_ref(),

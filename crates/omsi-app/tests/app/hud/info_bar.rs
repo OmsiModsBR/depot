@@ -1,7 +1,7 @@
-use openomsi_game::testing::app_events::{
+use openomsi_game::testing::hud::{
     delay_item, distance_driven, grouped, odometer_reading, passengers_aboard, temperatures,
+    InfoTone,
 };
-use openomsi_game::testing::hud::InfoTone;
 
 #[test]
 fn the_distance_driven_is_written_in_kilometres() {
@@ -63,7 +63,7 @@ fn the_delay_chip_says_late_early_or_on_time() {
 
 #[test]
 fn the_layout_is_read_from_the_setting() {
-    use openomsi_game::testing::app_events::InfoMode;
+    use openomsi_game::testing::hud::InfoMode;
     assert_eq!(InfoMode::from_setting("full"), InfoMode::Full);
     assert_eq!(InfoMode::from_setting("compact"), InfoMode::Compact);
     assert_eq!(InfoMode::from_setting("essential"), InfoMode::Essential);
@@ -74,7 +74,7 @@ fn the_layout_is_read_from_the_setting() {
 /// The custom layout leaves out the items switched off; the others keep their layout.
 #[test]
 fn the_custom_layout_leaves_out_what_is_switched_off() {
-    use openomsi_game::testing::app_events::{info_bar, InfoData, InfoMode};
+    use openomsi_game::testing::hud::{info_bar, InfoData, InfoMode};
     let clock = omsi_sim::SimClock::default();
     let mut data = InfoData {
         clock: &clock,
@@ -100,7 +100,7 @@ fn the_custom_layout_leaves_out_what_is_switched_off() {
 /// Without a vehicle the bar has the time, and the frame rate when it is asked for.
 #[test]
 fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
-    use openomsi_game::testing::app_events::{info_bar, InfoData, InfoMode};
+    use openomsi_game::testing::hud::{info_bar, InfoData, InfoMode};
     let clock = omsi_sim::SimClock::default();
     let data = InfoData {
         clock: &clock,
@@ -136,7 +136,7 @@ fn the_bar_without_a_vehicle_is_the_time_and_the_frame_rate() {
 /// the second, which the arrow folds away; the split layout keeps them on a plate of its own.
 #[test]
 fn the_two_tier_layouts_have_a_second_tier_that_folds_away() {
-    use openomsi_game::testing::app_events::{info_bar, InfoData, InfoMode};
+    use openomsi_game::testing::hud::{info_bar, InfoData, InfoMode};
     let clock = omsi_sim::SimClock::default();
     let mut data = InfoData {
         clock: &clock,

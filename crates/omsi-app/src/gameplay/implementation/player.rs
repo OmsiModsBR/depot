@@ -640,6 +640,18 @@ pub fn door_action(name: &str) -> Option<usize> {
 }
 
 impl Player {
+    /// The outside air from the weather and the cabin air the vehicle scripts/engine maintain.
+    /// OMSI exposes both to every bus as Weather_Temperature and Cabinair_Temp.
+    pub(crate) fn temperatures(&self) -> (f32, f32) {
+        let outside = self.vehicle.host.temperature;
+        let inside = self
+            .vehicle
+            .var("Cabinair_Temp")
+            .filter(|v| v.is_finite())
+            .unwrap_or_else(|| outside.clamp(18.0, 25.0));
+        (outside, inside)
+    }
+
     /// Door key `n` (1 = the front door; 0 = all of them): the triggers fired. All the doors
     /// close the ones open when any is (leaving the others as they are) and else open them
     /// all; the door release switch (`bus_dooraft` of the Berlin buses) is not a door then.
