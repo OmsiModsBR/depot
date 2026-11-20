@@ -145,16 +145,21 @@ impl PoleSim {
                     position: p.truncate().extend(shoe.z),
                 });
             }
-            // passed by without touching: it sounds where a shoe came nearest
+            // passed by without touching: it sounds where a shoe came nearest. With no shoe
+            // on the wire nothing passes it: the poles left the wire before the switch, and
+            // wherever they go back on, it is not sounded.
+            if shoes.is_empty() {
+                self.switch_waiting.clear();
+            }
             let mut passed = Vec::new();
             self.switch_waiting.retain_mut(|w| {
                 let d = nearest(w.0);
-                if d.is_finite() && d > w.2 + 0.05 {
+                if d > w.2 + 0.05 {
                     passed.push((w.0, w.1));
                     return false;
                 }
                 w.2 = w.2.min(d);
-                w.2 <= SWITCH_REACH * 2.0 || !d.is_finite()
+                w.2 <= SWITCH_REACH * 2.0
             });
             let wire_z = shoes.first().map(|(_, sh)| sh.z);
             for (p, kind) in passed {
