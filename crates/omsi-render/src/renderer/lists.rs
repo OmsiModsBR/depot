@@ -859,7 +859,7 @@ impl Renderer {
         let aspect = f.aspect;
         let cam_rel = f.cam_rel;
         let xr_view = f.features.xr_view;
-        let enhanced_frame = f.features.enhanced_frame;
+        let enhanced = f.features.enhanced;
         // Frustum culling by bounding sphere in view space. OpenXR projections
         // are asymmetric; the desktop field of view must not clip an eye's
         // wider side as the head turns.
@@ -889,7 +889,7 @@ impl Renderer {
         // scale height over the fog's base). Culled by the vanilla density, whatever stood
         // in thin fog went missing in plain sight - most of all seen from above, with the
         // camera zoomed out.
-        let fog_far = if enhanced_frame {
+        let fog_far = if enhanced {
             if lighting.fog_density > 1e-4 {
                 let base = lighting
                     .fog_base
@@ -990,7 +990,7 @@ impl Renderer {
             // (the enhanced sky is not the fog's colour below the horizon: ground
             // left out for the fog let it show through, road-shaped holes in the
             // terrain seen from above, so the ground is always drawn there)
-            if !inside && z - r > fog_far && !(enhanced_frame && (inst.surface || r > 100.0)) {
+            if !inside && z - r > fog_far && !(enhanced && (inst.surface || r > 100.0)) {
                 return None;
             }
             if !inside && (v.x.abs() > z * tan_x + r / cos_x || v.y.abs() > z * tan_y + r / cos_y) {
@@ -1103,7 +1103,7 @@ impl Renderer {
                 return true;
             }
             !(z + r < camera.near
-                || (!enhanced_frame && z - r > fog_far)
+                || (!enhanced && z - r > fog_far)
                 || v.x.abs() > z * tan_x + r / cos_x
                 || v.y.abs() > z * tan_y + r / cos_y)
         };

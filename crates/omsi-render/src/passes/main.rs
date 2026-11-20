@@ -5,6 +5,7 @@ use super::draw::{
     encode_batches, encode_batches_filtered, main_pipeline, Batch, PIPE_ALPHA_TEST, PIPE_BLEND,
     PIPE_BLEND_NO_WRITE,
 };
+use super::features::FrameFeatures;
 use crate::assets::upload_texture;
 use crate::gpu::{pass_timer, sampler_entry, texture_entry};
 use crate::lighting::Lighting;
@@ -66,18 +67,22 @@ pub(crate) fn encode_main_pass(
     overlays: &[(TextureId, [f32; 4])],
     width: u32,
     height: u32,
-    enhanced: bool,
-    masked_frame: bool,
+    features: &FrameFeatures,
     has_presurface: bool,
-    prepass_on: bool,
-    ao_on: bool,
-    puddles_wanted: bool,
-    scaled: bool,
-    with_overlays: bool,
-    xr_view: bool,
     tset: &Option<wgpu::QuerySet>,
     timed: &mut Vec<&'static str>,
 ) -> Vec<wgpu::CommandEncoder> {
+    let FrameFeatures {
+        enhanced,
+        masked_frame,
+        prepass_on,
+        ao_on,
+        puddles_wanted,
+        scaled,
+        with_overlays,
+        xr_view,
+        ..
+    } = *features;
     // Without multisampling the main pass tests against the depth the prepass left
     // (when there was one): the costly shading - lighting, the shadow filter - is then
     // done once per pixel for the surface that is seen, not for every tree and wall

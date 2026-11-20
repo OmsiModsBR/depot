@@ -1,6 +1,7 @@
 //! The glass pass: what lies behind the panes, and drawing the glass over it.
 
 use super::draw::{encode_batches, Batch};
+use super::features::FrameFeatures;
 use crate::scene::Scene;
 use crate::targets::TargetCache;
 
@@ -16,10 +17,14 @@ pub(crate) fn encode_glass(
     rain_batches: &[Batch],
     width: u32,
     height: u32,
-    glass_on: bool,
-    masked_frame: bool,
+    features: &FrameFeatures,
     puddles_on: bool,
 ) {
+    let FrameFeatures {
+        glass_on,
+        masked_frame,
+        ..
+    } = *features;
     if glass_on {
         let hdr = masked_frame.then(|| &targets.hdr_targets[&(width, height)]);
         let view = hdr.map_or(scene_view, |h| {

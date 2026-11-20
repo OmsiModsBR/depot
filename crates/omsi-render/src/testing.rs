@@ -11,3 +11,7 @@ pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
 }
 
 pub use crate::renderer::lists::{shadow_caster, ShadowCaster};
+
+/// What a picture draws (`FrameFeatures::decide`), for tests without a graphics adapter.
+pub use crate::passes::FrameFeatures;
+pub use crate::renderer::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
