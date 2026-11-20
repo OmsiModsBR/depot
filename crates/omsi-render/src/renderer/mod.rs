@@ -4,6 +4,7 @@
 mod assets;
 mod build;
 mod encode;
+mod features;
 mod frame;
 mod lights;
 pub(crate) mod lists;
@@ -19,6 +20,7 @@ mod state;
 mod targets;
 mod upload;
 
+pub use features::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 pub use mirror::{
     AssetMirror, FramePlan, MirrorEvent, MirrorTexture, PlanBatch, PlanKind, PlanSink,
 };

@@ -5,8 +5,8 @@ use crate::assets::GpuTexture;
 use crate::gpu::target_2d;
 use crate::lighting::Lighting;
 use crate::passes::{
-    encode_enhanced_post, encode_glass, encode_main_pass, Batch, MainParts, PassPipelines,
-    PostParts,
+    encode_enhanced_post, encode_glass, encode_main_pass, Batch, FrameFeatures, MainParts,
+    PassPipelines, PostParts,
 };
 use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
@@ -38,22 +38,14 @@ impl Renderer {
         overlays: &[(TextureId, [f32; 4])],
         width: u32,
         height: u32,
-        enhanced: bool,
-        reflection_frame: bool,
-        masked_frame: bool,
+        features: &FrameFeatures,
         has_presurface: bool,
-        prepass_on: bool,
-        ao_on: bool,
-        puddles_wanted: bool,
-        scaled: bool,
-        with_overlays: bool,
-        xr_view: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) -> Vec<wgpu::CommandEncoder> {
-        let pipes = if enhanced {
+        let pipes = if features.enhanced {
             self.hdr_pass.as_ref().unwrap()
-        } else if reflection_frame {
+        } else if features.reflection_frame {
             self.reflection_pass.as_ref().unwrap()
         } else {
             &self.pass
@@ -84,15 +76,8 @@ impl Renderer {
             overlays,
             width,
             height,
-            enhanced,
-            masked_frame,
+            features,
             has_presurface,
-            prepass_on,
-            ao_on,
-            puddles_wanted,
-            scaled,
-            with_overlays,
-            xr_view,
             tset,
             timed,
         )
@@ -109,23 +94,21 @@ impl Renderer {
         rain_batches: &[Batch],
         width: u32,
         height: u32,
-        enhanced: bool,
-        glass_on: bool,
-        masked_frame: bool,
+        features: &FrameFeatures,
         puddles_on: bool,
-        reflection_frame: bool,
     ) {
         encode_glass(
             &self.targets,
-            &self.main_pass(enhanced, reflection_frame).rain_pipelines,
+            &self
+                .main_pass(features.enhanced, features.reflection_frame)
+                .rain_pipelines,
             scene,
             encoder,
             scene_view,
             rain_batches,
             width,
             height,
-            glass_on,
-            masked_frame,
+            features,
             puddles_on,
         );
     }
@@ -142,11 +125,8 @@ impl Renderer {
         width: u32,
         height: u32,
         dt: f32,
-        enhanced: bool,
-        lead_view: bool,
+        features: &FrameFeatures,
         puddles_on: bool,
-        scaled: bool,
-        with_overlays: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
@@ -166,7 +146,7 @@ impl Renderer {
                     .diagnostics
                     .exposure_log
                     .as_mut()
-                    .filter(|_| with_overlays && !lost),
+                    .filter(|_| features.with_overlays && !lost),
                 overlay_pipeline_1x: &self.presenter.overlay_pipeline_1x,
             },
             scene,
@@ -177,11 +157,8 @@ impl Renderer {
             width,
             height,
             dt,
-            enhanced,
-            lead_view,
+            features,
             puddles_on,
-            scaled,
-            with_overlays,
             tset,
             timed,
         );

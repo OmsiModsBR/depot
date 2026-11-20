@@ -3,6 +3,7 @@
 
 mod depth;
 mod draw;
+mod features;
 mod fog_lamps;
 mod glass;
 mod main;
@@ -19,6 +20,7 @@ pub(crate) use draw::{
     Batch, DrawItem, PostPass, PIPE_ALPHA_TEST, PIPE_BLEND, PIPE_BLEND_NO_WRITE, PIPE_KINDS,
     PIPE_OPAQUE, PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
 };
+pub use features::FrameFeatures;
 #[cfg(test)]
 pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};

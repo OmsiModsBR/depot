@@ -1,6 +1,7 @@
 //! The enhanced post passes: glow, exposure metering and tone mapping.
 
 use super::draw::PostPass;
+use super::features::FrameFeatures;
 use crate::assets::GpuTexture;
 use crate::gpu::{
     float_tex, fullscreen_pipeline, pass_timer, sampler_entry, target_2d, uniform_entry,
@@ -143,14 +144,18 @@ pub(crate) fn encode_enhanced_post(
     width: u32,
     height: u32,
     dt: f32,
-    enhanced: bool,
-    lead_view: bool,
+    features: &FrameFeatures,
     puddles_on: bool,
-    scaled: bool,
-    with_overlays: bool,
     tset: &Option<wgpu::QuerySet>,
     timed: &mut Vec<&'static str>,
 ) {
+    let FrameFeatures {
+        enhanced,
+        lead_view,
+        scaled,
+        with_overlays,
+        ..
+    } = *features;
     if enhanced {
         // --- the post passes: glow, metering and adaptation, tone curve, FXAA
         let secs = |tau: f32| {

@@ -2,40 +2,17 @@
 //! what the picture draws and writes the camera uniform into a `FrameContext`; the draw lists
 //! (`lists.rs`) and the passes (`encode.rs`) follow, and the commands are submitted at the end.
 
+use super::features::{puddle_weather, BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 use super::state::Renderer;
 use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, target_2d, HDR_FORMAT};
-use crate::lighting::{debug_view, lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
+use crate::lighting::{lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
-use crate::passes::{Batch, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE};
+use crate::passes::{
+    Batch, FrameFeatures, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE,
+};
 use crate::scene::{point_in_vehicle_box, Camera, CameraUniform, Scene, TextureId};
 use crate::sky::CLOUD_ORIGIN_PERIOD;
 use glam::{DVec3, Mat4, Vec3};
-
-/// What a picture draws, decided at its start (`begin_frame`): the passes and paths the
-/// draw lists and the encoders branch on.
-#[derive(Clone, Copy)]
-pub(crate) struct FrameFeatures {
-    /// The FXAA on the plain graphics, the picture drawn into a texture of the window's size.
-    pub(crate) fxaa_without_msaa: bool,
-    /// The rain's glass picture (what is behind the glass is drawn first).
-    pub(crate) glass_on: bool,
-    /// The picture goes through a scaled target (`scene_view`).
-    pub(crate) scaled: bool,
-    /// A headset's eye, the window's lead view (the one that moves the clocks), Enhanced.
-    pub(crate) xr_view: bool,
-    pub(crate) lead_view: bool,
-    pub(crate) enhanced_frame: bool,
-    pub(crate) enhanced: bool,
-    /// The puddles and their reflections (`reflection_frame` when drawn by their own pass).
-    pub(crate) puddles_wanted: bool,
-    pub(crate) reflection_frame: bool,
-    /// The scene drawn into the masked targets (Enhanced or the reflections).
-    pub(crate) masked_frame: bool,
-    /// The ambient occlusion pass.
-    pub(crate) ao_on: bool,
-    /// The depth prepass before the shading.
-    pub(crate) prepass_on: bool,
-}
 
 /// One picture on its way through the stages of `Renderer::render_inner`: where it goes and
 /// what its start decided (its size and targets, what it draws, the shadows' schedule, the
@@ -291,25 +268,43 @@ impl Renderer {
         } else {
             (full_w, full_h)
         };
-        // FXAA on the plain graphics too, where there is no multisampling to smooth the
-        // edges (the Enhanced path has it in its post passes): the picture is drawn into a
-        // texture of the window's size and smoothed on its way to the window, the HUD after
-        let fxaa_without_msaa = with_overlays
-            && (width, height) == (full_w, full_h)
-            && self.options.fxaa
-            && self.options.msaa <= 1
-            && !(lighting.hdr() && self.hdr_pass.is_some())
-            && !omsi_cfg::flags::NO_FXAA.is_set();
-        // Rain films are drawn after copying the clean current-frame scene. Classic
-        // graphics need a sampleable scene target too, even without puddles or scaling.
-        let enhanced_view = lighting.hdr() && self.hdr_pass.is_some();
-        let glass_on = with_overlays
-            && scene.glass_slot.is_some()
-            && (lighting.rain > 0.001 || lighting.wetness > 0.02)
-            && !omsi_cfg::flags::NO_GLASS_PICTURE.is_set();
-        let scaled = (width, height) != (full_w, full_h)
-            || fxaa_without_msaa
-            || (glass_on && !enhanced_view);
+        let xr_view = projection.is_some();
+        let lead_view = (with_overlays || xr_view) && !second_eye;
+        // what the picture draws (and, with it, whether it goes through a scaled target)
+        let features = FrameFeatures::decide(
+            lighting.path,
+            &self.options,
+            &FrameInputs {
+                view: ViewKind::of(output),
+                lead_view,
+                full_size: (full_w, full_h),
+                picture_size: (width, height),
+                rain: lighting.rain,
+                wetness: lighting.wetness,
+                snow: lighting.snow,
+                has_glass_slot: scene.glass_slot.is_some(),
+                // (looked for only where the weather could use it)
+                has_puddle_material: with_overlays
+                    && puddle_weather(lighting.wetness, lighting.snow)
+                    && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0),
+                built: BuiltPasses {
+                    enhanced: self.hdr_pass.is_some(),
+                    reflections: self.reflection_pass.is_some(),
+                    puddles: self.puddles.is_some(),
+                    ssao: self.ssao.ssao_pipeline.is_some(),
+                },
+                switches: FrameSwitches::from_environment(),
+            },
+        );
+        let FrameFeatures {
+            glass_on,
+            scaled,
+            enhanced,
+            masked_frame,
+            ao_on,
+            prepass_on,
+            ..
+        } = features;
         let scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)> = if scaled {
             Some(self.scale_target(width, height))
         } else {
@@ -319,37 +314,10 @@ impl Renderer {
             .texture_aspect
             .unwrap_or(width as f32 / height.max(1) as f32);
         let cam_rel = (camera.position - ro).as_vec3();
-        // The mirrors are drawn with the plain shading even in Enhanced: without the depth
-        // prepass (sized for the window) every layer of a mirror's picture ran the enhanced
-        // shader, 12.7 ms of GPU time for one 256-pixel mirror against 5.8 ms for the whole
-        // window; plainly shaded it is 0.6 ms, and a mirror's small picture shows no
-        // difference worth that. `OMSI_MIRROR_ENHANCED=1` draws them enhanced again.
-        // The headset's eyes are the real picture as much as the window is (#784: VR showed
-        // the plain graphics with Enhanced on); the first eye is the one that moves the
-        // exposure, the sky cube and the frame clock on, as the window does without VR.
-        let xr_view = projection.is_some();
-        let lead_view = (with_overlays || xr_view) && !second_eye;
-        let enhanced_frame = lighting.hdr()
-            && self.hdr_pass.is_some()
-            && (with_overlays || xr_view || omsi_cfg::flags::MIRROR_ENHANCED.is_set());
-        // the mirrors are drawn by the same path as the window (their picture graded with
-        // the window's exposure, see the post passes)
-        let enhanced = enhanced_frame;
-        // Rain reflections belong to all graphics modes. Classic shading uses the same
-        // scene/mask targets, then presents their linear colour without Enhanced grading.
-        let puddles_wanted = with_overlays
-            && self.puddles.is_some()
-            && self.options.reflections
-            && lighting.wetness * (1.0 - lighting.snow.clamp(0.0, 1.0)) > 0.05
-            && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0)
-            && debug_view() == 0.0
-            && !omsi_cfg::flags::NO_PUDDLE_REFLECTIONS.is_set();
-        let reflection_frame = !enhanced && puddles_wanted && self.reflection_pass.is_some();
-        let masked_frame = enhanced || reflection_frame;
         let (grid, lamp_shadows) = self.prepare_lights(
             scene,
             cam_rel,
-            enhanced_frame,
+            enhanced,
             lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
@@ -366,15 +334,6 @@ impl Renderer {
                 .filter(|v| point_in_vehicle_box(camera.position, v)),
         );
         self.prepare_smoke(scene, camera.position, exclude_texture.is_some());
-        // ambient occlusion only for the real picture, not for the mirrors
-        let ao_on = with_overlays
-            && self.options.ssao
-            && self.ssao.ssao_pipeline.is_some()
-            && !omsi_cfg::flags::NO_AO.is_set();
-        // the enhanced path's shading is costly: the depth prepass keeps it to the visible
-        // surface (without multisampling, see `share_depth`)
-        let prepass_on =
-            ao_on || puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view));
         if prepass_on && self.ensure_ao(width, height) {
             // a new AO texture: the camera bind group must point at it
             scene.dirty = true;
@@ -432,7 +391,7 @@ impl Renderer {
             scene.render_origin,
             lighting,
             cam_rel,
-            enhanced_frame,
+            enhanced,
             with_overlays,
             projection,
             second_eye,
@@ -688,20 +647,7 @@ impl Renderer {
                 full_h,
                 width,
                 height,
-                features: FrameFeatures {
-                    fxaa_without_msaa,
-                    glass_on,
-                    scaled,
-                    xr_view,
-                    lead_view,
-                    enhanced_frame,
-                    enhanced,
-                    puddles_wanted,
-                    reflection_frame,
-                    masked_frame,
-                    ao_on,
-                    prepass_on,
-                },
+                features,
                 aspect,
                 cam_rel,
                 dt,

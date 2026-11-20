@@ -68,7 +68,7 @@ left; phase A2 extends it with the glass case:
 
 The rule lives in one place (`scene` or `passes::shadow`), with a test in `omsi-render/tests/`.
 
-## FrameFeatures (exists, `omsi-render/src/renderer/frame.rs`; phase C1)
+## FrameFeatures (`omsi-render/src/passes/features.rs`, decided in `renderer/features.rs`; phase C1, done)
 
 Today a struct of 13 bools filled inside `begin_frame` and passed to the passes field by field.
 After phase C1:
@@ -80,6 +80,9 @@ FrameInputs  { view: Window | Mirror | XrEye | TriplePanel, lead_view, full_size
 ```
 
 The passes take `&FrameFeatures` (or the `FrameContext` that holds it) instead of separate bools.
+The struct sits in `passes` (the layer that reads it) and `decide` is an `impl` in `renderer`, which
+may name `RenderOptions`. `FrameInputs` also carries what the renderer was built with
+(`BuiltPasses`) and the environment's switches (`FrameSwitches`, which phase C2 turns into options).
 `rt_frame` leaves with phase A1; `vanilla_fxaa` is renamed `fxaa_without_msaa` with phase A6. With
 phase C4 the decisions split: the core decides what both modes share (scaled target, glass, prepass,
 AO, puddles wanted), and each mode adds its own through the mode interface.

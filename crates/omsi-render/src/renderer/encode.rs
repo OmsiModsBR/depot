@@ -28,10 +28,8 @@ impl Renderer {
         let width = f.width;
         let height = f.height;
         let fxaa_without_msaa = f.features.fxaa_without_msaa;
-        let glass_on = f.features.glass_on;
         let scaled = f.features.scaled;
         let aspect = f.aspect;
-        let xr_view = f.features.xr_view;
         let lead_view = f.features.lead_view;
         let enhanced = f.features.enhanced;
         let puddles_wanted = f.features.puddles_wanted;
@@ -158,16 +156,8 @@ impl Renderer {
             &overlays,
             width,
             height,
-            enhanced,
-            reflection_frame,
-            masked_frame,
+            &f.features,
             has_presurface,
-            prepass_on,
-            ao_on,
-            puddles_wanted,
-            scaled,
-            with_overlays,
-            xr_view,
             &clock.tset,
             &mut clock.timed,
         );
@@ -226,11 +216,8 @@ impl Renderer {
             &rain_batches,
             width,
             height,
-            enhanced,
-            glass_on,
-            masked_frame,
+            &f.features,
             puddles_on,
-            reflection_frame,
         );
         self.encode_reflection_resolve(
             scene,
@@ -252,11 +239,8 @@ impl Renderer {
             width,
             height,
             dt,
-            enhanced,
-            lead_view,
+            &f.features,
             puddles_on,
-            scaled,
-            with_overlays,
             &clock.tset,
             &mut clock.timed,
         );
