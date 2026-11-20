@@ -1,12 +1,12 @@
 //! An aircraft: on its path, banking into its turns.
 
-use super::{wrap, AiBody};
+use super::depot::{wrap, AiBody};
 use glam::DVec3;
 
 impl AiBody {
     /// An aircraft: on its path, nose along it, banking into a turn as much as the turn
     /// asks for (tan bank = speed × turn rate / g).
-    pub(super) fn fly(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3) {
+    pub(in crate::ai) fn fly(&mut self, dt: f32, speed: f32, way: &dyn Fn(f32) -> DVec3) {
         let p = way(0.0);
         let d = way(15.0) - way(-15.0);
         let run = d.truncate().length();

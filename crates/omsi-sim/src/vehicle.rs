@@ -47,7 +47,7 @@ pub struct VehicleInstance {
     a_trans: OmsiFrames,
     pub ty: Arc<VehicleType>,
     /// The engine that runs this vehicle, decided when it appeared (see `resolve_physics_mode`).
-    physics_mode: omsi_cfg::PhysicsMode,
+    engine: Engine,
     /// The coupled parts keep the pose they have (the Classic AI beyond the detail radius:
     /// `KA-5`, `KA-9`).
     coupled_parts_held: bool,
@@ -337,9 +337,14 @@ impl VehicleInstance {
         ai_lift
     }
 
-    /// The engine that runs this vehicle.
+    /// The engine that runs this vehicle, as the settings name it.
     pub fn physics_mode(&self) -> omsi_cfg::PhysicsMode {
-        self.physics_mode
+        self.engine.into()
+    }
+
+    /// The engine that runs this vehicle.
+    pub fn engine(&self) -> Engine {
+        self.engine
     }
 
     /// Whether the coupled parts keep the pose they have, not following the vehicle.
@@ -368,11 +373,15 @@ impl VehicleInstance {
         }
     }
 
-    /// Fix the engine of this vehicle, once, when it appears.
+    /// Fix the engine of this vehicle and of its coupled parts, once, when it appears (a new
+    /// vehicle runs OMSI Classic until then).
     pub fn set_physics_mode(&mut self, mode: omsi_cfg::PhysicsMode) {
-        self.physics_mode = mode;
-        // the static pose of the AI copy is the engine's own
         let engine = Engine::from(mode);
+        self.engine = engine;
+        // the static pose of the AI copy and of each part is the engine's own
+        for t in &mut self.trailers {
+            t.set_engine(engine);
+        }
         self.rest_sag = crate::physics::kinematic_rest_sag(
             &self.ty.def,
             &self.ty.hub_heights(0, engine),
@@ -461,7 +470,7 @@ impl VehicleInstance {
             v_accel: [v("A_Trans_X"), v("A_Trans_Y"), v("A_Trans_Z")],
             v_wheels,
             ty,
-            physics_mode: omsi_cfg::PhysicsMode::Classic,
+            engine: Engine::Classic,
             coupled_parts_held: false,
             state,
             vm,

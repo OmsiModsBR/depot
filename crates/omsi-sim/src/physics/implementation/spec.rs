@@ -13,7 +13,6 @@
 //! values the player's vehicle no longer uses are kept behind the `model-fallbacks` feature
 //! (`params::fallbacks`) until the physics is validated in game.
 
-use super::{classic, depot};
 use crate::physics::domain::params::{
     AI_HEAVY_MASS, BUMP, DEFAULT_INERTIA_INV, GRAVITY, LOCK_DEG_MAX, LOCK_DEG_MIN, TRACK_SHARE,
 };
@@ -149,19 +148,13 @@ impl PhysicsSpec {
 /// The static load on each wheel of each axle (N) by the rule of `engine`: the weight shared
 /// about the model's origin (Classic, `K-1`) or about `[cog]` (Depot, `D-1`).
 pub fn wheel_rest_loads(def: &Vehicle, engine: Engine) -> Vec<f32> {
-    match engine {
-        Engine::Classic => classic::load_share::wheel_rest_loads(def),
-        Engine::Depot => depot::load_share::wheel_rest_loads(def),
-    }
+    engine.wheel_rest_loads(def)
 }
 
 /// [`wheel_rest_loads`] as the kinematic model (the AI's copies and their parts) reads them,
 /// by the rule of `engine`.
 pub fn kinematic_wheel_rest_loads(def: &Vehicle, engine: Engine) -> Vec<f32> {
-    match engine {
-        Engine::Classic => classic::load_share::kinematic_wheel_rest_loads(def),
-        Engine::Depot => depot::load_share::kinematic_wheel_rest_loads(def),
-    }
+    engine.kinematic_wheel_rest_loads(def)
 }
 
 /// How far each axle's spring sits down under the vehicle's weight and how far its tyre

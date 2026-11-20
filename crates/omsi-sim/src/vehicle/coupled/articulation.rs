@@ -123,8 +123,7 @@ impl VehicleInstance {
             lead.coupled = self.coupled_parts();
             if self.rest_loads_for != 0 {
                 // the parts that were carried by the bodies are gone: the wheels carry their own again
-                let loads =
-                    crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
+                let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.engine());
                 for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                     w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
                 }
@@ -151,7 +150,7 @@ impl VehicleInstance {
         lead.coupled.clear();
         let created = self.trailers.iter().any(|t| t.body.is_none());
         let ty = self.ty.clone();
-        let engine = Engine::from(self.physics_mode());
+        let engine = self.engine();
         for t in self.trailers.iter_mut().filter(|t| t.body.is_none()) {
             t.body = Some(PartBody::new(t, &ty.program, engine));
         }
@@ -176,7 +175,7 @@ impl VehicleInstance {
             self.rest_loads_for = self.trailers.len();
             // the joints carry part of each part behind (from the front: each load the part in
             // front of it takes on its axles)
-            let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.physics_mode().into());
+            let loads = crate::physics::wheel_rest_loads(&self.ty.def, self.engine());
             let lead = &mut bodies[0];
             for (w, a) in lead.wheels.iter_mut().zip(&lead.wheel_axle) {
                 w.rest_load = loads.get(*a).copied().unwrap_or(w.rest_load);
