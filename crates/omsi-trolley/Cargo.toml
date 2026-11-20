@@ -1,0 +1,22 @@
+[package]
+name = "omsi-trolley"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Trolleybus support: the overhead wire network of a map and the content convention that declares it"
+
+[features]
+default = []
+# what the tests in `tests/` reach of the crate's insides (`testing`); the crate's own
+# dev-dependency turns it on
+test-support = []
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-map = { path = "../omsi-map" }
+omsi-geometry = { path = "../omsi-geometry" }
+glam.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+omsi-trolley = { path = ".", features = ["test-support"] }

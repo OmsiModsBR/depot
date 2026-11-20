@@ -255,6 +255,8 @@ then x, y, z of the device, as usual); OMSI 2 still takes the last of them.
 ## Scripts and plugins
 
 - Script variables and string variables have no count limit.
+- Trolleybuses of the plugin-based convention run without their plugins: see
+  [Trolleybuses](TROLLEYBUS.md) for the files they need and where they go.
 
 ## Radio: a map's stations and a bus's display
 

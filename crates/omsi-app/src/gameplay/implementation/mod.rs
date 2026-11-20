@@ -15,3 +15,4 @@ pub(crate) mod spawn;
 pub(crate) mod teleport;
 pub(crate) mod traffic;
 pub(crate) mod traffic_link;
+pub(crate) mod wire_sounds;

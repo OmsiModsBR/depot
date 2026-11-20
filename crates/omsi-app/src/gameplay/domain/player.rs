@@ -34,6 +34,9 @@ pub struct Player {
     /// (scan code, modifier bits) → action name, from `Inputs/keyboard.cfg` `[vehicles]`.
     pub(crate) bindings: Vec<omsi_content::KeyBinding>,
     pub(crate) sounds: Option<omsi_audio::SoundSet>,
+    /// The wire's recordings (a trolleybus), and whether the camera is a passenger's.
+    pub(crate) wire_sounds: super::wire_sounds::WireSounds,
+    pub(crate) view_saloon: bool,
     /// Mesh index currently pressed with the mouse (its `[mouseevent]` gets `_off` on release).
     pub(crate) pressed_mesh: Option<usize>,
     /// Coupled-part mesh currently pressed.  Articulated buses keep the rear controls in

@@ -422,6 +422,7 @@ pub(crate) fn spawn_player(
     let render = world.add_vehicle(renderer, scene, &vt, scheme);
     // coupled rear sections / trailers
     let parts = load_coupled_parts(&args.root, &mut vehicle);
+    vehicle.trolley = trolley_of(world, &vt, &parts);
     let rear: Vec<&omsi_vehicle::Vehicle> = parts.iter().map(|t| &t.def).collect();
     vehicle.set_physics_mode(omsi_sim::resolve_physics_mode(
         &format!("{} {}", vt.def.manufacturer, vt.def.type_name),
@@ -584,6 +585,8 @@ pub(crate) fn spawn_player(
         head_vel: Vec3::ZERO,
         head_omega: Vec3::ZERO,
         head_idle: Default::default(),
+        wire_sounds: Default::default(),
+        view_saloon: false,
         steer_look: 0.0,
         seat: Vec3::ZERO,
         mirror_offsets: crate::settings::mirror_offsets(&vt.def.path),
@@ -846,4 +849,186 @@ pub(crate) fn recorded_entry_pos(
         .iter()
         .all(|v| v.is_finite())
         .then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
+}
+
+/// The poles a vehicle part's model draws (see `omsi_trolley::poles_in_model`): each pole's
+/// foot, and on its shoe where the wire runs (`omsi_trolley::shoe_contact`, from the points of
+/// the meshes the shoe's turn moves; the shoe's pivot when they give none). None: the part
+/// has no working poles.
+fn model_poles(part: &omsi_sim::VehicleType) -> Option<[(DVec3, DVec3); 2]> {
+    let started = std::time::Instant::now();
+    let anims = part.model.meshes.iter().flat_map(|m| {
+        m.animations.iter().filter_map(|a| {
+            a.origins.iter().find_map(|o| match o {
+                omsi_model::AnimOrigin::Trans(t) => {
+                    Some((a.variable.as_str(), [t[0] as f64, t[1] as f64, t[2] as f64]))
+                }
+                _ => None,
+            })
+        })
+    });
+    let mut poles = omsi_trolley::poles_in_model(anims)?;
+    let mut files = 0;
+    for (i, (_, shoe)) in poles.iter_mut().enumerate() {
+        // the meshes the shoe's turn moves, and their points in the model's frame
+        let points: Vec<DVec3> = part
+            .meshes
+            .iter()
+            .filter(|m| {
+                part.model.meshes.get(m.def_index).is_some_and(|d| {
+                    d.animations
+                        .iter()
+                        .any(|a| omsi_trolley::pole_variable(&a.variable) == Some((i, true)))
+                })
+            })
+            .flat_map(|m| {
+                if !m.data.positions.is_empty() {
+                    return m.data.positions.clone();
+                }
+                // (a type kept no vertices: read again from the mesh's file)
+                files += 1;
+                match omsi_o3d::load_mesh(&m.file) {
+                    Ok(o) => omsi_geometry::mesh_from_o3d(&o).positions,
+                    Err(e) => {
+                        log::warn!("trolleybus: {}: {e}", m.file.display());
+                        Vec::new()
+                    }
+                }
+            })
+            .map(|p: Vec3| p.as_dvec3())
+            .collect();
+        match omsi_trolley::shoe_contact(*shoe, points.iter().copied()) {
+            Some(fit) => {
+                log::debug!(
+                    "trolleybus: shoe {i} of {}: {} of {} points its own, top {:.3} m and groove {} above its pivot; the wire at {:.3} m",
+                    part.def.path.display(),
+                    fit.points,
+                    points.len(),
+                    fit.top - shoe.z,
+                    fit.groove
+                        .map_or("none".to_string(), |g| format!("{:.3} m", g - shoe.z)),
+                    fit.contact.z - shoe.z
+                );
+                *shoe = fit.contact;
+            }
+            None => log::warn!(
+                "trolleybus: no place for the wire on shoe {i} of {} ({} points): its pivot stands for it",
+                part.def.path.display(),
+                points.len()
+            ),
+        }
+    }
+    log::debug!(
+        "trolleybus: poles of {} found in {:.2} ms ({files} mesh files read again)",
+        part.def.path.display(),
+        started.elapsed().as_secs_f64() * 1e3
+    );
+    Some(poles)
+}
+
+/// The vehicle (0) or coupled part (n) a part list index stands for, as the log names it.
+fn part_name(carrier: usize) -> String {
+    if carrier == 0 {
+        "the vehicle".to_string()
+    } else {
+        format!("coupled part {carrier}")
+    }
+}
+
+/// The poles of a vehicle the registry does not name, found by its model: the first part
+/// whose model draws working poles carries them (see [`model_poles`]); the parameter file
+/// gives the rest. None: no part has working poles.
+fn trolley_by_model(
+    world: &World,
+    convention: &omsi_trolley::Convention,
+    vt: &omsi_sim::VehicleType,
+    parts: &[Arc<omsi_sim::VehicleType>],
+) -> Option<Box<omsi_sim::Trolley>> {
+    let all = std::iter::once(vt).chain(parts.iter().map(|p| p.as_ref()));
+    let (carrier, poles) = all
+        .enumerate()
+        .find_map(|(i, part)| model_poles(part).map(|p| (i, p)))?;
+    let name = vt
+        .def
+        .path
+        .file_stem()
+        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    match omsi_trolley::declaration_from_model(
+        &format!("model:{name}"),
+        &vt.def.path.to_string_lossy(),
+        poles,
+        &convention.params,
+    ) {
+        Ok(declaration) => {
+            log::info!(
+                "trolleybus: {} found by the poles of its model (on {}): feet {:?}, shoes {:?}",
+                vt.def.path.display(),
+                part_name(carrier),
+                declaration.poles.map(|p| p.base),
+                declaration.poles.map(|p| p.rest_shoe),
+            );
+            Some(Box::new(omsi_sim::Trolley::new(
+                declaration,
+                carrier,
+                world.wires.clone(),
+            )))
+        }
+        Err(e) => {
+            log::warn!("trolleybus: {e}; the vehicle runs without poles");
+            None
+        }
+    }
+}
+
+/// The poles of the player's vehicle when the trolleybus registry declares it (see
+/// `omsi_trolley::find_declaration`: an entry that does not place the poles takes them from
+/// the carrier's model), else when its model draws working poles; a declaration that names
+/// it but cannot be used is reported, and the vehicle runs as an ordinary bus.
+fn trolley_of(
+    world: &World,
+    vt: &omsi_sim::VehicleType,
+    parts: &[Arc<omsi_sim::VehicleType>],
+) -> Option<Box<omsi_sim::Trolley>> {
+    let convention = world.trolley.as_ref()?;
+    let files: Vec<String> = parts
+        .iter()
+        .map(|p| p.def.path.to_string_lossy().into_owned())
+        .collect();
+    let refs: Vec<&str> = files.iter().map(String::as_str).collect();
+    let part = |carrier: usize| {
+        if carrier == 0 {
+            Some(vt)
+        } else {
+            parts.get(carrier - 1).map(|p| p.as_ref())
+        }
+    };
+    let Some(found) = omsi_trolley::find_declaration(
+        convention,
+        &vt.def.path.to_string_lossy(),
+        &refs,
+        |carrier| part(carrier).and_then(model_poles),
+    ) else {
+        return trolley_by_model(world, convention, vt, parts);
+    };
+    match found {
+        Ok((declaration, carrier)) => {
+            log::info!(
+                "trolleybus: {} declared by [vehicle:{}], poles on {}: feet {:?}, shoes {:?}",
+                vt.def.path.display(),
+                declaration.entry,
+                part_name(carrier),
+                declaration.poles.map(|p| p.base),
+                declaration.poles.map(|p| p.rest_shoe),
+            );
+            Some(Box::new(omsi_sim::Trolley::new(
+                declaration,
+                carrier,
+                world.wires.clone(),
+            )))
+        }
+        Err(e) => {
+            log::warn!("trolleybus: {e}; the vehicle runs without poles");
+            None
+        }
+    }
 }

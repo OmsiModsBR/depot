@@ -2701,6 +2701,7 @@ dependencies = [
  "omsi-sim",
  "omsi-texture",
  "omsi-timetable",
+ "omsi-trolley",
  "omsi-ui",
  "omsi-vehicle",
  "openxr",
@@ -2987,6 +2988,7 @@ dependencies = [
  "omsi-script",
  "omsi-sim",
  "omsi-texture",
+ "omsi-trolley",
  "omsi-vehicle",
  "parking_lot",
 ]
@@ -3010,6 +3012,18 @@ version = "0.1.0"
 dependencies = [
  "log",
  "omsi-cfg",
+]
+
+[[package]]
+name = "omsi-trolley"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "log",
+ "omsi-cfg",
+ "omsi-geometry",
+ "omsi-map",
+ "omsi-trolley",
 ]
 
 [[package]]
