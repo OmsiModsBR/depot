@@ -973,17 +973,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let surround = enh.fog_color.rgb * (0.25 / 0.9);
     let open = smoothstep(-0.05, 0.35, r.z);
     env = mix(surround, env, mix(open, 1.0, select(0.25, 0.5, reflective_env)));
-    // the cabin reflects the cabin, not the sky - and so does the bus's own glass seen
-    // from the driver's seat
-    let cab_view = max(in_cab, near_player_vehicle(in.world) * inside_vehicle(camera.cam_pos.xyz));
-    // From inside the player bus the pane is near the cabin, but it must still show the
-    // outside sky/street. Using the opaque-surface cabin weight here made every window a
-    // flat pale patch and hid the useful reflection while driving.
-    // A pane is the boundary between the cabin and the outside. Mixing the cabin
-    // irradiance into its reflection made every windscreen look like a pale grey sheet
-    // from the driver's seat; the interior is already behind the alpha-blended pane.
-    let cabin_reflection = select(0.85, 0.0, glass);
-    env = mix(env, cab_e * 0.35 / PI, cabin_reflection * cab_view);
+    // (An envmapped surface the cab classification counts as cab - a face up under a
+    // vehicle's roof - reflects the same as anywhere else, as the vanilla picture lays its
+    // sphere map by the material alone. Its reflection used to be swapped for the cab's
+    // grey light and its photo switched off: the shoulder rounding into a bus's roof and the
+    // cap over its destination display faded into a flat grey wherever they faced the sky,
+    // unlike the same models in OMSI.)
     // ... but the inner face of the bus's own glass cannot mirror the sky, which lies
     // behind it: it mirrors the cab, far darker than the street seen through it. Taken as
     // the sky, the doors (seen at a grazing angle from the driver's seat) went a milky
@@ -1022,15 +1017,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // (A car's bonnet is a handful of triangles: the photo's mip level by its footprint
         // above keeps its trees from turning into contour lines across it close up.)
         let sharpness = 1.0 - smoothstep(0.05, 0.25, rough);
-        // ... and only as far as the reflection is of the outside at all: the driver's own
-        // windscreen reflects the cab, and the photo's trees drawn over that stood as
-        // contour lines across everything seen through it (a car's bonnet close up)
-        let outside_env = 1.0 - cab_view;
         // ... and not in a fog: there is nothing sharp out there to mirror. The photo's
         // trees stood as flat grey silhouettes on every pane in fog, in front of the real
         // (fogged) trees behind the glass - outlines of trees that are not there
         let clear_air = exp(-enh.fog.x * 150.0);
-        env = env * mix(vec3<f32>(1.0), ratio, mix(0.25, 1.0, sharpness) * outside_env * clear_air * enh.debug.z);
+        env = env * mix(vec3<f32>(1.0), ratio, mix(0.25, 1.0, sharpness) * clear_air * enh.debug.z);
     }
     // what the SSAO darkens, it also keeps reflections out of
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
