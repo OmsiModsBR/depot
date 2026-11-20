@@ -475,9 +475,47 @@ enum Tok {
     Brace(String),
 }
 
-/// Tokenize one script line. `'` starts a comment (outside a string literal).
-fn tokenize(line: &str) -> Vec<Tok> {
+/// The tokens of a script, one entry per logical line with the number of the line it starts
+/// on. A string literal still open at the end of a line goes on over the next lines, line
+/// breaks included: the Volvo pmon writes each menu screen as one string over several lines,
+/// and cut at the line end, every following line of it was read as unknown commands. A string
+/// that is not closed before the end of the file is reported, and its lines are read one by
+/// one as before.
+fn tokenize_lines(lines: &[String]) -> (Vec<(usize, Vec<Tok>)>, Option<usize>) {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut i = 0;
+    while i < lines.len() {
+        let (mut toks, mut open) = tokenize(&lines[i]);
+        if !open {
+            out.push((i + 1, toks));
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut text = lines[i].clone();
+        while open && i + 1 < lines.len() {
+            i += 1;
+            text.push('\n');
+            text.push_str(&lines[i]);
+            (toks, open) = tokenize(&text);
+        }
+        if open {
+            for (n, line) in lines.iter().enumerate().skip(start) {
+                out.push((n + 1, tokenize(line).0));
+            }
+            return (out, Some(start + 1));
+        }
+        out.push((start + 1, toks));
+        i += 1;
+    }
+    (out, None)
+}
+
+/// Tokenize one script line. `'` starts a comment (outside a string literal). Also says
+/// whether the line ends inside a string literal that is not closed.
+fn tokenize(line: &str) -> (Vec<Tok>, bool) {
     let mut out = Vec::new();
+    let mut open = false;
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0;
     while i < chars.len() {
@@ -495,6 +533,7 @@ fn tokenize(line: &str) -> Vec<Tok> {
             while j < chars.len() && chars[j] != '"' {
                 j += 1;
             }
+            open = j >= chars.len();
             out.push(Tok::Str(chars[start..j.min(chars.len())].iter().collect()));
             i = j + 1;
             continue;
@@ -564,7 +603,7 @@ fn tokenize(line: &str) -> Vec<Tok> {
         out.push(Tok::Word(chars[start..j].iter().collect()));
         i = j.max(start + 1);
     }
-    out
+    (out, open)
 }
 
 enum BlockKind {
@@ -590,9 +629,15 @@ impl<'a> Compiler<'a> {
         // reached `{else}` skips to the next `{endif}`, so it jumps there here too - the
         // Procity's dashboard blanked its odometer every frame through such an `{else}`
         let mut orphan_elses: Vec<usize> = Vec::new();
-        for (ln, raw) in f.lines.iter().enumerate() {
-            let line_no = ln + 1;
-            let toks = tokenize(raw);
+        let (lines, unclosed) = tokenize_lines(&f.lines);
+        if let Some(line) = unclosed {
+            self.err(
+                &f.path,
+                line,
+                "string not closed before the end of the file".into(),
+            );
+        }
+        for (line_no, toks) in lines {
             for t in toks {
                 match t {
                     Tok::Brace(b) => {
@@ -1143,7 +1188,8 @@ mod tests {
 
     #[test]
     fn tokens() {
-        let t = tokenize(r#"(L.L.a) 0.5 > {if} "Krueger 7x6" (M.V.GetFontIndex) $+ 'comment (x)"#);
+        let t =
+            tokenize(r#"(L.L.a) 0.5 > {if} "Krueger 7x6" (M.V.GetFontIndex) $+ 'comment (x)"#).0;
         assert_eq!(
             t,
             vec![
@@ -1156,7 +1202,7 @@ mod tests {
                 Tok::Word("$+".into()),
             ]
         );
-        let t = tokenize("\"churafont CE (8-1)x3\" (M.V.GetFontIndex) (S.L.Font_(8-1)x3) (L.L.a)(L.L.b) ( L.L.c )");
+        let t = tokenize("\"churafont CE (8-1)x3\" (M.V.GetFontIndex) (S.L.Font_(8-1)x3) (L.L.a)(L.L.b) ( L.L.c )").0;
         assert_eq!(
             t,
             vec![
