@@ -1,6 +1,6 @@
 use openomsi_game::testing::hud::{
-    delay_item, distance_driven, grade_item, grouped, odometer_reading, passengers_aboard,
-    pedals_item, skid_item, temperatures, InfoTone,
+    delay_item, distance_driven, driving_items, grade_item, grouped, odometer_reading,
+    passengers_aboard, pedals_item, skid_item, temperatures, InfoTone,
 };
 use openomsi_game::testing::settings::INFO_ITEM_KEYS;
 
@@ -113,6 +113,34 @@ fn the_skid_lamp_is_lit_white_while_skidding() {
         assert!(it.text.is_empty());
         assert_eq!(it.tip.as_deref(), Some("Skidding"));
     }
+}
+
+/// The pedals, the grade and the skid lamp come in that order, each as a group, as far as
+/// they are known and switched on: a vehicle without a rigid body has only its pedals.
+#[test]
+fn the_driving_items_are_the_pedals_the_grade_and_the_lamp() {
+    let pedals = omsi_sim::Controls::default();
+    let tones = |groups: Vec<Vec<openomsi_game::testing::hud::InfoItem>>| {
+        groups.iter().map(|g| g[0].tone).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        tones(driving_items(pedals, Some(4.0), Some(true), |_| true)),
+        [
+            InfoTone::Pedals([0, 0, 0]),
+            InfoTone::Plain,
+            InfoTone::Light(true)
+        ]
+    );
+    assert_eq!(
+        tones(driving_items(pedals, None, None, |_| true)),
+        [InfoTone::Pedals([0, 0, 0])]
+    );
+    // (the Custom layout's switches 9, 10 and 11)
+    assert_eq!(
+        tones(driving_items(pedals, Some(4.0), Some(false), |i| i != 9)),
+        [InfoTone::Plain, InfoTone::Light(false)]
+    );
+    assert!(driving_items(pedals, Some(4.0), Some(false), |i| i < 9).is_empty());
 }
 
 #[test]

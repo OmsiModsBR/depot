@@ -115,9 +115,10 @@ pub struct InfoBar {
 pub enum InfoMode {
     /// Every item.
     Full,
-    /// The time, the speed and its limit, the line, the next stop and the delay.
+    /// The time, the speed and its limit, the pedals, the road's grade, the skid lamp, the
+    /// line, the next stop and the delay.
     Compact,
-    /// The speed, its limit and the delay.
+    /// The speed, its limit, the pedals, the road's grade, the skid lamp and the delay.
     Essential,
     /// The full bar with the items the player switched off left out.
     Custom,
