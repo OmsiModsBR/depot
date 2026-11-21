@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-21
 
-**Status**: Clarified (2026-11-21)
+**Status**: Clarified (2026-11-21, including a `/speckit-clarify` session)
 
 **Input**: User description (maintainer, 2026-11-21): "Plan a change to the Depot physics: steerable
 axles configurable in the physics, with deactivation and steering logic that scripts can change;
@@ -61,6 +61,9 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
 - Q7 (`/speckit-clarify`): Do AI copies of a bus with steerable axles show them steering? → A: no,
   the AI stays as today: it ignores the parameters and every axle points at the centre as in `C-6`,
   at no cost, even though it looks different from the player's bus (FR-016).
+- Q8 (`/speckit-clarify`): Does an axle in mode 2 (script angle) count as rigid for the turning
+  line? → A: yes: an axle held by the script at an angle weighs on the turning line like a locked
+  one (mode 1) and scrubs by how far it is from pointing at the centre (FR-006, FR-010).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -209,7 +212,7 @@ closed forms of the model document.
 **Turning**
 
 - **FR-006**: The turning line MUST follow from the axles that do not steer at that moment (rigid,
-  locked, or held at an angle by a script; an axle on its way to or from locked counts by how far it
+  locked in mode 1, or held at an angle by a script in mode 2, which counts as rigid; an axle on its way to or from locked counts by how far it
   has gone):
   on the single such axle, or the static-load-weighted middle of several; with none, the
   `[rot_pnt_long]` line of `C-6`.
