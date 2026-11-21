@@ -20,7 +20,7 @@ impl InfoMode {
 
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
-/// the trip with its next stop and delay, and the pedals. A group of it is one thing the player reads at
+/// the trip with its next stop and delay, the pedals, the road's grade and the skid lamp. A group of it is one thing the player reads at
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end. Each
 /// readout is an icon and its value; its name is the icon's tooltip.
 pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
@@ -30,8 +30,8 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     // (the custom layout is the full one less what is switched off, item by item: the time,
     // the speed, the trip distance, the odometer, the temperatures, the tank, the passengers,
-    // the line, the next stop and the pedals; the groups keep their order, so nothing moves
-    // when one is switched on or off)
+    // the line, the next stop, the pedals, the road's grade and the skid lamp; the groups
+    // keep their order, so nothing moves when one is switched on or off)
     let full = matches!(mode, InfoMode::Full | InfoMode::Custom);
     let on = |i: usize| mode != InfoMode::Custom || d.items[i];
     let mut groups: Vec<Vec<InfoItem>> = Vec::new();
@@ -44,6 +44,16 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
         }
         if full && on(9) {
             groups.push(vec![pedals_item(p.vehicle.controls())]);
+        }
+        // (from the rigid body the player's vehicle runs on; a vehicle moved along its
+        // track has none, and neither item)
+        if let Some(body) = p.vehicle.rigid().filter(|_| full) {
+            if let Some(grade) = body.road_grade().filter(|_| on(10)) {
+                groups.push(vec![grade_item(grade)]);
+            }
+            if on(11) {
+                groups.push(vec![skid_item(body.skidding())]);
+            }
         }
         if full && on(2) {
             groups.push(vec![plain(distance_driven(d.metres))
@@ -189,6 +199,32 @@ pub fn pedals_item(c: omsi_sim::Controls) -> InfoItem {
         InfoTone::Pedals([percent(c.clutch), percent(c.brake), percent(c.throttle)]),
     )
     .with_tip("Pedals")
+}
+
+/// The grade of the road under the vehicle in whole percent, a true minus downhill, after
+/// the slope icon: "8 %", "−5 %".
+pub fn grade_item(grade: f32) -> InfoItem {
+    let percent = grade.round();
+    let text = if percent < 0.0 {
+        format!("−{:.0} %", -percent)
+    } else {
+        format!("{:.0} %", percent.abs())
+    };
+    InfoItem::new(text, InfoTone::Plain)
+        .with_icon("hud-bus-slope")
+        .with_tip("Road grade")
+}
+
+/// The skid lamp: the skidding bus lit white while the vehicle skids, dark otherwise.
+pub fn skid_item(skidding: bool) -> InfoItem {
+    let icon = if skidding {
+        "hud-bus-skid-white"
+    } else {
+        "hud-bus-skid-dark"
+    };
+    InfoItem::new("", InfoTone::Light(skidding))
+        .with_icon(icon)
+        .with_tip("Skidding")
 }
 
 /// Where the trip goes: cut short when long (the next stop keeps its room), whole under the

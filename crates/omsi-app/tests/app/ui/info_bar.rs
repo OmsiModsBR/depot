@@ -94,6 +94,17 @@ fn bar(split: bool, bottom: bool, collapsed: bool, low: bool) -> InfoBar {
 
 /// A one-row layout as the game builds one: Full (`full`) with every readout, else Compact
 /// (the badge and the next stop as one group) or Essentials (`large`).
+/// `bar` with its skid lamp lit.
+fn skidding(mut bar: InfoBar) -> InfoBar {
+    for it in bar.groups.iter_mut().flatten() {
+        if it.tone == InfoTone::Light(false) {
+            it.tone = InfoTone::Light(true);
+            it.icon = Some("hud-bus-skid-white");
+        }
+    }
+    bar
+}
+
 fn one_row(full: bool, large: bool) -> InfoBar {
     let clock = with_icon(
         item("21:04:10", InfoTone::Plain),
@@ -116,10 +127,18 @@ fn one_row(full: bool, large: bool) -> InfoBar {
     } else if full {
         let mut pedals = item("", InfoTone::Pedals([0, 35, 80]));
         pedals.tip = Some("Pedals".into());
+        let grade = with_icon(item("6 %", InfoTone::Plain), "hud-bus-slope", "Road grade");
+        let skid = with_icon(
+            item("", InfoTone::Light(false)),
+            "hud-bus-skid-dark",
+            "Skidding",
+        );
         vec![
             vec![clock],
             speed,
             vec![pedals],
+            vec![grade],
+            vec![skid],
             vec![with_icon(
                 item("18.2 km", InfoTone::Plain),
                 "hud-trip",
@@ -303,6 +322,11 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
             Accent::Purple,
         ),
         ("full-top", one_row(true, false), Accent::Amber),
+        (
+            "full-top-skidding",
+            skidding(one_row(true, false)),
+            Accent::Amber,
+        ),
         ("compact-top", one_row(false, false), Accent::Amber),
         ("essentials-top", one_row(false, true), Accent::Amber),
     ];

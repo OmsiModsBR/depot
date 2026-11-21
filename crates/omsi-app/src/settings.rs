@@ -19,7 +19,7 @@ pub const NIGHT_LIGHT_CAP: u32 = 8;
 
 /// The items of the information bar the `custom` layout can switch one by one (settings
 /// keys `info_item_<name>`).
-pub const INFO_ITEM_KEYS: [&str; 10] = [
+pub const INFO_ITEM_KEYS: [&str; 12] = [
     "info_item_time",
     "info_item_speed",
     "info_item_trip",
@@ -30,6 +30,8 @@ pub const INFO_ITEM_KEYS: [&str; 10] = [
     "info_item_line",
     "info_item_next",
     "info_item_pedals",
+    "info_item_grade",
+    "info_item_skid",
 ];
 
 /// Where `key` (`info_item_<name>`) stands among the items of the information bar.

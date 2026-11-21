@@ -25,6 +25,8 @@ pub enum InfoTone {
     /// each is pressed, in percent, in the order the pedals stand: the clutch (blue), the
     /// brake (red) and the throttle (green).
     Pedals([u8; 3]),
+    /// A lamp with no text: its icon lit (white) or out (dark).
+    Light(bool),
 }
 
 #[derive(Clone, Debug, PartialEq)]

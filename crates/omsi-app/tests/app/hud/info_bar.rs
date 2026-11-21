@@ -1,6 +1,6 @@
 use openomsi_game::testing::hud::{
-    delay_item, distance_driven, grouped, odometer_reading, passengers_aboard, pedals_item,
-    temperatures, InfoTone,
+    delay_item, distance_driven, grade_item, grouped, odometer_reading, passengers_aboard,
+    pedals_item, skid_item, temperatures, InfoTone,
 };
 use openomsi_game::testing::settings::INFO_ITEM_KEYS;
 
@@ -84,6 +84,35 @@ fn the_pedals_are_three_bars_in_the_order_of_the_pedals() {
         steering: 0.0,
     });
     assert_eq!(past.tone, InfoTone::Pedals([100, 0, 100]));
+}
+
+/// The road's grade in whole percent after the slope icon, a true minus downhill and no
+/// "-0" on the flat.
+#[test]
+fn the_road_grade_is_written_in_whole_percent() {
+    assert_eq!(grade_item(8.4).text, "8 %");
+    assert_eq!(grade_item(-5.6).text, "−6 %");
+    assert_eq!(grade_item(-0.4).text, "0 %");
+    assert_eq!(grade_item(0.0).text, "0 %");
+    let it = grade_item(12.0);
+    assert_eq!(it.icon, Some("hud-bus-slope"));
+    assert_eq!(it.tip.as_deref(), Some("Road grade"));
+    assert_eq!(it.tone, InfoTone::Plain);
+}
+
+/// The skid lamp is its icon alone: white while skidding, dark otherwise.
+#[test]
+fn the_skid_lamp_is_lit_white_while_skidding() {
+    let lit = skid_item(true);
+    assert_eq!(lit.tone, InfoTone::Light(true));
+    assert_eq!(lit.icon, Some("hud-bus-skid-white"));
+    let out = skid_item(false);
+    assert_eq!(out.tone, InfoTone::Light(false));
+    assert_eq!(out.icon, Some("hud-bus-skid-dark"));
+    for it in [lit, out] {
+        assert!(it.text.is_empty());
+        assert_eq!(it.tip.as_deref(), Some("Skidding"));
+    }
 }
 
 #[test]

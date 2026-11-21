@@ -3196,7 +3196,7 @@ pub fn dimming_of(v: &Value) -> i64 {
 }
 
 /// The information bar's items the custom layout switches one by one.
-const INFO_ITEM_KEYS: [&str; 10] = [
+const INFO_ITEM_KEYS: [&str; 12] = [
     "info_item_time",
     "info_item_speed",
     "info_item_trip",
@@ -3207,6 +3207,8 @@ const INFO_ITEM_KEYS: [&str; 10] = [
     "info_item_line",
     "info_item_next",
     "info_item_pedals",
+    "info_item_grade",
+    "info_item_skid",
 ];
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
@@ -3320,6 +3322,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_item_pax", json!(true)),
         ("info_item_line", json!(true)),
         ("info_item_next", json!(true)),
+        ("info_item_pedals", json!(true)),
+        ("info_item_grade", json!(true)),
+        ("info_item_skid", json!(true)),
         ("get_up", json!(false)),
         ("time_speed", json!("1")),
         ("time_sync", json!(false)),

@@ -54,6 +54,8 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "info_item_line", "Line and destination", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "info_item_next", "Next stop and delay", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "info_item_pedals", "Pedals", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_grade", "Road grade", "Shown in the Custom bar layout").filter(|_| custom_bar),
+        switch_row(app, "info_item_skid", "Skidding", "Shown in the Custom bar layout").filter(|_| custom_bar),
         switch_row(app, "exact_fare", "Passengers pay the exact fare", "No change is given at the cash desk"),
         pick("boarding", "Boarding", "How passengers get their tickets"),
         pick("maintenance", "Maintenance", later),
