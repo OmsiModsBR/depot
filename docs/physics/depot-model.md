@@ -395,9 +395,12 @@ Without it the scrubbing tyres alone would set where the body turns: with a lock
 the lighter axle instead of the load-weighted middle. A scrubbing tyre slides across by design, so it
 is left out of the speed check by which the tyres hold again (`C-7`).
 
-With steerable axles the tyres take no roll across while holding, at walking pace too (`C-7` drops
-it only once the body follows its wheels, above 1 m/s): there the scrub rolled the body away from
-the turn, and it rocked back as it reached that speed.
+With steerable axles, while holding, the tyres take no roll across and the bend's pull rolls the
+body whatever the body's speed along and across (`C-7` does so only while the body follows its
+wheels: over 1 m/s along and under 0.5 m/s across at `[cog]`). Below 1 m/s the scrub rolled the body
+away from the turn, and it rocked back as it reached that speed; with the turning line well behind
+`[cog]`, as on a 6x2-4 whose line is on its driven axle, the speed across at `[cog]` passes 0.5 m/s in
+a turn at town speeds, and the roll swapped between the tyres and the bend's pull in one step.
 
 So a tandem's tyres slide across in a tight turn at walking speed, which costs drive and grip, and a
 tag axle locked in a tight turn drags; a tag axle that turns less than the centre asks shares the

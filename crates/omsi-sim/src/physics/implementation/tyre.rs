@@ -373,6 +373,11 @@ impl RigidBody {
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS
             && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
+        // (with steerable axles, `D-7`, always while holding: their scrub rolled the body at
+        // walking pace, and at speed a turning line far behind `[cog]` gives it more than
+        // `GRIPPED_ACROSS` across, so the roll swapped from the tyres to the bend's pull and
+        // back in one step either way)
+        let gripped = gripped || steered && self.steers_axles();
         // where each tyre is held across: at the tyre, or for a section behind a joint on its
         // turning line, level with the tyre, so that it turns about that line whatever axles
         // it has (`C-9`)
@@ -398,10 +403,8 @@ impl RigidBody {
             // (holding, no roll from the tyres' hold across: OMSI 2 then sets the
             // sideways motion outright and rolls the body by the bend's pull alone,
             // below - taken at the ground, every turn of the wheel kicked the body
-            // over; sliding, the tyres trip it as before. With steerable axles, `D-7`, none
-            // at walking pace either: the axles' scrub rolled the body, which rocked back
-            // as it reached that pace)
-            if self.holding && (gripped || steered && self.steers_axles()) {
+            // over; sliding, the tyres trip it as before)
+            if self.holding && gripped {
                 rn.y = 0.0;
             }
             let inv = c.right.dot(lin(c.right)) + (rn / self.inertia).dot(rn);

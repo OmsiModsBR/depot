@@ -11,7 +11,9 @@ use omsi_sim::testing::physics::implementation::depot::steering::{
 };
 use omsi_sim::testing::physics::RigidBodyInternals;
 use support::model::{build, launch, step};
-use support::vehicles::{twin_steer_8x2, v2_front_declared, v2_rigid_6x2, v2_tag_steer};
+use support::vehicles::{
+    tag_6x2_4_long, twin_steer_8x2, v2_front_declared, v2_rigid_6x2, v2_tag_steer,
+};
 
 fn axle(lock_deg: f32, centring_deg_s: f32) -> SteerAxle {
     SteerAxle {
@@ -391,4 +393,23 @@ fn a_steered_tag_axle_does_not_rock_the_body_pulling_away() {
         tag < 3.0 * rigid.max(1e-3),
         "roll {tag} rad/s with the tag axle, {rigid} rigid"
     );
+}
+
+/// Checks: D-7 (holding with steerable axles, the bend's pull rolls the body whatever its
+/// middle's speed across: with the turning line 1.4 m behind `[cog]`, that speed passed
+/// `GRIPPED_ACROSS` in a turn at 40 km/h and the roll swapped from the bend's pull to the
+/// tyres and back in one step, rocking the body)
+#[test]
+fn a_turning_line_far_behind_the_cog_does_not_rock_the_body_at_speed() {
+    let (mut bodies, joints) = depot(&tag_6x2_4_long());
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let mut roll = 0.0_f32;
+    for frame in 0..600 {
+        step(&mut bodies, &joints, &brakes, 10000.0, 0.3);
+        if frame >= 120 {
+            roll = roll.max(bodies[0].omega().y.abs());
+        }
+    }
+    assert!(bodies[0].holding());
+    assert!(roll < 0.03, "roll {roll} rad/s");
 }
