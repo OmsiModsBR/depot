@@ -21,6 +21,10 @@ pub enum InfoTone {
     /// The delay to the timetable as a chip: -1 ahead (green), 0 on time (the accent), 1 late
     /// (red); always as wide as "+00:00".
     Delay(i8),
+    /// The pedals with no text: three bars side by side, filled from the bottom by how far
+    /// each is pressed, in percent, in the order the pedals stand: the clutch (blue), the
+    /// brake (red) and the throttle (green).
+    Pedals([u8; 3]),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -137,7 +141,7 @@ pub struct InfoData<'a> {
     /// The frame rate and its 1 % low.
     pub fps: Option<(f32, Option<f32>)>,
     /// Which items the custom layout shows (`Settings::info_items`).
-    pub items: [bool; 9],
+    pub items: [bool; crate::settings::INFO_ITEM_KEYS.len()],
     /// The two-tier layouts: names above the readouts of the second tier.
     pub labels: bool,
     /// The two-tier layouts: a tank under 15 % is marked.

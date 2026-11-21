@@ -42,6 +42,15 @@ const INFO_MUTED: [u8; 4] = [163, 168, 178, 255];
 /// Late, a tank nearly empty: the red of the bar (and of its chip's text).
 const INFO_RED: [u8; 4] = [238, 106, 95, 255];
 const INFO_GREEN: [u8; 4] = [95, 207, 138, 255];
+/// The pedal bars, left to right as the pedals stand: the clutch, the brake, the throttle;
+/// full colours, so that a bar reads at a glance beside the bar's pale text.
+const PEDAL_COLOURS: [[u8; 4]; 3] = [[48, 120, 240, 255], [226, 48, 40, 255], [72, 214, 56, 255]];
+/// The groove behind a pedal bar (the part of it not pressed).
+const PEDAL_TRACK: [u8; 4] = [58, 59, 63, 255];
+/// A pedal bar's width and the gap between two, and their height, at size factor 1.
+const PEDAL_BAR_W: f32 = 6.0;
+const PEDAL_BAR_GAP: f32 = 3.0;
+const PEDAL_BAR_H: f32 = 18.0;
 
 /// The colour of an item's text by its tone.
 fn info_colour(tone: InfoTone) -> [u8; 4] {
@@ -53,7 +62,9 @@ fn info_colour(tone: InfoTone) -> [u8; 4] {
         InfoTone::Delay(1) => [255, 150, 140, 0],
         InfoTone::Delay(-1) => [139, 230, 173, 0],
         InfoTone::Delay(_) => accent_ink(),
-        InfoTone::Plain | InfoTone::Fps(_) | InfoTone::Speed => [255, 255, 255, 0],
+        InfoTone::Plain | InfoTone::Fps(_) | InfoTone::Speed | InfoTone::Pedals(_) => {
+            [255, 255, 255, 0]
+        }
     }
 }
 
@@ -204,6 +215,10 @@ impl Ui {
             InfoTone::Speed => (lw.max(digits("000", self)), lh),
             InfoTone::Delay(_) => (lw.max(digits("+00:00", self)) + 18.0 * s, lh + 4.0 * s),
             InfoTone::Fps(_) => (lw + 12.0 * s, lh),
+            InfoTone::Pedals(_) => (
+                (PEDAL_BAR_W * 3.0 + PEDAL_BAR_GAP * 2.0) * s,
+                PEDAL_BAR_H * s,
+            ),
             _ => (lw, lh),
         };
         let icon_px = (16.0 * s).round();
@@ -310,9 +325,45 @@ impl Ui {
                 );
                 tx = bx + 12.0 * s;
             }
+            InfoTone::Pedals(levels) => {
+                // (bars only: the item has no text to draw)
+                self.draw_pedal_bars(r, scene, levels, bx, cy, s);
+                return;
+            }
             _ => tx = bx,
         }
         scene.overlays.push((p.l.tex, [tx, ty, tx + lw, ty + lh]));
+    }
+
+    /// The pedal bars of [`InfoTone::Pedals`] from `x`, centred on the line `cy`: each a groove
+    /// with its colour rising from the bottom by `levels` (percent).
+    fn draw_pedal_bars(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        levels: [u8; 3],
+        x: f32,
+        cy: f32,
+        s: f32,
+    ) {
+        let (w, h) = (PEDAL_BAR_W * s, PEDAL_BAR_H * s);
+        let (top, bottom) = ((cy - h * 0.5).round(), (cy + h * 0.5).round());
+        let corner = (1.5 * s).min(w * 0.5);
+        for (k, (level, colour)) in levels.iter().zip(PEDAL_COLOURS).enumerate() {
+            let x0 = (x + k as f32 * (PEDAL_BAR_W + PEDAL_BAR_GAP) * s).round();
+            self.text
+                .rounded(r, scene, [x0, top, x0 + w, bottom], corner, PEDAL_TRACK);
+            let fill = (bottom - top) * f32::from((*level).min(100)) / 100.0;
+            if fill >= 1.0 {
+                self.text.rounded(
+                    r,
+                    scene,
+                    [x0, bottom - fill, x0 + w, bottom],
+                    corner.min(fill * 0.5),
+                    colour,
+                );
+            }
+        }
     }
 
     /// The information bar, along the top (or the bottom) in the middle: in as many rows as

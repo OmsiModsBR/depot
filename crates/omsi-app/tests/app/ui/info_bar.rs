@@ -114,9 +114,12 @@ fn one_row(full: bool, large: bool) -> InfoBar {
     let groups = if large {
         vec![speed, vec![late]]
     } else if full {
+        let mut pedals = item("", InfoTone::Pedals([0, 35, 80]));
+        pedals.tip = Some("Pedals".into());
         vec![
             vec![clock],
             speed,
+            vec![pedals],
             vec![with_icon(
                 item("18.2 km", InfoTone::Plain),
                 "hud-trip",

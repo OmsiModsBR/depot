@@ -20,7 +20,7 @@ impl InfoMode {
 
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
-/// and the trip with its next stop and delay. A group of it is one thing the player reads at
+/// the trip with its next stop and delay, and the pedals. A group of it is one thing the player reads at
 /// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end. Each
 /// readout is an icon and its value; its name is the icon's tooltip.
 pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
@@ -30,8 +30,8 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
     let plain = |t: String| InfoItem::new(t, InfoTone::Plain);
     // (the custom layout is the full one less what is switched off, item by item: the time,
     // the speed, the trip distance, the odometer, the temperatures, the tank, the passengers,
-    // the line and the next stop; the groups keep their order, so nothing moves when one is
-    // switched on or off)
+    // the line, the next stop and the pedals; the groups keep their order, so nothing moves
+    // when one is switched on or off)
     let full = matches!(mode, InfoMode::Full | InfoMode::Custom);
     let on = |i: usize| mode != InfoMode::Custom || d.items[i];
     let mut groups: Vec<Vec<InfoItem>> = Vec::new();
@@ -41,6 +41,9 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
     if let Some(p) = d.player {
         if on(1) {
             groups.push(speed_group(p, d.limit));
+        }
+        if full && on(9) {
+            groups.push(vec![pedals_item(p.vehicle.controls())]);
         }
         if full && on(2) {
             groups.push(vec![plain(distance_driven(d.metres))
@@ -174,6 +177,18 @@ fn speed_group(p: &Player, limit: Option<f32>) -> Vec<InfoItem> {
         speed.push(InfoItem::new(format!("{limit:.0}"), InfoTone::Limit).with_tip("Speed limit"));
     }
     speed
+}
+
+/// The clutch, the brake and the throttle as the vehicle has them this frame, whatever
+/// works them (the keys, a wheel and its pedals, a gamepad, the touch screen, the
+/// automatic clutch): three bars, no text; "Pedals" under the mouse.
+pub fn pedals_item(c: omsi_sim::Controls) -> InfoItem {
+    let percent = |v: f32| (v.clamp(0.0, 1.0) * 100.0).round() as u8;
+    InfoItem::new(
+        "",
+        InfoTone::Pedals([percent(c.clutch), percent(c.brake), percent(c.throttle)]),
+    )
+    .with_tip("Pedals")
 }
 
 /// Where the trip goes: cut short when long (the next stop keeps its room), whole under the
