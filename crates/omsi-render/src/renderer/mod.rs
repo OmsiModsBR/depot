@@ -21,9 +21,7 @@ mod targets;
 mod upload;
 
 pub use features::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
-pub use mirror::{
-    AssetMirror, FramePlan, MirrorEvent, MirrorTexture, PlanBatch, PlanKind, PlanSink,
-};
+pub use mirror::{AssetMirror, MirrorEvent, MirrorTexture};
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};
 pub use state::{OverlayHook, Renderer, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE};
 

@@ -9,6 +9,7 @@ pub use crate::gpu::{
     catch, catching, gl_backend, note_adapter, poll_gpu, wait_gpu, GpuWaitError,
     ADAPTER_TEXTURE_MB, ADAPTER_VRAM_MB, DEPTH_FORMAT, MSAA,
 };
+pub use crate::interface::{FramePlan, PlanBatch, PlanKind, PlanSink};
 pub use crate::lighting::{
     Corona, LightMode, Lighting, PointLight, ShadingPath, SmokeParticle, LM_ATLAS_TILES,
     LM_TILE_PX, SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE,
@@ -16,8 +17,8 @@ pub use crate::lighting::{
 pub use crate::output::{winit_window, SurfaceState};
 pub use crate::passes::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};
 pub use crate::renderer::{
-    AssetMirror, FramePlan, MirrorEvent, MirrorTexture, OverlayHook, PlanBatch, PlanKind, PlanSink,
-    RenderOptions, Renderer, AUTO_SCALE_PIXELS, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE,
+    AssetMirror, MirrorEvent, MirrorTexture, OverlayHook, RenderOptions, Renderer,
+    AUTO_SCALE_PIXELS, LAMP_CODE_STRIDE, MAX_LAMPS_PER_MESH, SHADOW_SIZE,
 };
 pub use crate::scene::{
     panel_width, Camera, Instance, MaterialId, MeshId, RenderPhase, Scene, ScreenView, TextureId,

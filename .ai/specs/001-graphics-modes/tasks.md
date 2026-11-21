@@ -182,9 +182,9 @@ the layer check passes; goldens and frame times unchanged (quickstart Q9, Q10).
 ### The interfaces `feat/render-mode-interface`
 
 - [ ] T052 [US3] [ph C4] Create `crates/omsi-render/src/interface/mode.rs`: the trait with the steps of research R-9 (build, features for a frame, prepare, light records, scene target and pipelines for a view, after the scene) and the parts the core hands a mode
-- [ ] T053 [P] [US3] [ph C4] Move `FramePlan` and its parts from `crates/omsi-render/src/renderer/mirror.rs` to `crates/omsi-render/src/interface/frame_plan.rs`; `crates/omsi-render/src/api/types.rs` keeps re-exporting the same names (`crates/omsi-render/tests/public_api.rs` unchanged)
+- [x] T053 [P] [US3] [ph C4] Move `FramePlan` and its parts from `crates/omsi-render/src/renderer/mirror.rs` to `crates/omsi-render/src/interface/frame_plan.rs`; `crates/omsi-render/src/api/types.rs` keeps re-exporting the same names (`crates/omsi-render/tests/public_api.rs` unchanged)
 - [ ] T054 [US3] [ph C4] Create `crates/omsi-render/src/modes/{vanilla_plus,enhanced}/mod.rs` as thin implementations that call the code where it is; `Renderer` holds one boxed mode built in `crates/omsi-render/src/renderer/build.rs`, the one function that names both; `renderer/` calls the mode instead of testing `enhanced`
-- [ ] T055 [US3] [ph C4] Teach `scripts/check-render-layers.sh` the order `... effects < interface < modes/vanilla_plus | modes/enhanced < output < renderer < api` and rules 1-4 and 6 of [contracts/render-structure.md](contracts/render-structure.md); add planted-import tests under `scripts/tests/` that the script must fail on
+- [x] T055 [US3] [ph C4] Teach `scripts/check-render-layers.sh` the order `... effects < interface < modes/vanilla_plus | modes/enhanced < output < renderer < api` and rules 1-4 and 6 of [contracts/render-structure.md](contracts/render-structure.md); add planted-import tests under `scripts/tests/` that the script must fail on
 - [ ] T056 [P] [US3] [ph C4] Measure the frame before and after the boxed mode (`profile window:` on the same scene, and the per-mode measurement); the pull request carries both (Principle VII)
 
 ### Move each mode `feat/render-mode-enhanced`, `feat/render-mode-vanilla-plus`
