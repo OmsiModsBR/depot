@@ -160,6 +160,7 @@ pub mod hpattern {
 }
 pub mod hud {
     pub use crate::hud::domain::*;
+    pub use crate::hud::implementation::info_bar::*;
     pub use crate::hud::implementation::legacy::oft::*;
     pub use crate::hud::implementation::legacy::settings::vr_settings_sidebar_step;
     pub use crate::hud::implementation::legacy::*;

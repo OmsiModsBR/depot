@@ -1,3 +1,4 @@
+mod info_bar;
 mod legacy;
 mod lists;
 mod nav;
