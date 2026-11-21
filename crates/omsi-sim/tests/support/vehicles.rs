@@ -321,6 +321,18 @@ pub fn tag_6x2_4_long() -> Vec<Vehicle> {
     steerable(defs, 0, 2, 10.5, 60.0)
 }
 
+/// V5 with its fourth axle, the rear section's last, steerable by the 34.85° that points it at
+/// the centre of a steady turn at half steering, 60°/s (spec 004).
+pub fn v5_last_axle_steer() -> Vec<Vehicle> {
+    steerable(v5_articulated_8x2(), 1, 1, 34.85, 60.0)
+}
+
+/// V4 with the axle of its rear section steerable (10°, 60°/s): a section whose every axle
+/// steers turns about its file's line (spec 004).
+pub fn v4_rear_axle_steer() -> Vec<Vehicle> {
+    steerable(v4_biarticulated(), 2, 0, 10.0, 60.0)
+}
+
 /// The five vehicles by name, as the conformance tests are named after them.
 pub fn conformance_vehicles() -> [(&'static str, Vec<Vehicle>); 5] {
     [

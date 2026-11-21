@@ -11,7 +11,7 @@ use omsi_sim::{Controls, SimClock, VehicleHost, VehicleInstance, VehicleType};
 use std::path::PathBuf;
 use std::sync::Arc;
 use support::ground::flat;
-use support::vehicles::v2_tag_steer;
+use support::vehicles::{v2_tag_steer, v5_last_axle_steer};
 
 const DT: f32 = 1.0 / 60.0;
 /// V2's tag axle: axle 2, its left wheel the fifth.
@@ -25,16 +25,34 @@ fn bus(declared: bool) -> VehicleInstance {
 }
 
 fn bus_of(def: omsi_vehicle::Vehicle, declared: bool) -> VehicleInstance {
+    let mut v = instance(vehicle_type(def, declared.then_some(TAG)));
+    v.enable_rigid_body();
+    v
+}
+
+/// A vehicle of type `ty` under Project Depot Physics on the flat, not yet on its wheels.
+fn instance(ty: Arc<VehicleType>) -> VehicleInstance {
+    let mut host = VehicleHost::new(SimClock::default());
+    host.street_cond = 0.0;
+    host.temperature = 15.0;
+    let mut v = VehicleInstance::new(ty, host);
+    v.set_physics_mode(omsi_cfg::PhysicsMode::Depot);
+    v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
+    v
+}
+
+/// The type of `def`, its scripts declaring the steerable axle variables of axle `axle`.
+fn vehicle_type(def: omsi_vehicle::Vehicle, axle: Option<usize>) -> Arc<VehicleType> {
     let mut program = Program::default();
     for n in ["M_Wheel", "Velocity"] {
         program.declare_var(n);
     }
-    if declared {
+    if let Some(axle) = axle {
         for n in ["Mode", "Angle", "Locked"] {
-            program.declare_var(&format!("Axle_Steer_{n}_{TAG}"));
+            program.declare_var(&format!("Axle_Steer_{n}_{axle}"));
         }
     }
-    let ty = Arc::new(VehicleType {
+    Arc::new(VehicleType {
         def,
         model: Model::default(),
         model_dir: PathBuf::new(),
@@ -47,15 +65,7 @@ fn bus_of(def: omsi_vehicle::Vehicle, declared: bool) -> VehicleInstance {
         missing_packs: Vec::new(),
         mesh_bounds: Vec::new(),
         mesh_boxes: Vec::new(),
-    });
-    let mut host = VehicleHost::new(SimClock::default());
-    host.street_cond = 0.0;
-    host.temperature = 15.0;
-    let mut v = VehicleInstance::new(ty, host);
-    v.set_physics_mode(omsi_cfg::PhysicsMode::Depot);
-    v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
-    v.enable_rigid_body();
-    v
+    })
 }
 
 /// `n` frames with the steering at `steering` and `m_wheel` on the driven wheels.
@@ -181,4 +191,25 @@ fn a_saved_situation_puts_the_axle_back_at_its_angle() {
     let mut v = bus(true);
     v.restore_steer_axles(|_| None);
     assert_eq!(tag(&v), 0.0);
+}
+
+/// Checks: D-6 (a rear section's steerable axle answers to its number over the whole vehicle:
+/// V5's fourth axle is `Axle_Steer_Mode_3`)
+#[test]
+fn a_rear_sections_axle_answers_to_its_number_over_the_vehicle() {
+    let mut defs = v5_last_axle_steer();
+    let rear = vehicle_type(defs.remove(1), None);
+    // (the front section's scripts, which the rear section's variables live in)
+    let mut v = instance(vehicle_type(defs.remove(0), Some(3)));
+    v.attach_trailer(rear);
+    v.enable_rigid_body();
+    let fourth = |v: &VehicleInstance| v.trailers[0].rigid().unwrap().axle_steer(2);
+    run(&mut v, 60, 0.0, 3000.0);
+    run(&mut v, 180, 0.7, 1500.0);
+    assert!(fourth(&v) < -0.05, "the fourth axle at {} rad", fourth(&v));
+    assert_eq!(v.var("Axle_Steer_Locked_3"), Some(0.0));
+    v.set_var("Axle_Steer_Mode_3", 1.0);
+    run(&mut v, 120, 0.7, 1500.0);
+    assert_eq!(fourth(&v), 0.0);
+    assert_eq!(v.var("Axle_Steer_Locked_3"), Some(1.0));
 }

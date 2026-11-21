@@ -251,8 +251,8 @@ f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
 
 ## D-5. Steerable axles and the turning line
 
-> In the game for the leading section, with the modes the scripts pick (spec 004, phases 3 and 4);
-> a section behind a joint keeps `C-9` until phase 5.
+> In the game for every section, leading or behind a joint, with the modes the scripts pick
+> (spec 004, phases 3 to 5).
 
 - **Inputs**: `achse_steer_angle` (`lock_i`, the axle's own lock) and `achse_steer_centring` of each
   steerable axle (`docs/FORMATS.md`), `achse_long` (`y_i`), each axle's load at rest `F_i` (`D-1`),
@@ -310,15 +310,19 @@ loads and line.
   Locking the tag axle widens the full-lock circle by 1.3 m (1.8 m from one that points at the
   centre).
 - **V5**, articulated 8x2: the rear section has axles at `1.2` and `−4.2` m, `[cog]` y `0.6`, its
-  ball at `5.6`; the front section's line is at `−2.5`, its ball at `−4.4` (`D = 1.9` m). The rear
-  section's loads share `0.889 : 0.111`. Fourth axle pointing at the centre: `y_turn = 1.2`, `d = 4.4` m; rigid
-  (locked): `y_turn = 0.6`, `d = 5.0` m. At the front section's full lock (`R = 8.33` m) the steady
-  articulation angle of `C-9`, `R · sin α + D · cos α = d`, is 18.1° steering and 23.0° rigid: the
-  rear section cuts the corner less with its last axle steering.
+  ball at `5.6`; the front section's line is at `−2.5`, its ball at `−4.4`, `1.9` m behind it
+  (`D = −1.9` m, counted forward). The joint carries part of the rear section, and its axles' loads
+  at rest share `0.571 : 0.429`. Fourth axle steerable by `34.85°`, which points it at the centre
+  of the turn at half steering: `y_turn = 1.2`, `d = 4.4` m, the axle at `−s_f · lock` with
+  `s_f = 0.70`; locked: `y_turn = 0.571 · 1.2 + 0.429 · −4.2 = −1.12`, `d = 6.72` m. At half
+  steering (`R = 16.67` m) the steady articulation angle of `C-9`, `R · sin α + D · cos α = d`, is
+  21.7° steering and 30.1° locked, and the rear section's line runs on a circle of 16.19 m and 15.37 m:
+  the rear section cuts the corner less with its last axle steering. Without the declaration it
+  turns about its file's line, here `1.2`, as `C-9` has it.
 
 ## D-6. Modes of a steerable axle
 
-> As `D-5`: in the game for the leading section.
+> As `D-5`: in the game for every section.
 
 - **Inputs**: the axle's mode `Axle_Steer_Mode_<n>` and angle `Axle_Steer_Angle_<n>` from the
   scripts (`docs/FORMATS.md`), `lock_i` and the centring rate `c_i` (`achse_steer_centring`, °/s),
@@ -365,7 +369,7 @@ any other law (pointing at the centre of the turn, a speed-dependent ratio) and 
 
 ## D-7. Scrub
 
-> As `D-5`: in the game for the leading section; a section behind a joint with phase 5.
+> As `D-5`: in the game for every section.
 
 - **Inputs**: each tyre's angle and the angle that points it at the centre of the turn (`C-6`), the
   road's reach `μ · grip_i · h` (`C-7`). **Outputs**: how much of the road's grip each tyre takes
@@ -387,10 +391,14 @@ reach_i = min( |δ_off,i| / SCRUB_FULL_ANGLE , 1 ) · μ · grip_i · h        S
 as a tyre's side force grows with its slip angle up to the road's grip. A tyre that points at the
 centre takes nothing across and slides nowhere; one far off it scrubs with the road's whole grip. A
 section with steerable axles behind a joint is held at each tyre rather than at its turning line
-(`C-9`), so its rigid axles scrub as well. These forces across enter `D-3`'s balance with the others.
+(`C-9`), so its rigid axles scrub as well, and its driver's axle is none: every tyre's reach follows
+the rule above. These forces across enter `D-3`'s balance with the others.
 
 While holding, the section is also held at its turning line (`D-5`): no speed across at the point
 of the line in the body's middle, with unlimited reach, as `C-9` holds a section behind a joint.
+Behind a joint that hold takes at most the road's reach of all the section's tyres, `Σ μ · grip_i ·
+h`, which is what `C-9` lets it take at its line, and the section holds again (`C-7`) only once the
+speed across at its line is under 0.1 m/s as well, since every tyre of it may scrub.
 Without it the scrubbing tyres alone would set where the body turns: with a locked tag axle, about
 the lighter axle instead of the load-weighted middle. A scrubbing tyre slides across by design, so it
 is left out of the speed check by which the tyres hold again (`C-7`).

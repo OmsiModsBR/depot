@@ -9,13 +9,13 @@ use glam::Vec3;
 use omsi_vehicle::Vehicle;
 
 impl Engine {
-    /// Whether `body` steers its own axles: a leading section with steerable axles under
-    /// Project Depot Physics (`D-5` to `D-7`; a section behind a joint keeps `C-9` for now).
-    /// OMSI Classic points every axle at the centre of the turn (`C-6`).
+    /// Whether `body` steers its own axles: a section with steerable axles under Project Depot
+    /// Physics, leading or behind a joint (`D-5` to `D-7`). OMSI Classic points every axle at
+    /// the centre of the turn (`C-6`), and a section behind a joint without them keeps `C-9`.
     pub(in crate::physics) fn steers_axles(self, body: &RigidBody) -> bool {
         match self {
             Engine::Classic => false,
-            Engine::Depot => body.leading && !body.steer_axles.is_empty(),
+            Engine::Depot => !body.steer_axles.is_empty(),
         }
     }
 
@@ -146,8 +146,9 @@ impl EngineState {
 impl Joint {
     /// The curvature (1/m, positive to the right) the joint, bent by `alpha`, makes the
     /// follower turn on about its `[rot_pnt_long]` line: the way the lead carries the joint as
-    /// well (`K-4`), or sin alpha over the follower's arm (Depot). The follower's axles show it
-    /// (`axle_steer`); its tyres do not steer.
+    /// well (`K-4`), or sin alpha over the follower's arm (Depot), the arm from the follower's
+    /// own turning line (with steerable axles, the one `D-5` gives it). The follower's axles
+    /// show it (`axle_steer`); its tyres do not steer unless it has steerable axles (`D-6`).
     pub(in crate::physics) fn follower_kappa(&self, alpha: f32, bodies: &[RigidBody]) -> f32 {
         let (l, f) = (&bodies[self.lead], &bodies[self.follow]);
         let follow_arm = self.anchor_follow.y - f.rot_pnt_long;
