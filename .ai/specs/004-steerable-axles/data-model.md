@@ -5,22 +5,21 @@
 | Field | Type | Unit | Rule |
 |---|---|---|---|
 | `lock_deg` (`achse_depot_steer_angle`) | f32 | deg | finite, `> 0`, `< 90` |
-| `lock_speed_kmh` (`achse_depot_steer_lockspeed`) | f32 | km/h | finite, `>= 0`; 0 = never locks by speed |
 | `centring_deg_s` (`achse_depot_steer_centring`) | f32 | deg/s | finite, `> 0` |
 
-All three parameters or none (a partial set is invalid). Not on the leading section's front axle (known only at spawn, checked there); once per axle.
+Both parameters or none (a partial set is invalid). Not on the leading section's front axle (known only at spawn, checked there); once per axle.
 Invalid declarations are dropped (`steer = None`) with a log line naming the file, the axle and the
 reason; the rest of the file is kept.
 
 ## SteerAxle (`physics/domain/spec.rs`, per section's `PhysicsSpec`)
 
-`axle` (index of the axle in its section), `lock` (rad), `lock_speed` (m/s, `None` for 0), `centring` (rad/s).
+`axle` (index of the axle in its section), `lock` (rad), `centring` (rad/s).
 Built from the declarations only when the engine is Depot.
 
 ## SteerMode (`physics/domain/steering.rs`)
 
-`BuiltIn` (0), `Locked` (1), `Free` (2), `ScriptAngle` (3). Any other value of the script variable
-is `BuiltIn` with one log line per vehicle.
+`Basic` (0), `Locked` (1), `ScriptAngle` (2). Any other value of the script variable is `Basic`
+with one log line per vehicle.
 
 ## SteerState (per steerable axle, in the section's `RigidBody`)
 
@@ -34,10 +33,9 @@ is `BuiltIn` with one log line per vehicle.
 State transitions of `engagement` (target, then ramp at `centring / lock` per second):
 
 ```text
-BuiltIn:      target = 1 if lock_speed is None or |v| < lock_speed, else 0
-Locked:       target = 0
-Free:         target = 1
-ScriptAngle:  target = 0  (angle follows script_angle at `centring`)
+Basic:        target = 1  (angle follows −s · lock at `centring`, s = κ / κ_max)
+Locked:       target = 0  (angle to 0 at `centring`)
+ScriptAngle:  target = 0  (angle follows script_angle, clamped to lock, at `centring`)
 ```
 
 Saved with the situation and restored on load; a situation without it starts with `angle = 0`,

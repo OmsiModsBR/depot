@@ -19,16 +19,17 @@ Today every axle of a section points at the centre of the turn on the `[rot_pnt_
 none is rigid, none can lock, and the scripts only read the angles. This plan adds, in Project Depot
 Physics only:
 
-1. three new axle parameters inside `[newachse]`, one value each (`achse_depot_steer_angle`,
-   `_lockspeed`, `_centring`), that declare that axle steerable
+1. two new axle parameters inside `[newachse]`, one value each (`achse_depot_steer_angle`,
+   `achse_depot_steer_centring`), that declare that axle steerable
    ([contracts/bus-key.md](contracts/bus-key.md));
 2. in a section with a declaration, rigid axles for every other axle (the leading section's front
    axle stays the driver's), and a turning line computed each substep from the axles that do not
    steer, weighted by their static load ([research.md](research.md) R-4);
 3. the front wheels' lock kept as `C-6` gives it, so the turning circle follows what the steerable
    axles do (R-5);
-4. per steerable axle, a geometric law with a speed lock and rate-limited centring (R-6), and script
-   modes that replace it ([contracts/script-vars.md](contracts/script-vars.md), R-9);
+4. per steerable axle, three modes chosen by the vehicle's script: 0 basic (opposite to the
+   steering axle, in proportion to the axle's lock, as a 6x2-4), 1 locked straight, 2 script angle,
+   with rate-limited changes (R-6); no locking rule in the game ([contracts/script-vars.md](contracts/script-vars.md), R-9);
 5. scrub of tyres that do not point at the centre, through the road's reach in the existing lateral
    solver and `D-3` (R-7);
 6. the same on any section behind a joint, on the curvature the joint gives it (R-8).
@@ -66,7 +67,7 @@ invalid content; nothing from the reference executable in public text
 | VI. Tests outside `src/` | New tests in `tests/` folders; what they need from `src/` via `testing` behind `test-support` | Pass |
 | VII. Performance | New per-substep work is a handful of arithmetic per axle; measured before/after (SC-007) | Pass (feature exception, with measurements) |
 | VIII. Provenance | Static-analysis reading used only to confirm OMSI 2 has no per-axle setting; nothing of it in public text | Pass |
-| IX. Small changes | Seven phases, one PR each, `feat/`/`docs/` prefixes | Pass |
+| IX. Small changes | Six phases, five of them PRs, `feat/`/`docs/` prefixes | Pass |
 | X. Lean code | One rule method, no trait (single implementation), no speculative options (no tyre model, no AI) | Pass |
 
 ## Project Structure
@@ -129,14 +130,15 @@ file, no new crate.
 
 1. If the section has no `SteerAxle`, run `C-6` / `C-9` as today and stop.
 2. Update each steerable axle's mode from its script variables (once per frame) and its engagement
-   `e_i` towards its target at `centring_i / lock_i` per second (R-6).
+   `e_i` towards its target (1 in mode 0, 0 in modes 1 and 2) at `centring_i / lock_i` per second
+   (R-6).
 3. `y_turn` from the rigid axles and `1 − e_i` of the steerable ones, weighted by static load; with
    no weight, the `C-6` line (R-4).
 4. Leading section: `κ = s · tan(lock_front) / |y_front − y_turn|` (R-5). Section behind: the joint's
    curvature, its `arm` measured from its own `y_turn`.
-5. Angles: front axle and engaged steerable axles point at the centre (`atan((y_i − y_turn) κ)`,
-   clamped to their lock, scaled by `e_i`, rate-limited to `centring_i`); script-angle axles move to
-   their angle; rigid axles 0. Tyres keep Ackermann about their axle's centre.
+5. Angles: front axle as `C-6`; steerable axles move, at most `centring_i` per second, to
+   `−s · lock_i` (mode 0, `s = κ / κ_max`), 0 (mode 1) or the script's angle clamped to the lock
+   (mode 2); rigid axles 0. Tyres keep Ackermann about their axle's angle.
 6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
    reach; keyed sections behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
    force.
@@ -155,14 +157,13 @@ identical.
 
 | Phase | Branch | Content | Spec | Label |
 |---|---|---|---|---|
-| 0 | (in game, maintainer) | T001: a stock bus with the three `achse_depot_steer_*` parameters added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
+| 0 | (in game, maintainer) | T001: a stock bus with the two `achse_depot_steer_*` parameters added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
 | 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
-| 3 | `feat/steer-axles-turning` | leading section: rigid axles, turning line, lock, angles, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
-| 4 | `feat/steer-axles-lock` | built-in logic: lock speed, engagement and centring ramps, continuity | US2, FR-009, FR-012, SC-003 | `physics-delta` |
-| 5 | `feat/steer-axles-scripts` | script modes and locked flag; situation save; changelog line | US3, FR-013, FR-014, SC-004 | `physics-delta` |
-| 6 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 keyed | US4, FR-015, SC-006a | `physics-delta` |
-| 7 | (measure + in game) | SC-007 frame time in the phase 6 PR; SC-008 by the maintainer on a keyed 6x2 and a keyed articulated bus | SC-007, SC-008 | - |
+| 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
+| 4 | `feat/steer-axles-scripts` | modes 1 and 2, engagement and centring ramps, continuity, locked flag; situation save; changelog line | US2, FR-009, FR-012..FR-014, SC-003, SC-004 | `physics-delta` |
+| 5 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 keyed | US3, FR-015, SC-006a | `physics-delta` |
+| 6 | (measure + in game) | SC-007 frame time in the phase 5 PR; SC-008 by the maintainer on a keyed 6x2 and a keyed articulated bus | SC-007, SC-008 | - |
 
 If T001 fails, the key moves to a side file `<name>.depot.cfg` (R-3) before phase 2.
 

@@ -33,6 +33,7 @@
 
 - Q1 (turning line from the non-steering axles) and Q2 (generic: any axle of any section) were
   decided by the maintainer on 2026-11-21, and Q3 (the declaration is parameters of each
-  `[newachse]`, one per value).
+  `[newachse]`, one per value), and Q4 (no locking rule in
+  the game; mode 0 proportional opposite to the steering axle).
 - Physics terms (`C-6`, `D-3`, `[rot_pnt_long]`, `Axle_Steering`) are the domain's vocabulary for
   mod authors, not implementation details; module names stay out of the spec.

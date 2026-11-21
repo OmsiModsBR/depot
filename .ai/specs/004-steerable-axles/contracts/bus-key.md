@@ -1,15 +1,14 @@
 # Contract: `achse_depot_steer_*` in a `[newachse]`
 
-Three new axle parameters, written inside the axle's own `[newachse]` like `achse_long`, each
+Two new axle parameters, written inside the axle's own `[newachse]` like `achse_long`, each
 followed by one value line:
 
 | Parameter | Value | Range |
 |---|---|---|
 | `achse_depot_steer_angle` | lock angle, degrees each side | `> 0`, `< 90` |
-| `achse_depot_steer_lockspeed` | speed above which the axle locks straight, km/h | `>= 0`; 0 = never |
-| `achse_depot_steer_centring` | rate at which the axle turns to and from straight, degrees per second | `> 0` |
+| `achse_depot_steer_centring` | the most the axle turns per second, between modes and following the steering, degrees per second | `> 0` |
 
-Example: a 6x2 bus with a steered tag axle that locks above 30 km/h.
+Example: a 6x2-4 bus with a steered tag axle (when it locks is up to the bus's script).
 
 ```text
 [newachse]
@@ -27,8 +26,6 @@ achse_maxwidth
 ...
 achse_depot_steer_angle
 15
-achse_depot_steer_lockspeed
-30
 achse_depot_steer_centring
 20
 ```
@@ -37,8 +34,8 @@ achse_depot_steer_centring
 
 - Read by Project Depot only; OMSI 2 and its derivatives skip them (checked in game, T001). They may
   stand anywhere among the axle's parameters, in any order.
-- The three go together: an axle with only one or two of them is not steerable, and the log names
-  the missing ones.
+- The two go together: an axle with only one of them is not steerable, and the log names the
+  missing one.
 - Only the keyword form of an axle can carry them; the old form with bare values cannot.
 - Take effect only when the vehicle runs Project Depot Physics (`[depot_physics]` in the leading
   section's file, or the launcher setting). Under OMSI Classic they are read and ignored, with one

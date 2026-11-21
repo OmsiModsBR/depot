@@ -37,9 +37,10 @@ Its only OMSI 2 requirement is that the new key is ignored there (R-3).
 
 ## R-3. The `.bus` key
 
-**Decision** (maintainer, 2026-11-21): three new axle parameters inside the axle's own
-`[newachse]`, each with one value line like `achse_long`: `achse_depot_steer_angle`, `achse_depot_steer_lockspeed` and `achse_depot_steer_centring` (lock angle in degrees, lock speed in
-km/h, centring rate in degrees per second) ([contracts/bus-key.md](contracts/bus-key.md)). One
+**Decision** (maintainer, 2026-11-21): two new axle parameters inside the axle's own
+`[newachse]`, each with one value line like `achse_long`: `achse_depot_steer_angle` (lock angle in
+degrees) and `achse_depot_steer_centring` (centring rate in degrees per second). No lock speed: when
+the axle locks is each vehicle's script's business (R-6, R-9) ([contracts/bus-key.md](contracts/bus-key.md)). One
 parameter per value keeps the pattern of the other axle parameters.
 
 **Rationale**: the declaration stays with the axle it describes, so no index can point at the
@@ -50,7 +51,7 @@ unknown lines inside an axle. That OMSI 2 ignores the new parameters is checked 
 anything is built (T001), as `[depot_physics]` was (spec 002, Q1).
 
 **Alternatives rejected**: a section of its own with an axle index (the maintainer chose the
-parameters; an index can drift when axles are added or reordered); one keyword followed by three
+parameters; an index can drift when axles are added or reordered); one keyword followed by all its
 values (does not follow the pattern of the other axle parameters, maintainer 2026-11-21); a side file `<name>.depot.cfg` (kept only as
 the fallback if T001 fails); an optional centring rate with a default (the game would invent a
 value, Principle III). The old keyword-less axle form (values only) cannot carry it.
@@ -95,27 +96,34 @@ change the radius).
 
 ## R-6. The axle's law, engagement and centring
 
-**Decision**: each steerable axle keeps an angle `δ_i` and an engagement `e_i`:
+**Decision** (maintainer, 2026-11-21): the game has no locking rule of its own; the script picks the
+mode. Each steerable axle keeps an angle `δ_i` and an engagement `e_i`:
 
 ```
-δ_geo   = atan((y_i − y_turn) · κ)            points at the centre of the turn
-target  = clamp(δ_geo, ±lock_i) · e_i         built-in and free modes
-target  = clamp(δ_script, ±lock_i)            script-angle mode (e_i ramps to 0)
-e_i     ramps to 1 (steering) or 0 (locked) at rate  centring_i / lock_i  (1/s)
+s       = δ_front / lock_front                the driver's steering, −1..1 (= κ / κ_max)
+target  = −s · lock_i                          mode 0, basic: opposite to the steering axle,
+                                               in proportion to the axle's own lock (6x2-4)
+target  = 0                                    mode 1, locked straight
+target  = clamp(δ_script, ±lock_i)             mode 2, script angle
+e_i     → 1 in mode 0, → 0 in modes 1 and 2, at rate  centring_i / lock_i  (1/s)
 δ_i     moves to its target at most centring_i (deg/s) per second
 ```
 
-Built-in mode: steering while `|v| < lock speed` (or lock speed 0), else locked. Locked mode: `e_i`
-to 0. Free mode: `e_i` to 1. Script-angle mode: `e_i` to 0 (the axle counts as held for the line,
-R-4) and `δ_i` to the script's angle. The tyres of an axle keep their own Ackermann angles about
+In mode 2 the axle counts as held for the turning line (R-4); in mode 0 as steering. The steering
+axle is the driver's front axle for every section, so a section behind a joint in mode 0 also
+follows `s` (maintainer's mode 0 read literally); a script that wants the joint's bend, or a twin
+steer second axle turning the same way, uses mode 2. The tyres of an axle keep their own Ackermann angles about
 `δ_i`'s centre as today. Uses `y_turn` of the previous substep (one substep, 1/240 s, of lag) to
 break the loop between the line and the angles.
 
-**Rationale**: rate limits on both the angle and the engagement make every transition continuous
-(FR-009, SC-003); one engagement value serves the line, the law and the locked flag.
+**Rationale**: the proportional law is how the steered tag axle of a 6x2-4 is linked to the
+steering; rate limits on both the angle and the engagement make every mode change continuous
+(FR-009, SC-003); one engagement value serves the line and the locked flag.
 
-**Alternatives rejected**: snapping to straight at the lock speed (a yaw kick at speed); a separate
-"locked" boolean (the line would jump).
+**Alternatives rejected**: a lock speed in the `.bus` file (removed by the maintainer: each make
+locks differently, so the script decides); a geometric law pointing at the centre of the turn (not
+what the maintainer asked for mode 0; a script can compute it and use mode 2); snapping to straight
+on a mode change (a yaw kick at speed); a separate "locked" boolean (the line would jump).
 
 ## R-7. Scrub of an axle that does not point at the centre
 
@@ -158,16 +166,16 @@ script, `Depot_AxleSteer_Locked_<n>` written by the physics
 step, as `Axle_Springfactor` is. `Axle_Steering_<n>_L/R` carries `δ_i` (0 for a rigid axle of a
 keyed section).
 
-**Rationale**: 0, the value of an undeclared variable, is the built-in logic, so scripts that know
-nothing of the feature work unchanged; OMSI 2 treats the names as ordinary user variables.
+**Rationale**: 0, the value of an undeclared variable, is the basic mode, so a script that knows
+nothing of the feature still gets a steering tag axle; OMSI 2 treats the names as ordinary user variables.
 
 **Alternatives rejected**: an `{event}`/macro call (no such mechanism for physics inputs); separate
 "lock" and "override" booleans (two variables for one choice).
 
 ## R-10. Where it lives (Principle V, X)
 
-- `omsi-vehicle`: parse the three `achse_depot_steer_*` parameters in `parse_axle` into
-  `Axle::steer: Option<AxleSteer>` (all three or none), validate, report.
+- `omsi-vehicle`: parse the two `achse_depot_steer_*` parameters in `parse_axle` into
+  `Axle::steer: Option<AxleSteer>` (both or none), validate, report.
 - `omsi-sim/src/physics/domain/`: `SteerAxle` (spec values in SI) in `spec.rs`, `SteerState` (angle,
   engagement, mode) in `wheel.rs` or a new `steering.rs`.
 - `omsi-sim/src/physics/implementation/depot/steering.rs`: the turning line (R-4), the lock (R-5),
