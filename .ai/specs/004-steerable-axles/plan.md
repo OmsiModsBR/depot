@@ -60,7 +60,7 @@ invalid content; nothing from the reference executable in public text
 | Principle | Check | Result |
 |---|---|---|
 | I. Own Path | Depot-only feature, no upstream tie | Pass |
-| II. Fidelity only with validation | No "as OMSI 2" claim; only the key's harmlessness in OMSI 2 is checked in game (T001); keyed changes carry `physics-delta`, unkeyed traces identical | Pass |
+| II. Fidelity only with validation | No "as OMSI 2" claim; only the key's harmlessness in OMSI 2 needed a game check (T001, passed 2026-11-21); keyed changes carry `physics-delta`, unkeyed traces identical | Pass |
 | III. No compensation | Declarations read as given; invalid ones reported and ignored, not corrected; all four values required, no invented default | Pass |
 | IV. No crash | Parser and script inputs validated; bad values logged, game continues (FR-005, SC-005) | Pass |
 | V. Domains as packages | Domain objects in `physics/domain`, rules in `physics/implementation/depot/steering.rs`, chosen in `engine.rs`; scripts reach physics only through `physics_bridge.rs` | Pass |
@@ -157,7 +157,7 @@ identical.
 
 | Phase | Branch | Content | Spec | Label |
 |---|---|---|---|---|
-| 0 | (in game, maintainer) | T001: a stock bus with the two `achse_steer_*` parameters added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
+| 0 | (in game, maintainer) | T001: a stock bus with the two `achse_steer_*` parameters added to an axle loads and drives the same in OMSI 2. **Done 2026-11-21**: OMSI 2 ignores the new parameters (maintainer) | FR-002 | - |
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
 | 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
 | 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
@@ -165,7 +165,7 @@ identical.
 | 5 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 keyed | US3, FR-015, SC-006a | `physics-delta` |
 | 6 | (measure + in game) | SC-007 frame time in the phase 5 PR; SC-008 by the maintainer on a keyed 6x2 and a keyed articulated bus | SC-007, SC-008 | - |
 
-If T001 fails, the key moves to a side file `<name>.depot.cfg` (R-3) before phase 2.
+Phase 0 passed (2026-11-21), so the parameters stay in `[newachse]`; the next phase is 1.
 
 ## Constitution Check (after design)
 

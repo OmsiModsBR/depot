@@ -47,13 +47,13 @@ parameter per value keeps the pattern of the other axle parameters.
 wrong axle. In the keyword form the axle parameters are named lines that apply to the axle opened
 by the last `[newachse]`, in any order, and a line the reader does not know is skipped; the values
 are bare numbers, which name no parameter. Depot's own reader (`parse_axle`) already skips
-unknown lines inside an axle. That OMSI 2 ignores the new parameters is checked in the game before
-anything is built (T001), as `[depot_physics]` was (spec 002, Q1).
+unknown lines inside an axle. That OMSI 2 ignores the new parameters was checked in the game by the
+maintainer on 2026-11-21 (T001), as `[depot_physics]` was (spec 002, Q1).
 
 **Alternatives rejected**: a section of its own with an axle index (the maintainer chose the
 parameters; an index can drift when axles are added or reordered); one keyword followed by all its
-values (does not follow the pattern of the other axle parameters, maintainer 2026-11-21); a side file `<name>.depot.cfg` (kept only as
-the fallback if T001 fails); an optional centring rate with a default (the game would invent a
+values (does not follow the pattern of the other axle parameters, maintainer 2026-11-21); a side file `<name>.depot.cfg` (not needed:
+T001 passed); an optional centring rate with a default (the game would invent a
 value, Principle III). The old keyword-less axle form (values only) cannot carry it.
 
 ## R-4. The turning line (maintainer decision Q1)

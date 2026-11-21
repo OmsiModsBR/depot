@@ -186,7 +186,7 @@ closed forms of the model document.
   game invents none (Principle III).
 - **FR-002**: Before any implementation, the parameter MUST be checked in OMSI 2 (black box, as
   `Q1` of spec 002): a stock bus with the parameter added to an axle loads and drives in OMSI 2
-  exactly as without it.
+  exactly as without it. **Done 2026-11-21**: the maintainer checked it; OMSI 2 ignores the new parameters.
 - **FR-003**: In a section with at least one valid declaration, every axle not declared steerable is
   rigid (always straight), except the leading section's front axle, which the driver steers as
   today. A section without any declaration runs exactly as today in both engines.

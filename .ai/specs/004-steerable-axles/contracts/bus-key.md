@@ -32,7 +32,7 @@ achse_steer_centring
 
 ## Rules
 
-- Read by Project Depot only; OMSI 2 and its derivatives skip them (checked in game, T001). They may
+- Read by Project Depot only; OMSI 2 and its derivatives skip them (checked in game by the maintainer, 2026-11-21). They may
   stand anywhere among the axle's parameters, in any order.
 - The two go together: an axle with only one of them is not steerable, and the log names the
   missing one.
