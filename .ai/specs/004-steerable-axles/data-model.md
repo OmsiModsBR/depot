@@ -49,5 +49,5 @@ Not stored: computed from the previous substep's states (research R-6).
 
 ## Script variables (per steerable axle, train-wide axle number `n`)
 
-See [contracts/script-vars.md](contracts/script-vars.md): `Depot_AxleSteer_Mode_<n>` and
-`Depot_AxleSteer_Angle_<n>` in, `Depot_AxleSteer_Locked_<n>` and `Axle_Steering_<n>_L/R` out.
+See [contracts/script-vars.md](contracts/script-vars.md): `Axle_Steer_Mode_<n>` and
+`Axle_Steer_Angle_<n>` in, `Axle_Steer_Locked_<n>` and `Axle_Steering_<n>_L/R` out.

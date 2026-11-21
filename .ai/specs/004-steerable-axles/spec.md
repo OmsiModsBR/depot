@@ -48,7 +48,7 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
   other axle parameters are (FR-001).
 - Q4: What logic does the game run by itself? → A (maintainer): none for locking: the speed lock
   is removed, and each vehicle's script locks or steers the axle through
-  `Depot_AxleSteer_Mode_<n>`. Mode 0 is the basic mode of a 6x2-4: the axle turns opposite to the
+  `Axle_Steer_Mode_<n>`. Mode 0 is the basic mode of a 6x2-4: the axle turns opposite to the
   steering axle, in proportion to its configured lock (FR-008, FR-012, FR-013). Reading taken: the
   steering axle is the driver's front axle for every section, so a section behind a joint in mode 0
   also follows the driver's steering; steering by the joint's bend, or a twin-steer axle turning the
@@ -223,7 +223,7 @@ closed forms of the model document.
 - **FR-012**: The game MUST NOT lock a steerable axle by itself (no speed, gear or fault rule): the
   vehicle's script decides, through the mode (FR-013).
 - **FR-013**: Scripts MUST be able to choose, per steerable axle and each frame, through
-  `Depot_AxleSteer_Mode_<n>`: 0 basic (FR-008; also when the script never declares the variable),
+  `Axle_Steer_Mode_<n>`: 0 basic (FR-008; also when the script never declares the variable),
   1 locked straight, 2 an angle written by the script (clamped to the lock). The axle moves between
   modes at its centring rate. Variable names are Project Depot's own and carry no meaning in OMSI 2.
 - **FR-014**: The physics MUST hand the scripts each axle's actual angle through the existing

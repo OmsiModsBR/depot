@@ -160,11 +160,15 @@ articulation-angle-controlled rear axle follows.
 ## R-9. Script interface
 
 **Decision**: three variables per steerable axle, numbered like `Axle_Steering` (axle number over
-the whole train): `Depot_AxleSteer_Mode_<n>` and `Depot_AxleSteer_Angle_<n>` written by the
-script, `Depot_AxleSteer_Locked_<n>` written by the physics
+the whole train): `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` written by the
+script, `Axle_Steer_Locked_<n>` written by the physics
 ([contracts/script-vars.md](contracts/script-vars.md)). Read once per frame before the physics
 step, as `Axle_Springfactor` is. `Axle_Steering_<n>_L/R` carries `δ_i` (0 for a rigid axle of a
 keyed section).
+
+Names chosen by the maintainer (2026-11-21), without a `Depot_` prefix, next to OMSI 2's
+`Axle_Steering_<n>`. The implementation must match them whole: `Axle_Steer_` is a prefix of
+`Axle_Steering_`, so no lookup by prefix (as in `vehicle/builtins.rs`) may mix the two.
 
 **Rationale**: 0, the value of an undeclared variable, is the basic mode, so a script that knows
 nothing of the feature still gets a steering tag axle; OMSI 2 treats the names as ordinary user variables.

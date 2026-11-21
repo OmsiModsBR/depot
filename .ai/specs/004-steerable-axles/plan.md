@@ -83,7 +83,7 @@ invalid content; nothing from the reference executable in public text
 ├── quickstart.md
 ├── contracts/
 │   ├── bus-key.md       # achse_depot_steer_* in [newachse]
-│   └── script-vars.md   # Depot_AxleSteer_* and Axle_Steering
+│   └── script-vars.md   # Axle_Steer_* and Axle_Steering
 └── checklists/
     └── requirements.md
 ```
@@ -105,7 +105,7 @@ crates/omsi-sim/
 ├── src/physics/implementation/body.rs   # steer_to / axle_steer use the rule
 ├── src/physics/implementation/tyre.rs   # reach of scrubbing tyres; keyed followers held at tyre
 ├── src/physics/implementation/train.rs  # kappa from kappa_max of the current line
-├── src/vehicle/physics_bridge.rs        # Depot_AxleSteer_* in and out
+├── src/vehicle/physics_bridge.rs        # Axle_Steer_* in and out
 ├── src/vehicle/coupled/articulation.rs  # section axle numbers for the variables
 ├── src/vehicle.rs / motion.rs           # situation save/restore of SteerState
 ├── src/testing.rs                       # test-support access to SteerState
@@ -142,7 +142,7 @@ file, no new crate.
 6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
    reach; keyed sections behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
    force.
-7. Outputs: `Axle_Steering_<n>` = `δ_i` (0 for rigid), `Depot_AxleSteer_Locked_<n>` = `e_i == 0`.
+7. Outputs: `Axle_Steering_<n>` = `δ_i` (0 for rigid), `Axle_Steer_Locked_<n>` = `e_i == 0`.
 
 ### Engine boundary
 
