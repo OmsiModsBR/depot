@@ -11,4 +11,4 @@ pub use cabin::PassengerCabin;
 pub use hof::Hof;
 pub use paths::VehiclePaths;
 pub use sound::{SoundCfg, SoundEntry, VolCurve};
-pub use vehicle::{Axle, Camera, Vehicle, VehicleKind};
+pub use vehicle::{Axle, AxleSteer, Camera, SteerParamError, Vehicle, VehicleKind};

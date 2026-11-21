@@ -1078,6 +1078,7 @@ fn the_wheels_stand_where_the_axle_says() {
         damper: 1.0,
         driven: false,
         inertia_inv: 0.0,
+        ..Default::default()
     };
     let spec = AxleSpec::of(&a);
     assert_eq!((spec.radius, spec.outer, spec.track), (0.1, 0.2, 0.1));

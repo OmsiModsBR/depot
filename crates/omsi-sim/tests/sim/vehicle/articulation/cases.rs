@@ -32,6 +32,7 @@ fn sections() -> (Arc<VehicleType>, Arc<VehicleType>) {
                 damper: 20.0,
                 driven,
                 inertia_inv: 0.0,
+                ..Default::default()
             })
             .collect();
         def.coupling_front_character = Some([52.5, -20.0, 20.0, 1.0]);

@@ -11,7 +11,7 @@ use crate::physics::domain::params::{
 };
 use crate::physics::domain::{
     BodyInputs, Engine, EngineState, Ground, GroundProbe, Payload, PhysicsSpec, RigidBody,
-    RigidWheel, RoadWeather,
+    RigidWheel, RoadWeather, SteerState,
 };
 use glam::{DVec3, Quat, Vec3};
 use omsi_vehicle::Vehicle;
@@ -95,6 +95,11 @@ impl RigidBody {
             wheels,
             wheel_axle,
             steer_deg: 0.0,
+            steer_axles: spec
+                .steer_axles
+                .iter()
+                .map(|s| (*s, SteerState::default()))
+                .collect(),
             kappa: 0.0,
             max_steer_deg: spec.max_steer_deg,
             rot_pnt_long: spec.turn_line,
@@ -115,6 +120,20 @@ impl RigidBody {
             last_position: DVec3::ZERO,
             last_orientation: Quat::IDENTITY,
         }
+    }
+
+    /// The body leads its vehicle: its front axle is the driver's, so a steerable axle
+    /// declared there is left out (spec 004; reported when the vehicle appears,
+    /// `resolve_physics_mode`).
+    pub fn lead(&mut self) {
+        let wheels = &self.wheels;
+        let axles = &self.wheel_axle;
+        self.steer_axles.retain(|(s, _)| {
+            !axles
+                .iter()
+                .zip(wheels)
+                .any(|(a, w)| *a == s.axle && w.steered)
+        });
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading

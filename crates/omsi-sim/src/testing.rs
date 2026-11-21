@@ -185,6 +185,7 @@ pub mod physics {
         fn inv_mass_at(&self, r: glam::Vec3, n: glam::Vec3) -> f32;
         fn wheel_axle(&self) -> &[usize];
         fn rot_pnt_long(&self) -> f32;
+        fn steer_axles(&self) -> &[(crate::physics::SteerAxle, crate::physics::SteerState)];
     }
 
     impl RigidBodyInternals for RigidBody {
@@ -196,6 +197,9 @@ pub mod physics {
         }
         fn rot_pnt_long(&self) -> f32 {
             self.rot_pnt_long
+        }
+        fn steer_axles(&self) -> &[(crate::physics::SteerAxle, crate::physics::SteerState)] {
+            &self.steer_axles
         }
     }
 

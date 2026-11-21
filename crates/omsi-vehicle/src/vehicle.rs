@@ -37,6 +37,91 @@ pub struct Axle {
     pub damper: f32,
     pub driven: bool,
     pub inertia_inv: f32,
+    /// `achse_steer_angle` and `achse_steer_centring`: the axle steers under Project Depot
+    /// Physics (spec 004, `D-5` to `D-7` of `docs/physics/depot-model.md`). `None` without
+    /// them, and for an invalid set, which is logged and dropped, never corrected.
+    pub steer: Option<AxleSteer>,
+}
+
+/// A steerable axle's two parameters, as the file gives them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AxleSteer {
+    /// `achse_steer_angle`: the lock each side, degrees, `> 0` and `< 90`.
+    pub lock_deg: f32,
+    /// `achse_steer_centring`: the most the axle turns per second, degrees, `> 0`.
+    pub centring_deg_s: f32,
+}
+
+/// Why the `achse_steer_*` parameters of an axle are dropped.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SteerParamError {
+    /// Only one of the two is given; names the missing one.
+    Missing(&'static str),
+    /// The value line of the named parameter is not a number.
+    NotANumber(&'static str, String),
+    /// The named parameter's value is outside its range.
+    OutOfRange(&'static str, f32),
+}
+
+impl std::fmt::Display for SteerParamError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Missing(name) => write!(f, "{name} is missing (the two go together)"),
+            Self::NotANumber(name, text) => write!(f, "{name} is not a number: {text:?}"),
+            Self::OutOfRange(name, v) => write!(
+                f,
+                "{name} {v} is out of range ({})",
+                if *name == AxleSteer::ANGLE {
+                    "> 0 and < 90"
+                } else {
+                    "> 0"
+                }
+            ),
+        }
+    }
+}
+
+impl AxleSteer {
+    pub const ANGLE: &'static str = "achse_steer_angle";
+    pub const CENTRING: &'static str = "achse_steer_centring";
+
+    /// The declaration from the value lines of the two parameters (`None`: not given):
+    /// neither gives no declaration; both must be numbers in range.
+    pub fn from_params(
+        angle: Option<&str>,
+        centring: Option<&str>,
+    ) -> Result<Option<AxleSteer>, SteerParamError> {
+        let (angle, centring) = match (angle, centring) {
+            (None, None) => return Ok(None),
+            (Some(_), None) => return Err(SteerParamError::Missing(Self::CENTRING)),
+            (None, Some(_)) => return Err(SteerParamError::Missing(Self::ANGLE)),
+            (Some(a), Some(c)) => (a, c),
+        };
+        let lock_deg = steer_number(Self::ANGLE, angle)?;
+        if !(lock_deg > 0.0 && lock_deg < 90.0) {
+            return Err(SteerParamError::OutOfRange(Self::ANGLE, lock_deg));
+        }
+        let centring_deg_s = steer_number(Self::CENTRING, centring)?;
+        if centring_deg_s <= 0.0 {
+            return Err(SteerParamError::OutOfRange(Self::CENTRING, centring_deg_s));
+        }
+        Ok(Some(AxleSteer {
+            lock_deg,
+            centring_deg_s,
+        }))
+    }
+}
+
+/// A value line read strictly: its first word must be a finite number (a decimal comma is
+/// read as a point, as everywhere in the file); OMSI's reading of garbage as 0 would turn a
+/// typo into an out-of-range value instead of naming it.
+fn steer_number(name: &'static str, line: &str) -> Result<f32, SteerParamError> {
+    let word = line.split_whitespace().next().unwrap_or("");
+    word.replace(',', ".")
+        .parse::<f32>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .ok_or_else(|| SteerParamError::NotANumber(name, line.trim().to_string()))
 }
 
 impl Default for Axle {
@@ -51,6 +136,7 @@ impl Default for Axle {
             damper: 0.0,
             driven: false,
             inertia_inv: 0.0,
+            steer: None,
         }
     }
 }
@@ -210,6 +296,7 @@ pub fn parse_attachment(r: &mut omsi_cfg::CfgReader) -> Attachment {
 
 fn parse_axle(r: &mut omsi_cfg::CfgReader) -> Axle {
     let mut a = Axle::default();
+    let line = r.block_line();
     // Old files (the stock AI cars, the Manta) list the values without their keywords, one
     // per line: long, max width, min width, wheel diameter, spring, max force, damper,
     // driven, inertia. Read that way, the Golf's wheels are 0.503 m, not the default 1 m
@@ -251,6 +338,8 @@ fn parse_axle(r: &mut omsi_cfg::CfgReader) -> Axle {
         }
         return a;
     }
+    let mut steer_angle: Option<&str> = None;
+    let mut steer_centring: Option<&str> = None;
     loop {
         let save = r.pos();
         let l = r.str();
@@ -271,6 +360,22 @@ fn parse_axle(r: &mut omsi_cfg::CfgReader) -> Axle {
                     .unwrap_or(w.eq_ignore_ascii_case("true"));
             }
             "achse_inertia_inv" => a.inertia_inv = r.f32(),
+            "achse_steer_angle" | "achse_steer_centring" => {
+                let (name, slot) = if w == AxleSteer::ANGLE {
+                    (AxleSteer::ANGLE, &mut steer_angle)
+                } else {
+                    (AxleSteer::CENTRING, &mut steer_centring)
+                };
+                let value = r.word();
+                if slot.is_some() {
+                    log::info!(
+                        "{}: [newachse] at line {line}: {name} is given twice, the second is ignored",
+                        r.path().display()
+                    );
+                } else {
+                    *slot = Some(value);
+                }
+            }
             _ => {
                 if omsi_cfg::keyword_of(l).is_some() || r.at_end() {
                     r.seek(save);
@@ -279,6 +384,13 @@ fn parse_axle(r: &mut omsi_cfg::CfgReader) -> Axle {
                 // comment line between the parameters: skip
             }
         }
+    }
+    match AxleSteer::from_params(steer_angle, steer_centring) {
+        Ok(steer) => a.steer = steer,
+        Err(e) => log::info!(
+            "{}: [newachse] at line {line}: the axle is not steerable: {e}",
+            r.path().display()
+        ),
     }
     a
 }
