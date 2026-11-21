@@ -38,7 +38,7 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "collision_pedestrians", "Collisions with people", "Enables/disables knocking down people"),
         switch_row(app, "timetable_win", "Timetable window (Insert)", "Displays a list of all stops (only when a tour is active)"),
         switch_row(app, "info_bar", "Information bar (Shift+Y)", "Displays information such as the time, speed, and other details along the screen"),
-        pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay; Custom bar the items chosen below"),
+        pick("info_bar_mode", "Information bar layout", "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit, the pedals, the road grade, the skid lamp and the delay; Custom bar the items chosen below"),
         pick("info_bar_pos", "Information bar position", "Along the top or the bottom of the screen"),
         switch_row(app, "info_bar_fps", "Frame rate in the information bar", "Adds the frame rate and its 1 % low as the bar's last item"),
         switch_row(app, "info_bar_collapsed", "Second tier starts folded away", "In the Two-tier and Split layouts the lower readouts start hidden; the arrow beside the bar shows them").filter(|_| tiers),

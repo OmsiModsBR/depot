@@ -628,7 +628,7 @@ pub static OPTS: &[Opt] = &[
         "On screen",
         "info_bar_mode",
         "Information bar layout",
-        "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit and the delay; Custom bar the items chosen below",
+        "Full bar shows every item; Compact bar the driving essentials and the next stop; Essentials only the speed, its limit, the pedals, the road grade, the skid lamp and the delay; Custom bar the items chosen below",
         INFO_BAR_MODES,
     ),
     pick(
