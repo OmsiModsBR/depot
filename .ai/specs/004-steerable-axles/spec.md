@@ -162,7 +162,8 @@ closed forms of the model document.
 - The declaration names an axle that does not exist in that section, the leading section's front
   axle (steered by the driver already), or the same axle twice: that declaration is ignored with a log line naming the file and the
   reason; the bus loads and the rest of it works (Principle IV).
-- A lock angle of 0 or below, or not a number; a negative lock speed or centring rate: the
+- A lock angle of 0 or below, or not a number; a negative lock speed; a centring rate of 0 or below;
+  a missing value: the
   declaration is ignored with a log line. Nothing is corrected silently (Principle III).
 - Every axle of a section steerable (no rigid axle at all): there is no geometric turning line, so
   that section turns about its `[rot_pnt_long]` line as in `C-6` (leading section) or `C-9` (a
@@ -189,7 +190,8 @@ closed forms of the model document.
 - **FR-001**: The `.bus` file of any section of a vehicle MUST be able to declare an axle steerable with a Project Depot key that
   OMSI 2 and its derivatives ignore, giving the axle (by its index in the order of `[newachse]`,
   counted from 0 as in `Axle_Steering_<n>`), its lock angle (degrees, each side), its lock speed
-  (km/h, 0 = never) and, optionally, its centring rate (degrees per second).
+  (km/h, 0 = never) and its centring rate (degrees per second). All four values are required, so
+  the game invents none (Principle III).
 - **FR-002**: Before any implementation, the key MUST be checked in OMSI 2 (black box, as `Q1` of
   spec 002): a stock bus with the key added loads and drives in OMSI 2 exactly as without it.
 - **FR-003**: In a section with at least one valid declaration, every axle not declared steerable is
@@ -203,7 +205,8 @@ closed forms of the model document.
 **Turning**
 
 - **FR-006**: The turning line MUST follow from the axles that do not steer at that moment (rigid,
-  locked, or held at an angle by a script, counted by how far they are from pointing at the centre):
+  locked, or held at an angle by a script; an axle on its way to or from locked counts by how far it
+  has gone):
   on the single such axle, or the static-load-weighted middle of several; with none, the
   `[rot_pnt_long]` line of `C-6`.
 - **FR-007**: The front wheels' lock angle MUST stay the one `C-6` gives from `[inv_min_turnradius]`
@@ -292,8 +295,6 @@ closed forms of the model document.
   II); only the key's harmlessness in OMSI 2 needs an in-game check (FR-002).
 - The key is a section of its own after the axles, not a line inside `[newachse]`, because OMSI 2
   reads the lines of an axle in a fixed order.
-- The default centring rate, when the file gives none, is a Project Depot value tuned on V2 and
-  listed in `domain::params` with its origin.
 - The built-in logic does not lock in reverse; real systems differ, and scripts cover it (mode 1).
 - The driver's steering input and its rate stay as they are; only what the axles do with the
   curvature changes.
