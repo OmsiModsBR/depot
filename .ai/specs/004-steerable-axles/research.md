@@ -37,18 +37,22 @@ Its only OMSI 2 requirement is that the new key is ignored there (R-3).
 
 ## R-3. The `.bus` key
 
-**Decision**: a section of its own, `[depot_steer_axle]`, with four value lines (axle index in the
-file, lock angle in degrees, lock speed in km/h, centring rate in degrees per second), one section
-per steerable axle, anywhere after the file's axles ([contracts/bus-key.md](contracts/bus-key.md)).
+**Decision** (maintainer, 2026-11-21): a new axle parameter, `achse_depot_steer`, inside the axle's
+own `[newachse]` like `achse_long`, followed by three value lines (lock angle in degrees, lock speed
+in km/h, centring rate in degrees per second) ([contracts/bus-key.md](contracts/bus-key.md)).
 
-**Rationale**: OMSI 2 reads the lines of `[newachse]` in a fixed order, so a line added inside it
-would shift the axle's values; a section of its own is skipped like `[depot_physics]`, whose
-harmlessness was checked in the game (spec 002, Q1, 2026-11-10). The check is repeated for this key
-(T001) because it has value lines, which `[depot_physics]` does not.
+**Rationale**: the declaration stays with the axle it describes, so no index can point at the
+wrong axle. In the keyword form the axle parameters are named lines that apply to the axle opened
+by the last `[newachse]`, in any order, and a line the reader does not know is skipped; the three
+values are bare numbers, which name no parameter. Depot's own reader (`parse_axle`) already skips
+unknown lines inside an axle. That OMSI 2 ignores the new parameter is checked in the game before
+anything is built (T001), as `[depot_physics]` was (spec 002, Q1).
 
-**Alternatives rejected**: a line inside `[newachse]` (breaks OMSI 2's reading); a side file
-`<name>.depot.cfg` (one more file to ship and keep in step; kept only as the fallback if T001
-fails); an optional centring rate with a default (the game would invent a value, Principle III).
+**Alternatives rejected**: a section of its own with an axle index (the maintainer chose the
+parameter; an index can drift when axles are added or reordered); one keyword per value (three
+names for one declaration that is valid only whole); a side file `<name>.depot.cfg` (kept only as
+the fallback if T001 fails); an optional centring rate with a default (the game would invent a
+value, Principle III). The old keyword-less axle form (values only) cannot carry it.
 
 ## R-4. The turning line (maintainer decision Q1)
 
@@ -161,7 +165,8 @@ nothing of the feature work unchanged; OMSI 2 treats the names as ordinary user 
 
 ## R-10. Where it lives (Principle V, X)
 
-- `omsi-vehicle`: parse `[depot_steer_axle]` into `Vehicle::steer_axles`, validate, report.
+- `omsi-vehicle`: parse `achse_depot_steer` in `parse_axle` into `Axle::steer: Option<AxleSteer>`,
+  validate, report.
 - `omsi-sim/src/physics/domain/`: `SteerAxle` (spec values in SI) in `spec.rs`, `SteerState` (angle,
   engagement, mode) in `wheel.rs` or a new `steering.rs`.
 - `omsi-sim/src/physics/implementation/depot/steering.rs`: the turning line (R-4), the lock (R-5),

@@ -1,20 +1,20 @@
 # Data model: Steerable axles in Project Depot Physics
 
-## SteerAxleDecl (`omsi-vehicle`, from the `.bus` file)
+## AxleSteer (`omsi-vehicle`, `Axle::steer: Option<AxleSteer>`, from `achse_depot_steer`)
 
 | Field | Type | Unit | Rule |
 |---|---|---|---|
-| `axle` | index | - | `< axles.len()` of the same file; not the leading section's front axle (known only at spawn, checked there); unique in the file |
 | `lock_deg` | f32 | deg | finite, `> 0`, `< 90` |
 | `lock_speed_kmh` | f32 | km/h | finite, `>= 0`; 0 = never locks by speed |
 | `centring_deg_s` | f32 | deg/s | finite, `> 0` |
 
-Invalid declarations are dropped with a log line naming the file, the section's position and the
-reason; the rest of the file is kept. `Vehicle::steer_axles: Vec<SteerAxleDecl>`.
+Not on the leading section's front axle (known only at spawn, checked there); once per axle.
+Invalid declarations are dropped (`steer = None`) with a log line naming the file, the axle and the
+reason; the rest of the file is kept.
 
 ## SteerAxle (`physics/domain/spec.rs`, per section's `PhysicsSpec`)
 
-`axle` (index in the section), `lock` (rad), `lock_speed` (m/s, `None` for 0), `centring` (rad/s).
+`axle` (index of the axle in its section), `lock` (rad), `lock_speed` (m/s, `None` for 0), `centring` (rad/s).
 Built from the declarations only when the engine is Depot.
 
 ## SteerMode (`physics/domain/steering.rs`)

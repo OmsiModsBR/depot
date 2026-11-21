@@ -6,7 +6,8 @@
 **Input**: the maintainer's request (2026-11-21): "steerable axles configurable in the physics, with
 deactivation and steering logic that scripts can change; steerable axles take part in the bus's
 turning physics", and the decisions of the same day: the turning line follows from the axles that do
-not steer (Q1), and any axle of any section can be declared steerable (Q2).
+not steer (Q1), any axle of any section can be declared steerable (Q2), and the declaration is a new
+parameter of each `[newachse]` (Q3).
 
 **Execution notes**: `.ai/.specify/extensions.yml` does not exist, so no hooks ran. The feature
 directory was created by hand (the setup script was not run in the planning environment). Code read
@@ -18,8 +19,8 @@ Today every axle of a section points at the centre of the turn on the `[rot_pnt_
 none is rigid, none can lock, and the scripts only read the angles. This plan adds, in Project Depot
 Physics only:
 
-1. a `.bus` section `[depot_steer_axle]` that declares an axle of that file steerable, with its lock
-   angle, lock speed and centring rate ([contracts/bus-key.md](contracts/bus-key.md));
+1. a new axle parameter `achse_depot_steer` inside `[newachse]` that declares that axle steerable,
+   with its lock angle, lock speed and centring rate ([contracts/bus-key.md](contracts/bus-key.md));
 2. in a section with a declaration, rigid axles for every other axle (the leading section's front
    axle stays the driver's), and a turning line computed each substep from the axles that do not
    steer, weighted by their static load ([research.md](research.md) R-4);
@@ -79,7 +80,7 @@ invalid content; nothing from the reference executable in public text
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── bus-key.md       # [depot_steer_axle]
+│   ├── bus-key.md       # achse_depot_steer in [newachse]
 │   └── script-vars.md   # Depot_AxleSteer_* and Axle_Steering
 └── checklists/
     └── requirements.md
@@ -89,8 +90,8 @@ invalid content; nothing from the reference executable in public text
 
 ```text
 crates/omsi-vehicle/
-├── src/vehicle.rs                       # parse [depot_steer_axle] -> Vehicle::steer_axles
-└── tests/steer_axle_key.rs              # new: valid, invalid, duplicate, out of range
+├── src/vehicle.rs                       # parse_axle: achse_depot_steer -> Axle::steer
+└── tests/steer_axle_key.rs              # new: valid, missing values, out of range, duplicate
 
 crates/omsi-sim/
 ├── src/physics/domain/spec.rs           # SteerAxle in PhysicsSpec (SI units)
@@ -153,9 +154,9 @@ identical.
 
 | Phase | Branch | Content | Spec | Label |
 |---|---|---|---|---|
-| 0 | (in game, maintainer) | T001: a stock bus with `[depot_steer_axle]` added loads and drives the same in OMSI 2 | FR-002 | - |
+| 0 | (in game, maintainer) | T001: a stock bus with `achse_depot_steer` added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
-| 2 | `feat/steer-axle-key` | parse, validate, log; `Vehicle::steer_axles`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
+| 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
 | 3 | `feat/steer-axles-turning` | leading section: rigid axles, turning line, lock, angles, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
 | 4 | `feat/steer-axles-lock` | built-in logic: lock speed, engagement and centring ramps, continuity | US2, FR-009, FR-012, SC-003 | `physics-delta` |
 | 5 | `feat/steer-axles-scripts` | script modes and locked flag; situation save; changelog line | US3, FR-013, FR-014, SC-004 | `physics-delta` |

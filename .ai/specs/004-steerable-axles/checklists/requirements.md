@@ -32,6 +32,7 @@
 ## Notes
 
 - Q1 (turning line from the non-steering axles) and Q2 (generic: any axle of any section) were
-  decided by the maintainer on 2026-11-21.
+  decided by the maintainer on 2026-11-21, and Q3 (the declaration is a parameter of each
+  `[newachse]`).
 - Physics terms (`C-6`, `D-3`, `[rot_pnt_long]`, `Axle_Steering`) are the domain's vocabulary for
   mod authors, not implementation details; module names stay out of the spec.

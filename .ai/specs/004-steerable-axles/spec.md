@@ -43,6 +43,8 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
   section (FR-015). Reading taken: the leading section's front axle is already steered by the driver,
   so it needs no declaration (a declaration for it is reported and ignored); every other axle,
   including the front axle of a section behind a joint, can be declared.
+- Q3: Where does the declaration go in the `.bus` file? → A (maintainer): as new parameters of
+  each `[newachse]`, tied to that axle, not as a section of its own (FR-001).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -159,9 +161,11 @@ closed forms of the model document.
 
 ### Edge Cases
 
-- The declaration names an axle that does not exist in that section, the leading section's front
-  axle (steered by the driver already), or the same axle twice: that declaration is ignored with a log line naming the file and the
+- The declaration sits on the leading section's front axle (steered by the driver already), or is
+  given twice in the same axle: that declaration is ignored with a log line naming the file and the
   reason; the bus loads and the rest of it works (Principle IV).
+- An axle written in the old form without keywords (values only, one per line) cannot carry the
+  declaration; it stays rigid or `C-6` as the rest of its section decides.
 - A lock angle of 0 or below, or not a number; a negative lock speed; a centring rate of 0 or below;
   a missing value: the
   declaration is ignored with a log line. Nothing is corrected silently (Principle III).
@@ -187,13 +191,14 @@ closed forms of the model document.
 
 **Declaration**
 
-- **FR-001**: The `.bus` file of any section of a vehicle MUST be able to declare an axle steerable with a Project Depot key that
-  OMSI 2 and its derivatives ignore, giving the axle (by its index in the order of `[newachse]`,
-  counted from 0 as in `Axle_Steering_<n>`), its lock angle (degrees, each side), its lock speed
-  (km/h, 0 = never) and its centring rate (degrees per second). All four values are required, so
+- **FR-001**: In the `.bus` file of any section of a vehicle, an axle MUST be declarable steerable
+  by a new Project Depot parameter inside its own `[newachse]`, next to `achse_long` and the others,
+  that OMSI 2 and its derivatives ignore. It gives the axle's lock angle (degrees, each side), lock
+  speed (km/h, 0 = never) and centring rate (degrees per second). All three values are required, so
   the game invents none (Principle III).
-- **FR-002**: Before any implementation, the key MUST be checked in OMSI 2 (black box, as `Q1` of
-  spec 002): a stock bus with the key added loads and drives in OMSI 2 exactly as without it.
+- **FR-002**: Before any implementation, the parameter MUST be checked in OMSI 2 (black box, as
+  `Q1` of spec 002): a stock bus with the parameter added to an axle loads and drives in OMSI 2
+  exactly as without it.
 - **FR-003**: In a section with at least one valid declaration, every axle not declared steerable is
   rigid (always straight), except the leading section's front axle, which the driver steers as
   today. A section without any declaration runs exactly as today in both engines.
@@ -253,8 +258,8 @@ closed forms of the model document.
 
 ### Key Entities
 
-- **Steerable axle declaration**: axle index, lock angle, lock speed, centring rate; belongs to a
-  section's `.bus` file; valid or reported as invalid.
+- **Steerable axle declaration**: lock angle, lock speed, centring rate; belongs to one
+  `[newachse]` of a section's `.bus` file; valid or reported as invalid.
 - **Steerable axle state**: per steerable axle, its current angle, target angle, mode chosen by the
   script, and whether it is locked straight; saved with the situation.
 - **Turning line**: per section, the longitudinal position the body turns about this step, derived
@@ -274,8 +279,8 @@ closed forms of the model document.
   jump by more than 2 % between two frames (automated test).
 - **SC-004**: Each script mode takes effect in the first physics step after the script writes it, in
   100 % of the test cases.
-- **SC-005**: No invalid declaration or script value in the test set (out-of-range index, front
-  axle, duplicates, zero or negative values, not-a-number, unknown modes) crashes the game; each one
+- **SC-005**: No invalid declaration or script value in the test set (missing values, front axle,
+  duplicates, zero or negative values, not-a-number, unknown modes) crashes the game; each one
   produces its log line.
 - **SC-006**: At full lock and constant speed, V2 with both rear axles rigid needs measurably more
   drive than with the tag axle steering (automated test).
@@ -293,8 +298,6 @@ closed forms of the model document.
 - There is no OMSI 2 behaviour to match: OMSI 2 has no rigid or steerable axle setting, and every
   axle follows `C-6`. The rules are Project Depot Physics' own and are described as such (Principle
   II); only the key's harmlessness in OMSI 2 needs an in-game check (FR-002).
-- The key is a section of its own after the axles, not a line inside `[newachse]`, because OMSI 2
-  reads the lines of an axle in a fixed order.
 - The built-in logic does not lock in reverse; real systems differ, and scripts cover it (mode 1).
 - The driver's steering input and its rate stay as they are; only what the axles do with the
   curvature changes.
