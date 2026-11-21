@@ -236,6 +236,13 @@ impl VehicleType {
             Vehicle::load(bus_file).with_context(|| format!("loading {}", bus_file.display()))?;
         if ai_copy {
             ai_couplings(&mut def);
+            // (once per type loaded, never per copy driven out)
+            if def.axles.iter().any(|a| a.steer.is_some()) {
+                log::info!(
+                    "{}: steerable axles (achse_steer_*) act on the player's vehicle only; AI copies leave them out",
+                    bus_file.display()
+                );
+            }
         }
         let dir = def.dir().to_path_buf();
         let model_rel = def.model.clone().context("vehicle has no [model]")?;

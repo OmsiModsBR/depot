@@ -41,6 +41,18 @@ pub struct AxleSpec {
     pub driven: bool,
 }
 
+/// A steerable axle of a section (`achse_steer_angle` and `achse_steer_centring`, spec 004,
+/// `D-5` to `D-7`), in SI units. Only Project Depot Physics has any.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SteerAxle {
+    /// The axle's index in its section (the file's `[newachse]` order).
+    pub axle: usize,
+    /// Its lock each side (rad).
+    pub lock: f32,
+    /// The most it turns per second (rad/s), in every mode.
+    pub centring: f32,
+}
+
 /// The physics of a `.bus` file in SI units, as the rigid body and the kinematic model read it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PhysicsSpec {
@@ -90,6 +102,9 @@ pub struct PhysicsSpec {
     pub axles: Vec<AxleSpec>,
     /// The static load on each wheel of each axle (N, see [`wheel_rest_loads`]).
     pub rest_loads: Vec<f32>,
+    /// The section's steerable axles (`D-5`); none under OMSI Classic, which reads the
+    /// parameters and leaves them out.
+    pub steer_axles: Vec<SteerAxle>,
 }
 
 /// One wheel of the AI's body on its spring.

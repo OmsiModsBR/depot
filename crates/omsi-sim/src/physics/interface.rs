@@ -17,7 +17,8 @@
 pub use super::domain::{
     AiSpec, AiWheelSpec, AxleSpec, BodyInputs, Controls, CoupledPart, Dynamics, Engine, Ground,
     GroundProbe, Impact, Joint, JointKind, KinematicModel, Payload, PhysicsSpec, PhysicsState,
-    RigidBody, RigidWheel, RoadWeather, VehicleMotion, WallFace, WheelState,
+    RigidBody, RigidWheel, RoadWeather, SteerAxle, SteerMode, SteerState, VehicleMotion, WallFace,
+    WheelState,
 };
 
 // What a `.bus` file's values come to.

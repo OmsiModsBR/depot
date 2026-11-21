@@ -141,6 +141,7 @@ impl PhysicsSpec {
             wheelbase: (front_long - rear_long).abs().max(1.0),
             axles: def.axles.iter().map(AxleSpec::of).collect(),
             rest_loads: wheel_rest_loads(def, engine),
+            steer_axles: engine.steer_axles(def),
         }
     }
 }

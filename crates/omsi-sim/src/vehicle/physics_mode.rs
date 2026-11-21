@@ -23,5 +23,26 @@ pub fn resolve_physics_mode(
     if rear.iter().any(|r| r.depot_physics) {
         log::info!("{name}: [depot_physics] in a rear section's file is left out; the front section's file decides");
     }
+    note_steer_axles(name, mode, front, rear);
     mode
+}
+
+/// What becomes of the sections' steerable axles (`achse_steer_*`, spec 004), logged once
+/// when the vehicle appears: left out under OMSI Classic, and on the front section's front
+/// axle, which the driver steers (`RigidBody::lead` leaves it out).
+fn note_steer_axles(name: &str, mode: PhysicsMode, front: &Vehicle, rear: &[&Vehicle]) {
+    let declared = std::iter::once(front)
+        .chain(rear.iter().copied())
+        .any(|v| v.axles.iter().any(|a| a.steer.is_some()));
+    if !declared {
+        return;
+    }
+    if mode == PhysicsMode::Classic {
+        log::info!("{name}: steerable axles (achse_steer_*) are read and left out under OMSI Classic physics");
+        return;
+    }
+    let front_axle = front.axles.iter().max_by(|a, b| a.long.total_cmp(&b.long));
+    if front_axle.is_some_and(|a| a.steer.is_some()) {
+        log::info!("{name}: achse_steer_* on the front axle is left out; the driver steers it");
+    }
 }

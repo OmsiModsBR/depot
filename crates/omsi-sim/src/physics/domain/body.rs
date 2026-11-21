@@ -1,6 +1,6 @@
 //! The body ([`RigidBody`]) and the parts it tows ([`CoupledPart`]), with what reading them gives.
 
-use super::{Engine, EngineState, Impact, RigidWheel, RoadWeather};
+use super::{Engine, EngineState, Impact, RigidWheel, RoadWeather, SteerAxle, SteerState};
 use glam::{DVec3, Quat, Vec3};
 
 /// A part towed behind the body (the rear section of an articulated bus). The parts follow
@@ -76,6 +76,9 @@ pub struct RigidBody {
     /// Axle index of each wheel (two per axle, left then right).
     pub(crate) wheel_axle: Vec<usize>,
     pub(crate) steer_deg: f32,
+    /// The section's steerable axles and where each stands (`D-5`, `D-6`); none under OMSI
+    /// Classic, nor on the leading section's front axle, which the driver steers.
+    pub(crate) steer_axles: Vec<(SteerAxle, SteerState)>,
     /// The curvature the steering asks for this step (1/m, positive to the right).
     pub(crate) kappa: f32,
     pub(crate) max_steer_deg: f32,

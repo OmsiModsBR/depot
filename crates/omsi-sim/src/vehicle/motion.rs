@@ -166,6 +166,7 @@ impl VehicleInstance {
         // (its hubs from the `.bus` alone, a tyre radius over the model origin's plane where
         // OMSI's springs stand: neither the model's wheels nor their animation move them)
         let mut rb = crate::physics::RigidBody::for_engine(&self.ty.def, &[], self.engine());
+        rb.lead();
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }

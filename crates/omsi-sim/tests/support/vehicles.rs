@@ -15,6 +15,7 @@ pub fn bus() -> Vehicle {
         damper: 20.0,
         driven,
         inertia_inv: 0.0,
+        ..Default::default()
     };
     Vehicle {
         mass: 10.2,
@@ -45,6 +46,7 @@ pub fn gn92(puller: bool) -> (Vehicle, Vehicle) {
         damper: 20.0,
         driven,
         inertia_inv: 0.0,
+        ..Default::default()
     };
     let front = Vehicle {
         mass: 8.0,
@@ -102,6 +104,7 @@ fn conformance_axle(long: f32, spring: f32, max_force: f32, driven: bool) -> Axl
         damper: 20.0,
         driven,
         inertia_inv: 0.0,
+        ..Default::default()
     }
 }
 

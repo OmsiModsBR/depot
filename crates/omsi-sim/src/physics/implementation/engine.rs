@@ -4,11 +4,20 @@
 //! `docs/physics/classic-model.md` and `docs/physics/depot-model.md`.
 
 use super::{classic, depot};
-use crate::physics::domain::{Engine, EngineState, Joint, Payload, RigidBody};
+use crate::physics::domain::{Engine, EngineState, Joint, Payload, RigidBody, SteerAxle};
 use glam::Vec3;
 use omsi_vehicle::Vehicle;
 
 impl Engine {
+    /// The section's steerable axles (`D-5`); OMSI Classic has none and leaves the parameters
+    /// out.
+    pub(in crate::physics) fn steer_axles(self, def: &Vehicle) -> Vec<SteerAxle> {
+        match self {
+            Engine::Classic => Vec::new(),
+            Engine::Depot => depot::steering::steer_axles(def),
+        }
+    }
+
     /// The static load on each wheel of each axle (N): the weight shared about the model's
     /// origin (`K-1`) or about `[cog]` (`D-1`).
     pub(in crate::physics) fn wheel_rest_loads(self, def: &Vehicle) -> Vec<f32> {

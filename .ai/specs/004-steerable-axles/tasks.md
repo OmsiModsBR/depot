@@ -77,30 +77,31 @@ story uses. No physics behaviour changes; every trace stays identical.
 
 ### Parameters in the `.bus` file
 
-- [ ] T007 [P] [ph 2] Write the parser tests in `crates/omsi-vehicle/tests/steer_axle_key.rs`: both
+- [x] T007 [P] [ph 2] Write the parser tests in `crates/omsi-vehicle/tests/steer_axle_key.rs`: both
   parameters read in any order and position inside `[newachse]`; a partial set gives `steer = None`
   and a log line naming the missing one; `achse_steer_angle` "finite, `> 0`, `< 90`";
   `achse_steer_centring` "finite, `> 0`"; not a number; a parameter given twice (second ignored); the
   keyword-less axle form never carries them; a file without them parses exactly as before
-- [ ] T008 [ph 2] Add `AxleSteer { lock_deg, centring_deg_s }` and `Axle::steer: Option<AxleSteer>` in
+- [x] T008 [ph 2] Add `AxleSteer { lock_deg, centring_deg_s }` and `Axle::steer: Option<AxleSteer>` in
   `crates/omsi-vehicle/src/vehicle.rs`, read `achse_steer_angle` and `achse_steer_centring` in
   `parse_axle`, validate per data-model.md, report invalid sets with the file and axle (never correct
   them), make T007 pass
-- [ ] T009 [ph 2] At spawn, report and ignore a declaration on the leading section's front axle, and
+- [x] T009 [ph 2] At spawn, report and ignore a declaration on the leading section's front axle, and
   report once per vehicle type per session that the parameters are ignored when the vehicle runs OMSI
   Classic or is an AI copy (never once per AI spawn), in
   `crates/omsi-sim/src/vehicle/physics_mode.rs` (or where the engine is chosen at spawn)
 
 ### Domain types
 
-- [ ] T010 [ph 2] Add `SteerAxle { axle, lock, centring }` (SI units) to the section's `PhysicsSpec` in
+- [x] T010 [ph 2] Add `SteerAxle { axle, lock, centring }` (SI units) to the section's `PhysicsSpec` in
   `domain/spec.rs`, built in `implementation/spec.rs` only for `Engine::Depot`
-- [ ] T011 [ph 2] Add `domain/steering.rs` with `SteerMode { Basic, Locked, ScriptAngle }` (0, 1, 2; any
+- [x] T011 [ph 2] Add `domain/steering.rs` with `SteerMode { Basic, Locked, ScriptAngle }` (0, 1, 2; any
   other value is `Basic`) and `SteerState { angle, engagement, mode, script_angle }`, held per steerable
   axle by `RigidBody` (`domain/body.rs`), started at `angle = 0`, `engagement = 1`; re-export through
   `physics/mod.rs`; expose it to tests in `crates/omsi-sim/src/testing.rs`
-- [ ] T012 [ph 2] Add `SCRUB_TOLERANCE` to `domain/params.rs`, tagged *tuned* with its origin
-- [ ] T013 [ph 2] Run `scripts/physics-trace-diff.sh origin/main`: every trace identical (SC-002)
+- [ ] T012 [ph 3] Add `SCRUB_TOLERANCE` to `domain/params.rs`, tagged *tuned* with its origin, together
+  with T023, its first use (moved from phase 2: an unused constant is dead code, Principle X)
+- [x] T013 [ph 2] Run `scripts/physics-trace-diff.sh origin/main`: every trace identical (SC-002)
 
 **Checkpoint**: `cargo test --workspace` green, traces identical, nothing the player notices.
 

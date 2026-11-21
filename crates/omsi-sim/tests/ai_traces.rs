@@ -208,6 +208,7 @@ mod scenarios {
             damper,
             driven,
             inertia_inv: 0.0,
+            ..Default::default()
         }
     }
 
@@ -280,6 +281,7 @@ mod scenarios {
                     damper: 20.0,
                     driven,
                     inertia_inv: 0.0,
+                    ..Default::default()
                 })
                 .collect(),
             coupling_front: Some(Coupling {
