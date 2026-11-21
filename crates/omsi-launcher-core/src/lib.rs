@@ -3320,6 +3320,7 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_item_pax", json!(true)),
         ("info_item_line", json!(true)),
         ("info_item_next", json!(true)),
+        ("info_item_pedals", json!(true)),
         ("get_up", json!(false)),
         ("time_speed", json!("1")),
         ("time_sync", json!(false)),
