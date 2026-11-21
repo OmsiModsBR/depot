@@ -21,7 +21,7 @@ The axle moves to its mode's angle at its centring rate (`achse_steer_centring`)
 
 | Variable | Values | Meaning |
 |---|---|---|
-| `Axle_Steering_<n>_L`, `_R` | rad | the axle's actual angle `δ_i`, the same for both sides (as today); 0 for a rigid axle of a keyed section |
+| `Axle_Steering_<n>_L`, `_R` | rad | the axle's actual angle `δ_i`, the same for both sides (as today); 0 for a rigid axle of a section with steerable axles |
 | `Axle_Steer_Locked_<n>` | 0 or 1 | 1 while the axle is locked straight (mode 1 reached): for a dashboard lamp or a sound |
 
 ## Examples

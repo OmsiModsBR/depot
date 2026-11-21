@@ -44,11 +44,11 @@ OMSI Classic, the AI and every section without a declaration run exactly as toda
 **Storage**: `.bus` files (read only); the situation file keeps each steerable axle's angle and
 engagement
 **Testing**: `cargo test --workspace`; new tests in `crates/omsi-vehicle/tests/` (key parsing) and
-`crates/omsi-sim/tests/` (`physics_model_depot.rs` closed forms, `physics_traces.rs` new keyed
-scenarios, script-mode tests); test vehicles V2 and V5 of spec 002 get keyed variants
+`crates/omsi-sim/tests/` (`physics_model_depot.rs` closed forms, `physics_traces.rs` new
+scenarios with steerable axles, script-mode tests); test vehicles V2 and V5 of spec 002 get variants with steerable axles
 **Target Platform**: Windows x64
 **Project Type**: game (Cargo workspace)
-**Performance Goals**: no measurable frame-time change for keyed vehicles (SC-007); unkeyed
+**Performance Goals**: no measurable frame-time change for vehicles with steerable axles (SC-007); vehicles without the parameters
 vehicles unchanged by construction
 **Constraints**: physics traces of every existing scenario bit-identical (SC-002); no crash on
 invalid content; nothing from the reference executable in public text
@@ -61,7 +61,7 @@ invalid content; nothing from the reference executable in public text
 | Principle | Check | Result |
 |---|---|---|
 | I. Own Path | Depot-only feature, no upstream tie | Pass |
-| II. Fidelity only with validation | No "as OMSI 2" claim; only the key's harmlessness in OMSI 2 needed a game check (T001, passed 2026-11-21); keyed changes carry `physics-delta`, unkeyed traces identical | Pass |
+| II. Fidelity only with validation | No "as OMSI 2" claim; only the parameters' harmlessness in OMSI 2 needed a game check (T001, passed 2026-11-21); changes to vehicles with steerable axles carry `physics-delta`, traces of vehicles without the parameters identical | Pass |
 | III. No compensation | Declarations read as given; invalid ones reported and ignored, not corrected; all four values required, no invented default | Pass |
 | IV. No crash | Parser and script inputs validated; bad values logged, game continues (FR-005, SC-005) | Pass |
 | V. Domains as packages | Domain objects in `physics/domain`, rules in `physics/implementation/depot/steering.rs`, chosen in `engine.rs`; scripts reach physics only through `physics_bridge.rs` | Pass |
@@ -104,21 +104,21 @@ crates/omsi-sim/
 ├── src/physics/implementation/depot/steering.rs  # new: turn line, lock, law, ramps
 ├── src/physics/implementation/engine.rs # rule: C-6 or Depot steering
 ├── src/physics/implementation/body.rs   # steer_to / axle_steer use the rule
-├── src/physics/implementation/tyre.rs   # reach of scrubbing tyres; keyed followers held at tyre
+├── src/physics/implementation/tyre.rs   # reach of scrubbing tyres; follower with steerable axless held at tyre
 ├── src/physics/implementation/train.rs  # kappa from kappa_max of the current line
 ├── src/vehicle/physics_bridge.rs        # Axle_Steer_* in and out
 ├── src/vehicle/coupled/articulation.rs  # section axle numbers for the variables
 ├── src/vehicle.rs / motion.rs           # situation save/restore of SteerState
 ├── src/testing.rs                       # test-support access to SteerState
 └── tests/
-    ├── physics_model_depot.rs           # closed forms: V2 keyed, V5 keyed (SC-001, SC-006a)
+    ├── physics_model_depot.rs           # closed forms: V2, V5 with steerable axles (SC-001, SC-006a)
     ├── steer_axles.rs                   # new: ramps, continuity, modes, scrub (SC-003..006)
-    ├── physics_traces.rs                # new keyed scenarios; old ones identical
-    └── support/                         # V2/V5 keyed variants
+    ├── physics_traces.rs                # new scenarios with steerable axles; old ones identical
+    └── support/                         # V2/V5 variants with steerable axles
 
-docs/physics/depot-model.md              # D-5 steerable axles and turning line, D-6 scrub, D-7 logic
-docs/physics/common-model.md             # C-6, C-7, C-9 point to D-5..D-7 for keyed sections
-docs/FORMATS.md                          # the key and the script variables
+docs/physics/depot-model.md              # D-5 steerable axles and turning line, D-6 modes, D-7 scrub
+docs/physics/common-model.md             # C-6, C-7, C-9 point to D-5..D-7 for sections with steerable axles
+docs/FORMATS.md                          # the axle parameters and the script variables
 CHANGELOG.md                             # Unreleased line in the phase the player notices it
 ```
 
@@ -142,7 +142,7 @@ file, no new crate.
    the turning line, +1 ahead), 0 (mode 1) or the script's angle clamped to the lock
    (mode 2); rigid axles 0. Tyres keep Ackermann about their axle's angle.
 6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
-   reach; keyed sections behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
+   reach; sections with steerable axles behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
    force.
 7. Outputs: `Axle_Steering_<n>` = `δ_i` (0 for rigid), `Axle_Steer_Locked_<n>` = `e_i == 0`.
 
@@ -150,7 +150,7 @@ file, no new crate.
 
 `Engine::steering(...)` in `engine.rs`: `Classic` always runs `C-6`/`C-9`; `Depot` runs the above
 when the section has declarations, else `C-6`/`C-9`. A train runs the leading section's engine, so a
-keyed rear section under a Classic leading section is ignored with one log line.
+rear section with steerable axles under a Classic leading section is ignored with one log line.
 
 ## Delivery phases
 
@@ -162,10 +162,10 @@ identical.
 | 0 | (in game, maintainer) | T001: a stock bus with the two `achse_steer_*` parameters added to an axle loads and drives the same in OMSI 2. **Done 2026-11-21**: OMSI 2 ignores the new parameters (maintainer) | FR-002 | - |
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
 | 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
-| 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
+| 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 closed forms with a steerable tag axle | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
 | 4 | `feat/steer-axles-scripts` | modes 1 and 2, engagement and centring ramps, continuity, locked flag; situation save; changelog line | US2, FR-009, FR-012..FR-014, SC-003, SC-004 | `physics-delta` |
-| 5 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 keyed | US3, FR-015, SC-006a | `physics-delta` |
-| 6 | (measure + in game) | SC-007 frame time in the phase 5 PR; SC-008 by the maintainer on a keyed 6x2 and a keyed articulated bus | SC-007, SC-008 | - |
+| 5 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 with steerable axles | US3, FR-015, SC-006a | `physics-delta` |
+| 6 | (measure + in game) | SC-007 frame time in the phase 5 PR; SC-008 by the maintainer on a 6x2 and an articulated bus with steerable axles | SC-007, SC-008 | - |
 
 Phase 0 passed (2026-11-21), so the parameters stay in `[newachse]`; the next phase is 1.
 

@@ -123,6 +123,11 @@ opposite" so that a twin-steer axle needs no script. The tyres of an axle keep t
 `δ_i`'s centre as today. Uses `y_turn` of the previous substep (one substep, 1/240 s, of lag) to
 break the loop between the line and the angles.
 
+The rate limit applies in every mode, also while following the steering in mode 0: a real
+actuator has a finite speed, and the angle never jumps. A steering wheel turned faster than the rate
+(a mouse, for example) makes the axle lag; the mod author sets `achse_steer_centring` high enough
+to keep up (maintainer, 2026-11-21, analysis U1).
+
 **Rationale**: the proportional law is how the steered tag axle of a 6x2-4 is linked to the
 steering; rate limits on both the angle and the engagement make every mode change continuous
 (FR-009, SC-003); one engagement value serves the line and the locked flag.
@@ -138,7 +143,7 @@ on a mode change (a yaw kick at speed); a separate "locked" boolean (the line wo
 the turn by more than a small tolerance (`SCRUB_TOLERANCE`, a *tuned* constant in
 `domain::params`) is held with the road's reach (`μ · grip · h` per substep) instead of the
 unlimited reach of the leading section's tyres; its force across enters `D-3` with the others.
-Rigid axles of a keyed section behind a joint are held at the tyre with the road's reach (not
+Rigid axles of a section with steerable axles behind a joint are held at the tyre with the road's reach (not
 projected on the line), so they scrub as well.
 
 **Rationale**: a tandem's tyres slide across in a tight turn at walking speed, which costs drive and
@@ -171,7 +176,7 @@ the whole train): `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` written by th
 script, `Axle_Steer_Locked_<n>` written by the physics
 ([contracts/script-vars.md](contracts/script-vars.md)). Read once per frame before the physics
 step, as `Axle_Springfactor` is. `Axle_Steering_<n>_L/R` carries `δ_i` (0 for a rigid axle of a
-keyed section).
+section with steerable axles).
 
 Names chosen by the maintainer (2026-11-21), without a `Depot_` prefix, next to OMSI 2's
 `Axle_Steering_<n>`. The implementation must match them whole: `Axle_Steer_` is a prefix of
@@ -202,4 +207,4 @@ as every other `D-*` rule.
 
 Per substep and section: one weighted mean over at most 4-5 axles and one `atan` per steerable
 axle; the scrub test is one comparison per tyre. Negligible against the solver's passes. Measured
-anyway (SC-007): frame time of V2 keyed versus unkeyed in `examples/handling.rs` and in game.
+anyway (SC-007): frame time of V2 with and without the parameters in `examples/handling.rs` and in game.

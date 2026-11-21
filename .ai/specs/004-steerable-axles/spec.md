@@ -94,7 +94,7 @@ turning radius and each axle's angle with the closed forms of the model document
 4. **Given** an 8x2 front section whose second axle is declared steerable and stands ahead of the
    turning line, **When** the driver steers right, **Then** that axle turns right too, in proportion
    to its own lock, with no script.
-5. **Given** a keyed bus, **When** a script reads `Axle_Steering_<n>_L/R` of a rigid axle, **Then** it
+5. **Given** a bus with steerable axles, **When** a script reads `Axle_Steering_<n>_L/R` of a rigid axle, **Then** it
    reads 0; of a steerable axle, its actual angle.
 
 ---
@@ -135,7 +135,7 @@ A mod author declares the last axle of the rear section of a 23 m 8x2 articulate
 V5) as steerable. In a turn the rear section turns about the line of its rigid driven axle, its last
 axle turns against the bend as its joint bends (mode 0 follows the joint), and the rear section cuts the corner less than with
 that axle rigid. The same works for the middle and rear sections of a bi-articulated bus, and the
-script can take over as in story 2 (for example to steer by the joint's bend).
+script can take over as in story 2 (for example to lock the rear axle in reverse).
 
 **Why this priority**: the maintainer wants the declaration generic, for any axle of any section;
 articulated buses with a steered last axle are common in Brazil.
@@ -178,8 +178,7 @@ closed forms of the model document.
   line (the line moves when another axle locks) changes direction at its centring rate.
 - The bus runs OMSI Classic (no `[depot_physics]` key and the setting is Classic): the declaration
   is read, ignored, and the log says it applies to Project Depot Physics only; `C-6` runs unchanged.
-- An AI copy of a bus with the declaration: the AI keeps its own steering (spec 002 D6: the key
-  applies to the player's vehicle only); `Axle_Steering` of AI copies stays as today.
+- An AI copy of a bus with the declaration: the AI keeps its own steering (spec 002 D6 and clarify Q7); `Axle_Steering` of AI copies stays as today.
 - The script writes an unknown mode or an angle that is not a number: the axle behaves as mode 0,
   and the log says so once per vehicle.
 - A steerable axle that does not point at the centre of the turn (the basic law is proportional, not
@@ -198,8 +197,8 @@ closed forms of the model document.
   `achse_long` and the others, which OMSI 2 and its derivatives ignore: the axle's lock angle
   (degrees, each side) and centring rate (degrees per second). Both are required together, so the
   game invents none (Principle III).
-- **FR-002**: Before any implementation, the parameter MUST be checked in OMSI 2 (black box, as
-  `Q1` of spec 002): a stock bus with the parameter added to an axle loads and drives in OMSI 2
+- **FR-002**: Before any implementation, the parameters MUST be checked in OMSI 2 (black box, as
+  `Q1` of spec 002): a stock bus with the parameters added to an axle loads and drives in OMSI 2
   exactly as without it. **Done 2026-11-21**: the maintainer checked it; OMSI 2 ignores the new parameters.
 - **FR-003**: In a section with at least one valid declaration, every axle not declared steerable is
   rigid (always straight), except the leading section's front axle, which the driver steers as
@@ -225,8 +224,11 @@ closed forms of the model document.
   turning line (a 6x2-4 tag axle turns opposite), +1 ahead of it (a twin-steer second front axle
   turns the same way), 0 on it. In a section behind a joint the steering fraction is the joint's:
   `s_f = clamp(κ_f / κ_max, −1, 1)`, `κ_f` the curvature the joint gives the section (`C-9`) and
-  `κ_max` the leading section's current full-lock curvature (FR-007). Its tyres keep Ackermann angles about
-  the axle's angle as in `C-6`.
+  `κ_max` the leading section's current full-lock curvature (FR-007). In every mode the axle's angle
+  follows its target at most at the axle's centring rate, so it lags a steering wheel turned faster
+  than that; the mod author sets the rate high enough to keep up with fast steering (a mouse, for
+  example) (analysis U1, maintainer 2026-11-21). Its tyres keep Ackermann angles about the axle's
+  angle as in `C-6`.
 - **FR-009**: The turning line MUST move continuously when an axle locks, unlocks or changes angle:
   no step in yaw rate or lateral speed beyond what the steering itself causes.
 - **FR-010**: An axle that does not point at the centre of the turn (rigid off the line, steered by
@@ -245,7 +247,7 @@ closed forms of the model document.
   1 locked straight, 2 an angle written by the script (clamped to the lock). The axle moves between
   modes at its centring rate. Variable names are Project Depot's own and carry no meaning in OMSI 2.
 - **FR-014**: The physics MUST hand the scripts each axle's actual angle through the existing
-  `Axle_Steering_<n>_L/R` (0 for rigid axles of a keyed bus) and, per steerable axle, whether it is
+  `Axle_Steering_<n>_L/R` (0 for rigid axles of a bus with steerable axles) and, per steerable axle, whether it is
   locked straight.
 
 **Scope**
@@ -260,16 +262,17 @@ closed forms of the model document.
 - **FR-017**: The rules MUST be written in `docs/physics/depot-model.md` as new `D-*` entries with
   their equations, inputs, outputs, module and status, and `common-model.md` `C-6` MUST point to
   them.
-- **FR-018**: The new script variables and the `.bus` key MUST be documented in `docs/FORMATS.md`.
-- **FR-019**: A change in Project Depot Physics for keyed buses carries the `physics-delta` label;
-  the physics traces of every bus without the key MUST stay identical.
+- **FR-018**: The new script variables and the `.bus` parameters MUST be documented in `docs/FORMATS.md`.
+- **FR-019**: A change in Project Depot Physics for buses with steerable axles carries the `physics-delta` label;
+  the physics traces of every vehicle without the parameters MUST stay identical.
 
 ### Key Entities
 
 - **Steerable axle declaration**: lock angle, centring rate; belongs to one
   `[newachse]` of a section's `.bus` file; valid or reported as invalid.
-- **Steerable axle state**: per steerable axle, its current angle, target angle, mode chosen by the
-  script, and whether it is locked straight; saved with the situation.
+- **Steerable axle state**: per steerable axle, its current angle, its engagement (1 steering, 0
+  locked straight, in between while changing mode), the mode chosen by the script and the script's
+  angle; saved with the situation.
 - **Turning line**: per section, the longitudinal position the body turns about this step, derived
   from that section's non-steering axles and their loads (FR-006).
 - **Script steering controls**: per steerable axle, the mode and angle the script writes and the
@@ -281,7 +284,7 @@ closed forms of the model document.
 
 - **SC-001**: On V2 at full lock and 5 km/h, the turning radius with the tag axle steering is
   smaller than with it locked, and each matches the model's closed form within 2 % (automated test).
-- **SC-002**: The physics traces of every existing scenario (buses without the key) stay
+- **SC-002**: The physics traces of every existing scenario (vehicles without the parameters) stay
   bit-identical, in both engines.
 - **SC-003**: Locking or unlocking the tag axle by script in a steady turn at 25 km/h never makes the yaw rate
   jump by more than 2 % between two frames (automated test).
@@ -295,20 +298,20 @@ closed forms of the model document.
 - **SC-006a**: On V5 in a steady turn, the articulation angle with the fourth axle steering and with
   it rigid each match the model's closed form within 2 % (automated test); the rear section's swept
   path is narrower with the axle steering.
-- **SC-007**: Frame time of a keyed bus versus the same bus without the key, same machine and
+- **SC-007**: Frame time of a bus with steerable axles versus the same bus without the parameters, same machine and
   scenario, differs by no more than measurement noise; the measurements go in the pull request
   (Principle VII).
-- **SC-008**: The maintainer drives a keyed 6x2 bus in the game and confirms the tighter turn, a script
+- **SC-008**: The maintainer drives a 6x2 bus with a steerable tag axle in the game and confirms the tighter turn, a script
   that locks the axle at speed, and the script angle mode by eye.
 
 ## Assumptions
 
 - There is no OMSI 2 behaviour to match: OMSI 2 has no rigid or steerable axle setting, and every
   axle follows `C-6`. The rules are Project Depot Physics' own and are described as such (Principle
-  II); only the key's harmlessness in OMSI 2 needs an in-game check (FR-002).
+  II); only the parameters' harmlessness in OMSI 2 needs an in-game check (FR-002).
 - The driver's steering input and its rate stay as they are; only what the axles do with the
   curvature changes.
-- Players and modders who do not use the key see no change.
+- Players and modders who do not use the parameters see no change.
 
 ## Dependencies
 

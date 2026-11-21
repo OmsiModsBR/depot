@@ -6,7 +6,7 @@ followed by one value line:
 | Parameter | Value | Range |
 |---|---|---|
 | `achse_steer_angle` | lock angle, degrees each side | `> 0`, `< 90` |
-| `achse_steer_centring` | the most the axle turns per second, between modes and following the steering, degrees per second | `> 0` |
+| `achse_steer_centring` | the most the axle turns per second, between modes and following the steering, degrees per second; set it high enough to keep up with fast steering (a mouse) | `> 0` |
 
 Example: a 6x2-4 bus with a steered tag axle (when it locks is up to the bus's script).
 
