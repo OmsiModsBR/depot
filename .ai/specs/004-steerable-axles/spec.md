@@ -49,13 +49,15 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
 - Q4: What logic does the game run by itself? → A (maintainer): none for locking: the speed lock
   is removed, and each vehicle's script locks or steers the axle through
   `Axle_Steer_Mode_<n>`. Mode 0 is the basic mode of a 6x2-4: the axle turns opposite to the
-  steering axle, in proportion to its configured lock (FR-008, FR-012, FR-013). Reading taken: the
-  steering axle is the driver's front axle for every section, so a section behind a joint in mode 0
-  also follows the driver's steering; steering by the joint's bend is done by the script in mode 2.
+  steering axle, in proportion to its configured lock (FR-008, FR-012, FR-013).
 - Q5 (`/speckit-clarify`): In mode 0, which way does an axle ahead of the turning line turn? → A:
   by its side of the turning line: an axle behind the line turns opposite to the steering axle (tag
   axle), an axle ahead of it turns the same way (twin steer second front axle); no script needed
   for either (FR-008).
+- Q6 (`/speckit-clarify`): In mode 0, what does a steerable axle of a section behind a joint follow?
+  → A: the joint's bend, not the driver's steering wheel: its steering fraction is the curvature
+  its joint gives it over the leading section's full-lock curvature, so it follows the real bend of
+  the section even while the driver is already straightening (FR-008, FR-015).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -125,7 +127,7 @@ the yaw rate over time; then cycle the mode through every value in a steady turn
 
 A mod author declares the last axle of the rear section of a 23 m 8x2 articulated bus (test vehicle
 V5) as steerable. In a turn the rear section turns about the line of its rigid driven axle, its last
-axle turns against the steering as in story 1, and the rear section cuts the corner less than with
+axle turns against the bend as its joint bends (mode 0 follows the joint), and the rear section cuts the corner less than with
 that axle rigid. The same works for the middle and rear sections of a bi-articulated bus, and the
 script can take over as in story 2 (for example to steer by the joint's bend).
 
@@ -139,8 +141,8 @@ closed forms of the model document.
 **Acceptance Scenarios**:
 
 1. **Given** V5 with its fourth axle declared steerable, **When** it turns steadily, **Then** the
-   rear section turns about its third axle's line, the fourth axle stands at `−s · lock` (`s` the
-   driver's steering, −1 to 1), and the articulation angle is the closed form's for that turning line.
+   rear section turns about its third axle's line, the fourth axle stands at `−s_f · lock` (`s_f`
+   the joint's steering fraction, FR-008), and the articulation angle is the closed form's for that turning line.
 2. **Given** the same axle rigid, **Then** the rear section turns about the load-weighted middle of
    its two axles and both scrub (FR-010).
 3. **Given** a rear section without any declaration, **Then** it behaves exactly as today (`C-9`).
@@ -163,9 +165,9 @@ closed forms of the model document.
 - Every axle of a section steerable (no rigid axle at all): there is no geometric turning line, so
   that section turns about its `[rot_pnt_long]` line as in `C-6` (leading section) or `C-9` (a
   section behind a joint), and the log says so once.
-- A section behind a joint in mode 0 follows the driver's steering, not its joint: with the
-  steering centred and the joint bent its axles stand straight. A script that wants the joint's
-  bend uses mode 2 (reading taken, see Q4).
+- A section behind a joint in mode 0 follows its joint: with the joint straight its axles stand
+  straight whatever the steering wheel does, and with the joint bent they keep steering after the
+  wheel is centred, until the section is straight again.
 - A steerable axle that stands on the turning line in mode 0 stays straight; one that crosses the
   line (the line moves when another axle locks) changes direction at its centring rate.
 - The bus runs OMSI Classic (no `[depot_physics]` key and the setting is Classic): the declaration
@@ -215,7 +217,9 @@ closed forms of the model document.
   axle and its own lock, on the side its position gives: `δ_i = σ_i · (δ_front / lock_front) ·
   lock_i = σ_i · s · lock_i`, with `s` the driver's steering from −1 to 1 and `σ_i` = −1 behind the
   turning line (a 6x2-4 tag axle turns opposite), +1 ahead of it (a twin-steer second front axle
-  turns the same way), 0 on it. Its tyres keep Ackermann angles about
+  turns the same way), 0 on it. In a section behind a joint the steering fraction is the joint's:
+  `s_f = clamp(κ_f / κ_max, −1, 1)`, `κ_f` the curvature the joint gives the section (`C-9`) and
+  `κ_max` the leading section's current full-lock curvature (FR-007). Its tyres keep Ackermann angles about
   the axle's angle as in `C-6`.
 - **FR-009**: The turning line MUST move continuously when an axle locks, unlocks or changes angle:
   no step in yaw rate or lateral speed beyond what the steering itself causes.

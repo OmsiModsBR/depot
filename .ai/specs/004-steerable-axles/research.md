@@ -111,9 +111,13 @@ e_i     → 1 in mode 0, → 0 in modes 1 and 2, at rate  centring_i / lock_i  (
 δ_i     moves to its target at most centring_i (deg/s) per second
 ```
 
-In mode 2 the axle counts as held for the turning line (R-4); in mode 0 as steering. The steering
-axle is the driver's front axle for every section, so a section behind a joint in mode 0 also
-follows `s`; a script that wants the joint's bend uses mode 2. The side `σ_i` (clarify Q5) costs one
+In mode 2 the axle counts as held for the turning line (R-4); in mode 0 as steering. A section behind a joint in mode 0
+follows its joint instead of the steering wheel (clarify Q6): `s_f = clamp(κ_f / κ_max, −1, 1)`,
+with `κ_f` the joint's curvature (already computed each substep for `C-9`) and `κ_max` the leading
+section's current full-lock curvature (R-5), so in a steady turn `s_f` is close to the driver's `s`
+and it lags the wheel as the real section does. Rejected: the joint angle over its
+`[coupling_front_character]` limit (most files have none, spec 002 P11), the driver's `s` (the axle
+would steer before the section enters the bend). The side `σ_i` (clarify Q5) costs one
 comparison per axle against `y_turn`, which is computed anyway; it was chosen over "always
 opposite" so that a twin-steer axle needs no script. The tyres of an axle keep their own Ackermann angles about
 `δ_i`'s centre as today. Uses `y_turn` of the previous substep (one substep, 1/240 s, of lag) to

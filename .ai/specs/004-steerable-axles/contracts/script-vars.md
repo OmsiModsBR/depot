@@ -12,7 +12,7 @@ vehicle's script's, through the mode.
 
 | Variable | Values | Meaning |
 |---|---|---|
-| `Axle_Steer_Mode_<n>` | 0, 1, 2 | 0 basic: in proportion to the driver's steering axle and the axle's lock, `δ = σ · (δ_front / lock_front) · lock`, `σ` −1 behind the turning line (tag axle, opposite), +1 ahead of it (twin steer, same way); 1 locked straight; 2 script angle. Any other value: 0, one log line per vehicle |
+| `Axle_Steer_Mode_<n>` | 0, 1, 2 | 0 basic: in proportion to the driver's steering axle and the axle's lock, `δ = σ · (δ_front / lock_front) · lock`, `σ` −1 behind the turning line (tag axle, opposite), +1 ahead of it (twin steer, same way); in a section behind a joint the fraction comes from the joint's bend, not the steering wheel; 1 locked straight; 2 script angle. Any other value: 0, one log line per vehicle |
 | `Axle_Steer_Angle_<n>` | rad, positive to the right | the axle's angle in mode 2, clamped to its lock. Not a number: treated as mode 0 |
 
 The axle moves to its mode's angle at its centring rate (`achse_steer_centring`).

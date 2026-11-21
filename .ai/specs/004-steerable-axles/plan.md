@@ -138,7 +138,8 @@ file, no new crate.
 4. Leading section: `κ = s · tan(lock_front) / |y_front − y_turn|` (R-5). Section behind: the joint's
    curvature, its `arm` measured from its own `y_turn`.
 5. Angles: front axle as `C-6`; steerable axles move, at most `centring_i` per second, to
-   `σ_i · s · lock_i` (mode 0, `s = κ / κ_max`, `σ_i` −1 behind the turning line, +1 ahead), 0 (mode 1) or the script's angle clamped to the lock
+   `σ_i · s · lock_i` (mode 0, `s = κ / κ_max`, behind a joint `s = clamp(κ_joint / κ_max, −1, 1)`, `σ_i` −1 behind
+   the turning line, +1 ahead), 0 (mode 1) or the script's angle clamped to the lock
    (mode 2); rigid axles 0. Tyres keep Ackermann about their axle's angle.
 6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
    reach; keyed sections behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
