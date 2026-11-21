@@ -1,10 +1,10 @@
 # Feature Specification: Steerable axles in Project Depot Physics
 
-**Feature Branch**: one per delivery phase (see `plan.md`, written after the open decisions below)
+**Feature Branch**: one per delivery phase (see `plan.md`)
 
 **Created**: 2026-11-21
 
-**Status**: Draft (one maintainer decision pending, see [Clarifications](#clarifications))
+**Status**: Clarified (2026-11-21)
 
 **Input**: User description (maintainer, 2026-11-21): "Plan a change to the Depot physics: steerable
 axles configurable in the physics, with deactivation and steering logic that scripts can change;
@@ -22,7 +22,9 @@ setting.
 
 This feature adds, for **Project Depot Physics only** (spec 002, `D-*` rules), axles that are either
 rigid or steerable, declared in the `.bus` file, and makes the turning of the bus follow from which
-axles steer at each moment. OMSI Classic keeps `C-6` unchanged.
+axles steer at each moment. The declaration is generic: any axle of any section of a vehicle (a
+rigid bus, the front, middle or rear section of an articulated bus, each section with its own
+`.bus` file) can be declared steerable. OMSI Classic keeps `C-6` and `C-9` unchanged.
 
 ## Clarifications
 
@@ -34,12 +36,13 @@ axles steer at each moment. OMSI Classic keeps `C-6` unchanged.
   tag axle widens the turning circle (FR-006 to FR-009). Rejected: keeping `[rot_pnt_long]` as the
   line, where locking an axle would not change the turning circle.
 
-### Pending (2026-11-21)
-
-- Q2: Are steerable axles on the rear section of an articulated bus in scope? → **Pending.**
-  Recommended: no; this feature covers rigid buses and the front section of an articulated bus, and
-  a rear section keeps `C-9` (its axles show the joint's bend, its tyres do not steer). The
-  requirements below are written for the recommended answer (FR-015).
+- Q2: Are steerable axles on the rear section of an articulated bus in scope? → A (maintainer): yes,
+  and generically: any axle of any section of the vehicle can be declared steerable. A section
+  behind a joint turns on the curvature its joint gives it (`C-9`); its steerable axles point at the
+  centre of that turn and its turning line follows from its own non-steering axles, as in the leading
+  section (FR-015). Reading taken: the leading section's front axle is already steered by the driver,
+  so it needs no declaration (a declaration for it is reported and ignored); every other axle,
+  including the front axle of a section behind a joint, can be declared.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -126,15 +129,46 @@ speed in a steady turn; each mode is checked against the expected axle angle and
 
 ---
 
+### User Story 4 - A rear section with a steered axle follows tighter (Priority: P2)
+
+A mod author declares the last axle of the rear section of a 23 m 8x2 articulated bus (test vehicle
+V5) as steerable. In a turn the rear section turns about the line of its rigid driven axle, its last
+axle points at the centre of the rear section's turn, and the rear section cuts the corner less
+than with that axle rigid. The same works for the middle and rear sections of a bi-articulated bus.
+
+**Why this priority**: the maintainer wants the declaration generic, for any axle of any section;
+articulated buses with a steered last axle are common in Brazil.
+
+**Independent Test**: on V5, a steady turn at walking speed with the fourth axle declared
+steerable and again rigid; compare the articulation angle and the rear section's swept path with the
+closed forms of the model document.
+
+**Acceptance Scenarios**:
+
+1. **Given** V5 with its fourth axle declared steerable, **When** it turns steadily, **Then** the
+   rear section turns about its third axle's line, the fourth axle stands at
+   `atan((y_4 − y_3) · κ_rear)` or its lock, and the articulation angle is the closed form's for
+   that turning line.
+2. **Given** the same axle rigid, **Then** the rear section turns about the load-weighted middle of
+   its two axles and both scrub (FR-010).
+3. **Given** a rear section without any declaration, **Then** it behaves exactly as today (`C-9`).
+4. **Given** the rear section's steerable axle locked by speed or by its script, **Then** the rear
+   section's turning line moves continuously, as in story 2.
+
+---
+
 ### Edge Cases
 
-- The declaration names an axle that does not exist, the front axle (steered by the driver already),
-  or the same axle twice: that declaration is ignored with a log line naming the file and the
+- The declaration names an axle that does not exist in that section, the leading section's front
+  axle (steered by the driver already), or the same axle twice: that declaration is ignored with a log line naming the file and the
   reason; the bus loads and the rest of it works (Principle IV).
 - A lock angle of 0 or below, or not a number; a negative lock speed or centring rate: the
   declaration is ignored with a log line. Nothing is corrected silently (Principle III).
-- Every axle steerable (no rigid axle at all): there is no geometric turning line, so the bus turns
-  about the `[rot_pnt_long]` line as in `C-6`, and the log says so once.
+- Every axle of a section steerable (no rigid axle at all): there is no geometric turning line, so
+  that section turns about its `[rot_pnt_long]` line as in `C-6` (leading section) or `C-9` (a
+  section behind a joint), and the log says so once.
+- A section behind a joint with steerable axles while its joint is straight: its axles stand
+  straight, as the curvature is 0.
 - The bus runs OMSI Classic (no `[depot_physics]` key and the setting is Classic): the declaration
   is read, ignored, and the log says it applies to Project Depot Physics only; `C-6` runs unchanged.
 - An AI copy of a bus with the declaration: the AI keeps its own steering (spec 002 D6: the key
@@ -152,15 +186,15 @@ speed in a steady turn; each mode is checked against the expected axle angle and
 
 **Declaration**
 
-- **FR-001**: A `.bus` file MUST be able to declare an axle steerable with a Project Depot key that
+- **FR-001**: The `.bus` file of any section of a vehicle MUST be able to declare an axle steerable with a Project Depot key that
   OMSI 2 and its derivatives ignore, giving the axle (by its index in the order of `[newachse]`,
   counted from 0 as in `Axle_Steering_<n>`), its lock angle (degrees, each side), its lock speed
   (km/h, 0 = never) and, optionally, its centring rate (degrees per second).
 - **FR-002**: Before any implementation, the key MUST be checked in OMSI 2 (black box, as `Q1` of
   spec 002): a stock bus with the key added loads and drives in OMSI 2 exactly as without it.
-- **FR-003**: In a bus with at least one valid declaration, the front axle steers as today and every
-  other axle not declared steerable is rigid (always straight). A bus without the key runs exactly as
-  today in both engines.
+- **FR-003**: In a section with at least one valid declaration, every axle not declared steerable is
+  rigid (always straight), except the leading section's front axle, which the driver steers as
+  today. A section without any declaration runs exactly as today in both engines.
 - **FR-004**: The declaration MUST take effect only in Project Depot Physics; OMSI Classic ignores it
   (`C-6` unchanged) and logs that once.
 - **FR-005**: Invalid declarations MUST be reported in the log and ignored without crashing and
@@ -201,8 +235,11 @@ speed in a steady turn; each mode is checked against the expected axle angle and
 
 **Scope**
 
-- **FR-015**: The feature covers rigid buses and the front section of an articulated bus; the rear
-  section of an articulated bus keeps `C-9` (pending Q2).
+- **FR-015**: The feature MUST work on any section. In a section behind a joint, the curvature comes
+  from the joint (`C-9`, Depot's `follower_kappa`); its steerable axles point at the centre of that
+  turn (FR-008) and their tyres steer, its rigid axles' tyres stay square to the body, and its
+  turning line follows FR-006 from its own non-steering axles. A section behind a joint without any
+  declaration keeps `C-9` unchanged.
 - **FR-016**: AI vehicles are not affected (spec 002 D6).
 - **FR-017**: The rules MUST be written in `docs/physics/depot-model.md` as new `D-*` entries with
   their equations, inputs, outputs, module and status, and `common-model.md` `C-6` MUST point to
@@ -214,11 +251,11 @@ speed in a steady turn; each mode is checked against the expected axle angle and
 ### Key Entities
 
 - **Steerable axle declaration**: axle index, lock angle, lock speed, centring rate; belongs to a
-  vehicle's `.bus` file; valid or reported as invalid.
+  section's `.bus` file; valid or reported as invalid.
 - **Steerable axle state**: per steerable axle, its current angle, target angle, mode chosen by the
   script, and whether it is locked straight; saved with the situation.
-- **Turning line**: the longitudinal position the body turns about this step, derived from the
-  non-steering axles and their loads (FR-006).
+- **Turning line**: per section, the longitudinal position the body turns about this step, derived
+  from that section's non-steering axles and their loads (FR-006).
 - **Script steering controls**: per steerable axle, the mode and angle the script writes and the
   locked flag it reads.
 
@@ -239,6 +276,9 @@ speed in a steady turn; each mode is checked against the expected axle angle and
   produces its log line.
 - **SC-006**: At full lock and constant speed, V2 with both rear axles rigid needs measurably more
   drive than with the tag axle steering (automated test).
+- **SC-006a**: On V5 in a steady turn, the articulation angle with the fourth axle steering and with
+  it rigid each match the model's closed form within 2 % (automated test); the rear section's swept
+  path is narrower with the axle steering.
 - **SC-007**: Frame time of a keyed bus versus the same bus without the key, same machine and
   scenario, differs by no more than measurement noise; the measurements go in the pull request
   (Principle VII).
@@ -264,3 +304,8 @@ speed in a steady turn; each mode is checked against the expected axle angle and
 - Spec 002 (two physics modes) is implemented: `[depot_physics]`, the `Engine` split and the `D-*`
   rules exist.
 - The physics trace harness and test vehicles V1-V5 (`crates/omsi-sim/tests/`).
+- A train runs one engine, chosen by its leading section's file (spec 002): the declarations of the
+  sections behind take effect only when the leading section runs Project Depot Physics.
+- `common-model.md` (`C-7`) says the steering of a rear axle's tyres is modelled in neither engine
+  (maintainer, 2026-11-12); this feature lifts that for Project Depot Physics only, and the note is
+  updated to say so. OMSI Classic keeps it.
