@@ -7,11 +7,10 @@ use crate::hud::interface::output::{Renderer, Scene, TextureId};
 impl TextCache {
     /// A small white circle, centred on the point that receives the click.
     pub(super) fn vr_pointer(&mut self, r: &Renderer, scene: &mut Scene) -> TextureId {
-        let key = ("\u{0}vr_pointer_dot".to_string(), 0, [0, 0, 0, 0]);
-        if let Some(label) = self.labels.get_mut(&key) {
-            label.used = self.frame;
+        if let Some(label) = self.hit("\u{0}vr_pointer_dot", 0, [0, 0, 0, 0]) {
             return label.tex;
         }
+        let key = ("\u{0}vr_pointer_dot".to_string(), 0, [0, 0, 0, 0]);
         const W: usize = 32;
         const H: usize = 32;
         let mut rgba = vec![0u8; W * H * 4];
@@ -74,15 +73,11 @@ impl TextCache {
         if matches!(kind, 0 | 3 | 7) {
             rgba[3] = (rgba[3] as f32 * self.backdrop).round().clamp(0.0, 255.0) as u8;
         }
-        let key = (
-            "\u{0}plate".to_string(),
-            kind as u32,
-            [rgba[0], rgba[1], rgba[2], rgba[3]],
-        );
-        if let Some(l) = self.labels.get_mut(&key) {
-            l.used = self.frame;
+        let colour = [rgba[0], rgba[1], rgba[2], rgba[3]];
+        if let Some(l) = self.hit("\u{0}plate", kind as u32, colour) {
             return l.tex;
         }
+        let key = ("\u{0}plate".to_string(), kind as u32, colour);
         let img = omsi_texture::Image {
             width: 1,
             height: 1,
@@ -104,11 +99,10 @@ impl TextCache {
 
     /// A plate of one RGBA colour, any size (stretched).
     fn solid(&mut self, r: &Renderer, scene: &mut Scene, rgba: [u8; 4]) -> TextureId {
-        let key = ("\u{0}solid".to_string(), 0, rgba);
-        if let Some(l) = self.labels.get_mut(&key) {
-            l.used = self.frame;
+        if let Some(l) = self.hit("\u{0}solid", 0, rgba) {
             return l.tex;
         }
+        let key = ("\u{0}solid".to_string(), 0, rgba);
         let img = omsi_texture::Image {
             width: 1,
             height: 1,
@@ -138,11 +132,10 @@ impl TextCache {
         idx: u32,
         rgba: [u8; 4],
     ) -> TextureId {
-        let key = ("\u{0}corner".to_string(), (rad << 8) | idx, rgba);
-        if let Some(l) = self.labels.get_mut(&key) {
-            l.used = self.frame;
+        if let Some(l) = self.hit("\u{0}corner", (rad << 8) | idx, rgba) {
             return l.tex;
         }
+        let key = ("\u{0}corner".to_string(), (rad << 8) | idx, rgba);
         let n = rad as usize;
         let (cx, cy) = (
             if idx & 1 == 0 { rad as f32 } else { 0.0 },
@@ -177,19 +170,42 @@ impl TextCache {
         tex
     }
 
-    /// A texture made once for `key` (kept while it is used, like a text).
+    /// Like [`cached`](Self::cached) for a name that is put together (`format_args!`): it is
+    /// written into a buffer that is kept, so only a texture that is made has a `String`
+    /// for its key.
+    fn cached_as(
+        &mut self,
+        r: &Renderer,
+        scene: &mut Scene,
+        name: std::fmt::Arguments,
+        px: u32,
+        rgba: [u8; 4],
+        size: (u32, u32),
+        build: impl FnOnce() -> Vec<u8>,
+    ) -> TextureId {
+        use std::fmt::Write;
+        let mut buf = self.take_key_buf();
+        let _ = buf.write_fmt(name);
+        let tex = self.cached(r, scene, &buf, px, rgba, size, build);
+        self.put_key_buf(buf);
+        tex
+    }
+
+    /// A texture made once for `(name, px, rgba)` (kept while it is used, like a text).
     fn cached(
         &mut self,
         r: &Renderer,
         scene: &mut Scene,
-        key: (String, u32, [u8; 4]),
+        name: &str,
+        px: u32,
+        rgba: [u8; 4],
         size: (u32, u32),
         build: impl FnOnce() -> Vec<u8>,
     ) -> TextureId {
-        if let Some(l) = self.labels.get_mut(&key) {
-            l.used = self.frame;
+        if let Some(l) = self.hit(name, px, rgba) {
             return l.tex;
         }
+        let key = (name.to_string(), px, rgba);
         let img = omsi_texture::Image {
             width: size.0,
             height: size.1,
@@ -222,16 +238,23 @@ impl TextCache {
     ) -> Option<TextureId> {
         let px = px.clamp(4, 256);
         omsi_ui::icons::svg(name)?;
-        let key = (format!("\u{0}icon:{name}"), px, rgba);
-        Some(self.cached(r, scene, key, (px, px), || {
-            let mask = omsi_ui::icons::rasterize(name, px).unwrap_or_default();
-            let mut data = vec![0u8; (px * px * 4) as usize];
-            for (o, a) in data.chunks_exact_mut(4).zip(mask) {
-                o[..3].copy_from_slice(&rgba[..3]);
-                o[3] = (a as f32 * rgba[3] as f32 / 255.0).round() as u8;
-            }
-            data
-        }))
+        Some(self.cached_as(
+            r,
+            scene,
+            format_args!("\u{0}icon:{name}"),
+            px,
+            rgba,
+            (px, px),
+            || {
+                let mask = omsi_ui::icons::rasterize(name, px).unwrap_or_default();
+                let mut data = vec![0u8; (px * px * 4) as usize];
+                for (o, a) in data.chunks_exact_mut(4).zip(mask) {
+                    o[..3].copy_from_slice(&rgba[..3]);
+                    o[3] = (a as f32 * rgba[3] as f32 / 255.0).round() as u8;
+                }
+                data
+            },
+        ))
     }
 
     /// A small button of the HUD (the information bar's arrow ...): a rounded square of
@@ -281,34 +304,41 @@ impl TextCache {
         rad: f32,
         rgba: [u8; 4],
     ) -> TextureId {
-        let key = (format!("\u{0}rr{w}x{h}r{}", rad as u32), 0, rgba);
-        self.cached(r, scene, key, (w, h), || {
-            let mut data = vec![0u8; (w * h * 4) as usize];
-            let ri = rad as u32;
-            for py in 0..h {
-                let band_y = py >= ri && py + ri < h;
-                for px in 0..w {
-                    let cover = if band_y || (px >= ri && px + ri < w) {
-                        1.0
-                    } else {
-                        let d = rr_dist(
-                            px as f32 + 0.5,
-                            py as f32 + 0.5,
-                            0.0,
-                            0.0,
-                            w as f32,
-                            h as f32,
-                            rad,
-                        );
-                        (0.5 - d).clamp(0.0, 1.0)
-                    };
-                    let o = ((py * w + px) * 4) as usize;
-                    data[o..o + 3].copy_from_slice(&rgba[..3]);
-                    data[o + 3] = (rgba[3] as f32 * cover).round() as u8;
+        self.cached_as(
+            r,
+            scene,
+            format_args!("\u{0}rr{w}x{h}r{}", rad as u32),
+            0,
+            rgba,
+            (w, h),
+            || {
+                let mut data = vec![0u8; (w * h * 4) as usize];
+                let ri = rad as u32;
+                for py in 0..h {
+                    let band_y = py >= ri && py + ri < h;
+                    for px in 0..w {
+                        let cover = if band_y || (px >= ri && px + ri < w) {
+                            1.0
+                        } else {
+                            let d = rr_dist(
+                                px as f32 + 0.5,
+                                py as f32 + 0.5,
+                                0.0,
+                                0.0,
+                                w as f32,
+                                h as f32,
+                                rad,
+                            );
+                            (0.5 - d).clamp(0.0, 1.0)
+                        };
+                        let o = ((py * w + px) * 4) as usize;
+                        data[o..o + 3].copy_from_slice(&rgba[..3]);
+                        data[o + 3] = (rgba[3] as f32 * cover).round() as u8;
+                    }
                 }
-            }
-            data
-        })
+                data
+            },
+        )
     }
 
     /// A soft shadow under the rounded rectangle `rect`: it fades out over `spread` pixels
@@ -340,30 +370,34 @@ impl TextCache {
             .min((w as f32 * 0.5).floor())
             .min((h as f32 * 0.5).floor())
             .max(0.0);
-        let key = (
-            format!("\u{0}shadow{w}x{h}r{}m{m}", rad as u32),
+        let tex = self.cached_as(
+            r,
+            scene,
+            format_args!("\u{0}shadow{w}x{h}r{}m{m}", rad as u32),
             0,
             [0, 0, 0, alpha],
-        );
-        let tex = self.cached(r, scene, key, (tw, th), || {
-            let mut data = vec![0u8; (tw * th * 4) as usize];
-            for py in 0..th {
-                for px in 0..tw {
-                    let d = rr_dist(
-                        px as f32 + 0.5,
-                        py as f32 + 0.5,
-                        m as f32,
-                        m as f32,
-                        w as f32,
-                        h as f32,
-                        rad,
-                    );
-                    let k = (1.0 - d / m as f32).clamp(0.0, 1.0);
-                    data[((py * tw + px) * 4 + 3) as usize] = (alpha as f32 * k * k).round() as u8;
+            (tw, th),
+            || {
+                let mut data = vec![0u8; (tw * th * 4) as usize];
+                for py in 0..th {
+                    for px in 0..tw {
+                        let d = rr_dist(
+                            px as f32 + 0.5,
+                            py as f32 + 0.5,
+                            m as f32,
+                            m as f32,
+                            w as f32,
+                            h as f32,
+                            rad,
+                        );
+                        let k = (1.0 - d / m as f32).clamp(0.0, 1.0);
+                        data[((py * tw + px) * 4 + 3) as usize] =
+                            (alpha as f32 * k * k).round() as u8;
+                    }
                 }
-            }
-            data
-        });
+                data
+            },
+        );
         scene.overlays.push((
             tex,
             [
