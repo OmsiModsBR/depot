@@ -64,15 +64,18 @@ fn bar(split: bool, bottom: bool, collapsed: bool, low: bool) -> InfoBar {
                 item("km/h", InfoTone::Dim),
                 item("60", InfoTone::Limit),
             ],
-            vec![
-                with_icon(
-                    item("Av. Paulista", InfoTone::Plain),
-                    "hud-stop",
-                    "Next stop",
-                ),
-                item("−1:40", InfoTone::Delay(-1)),
-            ],
-        ],
+        ]
+        .into_iter()
+        .chain(driving())
+        .chain([vec![
+            with_icon(
+                item("Av. Paulista", InfoTone::Plain),
+                "hud-stop",
+                "Next stop",
+            ),
+            item("−1:40", InfoTone::Delay(-1)),
+        ]])
+        .collect(),
         bottom,
         tier2: if collapsed {
             Vec::new()
@@ -92,8 +95,20 @@ fn bar(split: bool, bottom: bool, collapsed: bool, low: bool) -> InfoBar {
     }
 }
 
-/// A one-row layout as the game builds one: Full (`full`) with every readout, else Compact
-/// (the badge and the next stop as one group) or Essentials (`large`).
+/// The pedals, the road's grade and the skid lamp (out), as every layout has them after the
+/// speed.
+fn driving() -> Vec<Vec<InfoItem>> {
+    let mut pedals = item("", InfoTone::Pedals([0, 35, 80]));
+    pedals.tip = Some("Pedals".into());
+    let grade = with_icon(item("6 %", InfoTone::Plain), "hud-bus-slope", "Road grade");
+    let skid = with_icon(
+        item("", InfoTone::Light(false)),
+        "hud-bus-skid-dark",
+        "Skidding",
+    );
+    vec![vec![pedals], vec![grade], vec![skid]]
+}
+
 /// `bar` with its skid lamp lit.
 fn skidding(mut bar: InfoBar) -> InfoBar {
     for it in bar.groups.iter_mut().flatten() {
@@ -105,6 +120,8 @@ fn skidding(mut bar: InfoBar) -> InfoBar {
     bar
 }
 
+/// A one-row layout as the game builds one: Full (`full`) with every readout, else Compact
+/// (the badge and the next stop as one group) or Essentials (`large`).
 fn one_row(full: bool, large: bool) -> InfoBar {
     let clock = with_icon(
         item("21:04:10", InfoTone::Plain),
@@ -122,23 +139,11 @@ fn one_row(full: bool, large: bool) -> InfoBar {
         "Next stop",
     );
     let late = item("+3:12", InfoTone::Delay(1));
-    let groups = if large {
-        vec![speed, vec![late]]
+    let groups: Vec<Vec<InfoItem>> = if large {
+        [vec![speed], driving(), vec![vec![late]]].concat()
     } else if full {
-        let mut pedals = item("", InfoTone::Pedals([0, 35, 80]));
-        pedals.tip = Some("Pedals".into());
-        let grade = with_icon(item("6 %", InfoTone::Plain), "hud-bus-slope", "Road grade");
-        let skid = with_icon(
-            item("", InfoTone::Light(false)),
-            "hud-bus-skid-dark",
-            "Skidding",
-        );
-        vec![
-            vec![clock],
-            speed,
-            vec![pedals],
-            vec![grade],
-            vec![skid],
+        let start = [vec![vec![clock], speed], driving()].concat();
+        let rest = vec![
             vec![with_icon(
                 item("18.2 km", InfoTone::Plain),
                 "hud-trip",
@@ -163,18 +168,18 @@ fn one_row(full: bool, large: bool) -> InfoBar {
             route("829", "Terminal Sul"),
             vec![next, late],
             vec![item("74 fps", InfoTone::Fps(0))],
-        ]
+        ];
+        [start, rest].concat()
     } else {
-        vec![
-            vec![clock],
-            speed,
+        let end = vec![
             vec![
                 item("829", InfoTone::Badge),
                 next,
                 item("+0:20", InfoTone::Delay(0)),
             ],
             vec![item("74 / 52 fps", InfoTone::Fps(0))],
-        ]
+        ];
+        [vec![vec![clock], speed], driving(), end].concat()
     };
     InfoBar {
         groups,
