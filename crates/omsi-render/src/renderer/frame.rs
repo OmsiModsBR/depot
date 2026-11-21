@@ -5,7 +5,8 @@
 use super::features::{puddle_weather, BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 use super::state::Renderer;
 use crate::gpu::{fault_due, guarded_poll, lost_why, target_2d, FaultHook, HDR_FORMAT};
-use crate::lighting::{lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
+use crate::interface::{LeadViewParts, PipeSet};
+use crate::lighting::{LampShadow, Lighting};
 use crate::output::Output;
 use crate::passes::{
     Batch, FrameFeatures, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE,
@@ -42,6 +43,8 @@ pub(crate) struct FrameContext<'a> {
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) features: FrameFeatures,
+    /// The pipelines of the main pass this picture is drawn with (the mode's choice).
+    pub(crate) pipe_set: PipeSet,
     pub(crate) aspect: f32,
     /// The camera relative to the render origin.
     pub(crate) cam_rel: Vec3,
@@ -259,8 +262,9 @@ impl Renderer {
         let xr_view = projection.is_some();
         let lead_view = (with_overlays || xr_view) && !second_eye;
         // what the picture draws (and, with it, whether it goes through a scaled target)
-        let features = FrameFeatures::decide(
-            lighting.path,
+        let mode = super::build::mode_for(lighting.path);
+        let features = FrameFeatures::decide_with(
+            mode,
             &self.options,
             &FrameInputs {
                 view: ViewKind::of(output),
@@ -305,7 +309,8 @@ impl Renderer {
         let (grid, lamp_shadows) = self.prepare_lights(
             scene,
             cam_rel,
-            enhanced,
+            mode,
+            &features,
             lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
@@ -572,49 +577,18 @@ impl Renderer {
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));
-        // (a mirror takes the window's light - its own call would move the exposure on -
-        // unless it comes before the window's first frame)
-        if enhanced && lead_view {
-            let ground = lighting
-                .fog_base
-                .or(lighting.inside.map(|v| v.0.z))
-                .map(|z| (z - scene.render_origin.z) as f32);
-            self.adaptation.view_lamps = Some(view_lamp_light(
-                &scene.lights,
-                scene.render_origin,
+        mode.lead_view(
+            &features,
+            LeadViewParts {
+                scene,
+                lighting,
+                camera,
                 cam_rel,
-                (camera.forward(), camera.right(), camera.up()),
-                camera.fov_deg,
                 aspect,
-                ground,
-            ));
-            if crate::gpu::debug().debug_view_lamps {
-                log::info!(
-                    "view lamps: {:.6}",
-                    self.adaptation.view_lamps.unwrap_or(0.0)
-                );
-            }
-        }
-        // the night sky's glow from the lamps round the camera (the window's view leads), in
-        // steps of a tenth: the sky is recomputed for a new value, not for every metre driven
-        if enhanced && lead_view {
-            let raw = lamp_sky_glow(&scene.lights, scene.render_origin, cam_rel);
-            let target = raw.clamp(0.03, 1.5);
-            let step = (target.ln() * 10.0).round() / 10.0;
-            let changed = self
-                .sky
-                .city_glow
-                .is_none_or(|g| (g.ln() - step).abs() > 0.15);
-            if changed {
-                self.sky.city_glow = Some(step.exp());
-            }
-            if crate::gpu::debug().debug_sky && changed {
-                log::info!(
-                    "sky glow from the lamps: {raw:.3} (taken {:.3})",
-                    step.exp()
-                );
-            }
-        }
+                adaptation: &mut self.adaptation,
+                sky: &mut self.sky,
+            },
+        );
         let probe_redraw = enhanced
             && (lead_view || self.sky.sky_state.is_none())
             && self.prepare_enhanced(lighting, cam_rel, ro, dt);
@@ -637,6 +611,7 @@ impl Renderer {
                 width,
                 height,
                 features,
+                pipe_set: mode.pipe_set(&features),
                 aspect,
                 cam_rel,
                 dt,

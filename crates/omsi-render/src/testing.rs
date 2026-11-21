@@ -13,5 +13,40 @@ pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
 pub use crate::renderer::lists::{shadow_caster, ShadowCaster};
 
 /// What a picture draws (`FrameFeatures::decide`), for tests without a graphics adapter.
+pub use crate::interface::{ModeShading, ModeView, PipeSet};
 pub use crate::passes::FrameFeatures;
 pub use crate::renderer::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
+
+/// What the render mode of `path` answers for a frame (`interface::RenderMode`), for the tests
+/// that need no graphics adapter.
+pub mod modes {
+    use super::{FrameFeatures, ModeShading, ModeView, PipeSet};
+    use crate::interface::RenderMode;
+    use crate::lighting::{PointLight, ShadingPath};
+
+    fn mode(path: ShadingPath) -> &'static dyn RenderMode {
+        crate::renderer::mode_for(path)
+    }
+
+    pub fn shading(path: ShadingPath, view: &ModeView) -> ModeShading {
+        mode(path).shading(view)
+    }
+
+    pub fn pipe_set(path: ShadingPath, features: &FrameFeatures) -> PipeSet {
+        mode(path).pipe_set(features)
+    }
+
+    pub fn draws_light(path: ShadingPath, l: &PointLight, features: &FrameFeatures) -> bool {
+        mode(path).draws_light(l, features)
+    }
+
+    /// The radius a mode's light record gives the shader for `l` (0 for a lamp the plain
+    /// shader reads as no light).
+    pub fn light_radius(path: ShadingPath, l: &PointLight, features: &FrameFeatures) -> f32 {
+        mode(path).light_record(l, glam::Vec3::ZERO, features).pos[3]
+    }
+
+    pub fn lamp_shadows(path: ShadingPath, features: &FrameFeatures) -> bool {
+        mode(path).lamp_shadows(features)
+    }
+}
