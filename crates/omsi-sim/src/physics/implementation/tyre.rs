@@ -398,8 +398,10 @@ impl RigidBody {
             // (holding, no roll from the tyres' hold across: OMSI 2 then sets the
             // sideways motion outright and rolls the body by the bend's pull alone,
             // below - taken at the ground, every turn of the wheel kicked the body
-            // over; sliding, the tyres trip it as before)
-            if self.holding && gripped {
+            // over; sliding, the tyres trip it as before. With steerable axles, `D-7`, none
+            // at walking pace either: the axles' scrub rolled the body, which rocked back
+            // as it reached that pace)
+            if self.holding && (gripped || steered && self.steers_axles()) {
                 rn.y = 0.0;
             }
             let inv = c.right.dot(lin(c.right)) + (rn / self.inertia).dot(rn);

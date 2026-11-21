@@ -76,6 +76,16 @@ with a steered tag axle; with several, a load-weighted middle is the steady-stat
 of axles with cornering stiffness in proportion to load, the usual first approximation of a tandem.
 Weighting by `1 − e_i` lets an axle on its way to locked move the line continuously (FR-009).
 
+**Changed (2026-11-21, PR #820, after the first in-game test)**: a linked tag axle turns in
+proportion to the steering and so, at most angles, less than a turn about the rigid axles asks.
+Weighted out by `1 − e_i`, it scrubbed alone against the line's hold with the road's whole grip at
+a few degrees: in a turn the bus needed far more drive, spun its driven wheels and jolted. Each
+axle now counts where it points, `p_i = y_i − tan(δ_i) / κ` (its own place when straight), weighted
+by `F_i`: the point where the side forces of tyres with cornering stiffness in proportion to load
+balance. An axle pointing at the centre does not move the line (the Q1 case); mode 2 counts by its
+angle like the others; `e_i` is gone, the angle's own rate limit keeps the line continuous.
+`docs/physics/depot-model.md` `D-5` holds the rule.
+
 **Alternatives rejected**: plain mean of rigid axles (ignores that the heavier axle dominates);
 keeping `[rot_pnt_long]` (rejected by the maintainer, Q1); solving the tyre forces for the yaw
 balance every substep (exact but needs cornering stiffness the `.bus` does not give).
@@ -97,7 +107,8 @@ change the radius).
 ## R-6. The axle's law, engagement and centring
 
 **Decision** (maintainer, 2026-11-21): the game has no locking rule of its own; the script picks the
-mode. Each steerable axle keeps an angle `δ_i` and an engagement `e_i`:
+mode. Each steerable axle keeps an angle `δ_i` and an engagement `e_i` (changed 2026-11-21: `e_i`
+dropped, the turning line follows `δ_i`, see R-4):
 
 ```
 s       = δ_front / lock_front                the driver's steering, −1..1 (= κ / κ_max)

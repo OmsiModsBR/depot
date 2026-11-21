@@ -10,6 +10,9 @@ const ON_LINE: f32 = 1e-3;
 /// The shortest arm (m) from the turning line to the front axle the full lock is worked out
 /// with: a line on the front axle would ask an endless curvature.
 const MIN_ARM: f32 = 0.5;
+/// The least curvature (1/m) an axle's angle is set against to find where it points: straight
+/// on, a steered axle would point at an endless distance (and the line then hardly matters).
+const MIN_KAPPA: f32 = 1e-3;
 
 /// The section's steerable axles, from the `achse_steer_*` parameters of its `[newachse]`
 /// (`D-5`).
@@ -27,12 +30,18 @@ pub(in crate::physics) fn steer_axles(def: &Vehicle) -> Vec<SteerAxle> {
         .collect()
 }
 
-/// The turning line (m along the body, `D-5`) of axles at `(y, load, weight)`: the mean of
-/// their places weighted by `load · weight` (1 for a rigid axle or one the script holds,
-/// `1 − e` for a steerable one); `fallback`, the `C-6` line, when nothing weighs.
-pub fn turning_line(axles: &[(f32, f32, f32)], fallback: f32) -> f32 {
-    let (sum_w, sum_wy) = axles.iter().fold((0.0, 0.0), |(w, wy), &(y, load, r)| {
-        (w + load * r, wy + load * r * y)
+/// The turning line (m along the body, `D-5`) of axles at `(y, load, angle)` on curvature
+/// `kappa`: where each axle points on the body's centre line, `y − tan(angle) / κ` (its own
+/// place for a straight axle), weighted by its load, so that the tyres' slip balances;
+/// `fallback`, the `C-6` line, when nothing weighs.
+pub fn turning_line(axles: &[(f32, f32, f32)], kappa: f32, fallback: f32) -> f32 {
+    let k = if kappa.abs() < MIN_KAPPA {
+        MIN_KAPPA.copysign(kappa)
+    } else {
+        kappa
+    };
+    let (sum_w, sum_wy) = axles.iter().fold((0.0, 0.0), |(w, wy), &(y, load, angle)| {
+        (w + load, wy + load * (y - angle.tan() / k))
     });
     if sum_w > 0.0 {
         sum_wy / sum_w
@@ -69,22 +78,12 @@ pub fn target_angle(axle: &SteerAxle, state: &SteerState, sigma: f32, s: f32) ->
 }
 
 /// The axle's state a time `h` (s) on (`D-6`): its angle moves to its target at most
-/// `centring` per second, its engagement to 1 (basic mode) or 0 at most `centring / lock` per
-/// second.
+/// `centring` per second.
 pub fn advance(axle: &SteerAxle, state: SteerState, sigma: f32, s: f32, h: f32) -> SteerState {
-    let towards = |from: f32, to: f32, step: f32| from + (to - from).clamp(-step, step);
-    let engaged = if state.mode == SteerMode::Basic {
-        1.0
-    } else {
-        0.0
-    };
+    let step = axle.centring * h;
+    let to = target_angle(axle, &state, sigma, s);
     SteerState {
-        angle: towards(
-            state.angle,
-            target_angle(axle, &state, sigma, s),
-            axle.centring * h,
-        ),
-        engagement: towards(state.engagement, engaged, axle.centring / axle.lock * h),
+        angle: state.angle + (to - state.angle).clamp(-step, step),
         ..state
     }
 }
@@ -94,16 +93,6 @@ pub fn advance(axle: &SteerAxle, state: SteerState, sigma: f32, s: f32, h: f32) 
 /// `SCRUB_FULL_ANGLE` on.
 pub fn scrub_reach(off: f32) -> f32 {
     (off.abs() / SCRUB_FULL_ANGLE).min(1.0)
-}
-
-/// How much an axle weighs in the turning line besides its load (`D-5`): 1 rigid or held by
-/// the script, `1 − e` steering.
-fn weight(state: Option<&SteerState>) -> f32 {
-    match state {
-        None => 1.0,
-        Some(s) if s.mode == SteerMode::ScriptAngle => 1.0,
-        Some(s) => 1.0 - s.engagement,
-    }
 }
 
 impl RigidBody {
@@ -123,7 +112,9 @@ impl RigidBody {
             .map(|(_, s)| s)
     }
 
-    /// The section's turning line now (`D-5`), the leading front axle left out.
+    /// The section's turning line now (`D-5`), the leading front axle left out, on the
+    /// curvature and the axles' angles of the substep before: between its rearmost axle and
+    /// `MIN_ARM` behind the front one; the `C-6` line when every other axle steers.
     fn depot_turning_line(&self) -> f32 {
         let front = self.front_axle_y();
         let axles: Vec<(f32, f32, f32)> = self
@@ -132,9 +123,18 @@ impl RigidBody {
             .zip(&self.wheel_axle)
             .step_by(2)
             .filter(|(w, _)| w.attach.y != front)
-            .map(|(w, &a)| (w.attach.y, w.rest_load, weight(self.steer_state(a))))
+            .map(|(w, &a)| {
+                let angle = self.steer_state(a).map_or(0.0, |s| s.angle);
+                (w.attach.y, w.rest_load, angle)
+            })
             .collect();
-        turning_line(&axles, self.file_turn_line)
+        if axles.len() == self.steer_axles.len() {
+            return self.file_turn_line;
+        }
+        let rearmost = axles.iter().map(|a| a.0).fold(f32::MAX, f32::min);
+        turning_line(&axles, self.kappa, self.file_turn_line)
+            .min(front - MIN_ARM)
+            .max(rearmost)
     }
 }
 
