@@ -53,25 +53,25 @@ story uses. No physics behaviour changes; every trace stays identical.
 
 ### Model document (docs only)
 
-- [ ] T002 [ph 1] Write `D-5` "Steerable axles and the turning line" in `docs/physics/depot-model.md`:
+- [x] T002 [ph 1] Write `D-5` "Steerable axles and the turning line" in `docs/physics/depot-model.md`:
   inputs (`achse_steer_angle`, `achse_steer_centring`, `achse_long`, `D-1` loads, `[inv_min_turnradius]`,
   `[rot_pnt_long]`), the weight `w_i = F_i · r_i` (rigid 1, steerable `1 − e_i`, mode 2 counted as
   rigid), `y_turn`, the `C-6` fallback with no weight, `lock_front` from `C-6` and
   `κ_max = tan(lock_front) / |y_front − y_turn|`; closed forms for V2 (tag steering, tag locked) and
   V5's rear section (fourth axle steering, rigid); index row; status "checked by the conformance
   tests" (research R-4, R-5)
-- [ ] T003 [ph 1] Write `D-6` "Modes of a steerable axle" in `docs/physics/depot-model.md`: mode 0
+- [x] T003 [ph 1] Write `D-6` "Modes of a steerable axle" in `docs/physics/depot-model.md`: mode 0
   `δ = σ · s · lock` with `σ` −1 behind the turning line, +1 ahead, 0 on it; `s = κ / κ_max` in the
   leading section, `s_f = clamp(κ_joint / κ_max, −1, 1)` behind a joint; mode 1 straight; mode 2 the
   script's angle clamped to the lock; engagement `e` ramping at `centring / lock`, angle at most
   `centring` per second; no locking rule in the game (research R-6)
-- [ ] T004 [ph 1] Write `D-7` "Scrub" in `docs/physics/depot-model.md`: tyres off the centre by more
+- [x] T004 [ph 1] Write `D-7` "Scrub" in `docs/physics/depot-model.md`: tyres off the centre by more
   than `SCRUB_TOLERANCE` held with the road's reach, sections with steerable axles behind a joint held at each tyre,
   their force in `D-3`; basis *physics, tuned*; risk and fallback of research R-7
-- [ ] T005 [P] [ph 1] Point `C-6`, `C-7` and `C-9` of `docs/physics/common-model.md` to `D-5`..`D-7` for
+- [x] T005 [P] [ph 1] Point `C-6`, `C-7` and `C-9` of `docs/physics/common-model.md` to `D-5`..`D-7` for
   sections with steerable axles, and update the `C-7` note "the steering of a rear axle's tyres is
   modelled in neither engine" to say Project Depot Physics models it now
-- [ ] T006 [P] [ph 1] Document the two axle parameters (contracts/bus-key.md) and the variables
+- [x] T006 [P] [ph 1] Document the two axle parameters (contracts/bus-key.md) and the variables
   `Axle_Steer_Mode_<n>`, `Axle_Steer_Angle_<n>`, `Axle_Steer_Locked_<n>` and the meaning of
   `Axle_Steering_<n>` (contracts/script-vars.md) in `docs/FORMATS.md`
 
@@ -257,7 +257,7 @@ articulation angle and swept path against the closed forms (SC-006a).
 - [ ] T041 [ph 6] Maintainer in game: 6x2 with a steerable tag axle (tighter turn, script lock at speed, mode 2) and
   articulated bus with a steered last axle (SC-008); findings go to `fix/` pull requests with their
   failing test
-- [ ] T042 [ph 6] Update the statuses in `docs/physics/depot-model.md` (`D-5`..`D-7`) after T041
+- [ ] T042 [ph 6] Update the statuses in `docs/physics/depot-model.md` (`D-5`..`D-7`) after T041, and remove their "Planned" notes
 
 ---
 

@@ -2,8 +2,8 @@
 
 Project Depot Physics runs every shared rule of [common-model.md](common-model.md) for the player's
 road vehicle, with the overrides listed here. It holds only changes that **override** a behaviour of
-OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are four overrides: `D-1`
-(the plan's decision D2), `D-2`, `D-3` and `D-4`. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
+OMSI 2; behaviour that only adds to OMSI 2 stays on in both engines. There are seven overrides: `D-1`
+(the plan's decision D2), `D-2`, `D-3`, `D-4`, and `D-5` to `D-7` for steerable axles. The AI road vehicle is today's Depot AI, `DA-1` to `DA-6`.
 
 How to read an entry (inputs, outputs, module, basis, status) is explained in the [README](README.md).
 Module paths are under `crates/omsi-sim/src/`. Every rule that differs between the engines is chosen
@@ -19,6 +19,9 @@ themselves are in `physics/implementation/depot/`.
 | [D-2](#d-2-the-people-aboard-move-cog-and-add-to-the-inertia) | the people aboard move `[cog]` and add to the inertia | physics |
 | [D-3](#d-3-the-tyres-hold-axle-by-axle-with-the-turning-they-must-start) | the tyres hold axle by axle, with the turning they must start | physics, tuned |
 | [D-4](#d-4-the-payload-slows-the-body-damping) | the payload slows the body's damping | physics |
+| [D-5](#d-5-steerable-axles-and-the-turning-line) | steerable axles and the turning line | physics |
+| [D-6](#d-6-modes-of-a-steerable-axle) | modes of a steerable axle | physics |
+| [D-7](#d-7-scrub) | scrub of tyres that do not point at the centre of the turn | physics, tuned |
 | [DA-1](#da-1-path-follower) | path follower | tuned |
 | [DA-2](#da-2-pure-pursuit) | pure pursuit steering | tuned |
 | [DA-3](#da-3-heading) | heading | physics |
@@ -245,6 +248,140 @@ The springs stay and the mass grows, so the body's pitch and roll follow the hea
 ```
 f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
 ```
+
+## D-5. Steerable axles and the turning line
+
+> Planned (spec 004): the game runs `C-6` for every vehicle until phases 3 to 5 of that spec are
+> merged.
+
+- **Inputs**: `achse_steer_angle` (`lock_i`, the axle's own lock) and `achse_steer_centring` of each
+  steerable axle (`docs/FORMATS.md`), `achse_long` (`y_i`), each axle's load at rest `F_i` (`D-1`),
+  each steerable axle's engagement `e_i` and mode (`D-6`), `[inv_min_turnradius]`, `[rot_pnt_long]`
+  (`C-6`). **Outputs**: the section's turning line `y_turn`, the full-lock curvature `κ_max` and the
+  driver's curvature `κ`. **Module**: `physics/implementation/depot/steering.rs` (`turning_line`,
+  `full_lock`), chosen in `physics/implementation/engine.rs`; the values in
+  `physics/domain/spec.rs` (`SteerAxle`).
+- **Basis**: *physics*: one rigid axle turns about its own line, several about a load-weighted
+  middle (the zero-slip point of tyres whose cornering stiffness is in proportion to their load).
+  **Status**: checked by the conformance tests; no claim is made here about OMSI 2, which has no
+  steerable axle of its own (the scripts only animate one). Classic, and a section with no steerable
+  axle under Depot, keep `C-6` and `C-9` exactly.
+
+An axle is steerable when its `[newachse]` carries both parameters; in a section with at least one,
+every other axle is rigid, except the leading section's front axle, which the driver steers. Per
+section and per substep:
+
+```
+w_i     = F_i · r_i                     F_i: the axle's load at rest (D-1)
+r_i     = 1                             a rigid axle, and a steerable axle in mode 2 (the script holds it)
+r_i     = 1 − e_i                       a steerable axle in modes 0 and 1, e_i ∈ [0, 1] (D-6)
+y_turn  = Σ w_i · y_i / Σ w_i           over the section's axles but the leading front axle, if Σ w_i > 0
+y_turn  = the C-6 line                  otherwise (every axle steering)
+```
+
+The front wheels keep the lock `C-6` gives them, from the file's `[rot_pnt_long]` line (`y_rot`);
+the full lock follows the current line:
+
+```
+lock_front = atan( [inv_min_turnradius] · |y_front − y_rot| )
+κ_max      = tan(lock_front) / |y_front − y_turn|
+κ          = s · κ_max                  s ∈ [−1, 1] the driver's steering
+```
+
+The tyres of each axle still point at the centre of the turn (Ackermann, `C-6`) about their axle's
+angle. A section behind a joint takes its curvature from the joint (`C-9`), with its own axles,
+loads and line.
+
+**Closed forms** (the conformance vehicles of `crates/omsi-sim/tests/support/vehicles.rs`, every
+`[inv_min_turnradius]` 0.12 1/m):
+
+- **V2**, 6x2 rigid, axles at `4.4`, `−1.9`, `−5.2` m, `[cog]` y `0.4`, `y_rot = −1.9`; the loads at
+  rest share `0.478 : 0.306 : 0.216`, and `lock_front = atan(0.12 · 6.3) = 37.09°`. Tag axle steering
+  (`e = 1`): `y_turn = −1.9`, `κ_max = 0.120` 1/m, radius 8.33 m at the line. Tag axle locked
+  (`e = 0`): `y_turn = (0.306 · −1.9 + 0.216 · −5.2) / 0.522 = −3.265`, `κ_max = 0.0986` 1/m, radius
+  10.14 m. Locking the tag axle widens the full-lock circle by 1.8 m.
+- **V5**, articulated 8x2: the rear section has axles at `1.2` and `−4.2` m, `[cog]` y `0.6`, its
+  ball at `5.6`; the front section's line is at `−2.5`, its ball at `−4.4` (`D = 1.9` m). The rear
+  section's loads share `0.889 : 0.111`. Fourth axle steering: `y_turn = 1.2`, `d = 4.4` m; rigid
+  (locked): `y_turn = 0.6`, `d = 5.0` m. At the front section's full lock (`R = 8.33` m) the steady
+  articulation angle of `C-9`, `R · sin α + D · cos α = d`, is 18.1° steering and 23.0° rigid: the
+  rear section cuts the corner less with its last axle steering.
+
+## D-6. Modes of a steerable axle
+
+> Planned (spec 004), as `D-5`.
+
+- **Inputs**: the axle's mode `Axle_Steer_Mode_<n>` and angle `Axle_Steer_Angle_<n>` from the
+  scripts (`docs/FORMATS.md`), `lock_i` and the centring rate `c_i` (`achse_steer_centring`, °/s),
+  the driver's steering `s` (`D-5`) or, behind a joint, the joint's curvature `κ_joint` (`C-9`), the
+  turning line `y_turn` (`D-5`). **Outputs**: the axle's angle `δ_i` (the scripts'
+  `Axle_Steering_<n>_L/R`), its engagement `e_i`, the locked flag `Axle_Steer_Locked_<n>`.
+  **Module**: `physics/implementation/depot/steering.rs` (`target_angle`, `advance`), the state in
+  `physics/domain/steering.rs` (`SteerState`).
+- **Basis**: *physics*: the proportional law is how the steered tag axle of a 6x2-4 is linked to
+  the steering; an actuator moves at a finite speed. **Status**: checked by unit tests; no claim is
+  made here about OMSI 2.
+
+The game never locks a steerable axle by itself: speed, gear, fault or dashboard logic is the
+vehicle's script's, through the mode (0 for a script that does not know the variable).
+
+```
+mode 0 (basic)   target = σ_i · s · lock_i       σ_i = −1 if y_i < y_turn  (behind the line: the other way, a tag axle)
+                                                 σ_i = +1 if y_i > y_turn  (ahead of it: the same way, a twin-steer axle)
+                                                 σ_i =  0 on the line
+                 s   = κ / κ_max                 the leading section
+                 s_f = clamp( κ_joint / κ_max, −1, 1 )      a section behind a joint, κ_max of the leading section
+mode 1 (locked)  target = 0
+mode 2 (script)  target = clamp( Axle_Steer_Angle_<n>, −lock_i, lock_i )
+any other mode   mode 0, one log line per vehicle; a script angle that is not a number: mode 0
+
+e_i  → 1 in mode 0, → 0 in modes 1 and 2, at most  c_i / lock_i  per second
+δ_i  → target, at most  c_i  degrees per second, in every mode
+Axle_Steer_Locked_<n> = 1  while mode 1 has brought e_i to 0, else 0
+```
+
+`σ_i` and `s` use the turning line and the full lock of the substep before (1/240 s of lag), which
+breaks the loop between the line and the angles. Behind a joint the axle follows the joint's bend
+rather than the steering wheel, so it steers as the section enters the bend, not before. In a mode
+change the angle and the engagement move together at the centring rate: the line (`D-5`) and the
+full lock move without a jump, and so does the body. The rate limits the angle while following the
+steering too: a steering wheel turned faster than `c_i` (with a mouse, for example) makes the axle
+lag, so a mod sets `achse_steer_centring` high enough to keep up. A rigid axle of a section with
+steerable axles shows `Axle_Steering_<n>` = 0.
+
+**What it means for a mod.** A 6x2-4 with a steered tag axle needs only the two parameters: in
+mode 0 the tag axle turns against the front wheels. Locking it above a speed, in reverse or on a
+fault is a line of the bus's script (`Axle_Steer_Mode_<n>` = 1), and the tag axle centres smoothly at
+its centring rate; a dashboard lamp can read `Axle_Steer_Locked_<n>`. Mode 2 lets a script compute
+any other law (pointing at the centre of the turn, a speed-dependent ratio) and hand the angle over.
+
+## D-7. Scrub
+
+> Planned (spec 004), as `D-5`.
+
+- **Inputs**: each tyre's angle and the angle that points it at the centre of the turn (`C-6`), the
+  road's reach `μ · grip_i · h` (`C-7`). **Outputs**: where each tyre is held across while the
+  tyres hold, and its force across, which enters `D-3`. **Module**:
+  `physics/implementation/tyre.rs` (`lateral_start`), the tolerance `SCRUB_TOLERANCE` in
+  `physics/domain/params.rs`.
+- **Basis**: *physics* for the friction; *tuned* for the tolerance. **Status**: checked by the
+  conformance tests; no claim is made here about OMSI 2.
+
+Under `C-7` the leading section's tyres hold with unlimited reach, which is right only while every
+tyre points at the centre of the turn. In a section with steerable axles, while the tyres hold, a
+tyre whose angle differs from the one that points at the centre by more than `SCRUB_TOLERANCE` is
+held with the road's reach (at most `μ · grip_i · h` of impulse a substep), as every tyre of a
+section behind a joint already is. A section with steerable axles behind a joint is held at each
+tyre rather than at its turning line (`C-9`), so its rigid axles scrub as well. These forces across
+enter `D-3`'s balance with the others.
+
+So a tandem's tyres slide across in a tight turn at walking speed, which costs drive and grip, and a
+tag axle locked in a tight turn drags. The solver already caps impulses at the road's reach: no new
+force model is needed.
+
+**Risk**: the friction is Coulomb-like, so the drag does not grow with the error above the
+tolerance. If the bus kicks at the threshold in the game, the reach grows linearly with the error
+instead (a change of this entry).
 
 ## Further `D-*`
 
