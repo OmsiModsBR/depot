@@ -83,7 +83,7 @@ pub struct Renderer {
     /// A second renderer's copy of the assets and of each window picture's plan (see
     /// `mirror.rs`).
     pub(crate) asset_mirror: super::MirrorSlot,
-    pub(crate) plan_sink: Option<super::PlanSink>,
+    pub(crate) plan_sink: Option<crate::interface::PlanSink>,
     /// What the window's pictures drew since start, summed (OMSI_PROFILE): instances that
     /// passed the culling and draws per pass.
     pub counts: std::cell::RefCell<std::collections::BTreeMap<&'static str, f64>>,

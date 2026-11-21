@@ -4,6 +4,7 @@ mod api;
 mod assets;
 mod effects;
 mod gpu;
+mod interface;
 mod lighting;
 mod output;
 mod passes;

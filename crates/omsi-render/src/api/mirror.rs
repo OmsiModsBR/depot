@@ -1,5 +1,6 @@
 //! The public methods for a second renderer: the asset mirror and the frame plan.
-use crate::renderer::{AssetMirror, PlanSink, Renderer};
+use crate::interface::PlanSink;
+use crate::renderer::{AssetMirror, Renderer};
 use crate::scene::Scene;
 
 impl Renderer {
