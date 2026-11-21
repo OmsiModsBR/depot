@@ -159,6 +159,12 @@ data for it; a larger change of the Depot model, possible later as its own `D-*`
 tolerance. The tolerance and the closed-form test of SC-006 keep it in check; if the in-game
 check (SC-008) shows a kick at the threshold, a linear ramp of reach with the error is the fallback.
 
+**Taken (2026-11-21, maintainer's first drive)**: the fallback is now the rule. Below the tolerance a
+tyre slightly off the centre fought the other axles with unlimited reach (a slight mouse steer made
+the bus need far more drive), above it Coulomb drag jumped in. The reach grows linearly with the
+angle off the centre up to `SCRUB_FULL_ANGLE` (5°); only the front axle keeps unlimited reach, and
+the section is held at its turning line while holding (`D-7`).
+
 ## R-8. Sections behind a joint (maintainer decision Q2)
 
 **Decision**: a section behind a joint with at least one declaration takes its curvature from the

@@ -1,7 +1,7 @@
 //! Steerable axles (spec 004): `D-5` to `D-7` of `docs/physics/depot-model.md`. The pure rules
 //! first, then what they come to on a body.
 
-use crate::physics::domain::params::{SCRUB_TOLERANCE, SUBSTEP_DT};
+use crate::physics::domain::params::{SCRUB_FULL_ANGLE, SUBSTEP_DT};
 use crate::physics::domain::{RigidBody, SteerAxle, SteerMode, SteerState};
 use omsi_vehicle::Vehicle;
 
@@ -87,6 +87,13 @@ pub fn advance(axle: &SteerAxle, state: SteerState, sigma: f32, s: f32, h: f32) 
         engagement: towards(state.engagement, engaged, axle.centring / axle.lock * h),
         ..state
     }
+}
+
+/// The share of the road's grip (0..1) a tyre that points `off` (rad) off the centre of the
+/// turn takes across while the tyres hold (`D-7`): growing with the angle, whole from
+/// `SCRUB_FULL_ANGLE` on.
+pub fn scrub_reach(off: f32) -> f32 {
+    (off.abs() / SCRUB_FULL_ANGLE).min(1.0)
 }
 
 /// How much an axle weighs in the turning line besides its load (`D-5`): 1 rigid or held by
@@ -178,7 +185,11 @@ pub(in crate::physics) fn steer_to(body: &mut RigidBody, kappa: f32) {
             }
         };
         w.steered = w.steer != 0.0;
-        w.scrubs = (w.steer - ackermann(kappa)).abs() > SCRUB_TOLERANCE;
+        w.hold_reach = if w.attach.y == front {
+            f32::INFINITY
+        } else {
+            scrub_reach(w.steer - ackermann(kappa))
+        };
     }
     body.steer_deg = ((front - y_turn) * kappa).atan().to_degrees();
 }

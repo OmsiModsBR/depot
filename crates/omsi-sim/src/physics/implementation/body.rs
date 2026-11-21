@@ -55,7 +55,7 @@ impl RigidBody {
                     driven: a.driven,
                     steered: (a.long - spec.front_long).abs() < 0.01,
                     steer: 0.0,
-                    scrubs: false,
+                    hold_reach: f32::INFINITY,
                     spring: a.spring,
                     damper: a.damper,
                     max_force: a.max_force,

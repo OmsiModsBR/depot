@@ -66,7 +66,7 @@ story uses. No physics behaviour changes; every trace stays identical.
   script's angle clamped to the lock; engagement `e` ramping at `centring / lock`, angle at most
   `centring` per second; no locking rule in the game (research R-6)
 - [x] T004 [ph 1] Write `D-7` "Scrub" in `docs/physics/depot-model.md`: tyres off the centre by more
-  than `SCRUB_TOLERANCE` held with the road's reach, sections with steerable axles behind a joint held at each tyre,
+  than `SCRUB_FULL_ANGLE` held with the road's reach, sections with steerable axles behind a joint held at each tyre,
   their force in `D-3`; basis *physics, tuned*; risk and fallback of research R-7
 - [x] T005 [P] [ph 1] Point `C-6`, `C-7` and `C-9` of `docs/physics/common-model.md` to `D-5`..`D-7` for
   sections with steerable axles, and update the `C-7` note "the steering of a rear axle's tyres is
@@ -99,7 +99,7 @@ story uses. No physics behaviour changes; every trace stays identical.
   other value is `Basic`) and `SteerState { angle, engagement, mode, script_angle }`, held per steerable
   axle by `RigidBody` (`domain/body.rs`), started at `angle = 0`, `engagement = 1`; re-export through
   `physics/mod.rs`; expose it to tests in `crates/omsi-sim/src/testing.rs`
-- [x] T012 [ph 3] Add `SCRUB_TOLERANCE` to `domain/params.rs`, tagged *tuned* with its origin, together
+- [x] T012 [ph 3] Add `SCRUB_FULL_ANGLE` to `domain/params.rs`, tagged *tuned* with its origin, together
   with T023, its first use (moved from phase 2: an unused constant is dead code, Principle X)
 - [x] T013 [ph 2] Run `scripts/physics-trace-diff.sh origin/main`: every trace identical (SC-002)
 
@@ -156,7 +156,7 @@ full lock (SC-006).
   (0 for rigid axles of a section with steerable axles), so `Axle_Steering_<n>_L/R` carry it through
   `vehicle/physics_bridge.rs`
 - [x] T023 [US1] [ph 3] Scrub in `implementation/tyre.rs` (`lateral_start`): while holding, tyres off
-  the centre by more than `SCRUB_TOLERANCE` get the road's reach, and their force enters `D-3` with
+  the centre by more than `SCRUB_FULL_ANGLE` get the road's reach, and their force enters `D-3` with
   the others (research R-7)
 - [x] T024 [US1] [ph 3] Run the trace diff: only the new scenarios with steerable axles differ; label the PR
   `physics-delta` with the public justification
@@ -254,7 +254,7 @@ articulation angle and swept path against the closed forms (SC-006a).
 - [ ] T039 [ph 5] Measure frame time of V2/V5 with steerable axles against copies without the parameters, same machine and
   scenario (`cargo run -p omsi-sim --example handling` and in game), and put the numbers in the phase 5
   pull request (SC-007, Principle VII)
-- [ ] T040 [P] [ph 5] Tune `SCRUB_TOLERANCE` on V2 so SC-006 holds without a kick at the threshold;
+- [ ] T040 [P] [ph 5] Tune `SCRUB_FULL_ANGLE` on V2 so SC-006 holds without a kick at the threshold;
   record the value's origin in `domain/params.rs` and `D-7`
 - [ ] T041 [ph 6] Maintainer in game: 6x2 with a steerable tag axle (tighter turn, script lock at speed, mode 2) and
   articulated bus with a steered last axle (SC-008); findings go to `fix/` pull requests with their

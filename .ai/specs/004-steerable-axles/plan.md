@@ -141,7 +141,7 @@ file, no new crate.
    `σ_i · s · lock_i` (mode 0, `s = κ / κ_max`, behind a joint `s = clamp(κ_joint / κ_max, −1, 1)`, `σ_i` −1 behind
    the turning line, +1 ahead), 0 (mode 1) or the script's angle clamped to the lock
    (mode 2); rigid axles 0. Tyres keep Ackermann about their axle's angle.
-6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
+6. Hold: tyres pointing at the centre (within `SCRUB_FULL_ANGLE`) as today; others with the road's
    reach; sections with steerable axles behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's
    force.
 7. Outputs: `Axle_Steering_<n>` = `δ_i` (0 for rigid), `Axle_Steer_Locked_<n>` = `e_i == 0`.

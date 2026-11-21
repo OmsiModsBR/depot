@@ -7,7 +7,7 @@ mod support;
 
 use omsi_sim::physics::{Engine, RigidBody, SteerAxle, SteerMode, SteerState};
 use omsi_sim::testing::physics::implementation::depot::steering::{
-    advance, full_lock, side, target_angle, turning_line,
+    advance, full_lock, scrub_reach, side, target_angle, turning_line,
 };
 use omsi_sim::testing::physics::RigidBodyInternals;
 use support::model::{build, launch, step};
@@ -128,6 +128,15 @@ fn the_angle_and_the_engagement_move_at_the_centring_rate() {
     assert!((locked.engagement - 0.8).abs() < 1e-6);
 }
 
+/// Checks: D-7
+#[test]
+fn a_tyre_takes_more_grip_the_further_it_points_off_the_centre() {
+    assert_eq!(scrub_reach(0.0), 0.0);
+    assert!((scrub_reach(2.5f32.to_radians()) - 0.5).abs() < 1e-5);
+    assert_eq!(scrub_reach(-5f32.to_radians()), 1.0);
+    assert_eq!(scrub_reach(20f32.to_radians()), 1.0);
+}
+
 /// The bodies of `defs` under Project Depot Physics, the first one leading.
 fn depot(defs: &[omsi_vehicle::Vehicle]) -> (Vec<RigidBody>, Vec<omsi_sim::physics::Joint>) {
     let (mut bodies, joints) = build(defs, Engine::Depot);
@@ -198,8 +207,10 @@ fn v2_turns_tighter_with_its_tag_axle_steering() {
     assert!((tag - -15f32.to_radians()).abs() < 1e-4, "tag {tag} rad");
     assert_eq!(b.axle_steer(2), 0.0);
     // the scrub of the tag axle, which turns less than the centre asks
-    assert!(b.scrubs(4) && b.scrubs(5));
-    assert!(!b.scrubs(0) && !b.scrubs(2));
+    assert_eq!((b.hold_reach(4), b.hold_reach(5)), (1.0, 1.0));
+    assert!(b.hold_reach(0).is_infinite());
+    // (the middle axle, on the line, points at the centre)
+    assert!(b.hold_reach(2) < 0.01);
 }
 
 /// Checks: D-5, D-7
@@ -304,4 +315,23 @@ fn every_rear_axle_steering_turns_about_the_c6_line() {
     let r = radius(&b);
     assert!((r - 8.333).abs() < 0.02 * 8.333, "radius {r} m");
     assert!((b.axle_steer(2)).abs() < 1e-6, "on the line: straight");
+}
+
+/// Checks: D-7 (a slight steer, the tag axle a fraction of a degree off the centre, drags no
+/// more than the rigid bus: no Coulomb fight between the axles)
+#[test]
+fn a_slight_steer_costs_no_drive() {
+    let speed = |defs: Vec<omsi_vehicle::Vehicle>| {
+        let (mut bodies, joints) = depot(&defs);
+        let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+        for _ in 0..900 {
+            step(&mut bodies, &joints, &brakes, 9000.0, 0.05);
+        }
+        bodies[0].forward_speed()
+    };
+    let (rigid, tag) = (speed(v2_rigid_6x2()), speed(v2_tag_steer()));
+    assert!(
+        (tag - rigid).abs() < 0.01 * rigid,
+        "after 15 s {tag} m/s with the tag axle steering, {rigid} m/s rigid"
+    );
 }

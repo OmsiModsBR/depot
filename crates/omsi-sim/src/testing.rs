@@ -189,7 +189,7 @@ pub mod physics {
         fn steer_axles_mut(
             &mut self,
         ) -> &mut [(crate::physics::SteerAxle, crate::physics::SteerState)];
-        fn scrubs(&self, wheel: usize) -> bool;
+        fn hold_reach(&self, wheel: usize) -> f32;
     }
 
     impl RigidBodyInternals for RigidBody {
@@ -210,8 +210,8 @@ pub mod physics {
         ) -> &mut [(crate::physics::SteerAxle, crate::physics::SteerState)] {
             &mut self.steer_axles
         }
-        fn scrubs(&self, wheel: usize) -> bool {
-            self.wheels[wheel].scrubs
+        fn hold_reach(&self, wheel: usize) -> f32 {
+            self.wheels[wheel].hold_reach
         }
     }
 

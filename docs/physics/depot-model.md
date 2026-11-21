@@ -360,35 +360,42 @@ any other law (pointing at the centre of the turn, a speed-dependent ratio) and 
 > As `D-5`: in the game for the leading section; a section behind a joint with phase 5.
 
 - **Inputs**: each tyre's angle and the angle that points it at the centre of the turn (`C-6`), the
-  road's reach `μ · grip_i · h` (`C-7`). **Outputs**: where each tyre is held across while the
-  tyres hold, and its force across, which enters `D-3`. **Module**:
-  `physics/implementation/tyre.rs` (`lateral_start`), the tolerance `SCRUB_TOLERANCE` in
-  `physics/domain/params.rs`.
-- **Basis**: *physics* for the friction; *tuned* for the tolerance. **Status**: checked by the
+  road's reach `μ · grip_i · h` (`C-7`). **Outputs**: how much of the road's grip each tyre takes
+  across while the tyres hold, and its force across, which enters `D-3`. **Module**:
+  `physics/implementation/depot/steering.rs` (`scrub_reach`), `physics/implementation/tyre.rs`
+  (`lateral_start`), the angle `SCRUB_FULL_ANGLE` in `physics/domain/params.rs`.
+- **Basis**: *physics* for the friction; *tuned* for the angle. **Status**: checked by the
   conformance tests; no claim is made here about OMSI 2.
 
 Under `C-7` the leading section's tyres hold with unlimited reach, which is right only while every
-tyre points at the centre of the turn. In a section with steerable axles, while the tyres hold, a
-tyre whose angle differs from the one that points at the centre by more than `SCRUB_TOLERANCE` is
-held with the road's reach (at most `μ · grip_i · h` of impulse a substep), as every tyre of a
-section behind a joint already is. A section with steerable axles behind a joint is held at each
-tyre rather than at its turning line (`C-9`), so its rigid axles scrub as well. These forces across
-enter `D-3`'s balance with the others.
+tyre points at the centre of the turn. In a section with steerable axles, while the tyres hold, only
+the front axle's tyres keep the unlimited reach; every other tyre is held with a share of the road's
+reach that grows with how far it points off the centre of the turn, `δ_off`:
+
+```
+reach_i = min( |δ_off,i| / SCRUB_FULL_ANGLE , 1 ) · μ · grip_i · h        SCRUB_FULL_ANGLE = 5°
+```
+
+as a tyre's side force grows with its slip angle up to the road's grip. A tyre that points at the
+centre takes nothing across and slides nowhere; one far off it scrubs with the road's whole grip. A
+section with steerable axles behind a joint is held at each tyre rather than at its turning line
+(`C-9`), so its rigid axles scrub as well. These forces across enter `D-3`'s balance with the others.
 
 While holding, the section is also held at its turning line (`D-5`): no speed across at the point
 of the line in the body's middle, with unlimited reach, as `C-9` holds a section behind a joint.
-Without it the scrubbing tyres alone, each at the road's reach, would set where the body turns:
-with a locked tag axle, about the lighter axle instead of the load-weighted middle. A scrubbing tyre
-slides across by design, so it is left out of the speed check by which the tyres hold again
-(`C-7`).
+Without it the scrubbing tyres alone would set where the body turns: with a locked tag axle, about
+the lighter axle instead of the load-weighted middle. A scrubbing tyre slides across by design, so it
+is left out of the speed check by which the tyres hold again (`C-7`).
 
 So a tandem's tyres slide across in a tight turn at walking speed, which costs drive and grip, and a
-tag axle locked in a tight turn drags. The solver already caps impulses at the road's reach: no new
-force model is needed.
+tag axle locked in a tight turn drags; a tag axle a fraction of a degree off the centre at a slight
+steer costs next to nothing.
 
-**Risk**: the friction is Coulomb-like, so the drag does not grow with the error above the
-tolerance. If the bus kicks at the threshold in the game, the reach grows linearly with the error
-instead (a change of this entry).
+**Why not the road's whole grip at any angle.** With Coulomb friction for every tyre off the centre
+by more than a tolerance, a tag axle a fraction of a degree off it at a slight steer (a mouse's small
+corrections) either fought the other axles with unlimited reach below the tolerance or dragged with
+the whole grip above it: the bus needed far more drive to speed up, and crossing the tolerance gave
+it a jolt. The share that grows with the angle has neither.
 
 ## Further `D-*`
 

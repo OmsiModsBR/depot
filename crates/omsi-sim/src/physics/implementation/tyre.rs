@@ -456,14 +456,15 @@ impl RigidBody {
         // them go. A section behind turns as its joint bends it, and its tyres hold by what
         // the road takes: taking any force, the driven axle of a pusher's rear section held
         // its line whatever pushed it sideways and folded the bus in two on uneven ground)
-        // (a tyre that does not point at the centre of the turn - a rigid or steerable axle
-        // of a section with steerable axles - is held by what the road takes: it scrubs, `D-7`)
+        // (a rigid or steerable axle of a section with steerable axles is held by a share of
+        // what the road takes, as far as it points off the centre of the turn: it scrubs, `D-7`)
         let holds_all = self.holding && steered;
         l.reach.clear();
         l.reach.extend(lat.iter().map(|&k| {
-            let scrubs = contacts[k].wheel.is_some_and(|i| self.wheels[i].scrubs);
-            if holds_all && !scrubs {
-                f32::INFINITY
+            if holds_all {
+                contacts[k]
+                    .wheel
+                    .map_or(f32::INFINITY, |i| self.wheels[i].hold_reach)
             } else {
                 1.0
             }
@@ -553,7 +554,9 @@ impl RigidBody {
             && !slipping
             && lat.iter().zip(at.iter()).all(|(&k, &r)| {
                 // (a tyre that scrubs slides across by design, `D-7`)
-                contacts[k].wheel.is_some_and(|i| self.wheels[i].scrubs)
+                contacts[k]
+                    .wheel
+                    .is_some_and(|i| self.wheels[i].hold_reach.is_finite())
                     || (v + rot.mul_vec3(w).cross(r)).dot(contacts[k].right).abs() < REHOLD_SPEED
             })
         {
