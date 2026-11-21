@@ -38,8 +38,8 @@ Its only OMSI 2 requirement is that the new key is ignored there (R-3).
 ## R-3. The `.bus` key
 
 **Decision** (maintainer, 2026-11-21): two new axle parameters inside the axle's own
-`[newachse]`, each with one value line like `achse_long`: `achse_depot_steer_angle` (lock angle in
-degrees) and `achse_depot_steer_centring` (centring rate in degrees per second). No lock speed: when
+`[newachse]`, each with one value line like `achse_long`: `achse_steer_angle` (lock angle in
+degrees) and `achse_steer_centring` (centring rate in degrees per second). No lock speed: when
 the axle locks is each vehicle's script's business (R-6, R-9) ([contracts/bus-key.md](contracts/bus-key.md)). One
 parameter per value keeps the pattern of the other axle parameters.
 
@@ -178,7 +178,7 @@ nothing of the feature still gets a steering tag axle; OMSI 2 treats the names a
 
 ## R-10. Where it lives (Principle V, X)
 
-- `omsi-vehicle`: parse the two `achse_depot_steer_*` parameters in `parse_axle` into
+- `omsi-vehicle`: parse the two `achse_steer_*` parameters in `parse_axle` into
   `Axle::steer: Option<AxleSteer>` (both or none), validate, report.
 - `omsi-sim/src/physics/domain/`: `SteerAxle` (spec values in SI) in `spec.rs`, `SteerState` (angle,
   engagement, mode) in `wheel.rs` or a new `steering.rs`.

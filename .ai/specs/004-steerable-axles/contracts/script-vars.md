@@ -15,7 +15,7 @@ vehicle's script's, through the mode.
 | `Axle_Steer_Mode_<n>` | 0, 1, 2 | 0 basic: opposite to the driver's steering axle, in proportion to the axle's lock (`δ = −(δ_front / lock_front) · lock`, a 6x2-4); 1 locked straight; 2 script angle. Any other value: 0, one log line per vehicle |
 | `Axle_Steer_Angle_<n>` | rad, positive to the right | the axle's angle in mode 2, clamped to its lock. Not a number: treated as mode 0 |
 
-The axle moves to its mode's angle at its centring rate (`achse_depot_steer_centring`).
+The axle moves to its mode's angle at its centring rate (`achse_steer_centring`).
 
 ## Written by the physics, read by the script
 

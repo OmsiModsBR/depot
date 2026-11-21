@@ -22,7 +22,7 @@ locked radius is larger by the amount `depot-model.md` D-5 gives for that bus.
 
 ## In OMSI 2 (phase 0, maintainer)
 
-1. Copy a stock 3-axle bus and add the two `achse_depot_steer_*` parameters inside the third
+1. Copy a stock 3-axle bus and add the two `achse_steer_*` parameters inside the third
    `[newachse]` ([contracts/bus-key.md](contracts/bus-key.md)); also try them as the first and as
    the last parameters of an axle.
 2. Load and drive it in OMSI 2: it must behave exactly like the unmodified copy, with no error in

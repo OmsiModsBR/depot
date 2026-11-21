@@ -19,8 +19,8 @@ Today every axle of a section points at the centre of the turn on the `[rot_pnt_
 none is rigid, none can lock, and the scripts only read the angles. This plan adds, in Project Depot
 Physics only:
 
-1. two new axle parameters inside `[newachse]`, one value each (`achse_depot_steer_angle`,
-   `achse_depot_steer_centring`), that declare that axle steerable
+1. two new axle parameters inside `[newachse]`, one value each (`achse_steer_angle`,
+   `achse_steer_centring`), that declare that axle steerable
    ([contracts/bus-key.md](contracts/bus-key.md));
 2. in a section with a declaration, rigid axles for every other axle (the leading section's front
    axle stays the driver's), and a turning line computed each substep from the axles that do not
@@ -82,7 +82,7 @@ invalid content; nothing from the reference executable in public text
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── bus-key.md       # achse_depot_steer_* in [newachse]
+│   ├── bus-key.md       # achse_steer_* in [newachse]
 │   └── script-vars.md   # Axle_Steer_* and Axle_Steering
 └── checklists/
     └── requirements.md
@@ -92,7 +92,7 @@ invalid content; nothing from the reference executable in public text
 
 ```text
 crates/omsi-vehicle/
-├── src/vehicle.rs                       # parse_axle: achse_depot_steer_* -> Axle::steer
+├── src/vehicle.rs                       # parse_axle: achse_steer_* -> Axle::steer
 └── tests/steer_axle_key.rs              # new: valid, missing values, out of range, duplicate
 
 crates/omsi-sim/
@@ -157,7 +157,7 @@ identical.
 
 | Phase | Branch | Content | Spec | Label |
 |---|---|---|---|---|
-| 0 | (in game, maintainer) | T001: a stock bus with the two `achse_depot_steer_*` parameters added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
+| 0 | (in game, maintainer) | T001: a stock bus with the two `achse_steer_*` parameters added to an axle loads and drives the same in OMSI 2 | FR-002 | - |
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
 | 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
 | 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 keyed closed forms | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |

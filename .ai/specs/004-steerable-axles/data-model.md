@@ -1,11 +1,11 @@
 # Data model: Steerable axles in Project Depot Physics
 
-## AxleSteer (`omsi-vehicle`, `Axle::steer: Option<AxleSteer>`, from `achse_depot_steer_*`)
+## AxleSteer (`omsi-vehicle`, `Axle::steer: Option<AxleSteer>`, from `achse_steer_*`)
 
 | Field | Type | Unit | Rule |
 |---|---|---|---|
-| `lock_deg` (`achse_depot_steer_angle`) | f32 | deg | finite, `> 0`, `< 90` |
-| `centring_deg_s` (`achse_depot_steer_centring`) | f32 | deg/s | finite, `> 0` |
+| `lock_deg` (`achse_steer_angle`) | f32 | deg | finite, `> 0`, `< 90` |
+| `centring_deg_s` (`achse_steer_centring`) | f32 | deg/s | finite, `> 0` |
 
 Both parameters or none (a partial set is invalid). Not on the leading section's front axle (known only at spawn, checked there); once per axle.
 Invalid declarations are dropped (`steer = None`) with a log line naming the file, the axle and the

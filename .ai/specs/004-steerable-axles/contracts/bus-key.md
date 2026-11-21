@@ -1,12 +1,12 @@
-# Contract: `achse_depot_steer_*` in a `[newachse]`
+# Contract: `achse_steer_*` in a `[newachse]`
 
 Two new axle parameters, written inside the axle's own `[newachse]` like `achse_long`, each
 followed by one value line:
 
 | Parameter | Value | Range |
 |---|---|---|
-| `achse_depot_steer_angle` | lock angle, degrees each side | `> 0`, `< 90` |
-| `achse_depot_steer_centring` | the most the axle turns per second, between modes and following the steering, degrees per second | `> 0` |
+| `achse_steer_angle` | lock angle, degrees each side | `> 0`, `< 90` |
+| `achse_steer_centring` | the most the axle turns per second, between modes and following the steering, degrees per second | `> 0` |
 
 Example: a 6x2-4 bus with a steered tag axle (when it locks is up to the bus's script).
 
@@ -24,9 +24,9 @@ achse_long
 -4.0
 achse_maxwidth
 ...
-achse_depot_steer_angle
+achse_steer_angle
 15
-achse_depot_steer_centring
+achse_steer_centring
 20
 ```
 
