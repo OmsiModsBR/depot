@@ -1,10 +1,12 @@
 //! The frame's lights on the renderer: the light grid and the lamps' shadows, the coronas and the smoke uploaded for the frame.
 
 use crate::gpu::GpuArray;
+use crate::interface::RenderMode;
 use crate::lighting::{
-    drawn_by, gpu_light, smoke_sprite, Corona, GpuCorona, GpuPointLight, LampShadow, Lighting,
-    LAMP_SHADOWS, LAMP_SHADOW_REACH, LIGHT_CELL, LIGHT_CELL_CAP, LIGHT_GRID_SIDE,
+    smoke_sprite, Corona, GpuCorona, GpuPointLight, LampShadow, Lighting, LAMP_SHADOWS,
+    LAMP_SHADOW_REACH, LIGHT_CELL, LIGHT_CELL_CAP, LIGHT_GRID_SIDE,
 };
+use crate::passes::FrameFeatures;
 use crate::renderer::Renderer;
 use crate::scene::{point_in_vehicle_box, Scene};
 use glam::{DVec3, Vec3};
@@ -196,7 +198,8 @@ impl Renderer {
         &self,
         scene: &mut Scene,
         cam_rel: Vec3,
-        enhanced: bool,
+        mode: &dyn RenderMode,
+        features: &FrameFeatures,
         lamp_shadows: bool,
     ) -> ([f32; 4], Vec<LampShadow>) {
         // the street lamps that get a shadow map: the few lighting the camera's
@@ -215,11 +218,11 @@ impl Renderer {
         // the vehicles' interior lamps first, at the indices their meshes name (they are in
         // no grid cell: only those meshes look them up)
         for l in &scene.interior_lights {
-            gpu_lights.push(gpu_light(l, (l.position - ro).as_vec3(), enhanced));
+            gpu_lights.push(mode.light_record(l, (l.position - ro).as_vec3(), features));
         }
         let mut grid = vec![u32::MAX; side * side * LIGHT_CELL_CAP];
         for l in &scene.lights {
-            if !drawn_by(l, enhanced) {
+            if !mode.draws_light(l, features) {
                 continue;
             }
             let p = (l.position - ro).as_vec3();
@@ -231,8 +234,8 @@ impl Renderer {
                 continue;
             }
             let idx = gpu_lights.len() as u32;
-            gpu_lights.push(gpu_light(l, p, enhanced));
-            if lamp_shadows && enhanced && l.housed && l.intensity > 0.0 {
+            gpu_lights.push(mode.light_record(l, p, features));
+            if lamp_shadows && mode.lamp_shadows(features) && l.housed && l.intensity > 0.0 {
                 let d = (p - cam_rel).length();
                 if d < l.radius + LAMP_SHADOW_REACH {
                     let mut score =
