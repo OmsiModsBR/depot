@@ -79,6 +79,11 @@ pub struct RigidBody {
     /// The section's steerable axles and where each stands (`D-5`, `D-6`); none under OMSI
     /// Classic, nor on the leading section's front axle, which the driver steers.
     pub(crate) steer_axles: Vec<(SteerAxle, SteerState)>,
+    /// The body leads its vehicle (see `RigidBody::lead`): the driver steers its front axle.
+    pub(crate) leading: bool,
+    /// The `C-6` turning line (`PhysicsSpec::turn_line`), which a section whose axles all
+    /// steer turns about (`D-5`); `rot_pnt_long` is the line it turns about now.
+    pub(crate) file_turn_line: f32,
     /// The curvature the steering asks for this step (1/m, positive to the right).
     pub(crate) kappa: f32,
     pub(crate) max_steer_deg: f32,

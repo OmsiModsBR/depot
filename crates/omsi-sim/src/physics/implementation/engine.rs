@@ -9,6 +9,16 @@ use glam::Vec3;
 use omsi_vehicle::Vehicle;
 
 impl Engine {
+    /// Whether `body` steers its own axles: a leading section with steerable axles under
+    /// Project Depot Physics (`D-5` to `D-7`; a section behind a joint keeps `C-9` for now).
+    /// OMSI Classic points every axle at the centre of the turn (`C-6`).
+    pub(in crate::physics) fn steers_axles(self, body: &RigidBody) -> bool {
+        match self {
+            Engine::Classic => false,
+            Engine::Depot => body.leading && !body.steer_axles.is_empty(),
+        }
+    }
+
     /// The section's steerable axles (`D-5`); OMSI Classic has none and leaves the parameters
     /// out.
     pub(in crate::physics) fn steer_axles(self, def: &Vehicle) -> Vec<SteerAxle> {

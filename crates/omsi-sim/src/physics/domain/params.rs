@@ -111,6 +111,12 @@ pub const REHOLD_SPEED: f32 = 0.1;
 /// start or stop over the time this takes (`D-3`), so a steering key that sets the full bend
 /// in one step does not ask an endless force of them. *tuned*
 pub const RELAXATION_LENGTH: f32 = 0.6;
+/// A tyre of a section with steerable axles whose angle differs from the one that points it at
+/// the centre of the turn by more than this (rad, 1°) is held across with the road's reach, not
+/// the unlimited reach of a tyre that rolls where it points: it scrubs (`D-7`). Small enough
+/// that a locked tag axle in a tight turn drags, large enough that the rounding of an axle that
+/// does point at the centre never does. *tuned*
+pub const SCRUB_TOLERANCE: f32 = 0.017_453_3;
 
 // The ground under a tyre.
 

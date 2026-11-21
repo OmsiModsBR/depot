@@ -28,6 +28,10 @@ pub struct RigidWheel {
     /// at the turning centre on the `[rot_pnt_long]` line, atan((long - rot_pnt_long) x
     /// curvature), so an axle behind that line steers the other way.
     pub(crate) steer: f32,
+    /// The tyre does not point at the centre of the turn (a rigid or steerable axle of a
+    /// section with steerable axles, off by more than `SCRUB_TOLERANCE`): holding, it is held
+    /// across with the road's reach only, and scrubs (`D-7`).
+    pub(crate) scrubs: bool,
     /// Spring rate (N/m), damper rate (N s/m) and the load the strut is built for (N).
     pub(crate) spring: f32,
     pub(crate) damper: f32,

@@ -251,8 +251,8 @@ f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
 
 ## D-5. Steerable axles and the turning line
 
-> Planned (spec 004): the game runs `C-6` for every vehicle until phases 3 to 5 of that spec are
-> merged.
+> In the game for the leading section, in the basic mode (spec 004, phase 3). The modes the
+> scripts pick come with phase 4; a section behind a joint keeps `C-9` until phase 5.
 
 - **Inputs**: `achse_steer_angle` (`lock_i`, the axle's own lock) and `achse_steer_centring` of each
   steerable axle (`docs/FORMATS.md`), `achse_long` (`y_i`), each axle's load at rest `F_i` (`D-1`),
@@ -309,7 +309,7 @@ loads and line.
 
 ## D-6. Modes of a steerable axle
 
-> Planned (spec 004), as `D-5`.
+> As `D-5`: the basic mode is in the game; the scripts' variables come with phase 4.
 
 - **Inputs**: the axle's mode `Axle_Steer_Mode_<n>` and angle `Axle_Steer_Angle_<n>` from the
   scripts (`docs/FORMATS.md`), `lock_i` and the centring rate `c_i` (`achse_steer_centring`, °/s),
@@ -357,7 +357,7 @@ any other law (pointing at the centre of the turn, a speed-dependent ratio) and 
 
 ## D-7. Scrub
 
-> Planned (spec 004), as `D-5`.
+> As `D-5`: in the game for the leading section; a section behind a joint with phase 5.
 
 - **Inputs**: each tyre's angle and the angle that points it at the centre of the turn (`C-6`), the
   road's reach `μ · grip_i · h` (`C-7`). **Outputs**: where each tyre is held across while the
@@ -374,6 +374,13 @@ held with the road's reach (at most `μ · grip_i · h` of impulse a substep), a
 section behind a joint already is. A section with steerable axles behind a joint is held at each
 tyre rather than at its turning line (`C-9`), so its rigid axles scrub as well. These forces across
 enter `D-3`'s balance with the others.
+
+While holding, the section is also held at its turning line (`D-5`): no speed across at the point
+of the line in the body's middle, with unlimited reach, as `C-9` holds a section behind a joint.
+Without it the scrubbing tyres alone, each at the road's reach, would set where the body turns:
+with a locked tag axle, about the lighter axle instead of the load-weighted middle. A scrubbing tyre
+slides across by design, so it is left out of the speed check by which the tyres hold again
+(`C-7`).
 
 So a tandem's tyres slide across in a tight turn at walking speed, which costs drive and grip, and a
 tag axle locked in a tight turn drags. The solver already caps impulses at the road's reach: no new
