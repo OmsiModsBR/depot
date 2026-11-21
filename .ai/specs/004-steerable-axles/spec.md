@@ -58,6 +58,9 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
   → A: the joint's bend, not the driver's steering wheel: its steering fraction is the curvature
   its joint gives it over the leading section's full-lock curvature, so it follows the real bend of
   the section even while the driver is already straightening (FR-008, FR-015).
+- Q7 (`/speckit-clarify`): Do AI copies of a bus with steerable axles show them steering? → A: no,
+  the AI stays as today: it ignores the parameters and every axle points at the centre as in `C-6`,
+  at no cost, even though it looks different from the player's bus (FR-016).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -249,7 +252,8 @@ closed forms of the model document.
   FR-013) and their tyres steer, its rigid axles' tyres stay square to the body, and its
   turning line follows FR-006 from its own non-steering axles. A section behind a joint without any
   declaration keeps `C-9` unchanged.
-- **FR-016**: AI vehicles are not affected (spec 002 D6).
+- **FR-016**: AI vehicles are not affected (spec 002 D6), neither in physics nor in the `Axle_Steering`
+  they hand their scripts: they ignore the steerable-axle parameters (clarify Q7).
 - **FR-017**: The rules MUST be written in `docs/physics/depot-model.md` as new `D-*` entries with
   their equations, inputs, outputs, module and status, and `common-model.md` `C-6` MUST point to
   them.
