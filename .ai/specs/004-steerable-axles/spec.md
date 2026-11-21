@@ -44,7 +44,8 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
   so it needs no declaration (a declaration for it is reported and ignored); every other axle,
   including the front axle of a section behind a joint, can be declared.
 - Q3: Where does the declaration go in the `.bus` file? → A (maintainer): as new parameters of
-  each `[newachse]`, tied to that axle, not as a section of its own (FR-001).
+  each `[newachse]`, tied to that axle, not as a section of its own, one parameter per value as the
+  other axle parameters are (FR-001).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -164,6 +165,8 @@ closed forms of the model document.
 - The declaration sits on the leading section's front axle (steered by the driver already), or is
   given twice in the same axle: that declaration is ignored with a log line naming the file and the
   reason; the bus loads and the rest of it works (Principle IV).
+- Only one or two of the three parameters given on an axle: the declaration is ignored with a log
+  line naming the missing ones.
 - An axle written in the old form without keywords (values only, one per line) cannot carry the
   declaration; it stays rigid or `C-6` as the rest of its section decides.
 - A lock angle of 0 or below, or not a number; a negative lock speed; a centring rate of 0 or below;
@@ -192,10 +195,10 @@ closed forms of the model document.
 **Declaration**
 
 - **FR-001**: In the `.bus` file of any section of a vehicle, an axle MUST be declarable steerable
-  by a new Project Depot parameter inside its own `[newachse]`, next to `achse_long` and the others,
-  that OMSI 2 and its derivatives ignore. It gives the axle's lock angle (degrees, each side), lock
-  speed (km/h, 0 = never) and centring rate (degrees per second). All three values are required, so
-  the game invents none (Principle III).
+  by new Project Depot parameters inside its own `[newachse]`, one parameter per value like
+  `achse_long` and the others, which OMSI 2 and its derivatives ignore: the axle's lock angle
+  (degrees, each side), lock speed (km/h, 0 = never) and centring rate (degrees per second). All
+  three are required together, so the game invents none (Principle III).
 - **FR-002**: Before any implementation, the parameter MUST be checked in OMSI 2 (black box, as
   `Q1` of spec 002): a stock bus with the parameter added to an axle loads and drives in OMSI 2
   exactly as without it.
