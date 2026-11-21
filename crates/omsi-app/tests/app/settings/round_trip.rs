@@ -198,6 +198,8 @@ const VARIED: &[(&str, &str)] = &[
     ("info_item_line", "0"),
     ("info_item_next", "0"),
     ("info_item_pedals", "0"),
+    ("info_item_grade", "0"),
+    ("info_item_skid", "0"),
     ("autosave_minutes", "10"),
     ("ui_accent", "Teal"),
     ("ui_corners", "square"),

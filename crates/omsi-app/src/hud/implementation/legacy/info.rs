@@ -11,7 +11,8 @@ struct Piece {
     l: Label,
     tone: InfoTone,
     icon: Option<TextureId>,
-    /// The icon's side and the gap after it (0 without an icon).
+    /// The icon's side, and with the gap after it (0 without an icon; no gap before nothing).
+    icon_side: f32,
     icon_w: f32,
     /// The text's box: the text, or the badge, the sign or the chip round it.
     body_w: f32,
@@ -42,6 +43,9 @@ const INFO_MUTED: [u8; 4] = [163, 168, 178, 255];
 /// Late, a tank nearly empty: the red of the bar (and of its chip's text).
 const INFO_RED: [u8; 4] = [238, 106, 95, 255];
 const INFO_GREEN: [u8; 4] = [95, 207, 138, 255];
+/// A lamp of the bar out (its icon dark on the plate) and lit (white).
+const LAMP_OUT: [u8; 4] = [72, 76, 84, 255];
+const LAMP_LIT: [u8; 4] = [255, 255, 255, 255];
 /// The pedal bars, left to right as the pedals stand: the clutch, the brake, the throttle;
 /// full colours, so that a bar reads at a glance beside the bar's pale text.
 const PEDAL_COLOURS: [[u8; 4]; 3] = [[48, 120, 240, 255], [226, 48, 40, 255], [72, 214, 56, 255]];
@@ -62,9 +66,11 @@ fn info_colour(tone: InfoTone) -> [u8; 4] {
         InfoTone::Delay(1) => [255, 150, 140, 0],
         InfoTone::Delay(-1) => [139, 230, 173, 0],
         InfoTone::Delay(_) => accent_ink(),
-        InfoTone::Plain | InfoTone::Fps(_) | InfoTone::Speed | InfoTone::Pedals(_) => {
-            [255, 255, 255, 0]
-        }
+        InfoTone::Plain
+        | InfoTone::Fps(_)
+        | InfoTone::Speed
+        | InfoTone::Pedals(_)
+        | InfoTone::Light(_) => [255, 255, 255, 0],
     }
 }
 
@@ -219,21 +225,29 @@ impl Ui {
                 (PEDAL_BAR_W * 3.0 + PEDAL_BAR_GAP * 2.0) * s,
                 PEDAL_BAR_H * s,
             ),
+            InfoTone::Light(_) => (0.0, 0.0),
             _ => (lw, lh),
         };
         let icon_px = (16.0 * s).round();
         let icon = it.icon.and_then(|name| {
-            let ink = if alert { INFO_RED } else { INFO_MUTED };
+            let ink = match it.tone {
+                InfoTone::Light(true) => LAMP_LIT,
+                InfoTone::Light(false) => LAMP_OUT,
+                _ if alert => INFO_RED,
+                _ => INFO_MUTED,
+            };
             self.text.icon(r, scene, name, icon_px as u32, ink)
         });
+        let icon_side = if icon.is_some() { icon_px } else { 0.0 };
         Piece {
             l,
             tone: it.tone,
             icon,
-            icon_w: if icon.is_some() {
-                icon_px + 6.0 * s
+            icon_side,
+            icon_w: if body_w > 0.0 {
+                icon_side + 6.0 * s
             } else {
-                0.0
+                icon_side
             },
             body_w,
             h: h.max(if icon.is_some() { icon_px } else { 0.0 }),
@@ -245,7 +259,7 @@ impl Ui {
     fn draw_piece(&mut self, r: &Renderer, scene: &mut Scene, p: &Piece, x: f32, cy: f32, s: f32) {
         let (lw, lh) = (p.l.w as f32, p.l.h as f32);
         if let Some(icon) = p.icon {
-            let side = p.icon_w - 6.0 * s;
+            let side = p.icon_side;
             let y0 = (cy - side * 0.5).round();
             scene
                 .overlays
@@ -330,6 +344,8 @@ impl Ui {
                 self.draw_pedal_bars(r, scene, levels, bx, cy, s);
                 return;
             }
+            // (the icon is the lamp: no text to draw)
+            InfoTone::Light(_) => return,
             _ => tx = bx,
         }
         scene.overlays.push((p.l.tex, [tx, ty, tx + lw, ty + lh]));

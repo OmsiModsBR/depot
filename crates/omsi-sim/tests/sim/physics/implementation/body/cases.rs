@@ -487,3 +487,81 @@ fn the_wheels_take_the_ground_of_the_road_under_them() {
         assert_eq!(w.surface(), 0x21);
     }
 }
+
+/// A road rising `grade` (a fraction) towards +y, as a probe reads it.
+fn ramp(grade: f64) -> impl Fn(f64, f64, f64) -> omsi_sim::physics::GroundProbe {
+    move |_x, y, _top| omsi_sim::physics::GroundProbe {
+        below: Some(y * grade),
+        above: None,
+    }
+}
+
+/// The road's grade is read from the ground under the axles, in percent, positive with the
+/// front higher: 8 % facing up the ramp, -8 % facing down it, 0 on the flat. It is the
+/// road's and not the body's pitch: braking hard, which tips the body forward, leaves it.
+#[test]
+fn the_road_grade_is_the_slope_under_the_axles() {
+    for engine in [Engine::Classic, Engine::Depot] {
+        for (heading, want) in [(0.0, 8.0), (180.0, -8.0)] {
+            let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+            rb.place(DVec3::ZERO, heading);
+            run(&mut rb, 3.0, 0.0, 50_000.0, &ramp(0.08));
+            let grade = rb.road_grade().expect("the bus stands on the ramp");
+            assert!((grade - want).abs() < 0.2, "{engine:?} {heading}: {grade}");
+        }
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        rb.place(DVec3::ZERO, 0.0);
+        run(&mut rb, 3.0, 0.0, 0.0, &flat);
+        assert!(rb.road_grade().unwrap().abs() < 0.05, "{engine:?} flat");
+        // braking from 10 m/s pitches the body, not the road
+        rb.set_velocity(Vec3::Y * 10.0);
+        for w in rb.wheels_mut() {
+            w.set_spin(10.0 / w.radius());
+        }
+        run(&mut rb, 0.5, 0.0, 3_000.0, &flat);
+        assert!(rb.road_grade().unwrap().abs() < 0.05, "{engine:?} braking");
+    }
+}
+
+/// Just placed, before a tyre has found the ground, the body has no grade to give.
+#[test]
+fn a_body_not_yet_on_the_ground_has_no_road_grade() {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    rb.place(DVec3::ZERO, 0.0);
+    assert_eq!(rb.road_grade(), None);
+}
+
+/// The body skids while its tyres slide across the road (they let go of it) or a tyre spins
+/// or is locked by its brake; standing, cruising and braking gently it does not.
+#[test]
+fn the_body_skids_when_a_tyre_slides_spins_or_locks() {
+    for engine in [Engine::Classic, Engine::Depot] {
+        // standing still on its springs
+        let mut rb = RigidBody::for_engine(&bus(), &[], engine);
+        rb.place(DVec3::ZERO, 0.0);
+        run(&mut rb, 3.0, 0.0, 0.0, &flat);
+        assert!(!rb.skidding(), "{engine:?} standing");
+        // cruising, then braking gently
+        let mut rb = rolling(engine, 12.0, 0.0);
+        assert!(!rb.skidding(), "{engine:?} cruising");
+        let gentle = vec![500.0; rb.wheels().len()];
+        rb.step(1.0 / 60.0, 0.0, &gentle, 0.0, &flat);
+        assert!(!rb.skidding(), "{engine:?} braking gently");
+        // a brake far past the grip locks the wheels
+        let hard = vec![200_000.0; rb.wheels().len()];
+        let locked = (0..30).any(|_| {
+            rb.step(1.0 / 60.0, 0.0, &hard, 0.0, &flat);
+            rb.skidding()
+        });
+        assert!(locked, "{engine:?} locked");
+        // full lock at speed lets the tyres go across
+        let mut rb = rolling(engine, 14.0, 0.0);
+        let none = vec![0.0; rb.wheels().len()];
+        let slid = (0..120).any(|i| {
+            let s = if i < 30 { i as f32 / 30.0 } else { 1.0 };
+            rb.step(1.0 / 60.0, 0.0, &none, s, &flat);
+            !rb.holding()
+        });
+        assert!(slid && rb.skidding(), "{engine:?} sliding across");
+    }
+}

@@ -247,6 +247,47 @@ impl RigidBody {
         self.velocity.dot(self.orientation.mul_vec3(Vec3::Y))
     }
 
+    /// The grade of the road under the body, in percent, positive where the front stands
+    /// higher: the rise of the ground from the rearmost to the frontmost axle with a tyre on
+    /// it, over the run between them. It is the road's and not the body's pitch, so braking
+    /// or a load does not change it. None while fewer than two axles stand on the ground.
+    pub fn road_grade(&self) -> Option<f32> {
+        // (each axle: where it stands along the body, and the mean height of the ground
+        // under its tyres that touch it)
+        let axles: Vec<(f32, f64)> = self
+            .wheels
+            .chunks(2)
+            .filter_map(|pair| {
+                let down: Vec<f64> = pair
+                    .iter()
+                    .filter(|w| w.on_ground && w.ground_seen)
+                    .map(|w| w.ground_z)
+                    .collect();
+                (!down.is_empty()).then(|| {
+                    (
+                        pair[0].attach.y,
+                        down.iter().sum::<f64>() / down.len() as f64,
+                    )
+                })
+            })
+            .collect();
+        let rear = axles.iter().min_by(|a, b| a.0.total_cmp(&b.0))?;
+        let front = axles.iter().max_by(|a, b| a.0.total_cmp(&b.0))?;
+        let length = front.0 - rear.0;
+        let rise = (front.1 - rear.1) as f32;
+        // (one axle on the ground, or two at the same place, has no run to measure a slope on)
+        if length < 0.5 || rise.abs() >= length {
+            return None;
+        }
+        Some(rise / (length * length - rise * rise).sqrt() * 100.0)
+    }
+
+    /// Whether the body skids: its tyres slide across the road (they let go of it, see
+    /// [`holding`](Self::holding)), or a tyre on the ground spins or is locked by its brake.
+    pub fn skidding(&self) -> bool {
+        !self.holding || self.wheels.iter().any(|w| w.on_ground && w.slipping)
+    }
+
     pub fn kinetic_energy(&self) -> f32 {
         0.5 * self.mass * self.velocity.length_squared()
             + 0.5 * (self.inertia * self.omega * self.omega).element_sum()
