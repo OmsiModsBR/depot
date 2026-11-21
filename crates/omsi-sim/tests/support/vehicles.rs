@@ -242,6 +242,85 @@ pub fn v5_articulated_8x2() -> Vec<Vehicle> {
     ]
 }
 
+/// `defs` with axle `axle` of section `section` steerable (`achse_steer_angle` `lock_deg`,
+/// `achse_steer_centring` `centring_deg_s`).
+pub fn steerable(
+    mut defs: Vec<Vehicle>,
+    section: usize,
+    axle: usize,
+    lock_deg: f32,
+    centring_deg_s: f32,
+) -> Vec<Vehicle> {
+    // (read from a `[newachse]` as a file gives it, so that the same scenario builds on a
+    // commit that does not know the parameters: there the axle stays rigid, and the trace
+    // diff shows what they change)
+    let a = &defs[section].axles[axle];
+    let text = format!(
+        "[newachse]\nachse_long\n{}\nachse_maxwidth\n{}\nachse_minwidth\n{}\n\
+         achse_raddurchmesser\n{}\nachse_feder\n{}\nachse_maxforce\n{}\n\
+         achse_daempfer\n{}\nachse_antrieb\n{}\nachse_inertia_inv\n{}\n\
+         achse_steer_angle\n{lock_deg}\nachse_steer_centring\n{centring_deg_s}\n",
+        a.long,
+        a.max_width,
+        a.min_width,
+        a.wheel_diameter,
+        a.spring,
+        a.max_force,
+        a.damper,
+        u8::from(a.driven),
+        a.inertia_inv,
+    );
+    let parsed = Vehicle::parse(&omsi_cfg::CfgFile::from_str("steer.bus", &text));
+    defs[section].axles[axle] = parsed.axles[0].clone();
+    defs
+}
+
+/// V2 with its tag axle steerable: 15° each side, 200°/s (spec 004).
+pub fn v2_tag_steer() -> Vec<Vehicle> {
+    steerable(v2_rigid_6x2(), 0, 2, 15.0, 200.0)
+}
+
+/// V2 with the parameters on its front axle only, which the driver steers: no steerable
+/// axle (spec 004).
+pub fn v2_front_declared() -> Vec<Vehicle> {
+    steerable(v2_rigid_6x2(), 0, 0, 15.0, 200.0)
+}
+
+/// The front section of an 8x2, a twin-steer: its second axle, ahead of the driven one,
+/// steerable (12°, 200°/s), its fourth rigid (spec 004).
+pub fn twin_steer_8x2() -> Vec<Vehicle> {
+    steerable(
+        vec![conformance_section(&Section {
+            mass: 16.0,
+            cog_y: 0.4,
+            axles: &[(4.4, false), (2.6, false), (-2.0, true), (-3.4, false)],
+            turning_axle: -2.7,
+            front: None,
+            back: None,
+        })],
+        0,
+        1,
+        12.0,
+        200.0,
+    )
+}
+
+/// A 15 m 6x2-4 whose `[cog]` stands 1.4 m ahead of its driven axle, its tag axle 1.5 m
+/// behind that axle steerable by the 10.5° a turn about it asks at full lock (60°/s): at speed
+/// in a turn its middle moves across faster than `GRIPPED_ACROSS` (spec 004).
+pub fn tag_6x2_4_long() -> Vec<Vehicle> {
+    let mut defs = vec![conformance_section(&Section {
+        mass: 15.5,
+        cog_y: -0.75,
+        axles: &[(4.9, false), (-2.15, true), (-3.65, false)],
+        turning_axle: -2.15,
+        front: None,
+        back: None,
+    })];
+    defs[0].inv_min_turn_radius = 0.124;
+    steerable(defs, 0, 2, 10.5, 60.0)
+}
+
 /// The five vehicles by name, as the conformance tests are named after them.
 pub fn conformance_vehicles() -> [(&'static str, Vec<Vehicle>); 5] {
     [

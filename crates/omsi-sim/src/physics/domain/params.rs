@@ -111,6 +111,12 @@ pub const REHOLD_SPEED: f32 = 0.1;
 /// start or stop over the time this takes (`D-3`), so a steering key that sets the full bend
 /// in one step does not ask an endless force of them. *tuned*
 pub const RELAXATION_LENGTH: f32 = 0.6;
+/// How far a tyre of a section with steerable axles may point off the centre of the turn (rad,
+/// 5°) before it takes the road's whole grip across while it scrubs (`D-7`): below it, the
+/// share it takes grows with the angle, as a tyre's side force grows with its slip angle. With
+/// the whole grip at any angle (Coulomb), a tag axle a fraction of a degree off the centre at
+/// a slight steer dragged the bus as hard as a locked one in a tight turn. *tuned*
+pub const SCRUB_FULL_ANGLE: f32 = 0.087_266_46;
 
 // The ground under a tyre.
 

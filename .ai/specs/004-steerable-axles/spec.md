@@ -270,8 +270,7 @@ closed forms of the model document.
 
 - **Steerable axle declaration**: lock angle, centring rate; belongs to one
   `[newachse]` of a section's `.bus` file; valid or reported as invalid.
-- **Steerable axle state**: per steerable axle, its current angle, its engagement (1 steering, 0
-  locked straight, in between while changing mode), the mode chosen by the script and the script's
+- **Steerable axle state**: per steerable axle, its current angle, the mode chosen by the script and the script's
   angle; saved with the situation.
 - **Turning line**: per section, the longitudinal position the body turns about this step, derived
   from that section's non-steering axles and their loads (FR-006).

@@ -611,7 +611,7 @@ fn slice(
         // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
         let kappas: Vec<f32> = (0..n)
             .map(|i| match steers[i] {
-                Some(s) => s.clamp(-1.0, 1.0) * bodies[i].inv_min_turn_radius,
+                Some(s) => bodies[i].steering_kappa(s),
                 None => joints
                     .iter()
                     .find(|j| j.follow == i)

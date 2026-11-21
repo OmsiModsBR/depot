@@ -2,6 +2,7 @@
 //! it tows ([`CoupledPart`]), and its motion over a substep (semi-implicit Euler) with OMSI's
 //! damping of pitch and roll ([`body_damping`]).
 
+use super::depot;
 use super::surface::surface_grip;
 use super::train::step_train;
 use super::tyre::Substep;
@@ -54,6 +55,7 @@ impl RigidBody {
                     driven: a.driven,
                     steered: (a.long - spec.front_long).abs() < 0.01,
                     steer: 0.0,
+                    hold_reach: f32::INFINITY,
                     spring: a.spring,
                     damper: a.damper,
                     max_force: a.max_force,
@@ -100,6 +102,8 @@ impl RigidBody {
                 .iter()
                 .map(|s| (*s, SteerState::default()))
                 .collect(),
+            leading: false,
+            file_turn_line: spec.turn_line,
             kappa: 0.0,
             max_steer_deg: spec.max_steer_deg,
             rot_pnt_long: spec.turn_line,
@@ -126,6 +130,7 @@ impl RigidBody {
     /// declared there is left out (spec 004; reported when the vehicle appears,
     /// `resolve_physics_mode`).
     pub fn lead(&mut self) {
+        self.leading = true;
         let wheels = &self.wheels;
         let axles = &self.wheel_axle;
         self.steer_axles.retain(|(s, _)| {
@@ -134,6 +139,12 @@ impl RigidBody {
                 .zip(wheels)
                 .any(|(a, w)| *a == s.axle && w.steered)
         });
+        let rest = self.wheel_axle.iter().step_by(2).count().saturating_sub(1);
+        if !self.steer_axles.is_empty() && self.steer_axles.len() == rest {
+            log::info!(
+                "every axle but the front one steers: while they do, the bus turns about its [rot_pnt_long] line"
+            );
+        }
     }
 
     /// Place the body at rest with its wheels on the ground plane at `origin.z`: heading
@@ -255,10 +266,29 @@ impl RigidBody {
     /// wheel of the cab, which turns with `Axle_Steering_0_L`, go further to the left than
     /// to the right (#953, #1073).
     pub fn axle_steer(&self, i: usize) -> f32 {
+        if self.steers_axles() {
+            return depot::steering::axle_angle(self, i);
+        }
         let Some(w) = self.wheels.get(i) else {
             return 0.0;
         };
         ((w.attach.y - self.rot_pnt_long) * self.kappa).atan()
+    }
+
+    /// The body steers its own axles (`Engine::steers_axles`).
+    pub(super) fn steers_axles(&self) -> bool {
+        self.engine().steers_axles(self)
+    }
+
+    /// The curvature (1/m) the driver's steering `s` (−1..1) asks for: `s` times the full lock
+    /// (`C-6`, `D-5`).
+    pub(super) fn steering_kappa(&self, s: f32) -> f32 {
+        let s = s.clamp(-1.0, 1.0);
+        if self.steers_axles() {
+            s * depot::steering::body_full_lock(self)
+        } else {
+            s * self.inv_min_turn_radius
+        }
     }
 
     /// Forward speed (m/s) in the body frame.
@@ -407,6 +437,9 @@ impl RigidBody {
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
         // input's business (keys, mouse, wheel), not the axle's: the old fixed rate here
         // lagged every mouse and controller movement by up to 0.4 s.
+        if !follower && self.steers_axles() {
+            return depot::steering::steer_to(self, kappa);
+        }
         self.kappa = kappa;
         let front = self
             .wheels
