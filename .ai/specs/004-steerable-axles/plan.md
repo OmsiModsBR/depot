@@ -41,8 +41,7 @@ OMSI Classic, the AI and every section without a declaration run exactly as toda
 
 **Language/Version**: Rust (workspace edition and toolchain as pinned)
 **Primary Dependencies**: `glam` (already used); no new crate
-**Storage**: `.bus` files (read only); the situation file keeps each steerable axle's angle and
-engagement
+**Storage**: `.bus` files (read only); the situation file keeps each steerable axle's angle
 **Testing**: `cargo test --workspace`; new tests in `crates/omsi-vehicle/tests/` (key parsing) and
 `crates/omsi-sim/tests/` (`physics_model_depot.rs` closed forms, `physics_traces.rs` new
 scenarios with steerable axles, script-mode tests); test vehicles V2 and V5 of spec 002 get variants with steerable axles
@@ -130,11 +129,9 @@ file, no new crate.
 ### Turning, per section and substep (data in [data-model.md](data-model.md))
 
 1. If the section has no `SteerAxle`, run `C-6` / `C-9` as today and stop.
-2. Update each steerable axle's mode from its script variables (once per frame) and its engagement
-   `e_i` towards its target (1 in mode 0, 0 in modes 1 and 2) at `centring_i / lock_i` per second
-   (R-6).
-3. `y_turn` from the rigid axles and `1 − e_i` of the steerable ones, weighted by static load; with
-   no weight, the `C-6` line (R-4).
+2. Update each steerable axle's mode from its script variables (once per frame) (R-6).
+3. `y_turn`: where each axle but the front one points on the body's middle, `y_i − tan(δ_i) / κ`,
+   weighted by static load; the `C-6` line when every such axle steers (R-4, changed 2026-11-21).
 4. Leading section: `κ = s · tan(lock_front) / |y_front − y_turn|` (R-5). Section behind: the joint's
    curvature, its `arm` measured from its own `y_turn`.
 5. Angles: front axle as `C-6`; steerable axles move, at most `centring_i` per second, to
@@ -163,7 +160,7 @@ identical.
 | 1 | `docs/steer-axles-model` | `depot-model.md` D-5..D-7 with equations and closed forms; notes in `C-6`, `C-7`, `C-9`; `FORMATS.md` | FR-017, FR-018 | - |
 | 2 | `feat/steer-axle-key` | parse, validate, log; `Axle::steer`; no physics effect | FR-001, FR-003 (parse), FR-005 | - |
 | 3 | `feat/steer-axles-turning` | leading section: rigid axles, mode 0 law, turning line, lock, `Axle_Steering`, scrub; V2 closed forms with a steerable tag axle | US1, FR-003..FR-011, FR-014 (angles), SC-001, SC-006 | `physics-delta` |
-| 4 | `feat/steer-axles-scripts` | modes 1 and 2, engagement and centring ramps, continuity, locked flag; situation save; changelog line | US2, FR-009, FR-012..FR-014, SC-003, SC-004 | `physics-delta` |
+| 4 | `feat/steer-axles-scripts` | modes 1 and 2, centring ramp, continuity, locked flag; situation save; changelog line | US2, FR-009, FR-012..FR-014, SC-003, SC-004 | `physics-delta` |
 | 5 | `feat/steer-axles-sections` | sections behind a joint; V5 and V4 with steerable axles | US3, FR-015, SC-006a | `physics-delta` |
 | 6 | (measure + in game) | SC-007 frame time in the phase 5 PR; SC-008 by the maintainer on a 6x2 and an articulated bus with steerable axles | SC-007, SC-008 | - |
 

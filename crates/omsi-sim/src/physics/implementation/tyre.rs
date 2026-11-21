@@ -373,6 +373,11 @@ impl RigidBody {
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS
             && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
+        // (with steerable axles, `D-7`, always while holding: their scrub rolled the body at
+        // walking pace, and at speed a turning line far behind `[cog]` gives it more than
+        // `GRIPPED_ACROSS` across, so the roll swapped from the tyres to the bend's pull and
+        // back in one step either way)
+        let gripped = gripped || steered && self.steers_axles();
         // where each tyre is held across: at the tyre, or for a section behind a joint on its
         // turning line, level with the tyre, so that it turns about that line whatever axles
         // it has (`C-9`)

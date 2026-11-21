@@ -305,6 +305,22 @@ pub fn twin_steer_8x2() -> Vec<Vehicle> {
     )
 }
 
+/// A 15 m 6x2-4 whose `[cog]` stands 1.4 m ahead of its driven axle, its tag axle 1.5 m
+/// behind that axle steerable by the 10.5° a turn about it asks at full lock (60°/s): at speed
+/// in a turn its middle moves across faster than `GRIPPED_ACROSS` (spec 004).
+pub fn tag_6x2_4_long() -> Vec<Vehicle> {
+    let mut defs = vec![conformance_section(&Section {
+        mass: 15.5,
+        cog_y: -0.75,
+        axles: &[(4.9, false), (-2.15, true), (-3.65, false)],
+        turning_axle: -2.15,
+        front: None,
+        back: None,
+    })];
+    defs[0].inv_min_turn_radius = 0.124;
+    steerable(defs, 0, 2, 10.5, 60.0)
+}
+
 /// The five vehicles by name, as the conformance tests are named after them.
 pub fn conformance_vehicles() -> [(&'static str, Vec<Vehicle>); 5] {
     [
