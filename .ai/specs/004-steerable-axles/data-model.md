@@ -33,7 +33,8 @@ with one log line per vehicle.
 State transitions of `engagement` (target, then ramp at `centring / lock` per second):
 
 ```text
-Basic:        target = 1  (angle follows −s · lock at `centring`, s = κ / κ_max)
+Basic:        target = 1  (angle follows σ · s · lock at `centring`, s = κ / κ_max,
+                           σ = −1 behind the turning line, +1 ahead, 0 on it)
 Locked:       target = 0  (angle to 0 at `centring`)
 ScriptAngle:  target = 0  (angle follows script_angle, clamped to lock, at `centring`)
 ```

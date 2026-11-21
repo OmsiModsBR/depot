@@ -51,8 +51,11 @@ rigid bus, the front, middle or rear section of an articulated bus, each section
   `Axle_Steer_Mode_<n>`. Mode 0 is the basic mode of a 6x2-4: the axle turns opposite to the
   steering axle, in proportion to its configured lock (FR-008, FR-012, FR-013). Reading taken: the
   steering axle is the driver's front axle for every section, so a section behind a joint in mode 0
-  also follows the driver's steering; steering by the joint's bend, or a twin-steer axle turning the
-  same way, is done by the script in mode 2.
+  also follows the driver's steering; steering by the joint's bend is done by the script in mode 2.
+- Q5 (`/speckit-clarify`): In mode 0, which way does an axle ahead of the turning line turn? → A:
+  by its side of the turning line: an axle behind the line turns opposite to the steering axle (tag
+  axle), an axle ahead of it turns the same way (twin steer second front axle); no script needed
+  for either (FR-008).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -80,7 +83,10 @@ turning radius and each axle's angle with the closed forms of the model document
 3. **Given** the same bus with no axle declared steerable apart from the front one, **When** it turns
    at full lock, **Then** its two rear axles both stay straight, the bus turns about their
    load-weighted middle, and both scrub.
-4. **Given** a keyed bus, **When** a script reads `Axle_Steering_<n>_L/R` of a rigid axle, **Then** it
+4. **Given** an 8x2 front section whose second axle is declared steerable and stands ahead of the
+   turning line, **When** the driver steers right, **Then** that axle turns right too, in proportion
+   to its own lock, with no script.
+5. **Given** a keyed bus, **When** a script reads `Axle_Steering_<n>_L/R` of a rigid axle, **Then** it
    reads 0; of a steerable axle, its actual angle.
 
 ---
@@ -160,8 +166,8 @@ closed forms of the model document.
 - A section behind a joint in mode 0 follows the driver's steering, not its joint: with the
   steering centred and the joint bent its axles stand straight. A script that wants the joint's
   bend uses mode 2 (reading taken, see Q4).
-- A second front axle (twin steer) turns the same way as the first, which mode 0 does not do: its
-  script uses mode 2 with the front axle's angle.
+- A steerable axle that stands on the turning line in mode 0 stays straight; one that crosses the
+  line (the line moves when another axle locks) changes direction at its centring rate.
 - The bus runs OMSI Classic (no `[depot_physics]` key and the setting is Classic): the declaration
   is read, ignored, and the log says it applies to Project Depot Physics only; `C-6` runs unchanged.
 - An AI copy of a bus with the declaration: the AI keeps its own steering (spec 002 D6: the key
@@ -205,9 +211,11 @@ closed forms of the model document.
 - **FR-007**: The front wheels' lock angle MUST stay the one `C-6` gives from `[inv_min_turnradius]`
   and `[rot_pnt_long]` as the file has them; the full-lock curvature then follows from the current
   turning line, so the turning circle changes with what the steerable axles do.
-- **FR-008**: In mode 0 (basic), a steerable axle MUST turn opposite to the driver's steering axle,
-  in proportion to its own lock: `δ_i = −(δ_front / lock_front) · lock_i`, that is `−s · lock_i` with
-  `s` the driver's steering from −1 to 1 (a 6x2-4 tag axle). Its tyres keep Ackermann angles about
+- **FR-008**: In mode 0 (basic), a steerable axle MUST turn in proportion to the driver's steering
+  axle and its own lock, on the side its position gives: `δ_i = σ_i · (δ_front / lock_front) ·
+  lock_i = σ_i · s · lock_i`, with `s` the driver's steering from −1 to 1 and `σ_i` = −1 behind the
+  turning line (a 6x2-4 tag axle turns opposite), +1 ahead of it (a twin-steer second front axle
+  turns the same way), 0 on it. Its tyres keep Ackermann angles about
   the axle's angle as in `C-6`.
 - **FR-009**: The turning line MUST move continuously when an axle locks, unlocks or changes angle:
   no step in yaw rate or lateral speed beyond what the steering itself causes.

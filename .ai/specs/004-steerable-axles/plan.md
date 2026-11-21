@@ -27,8 +27,9 @@ Physics only:
    steer, weighted by their static load ([research.md](research.md) R-4);
 3. the front wheels' lock kept as `C-6` gives it, so the turning circle follows what the steerable
    axles do (R-5);
-4. per steerable axle, three modes chosen by the vehicle's script: 0 basic (opposite to the
-   steering axle, in proportion to the axle's lock, as a 6x2-4), 1 locked straight, 2 script angle,
+4. per steerable axle, three modes chosen by the vehicle's script: 0 basic (in proportion to
+   the steering axle and the axle's lock: opposite behind the turning line, as a 6x2-4, the same
+   way ahead of it, as a twin steer), 1 locked straight, 2 script angle,
    with rate-limited changes (R-6); no locking rule in the game ([contracts/script-vars.md](contracts/script-vars.md), R-9);
 5. scrub of tyres that do not point at the centre, through the road's reach in the existing lateral
    solver and `D-3` (R-7);
@@ -137,7 +138,7 @@ file, no new crate.
 4. Leading section: `κ = s · tan(lock_front) / |y_front − y_turn|` (R-5). Section behind: the joint's
    curvature, its `arm` measured from its own `y_turn`.
 5. Angles: front axle as `C-6`; steerable axles move, at most `centring_i` per second, to
-   `−s · lock_i` (mode 0, `s = κ / κ_max`), 0 (mode 1) or the script's angle clamped to the lock
+   `σ_i · s · lock_i` (mode 0, `s = κ / κ_max`, `σ_i` −1 behind the turning line, +1 ahead), 0 (mode 1) or the script's angle clamped to the lock
    (mode 2); rigid axles 0. Tyres keep Ackermann about their axle's angle.
 6. Hold: tyres pointing at the centre (within `SCRUB_TOLERANCE`) as today; others with the road's
    reach; keyed sections behind a joint held at each tyre (R-7, R-8). `D-3` sees every tyre's

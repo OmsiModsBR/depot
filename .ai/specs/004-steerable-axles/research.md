@@ -101,8 +101,10 @@ mode. Each steerable axle keeps an angle `δ_i` and an engagement `e_i`:
 
 ```
 s       = δ_front / lock_front                the driver's steering, −1..1 (= κ / κ_max)
-target  = −s · lock_i                          mode 0, basic: opposite to the steering axle,
-                                               in proportion to the axle's own lock (6x2-4)
+target  = σ_i · s · lock_i                     mode 0, basic: in proportion to the axle's own lock;
+σ_i     = −1 if y_i < y_turn, +1 if y_i > y_turn, 0 on it
+                                               (behind the line opposite, as a 6x2-4 tag axle;
+                                               ahead the same way, as a twin-steer second axle)
 target  = 0                                    mode 1, locked straight
 target  = clamp(δ_script, ±lock_i)             mode 2, script angle
 e_i     → 1 in mode 0, → 0 in modes 1 and 2, at rate  centring_i / lock_i  (1/s)
@@ -111,8 +113,9 @@ e_i     → 1 in mode 0, → 0 in modes 1 and 2, at rate  centring_i / lock_i  (
 
 In mode 2 the axle counts as held for the turning line (R-4); in mode 0 as steering. The steering
 axle is the driver's front axle for every section, so a section behind a joint in mode 0 also
-follows `s` (maintainer's mode 0 read literally); a script that wants the joint's bend, or a twin
-steer second axle turning the same way, uses mode 2. The tyres of an axle keep their own Ackermann angles about
+follows `s`; a script that wants the joint's bend uses mode 2. The side `σ_i` (clarify Q5) costs one
+comparison per axle against `y_turn`, which is computed anyway; it was chosen over "always
+opposite" so that a twin-steer axle needs no script. The tyres of an axle keep their own Ackermann angles about
 `δ_i`'s centre as today. Uses `y_turn` of the previous substep (one substep, 1/240 s, of lag) to
 break the loop between the line and the angles.
 
