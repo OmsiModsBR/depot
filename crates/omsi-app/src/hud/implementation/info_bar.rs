@@ -20,9 +20,10 @@ impl InfoMode {
 
 /// OMSI's information bar: the time, the speed (and the limit of the road), the kilometres
 /// driven this session and the bus's odometer, temperatures, the tank, the passengers aboard,
-/// the trip with its next stop and delay, the pedals, the road's grade and the skid lamp. A group of it is one thing the player reads at
-/// a time; `mode` leaves out what is not wanted, `fps` adds the frame rate at the end. Each
-/// readout is an icon and its value; its name is the icon's tooltip.
+/// the trip with its next stop and delay, the pedals, the road's grade and the skid lamp. A
+/// group of it is one thing the player reads at a time; `mode` leaves out what is not wanted,
+/// `fps` adds the frame rate at the end. Each readout is an icon and its value; its name is
+/// the icon's tooltip.
 pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
     if matches!(mode, InfoMode::TwoTier | InfoMode::Split) {
         return tiered_bar(d, mode == InfoMode::Split, bottom);
@@ -42,19 +43,8 @@ pub fn info_bar(d: &InfoData, mode: InfoMode, bottom: bool) -> InfoBar {
         if on(1) {
             groups.push(speed_group(p, d.limit));
         }
-        if full && on(9) {
-            groups.push(vec![pedals_item(p.vehicle.controls())]);
-        }
-        // (from the rigid body the player's vehicle runs on; a vehicle moved along its
-        // track has none, and neither item)
-        if let Some(body) = p.vehicle.rigid().filter(|_| full) {
-            if let Some(grade) = body.road_grade().filter(|_| on(10)) {
-                groups.push(vec![grade_item(grade)]);
-            }
-            if on(11) {
-                groups.push(vec![skid_item(body.skidding())]);
-            }
-        }
+        // (every layout: what the driver does and what the bus does under it)
+        groups.extend(driving_groups(p, &on));
         if full && on(2) {
             groups.push(vec![plain(distance_driven(d.metres))
                 .with_icon("hud-trip")
@@ -189,6 +179,40 @@ fn speed_group(p: &Player, limit: Option<f32>) -> Vec<InfoItem> {
     speed
 }
 
+/// The pedals, the road's grade and the skid lamp of the player's vehicle (see
+/// [`driving_items`]). The grade and the lamp read the rigid body it runs on: a vehicle moved
+/// along its track has neither.
+fn driving_groups(p: &Player, on: impl Fn(usize) -> bool) -> Vec<Vec<InfoItem>> {
+    let body = p.vehicle.rigid();
+    driving_items(
+        p.vehicle.controls(),
+        body.and_then(|b| b.road_grade()),
+        body.map(|b| b.skidding()),
+        on,
+    )
+}
+
+/// The pedals, the road's grade (when known) and the skid lamp (when known), each a group of
+/// its own, as `on` lets them through (the Custom layout's switches 9, 10 and 11).
+pub fn driving_items(
+    controls: omsi_sim::Controls,
+    grade: Option<f32>,
+    skidding: Option<bool>,
+    on: impl Fn(usize) -> bool,
+) -> Vec<Vec<InfoItem>> {
+    let mut groups = Vec::new();
+    if on(9) {
+        groups.push(vec![pedals_item(controls)]);
+    }
+    if let Some(grade) = grade.filter(|_| on(10)) {
+        groups.push(vec![grade_item(grade)]);
+    }
+    if let Some(skidding) = skidding.filter(|_| on(11)) {
+        groups.push(vec![skid_item(skidding)]);
+    }
+    groups
+}
+
 /// The clutch, the brake and the throttle as the vehicle has them this frame, whatever
 /// works them (the keys, a wheel and its pedals, a gamepad, the touch screen, the
 /// automatic clutch): three bars, no text; "Pedals" under the mouse.
@@ -271,7 +295,8 @@ pub fn temperatures(outside: f32, inside: f32) -> String {
 }
 
 /// The two-tier layouts: the driving items (the line and where it goes, the time, the speed
-/// and its limit, the next stop with the delay) in the first tier, small readouts (trip,
+/// and its limit, the pedals, the road's grade, the skid lamp, the next stop with the delay)
+/// in the first tier, small readouts (trip,
 /// odometer, temperatures, passengers, the tank with its meter, the frame rate) in the
 /// second, which the arrow folds away. `split` puts the second tier on a plate of its own.
 fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> InfoBar {
@@ -308,6 +333,7 @@ fn tiered_bar(d: &InfoData, split: bool, bottom: bool) -> InfoBar {
             }
         }
         groups.push(speed_group(p, d.limit));
+        groups.extend(driving_groups(p, |_| true));
         if let Some(duty) = d.duty {
             if let Some(trip) = duty.trips.get(duty.trip_index) {
                 let next: Vec<InfoItem> = trip
