@@ -1,16 +1,21 @@
 //! The passes of a frame, one module per pass: its pipelines, its uniform and its encoding,
 //! with `draw` holding what the passes share (draw items, batches, pipeline codes).
 
+mod corona;
 mod depth;
 mod draw;
 mod features;
 mod fog_lamps;
 mod glass;
 mod main;
+mod pipelines;
 mod post;
+mod scene_pipelines;
 mod shadow;
 mod sky;
+mod snow;
 
+pub(crate) use corona::CoronaBuilder;
 pub(crate) use depth::{ao_pipelines, prepass_pipelines, PrepassPipelines, SsaoPass};
 pub(crate) use draw::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,
@@ -26,10 +31,14 @@ pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
 pub(crate) use glass::encode_glass;
 pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
+pub(crate) use pipelines::PathBuilders;
 #[cfg(test)]
 pub(crate) use post::PostUniform;
 pub(crate) use post::{encode_enhanced_post, post_pipelines, Exposure, PostParts, PostPipelines};
+pub(crate) use scene_pipelines::SceneBuilder;
 pub(crate) use shadow::{
     shadow_pipe, ShadowResources, ShadowSchedule, LAMP_CASCADE, SHADOW_CLOSE_MAX,
 };
 pub use shadow::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};
+pub(crate) use sky::SkyBuilder;
+pub(crate) use snow::{snow_layout, SnowBuilder};

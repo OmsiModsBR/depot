@@ -1,10 +1,88 @@
-//! The sky's passes: a face of the enhanced sky cube, and the reflection probe with its
-//! blurred mip chain.
+//! The sky's passes: its pipelines, a face of the enhanced sky cube, and the reflection
+//! probe with its blurred mip chain.
 
 use super::draw::PostPass;
-use crate::gpu::pass_timer;
-use crate::scene::Scene;
+use crate::gpu::{color_targets, pass_timer, DEPTH_FORMAT};
+use crate::scene::{Layouts, Scene};
+use crate::shaders::sky_shader_source;
 use crate::sky::{SkyResources, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS};
+
+/// What the sky's pipelines are made from: the sky shader (the sky resources draw with it
+/// too), its layout and the dome's vertex.
+pub(crate) struct SkyBuilder<'a> {
+    device: &'a wgpu::Device,
+    pub(crate) module: wgpu::ShaderModule,
+    layout: wgpu::PipelineLayout,
+    msaa: u32,
+}
+
+/// The dome's vertex: a position.
+const SKY_VERTEX: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
+    array_stride: 12,
+    step_mode: wgpu::VertexStepMode::Vertex,
+    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+};
+
+impl<'a> SkyBuilder<'a> {
+    pub(crate) fn new(device: &'a wgpu::Device, layouts: &Layouts, msaa: u32) -> Self {
+        log::info!("renderer: compiling the sky and clouds shaders");
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("sky"),
+            source: wgpu::ShaderSource::Wgsl(sky_shader_source().into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("sky"),
+            bind_group_layouts: &[Some(&layouts.camera_layout), Some(&layouts.sky_layout)],
+            immediate_size: 0,
+        });
+        Self {
+            device,
+            module,
+            layout,
+            msaa,
+        }
+    }
+
+    pub(crate) fn pipeline(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
+        self.device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("sky"),
+                layout: Some(&self.layout),
+                vertex: wgpu::VertexState {
+                    module: &self.module,
+                    entry_point: Some("vs_main"),
+                    buffers: &[SKY_VERTEX],
+                    compilation_options: Default::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Always),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: self.msaa,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &self.module,
+                    entry_point: Some(fs),
+                    targets: &color_targets(format, None, wgpu::ColorWrites::COLOR, false),
+                    compilation_options: Default::default(),
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+    }
+}
 
 impl SkyResources {
     /// The enhanced sky cube: a face a frame, all six the first time and for a new sky.
