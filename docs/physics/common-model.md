@@ -212,6 +212,10 @@ An axle behind the line (`y_i < y_turn`) points the other way, and so does a tag
 a joint has no steering of its own: its curvature comes from the joint, and its tyres do not steer
 (`C-9`).
 
+Under Project Depot Physics a section with steerable axles (`achse_steer_*` in its `[newachse]`)
+takes its turning line and full lock from `D-5` and its axles' angles from `D-6` of
+[depot-model.md](depot-model.md) instead.
+
 **Status**: the turning line counted from `[cog]` is **validated**: with a `[cog]` of `0 / 3 / 1.2` on a
 copy of a stock bus, driven at about 5 km/h at full lock, OMSI 2's pivot moves forward and the rear
 axle drags sideways (#655, black-box test 1). The per-axle angles `δ_i` are **to validate**: compare
@@ -242,6 +246,9 @@ or the speed across at the turning line is over 0.5 m/s              a knock fro
 or when a wheel is struck by a face (`C-3`). Sliding, each tyre passes on at most `μ N` across. The
 tyres **hold again** once the sideways speed at every tyre is under 0.1 m/s and no wheel slips. While
 holding, the bend's pull rolls the body by `m · h_cog · v · ω_z` (about the longitudinal axis).
+
+Under Project Depot Physics the tyres of a section with steerable axles that do not point at the
+centre of the turn are held with the road's reach (`D-7` of [depot-model.md](depot-model.md)).
 
 **Status**: **to validate**: full lock at rising speed on a dry and a wet road, noting the speed at
 which the bus lets go and the speed at which it holds again, in OMSI 2 and in the game.
@@ -327,7 +334,9 @@ R · sin α + D · cos α = d
 
 with `D` the distance of the ball from the turning line of the section ahead and `d` its distance from
 the follower's own. The steering of the tyres of a rear axle (an articulated bus with a steered last
-axle) is not modelled in either engine for now (maintainer, 2026-11-12).
+axle) is not modelled by OMSI Classic; Project Depot Physics models it for a section with steerable
+axles: its line from `D-5`, its axles following the joint's bend (`D-6`), held at each tyre (`D-7`)
+of [depot-model.md](depot-model.md).
 
 **Status**: **to validate**: the steady articulation angle of an articulated bus in a steady turn
 (radius and `α`), in OMSI 2 and in the game, also with a rear section of two axles (the maintainer's

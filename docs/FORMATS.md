@@ -645,6 +645,31 @@ Axle_Brakeforce_ Axle_SurfaceID_` × `{n}_{L|R}`, `PAX_Entry{n}_Open/_Req`, `PAX
 `PAX_Entry{n}_Busy` / `PAX_Exit{n}_Busy` (somebody in that doorway; see MODDING.md).
 Callbacks: `program/callbacklist_*.txt`.
 
+`achse_steer_angle` and `achse_steer_centring` (Project Depot only; inside an axle's `[newachse]`,
+each followed by one value line, anywhere among the axle's parameters): the axle steers. The first is
+its lock in degrees each side (`> 0`, `< 90`), the second the most it turns per second (degrees,
+`> 0`), between modes and while following the steering, so it must be high enough to keep up with
+fast steering (a mouse). The two go together (one alone: not steerable, and the log names the
+missing one); only the keyword form of an axle can carry them. A value that is not a number or out of
+range, a parameter given twice in one axle (the second is ignored), or the parameters on the leading
+section's front axle are logged and ignored, never corrected. In a section with a steerable axle,
+every other axle is rigid but the leading front axle, which the driver steers. They act only under
+Project Depot Physics (Classic reads them and logs one line), and AI copies ignore them. OMSI 2 skips
+them (checked in the game). Model: `D-5` to `D-7` of `docs/physics/depot-model.md`.
+
+Script variables of a steerable axle, `<n>` the axle number over the whole vehicle as in
+`Axle_Steering_{n}` (the leading section's axles first); they exist only if the script's varlist
+declares them, and OMSI 2 treats them as ordinary user variables:
+`Axle_Steer_Mode_<n>` (written by the script, read once a frame: 0 basic, the axle turns with the
+driver's steering in proportion to its lock, the other way behind the turning line and the same way
+ahead of it, in a section behind a joint with the joint's bend; 1 locked straight; 2 the script's
+angle; any other value is 0 with one log line per vehicle), `Axle_Steer_Angle_<n>` (written by the
+script: the angle in mode 2, rad, positive to the right, clamped to the lock; not a number means
+mode 0), `Axle_Steer_Locked_<n>` (written by the game: 1 while the axle is locked straight). The game
+never locks an axle by itself. The names are matched whole (`Axle_Steer_` is a prefix of
+`Axle_Steering_`). `Axle_Steering_{n}_L/R` carries a steerable axle's actual angle, the same on both
+sides, and 0 for a rigid axle of a section with steerable axles.
+
 `[depot_physics]` (Project Depot only; a section with no value lines): the vehicle runs Project
 Depot Physics when the player drives it, whatever the player's "Physics" setting says. Read from
 the front section's file only (the key in a rear section's file is left out with a log line); lines
