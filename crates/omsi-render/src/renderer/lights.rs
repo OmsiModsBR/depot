@@ -54,7 +54,7 @@ impl Renderer {
             }
         }
         let order: Vec<&Corona> = order.into_iter().map(|(_, c)| c).collect();
-        if omsi_cfg::flags::DEBUG_CONES.is_set() {
+        if crate::gpu::debug().debug_cones {
             log::info!(
                 "coronas: {} in {} runs {:?}, {} beams",
                 order.len(),
@@ -264,7 +264,7 @@ impl Renderer {
                         .position(|v| *v == u32::MAX)
                     {
                         grid[base + slot] = idx;
-                    } else if omsi_cfg::flags::DEBUG_LIGHT_GRID.is_set() {
+                    } else if crate::gpu::debug().debug_light_grid {
                         log::info!("light grid: cell ({x}, {y}) full, light at ({:.1}, {:.1}) radius {:.0} {} left out", p.x, p.y, l.radius, if l.direction.length_squared() > 0.5 { "spot" } else { "point" });
                     }
                 }

@@ -39,7 +39,7 @@ pub(crate) fn meter_tuning() -> [f32; 6] {
             0.0,
             NIGHT_VISION,
         ];
-        if let Some(v) = omsi_cfg::flags::METER.text() {
+        if let Some(v) = crate::gpu::debug().meter.as_deref() {
             for (k, x) in v.split(',').take(6).enumerate() {
                 if let Ok(x) = x.trim().parse() {
                     m[k] = x;
@@ -59,7 +59,7 @@ pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
     static OVERRIDE: std::sync::OnceLock<Option<(f32, f32)>> = std::sync::OnceLock::new();
     let (day, night) = OVERRIDE
         .get_or_init(|| {
-            let v = omsi_cfg::flags::TONE_CONTRAST.text()?;
+            let v = crate::gpu::debug().tone_contrast.clone()?;
             let mut it = v.split(',').map(|x| x.trim().parse::<f32>().ok());
             Some((it.next()??, it.next().flatten().unwrap_or(1.0)))
         })
@@ -106,7 +106,7 @@ impl ExposureLog {
             started: std::time::Instant::now(),
             pending: (0.0, [0.0; 6]),
             ev: 0.0,
-            log: omsi_cfg::flags::DEBUG_EXPOSURE.is_set(),
+            log: crate::gpu::debug().debug_exposure,
         })
     }
 

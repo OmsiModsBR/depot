@@ -55,7 +55,7 @@ impl Renderer {
             mesh_pages: Vec::new(),
             changed_mark: Vec::new(),
             origin_moved: false,
-            cache_bounds: !omsi_cfg::flags::NO_BOUNDS_CACHE.is_set(),
+            cache_bounds: !crate::gpu::debug().no_bounds_cache,
             bounds_meshes: Vec::new(),
             bounds_known: Vec::new(),
             bounds_users: Vec::new(),

@@ -58,7 +58,7 @@ impl Renderer {
         // pass in two to finish the halves side by side was tried as well: the second half
         // has to load the first one's targets back into the GPU's tile memory, which cost
         // more GPU time than it saved on the CPU.)
-        let main_bundles = if !omsi_cfg::flags::NO_BUNDLES.is_set() {
+        let main_bundles = if !crate::gpu::debug().no_bundles {
             let pp = self.main_pass(enhanced, reflection_frame);
             let format = if masked_frame {
                 HDR_FORMAT

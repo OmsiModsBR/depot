@@ -4,7 +4,7 @@
 
 use super::features::{puddle_weather, BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 use super::state::Renderer;
-use crate::gpu::{fake_due, fake_poll_loss, guarded_poll, lost_why, target_2d, HDR_FORMAT};
+use crate::gpu::{fault_due, guarded_poll, lost_why, target_2d, FaultHook, HDR_FORMAT};
 use crate::lighting::{lamp_sky_glow, view_lamp_light, LampShadow, Lighting};
 use crate::output::Output;
 use crate::passes::{
@@ -155,10 +155,7 @@ impl Renderer {
     fn fake_device_loss(&mut self, with_overlays: bool) {
         // test hook for a lost device (a driver reset): its resources are taken away and
         // the session has to end in order
-        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("lost")
-            && with_overlays
-            && self.started.elapsed().as_secs_f32() > 3.0
-            && self.device_lost().is_none()
+        if fault_due(FaultHook::Lost, self.started) && with_overlays && self.device_lost().is_none()
         {
             log::error!("the graphics device was lost (test): OMSI_FAKE_GPU_ERROR=lost");
             self.device.destroy();
@@ -171,7 +168,7 @@ impl Renderer {
         // test hook for a device the driver loses while the game runs (`lost-poll`): its loss
         // handler is told and the poll of it panics in wgpu, as on Vulkan - the panic is
         // caught, and the frame below sees the device lost
-        if with_overlays && fake_poll_loss(self.started) {
+        if with_overlays && fault_due(FaultHook::LostPoll, self.started) {
             let _ = guarded_poll(Some(&self.gpu.device_lost), true, || {
                 self.device.poll(wgpu::PollType::Poll)
             });
@@ -182,19 +179,10 @@ impl Renderer {
     fn fake_gpu_errors(&mut self, with_overlays: bool) {
         // test hook for a card out of memory: reported once, as a texture it could not make
         // is, so that the game keeps fewer textures (`take_out_of_memory`)
-        if with_overlays
-            && fake_due(
-                omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref(),
-                "oom",
-                self.started.elapsed().as_secs_f32(),
-            )
-        {
+        if with_overlays && fault_due(FaultHook::Oom, self.started) {
             self.gpu.errors.fake_out_of_memory_once();
         }
-        if omsi_cfg::flags::FAKE_GPU_ERROR.text().as_deref() == Some("frame")
-            && self.options.msaa > 1
-            && self.started.elapsed().as_secs_f32() > 3.0
-        {
+        if fault_due(FaultHook::Frame, self.started) && self.options.msaa > 1 {
             // test hook for the fallback below
             let _ = target_2d(
                 &self.device,
@@ -600,7 +588,7 @@ impl Renderer {
                 aspect,
                 ground,
             ));
-            if omsi_cfg::flags::DEBUG_VIEW_LAMPS.is_set() {
+            if crate::gpu::debug().debug_view_lamps {
                 log::info!(
                     "view lamps: {:.6}",
                     self.adaptation.view_lamps.unwrap_or(0.0)
@@ -620,7 +608,7 @@ impl Renderer {
             if changed {
                 self.sky.city_glow = Some(step.exp());
             }
-            if omsi_cfg::flags::DEBUG_SKY.is_set() && changed {
+            if crate::gpu::debug().debug_sky && changed {
                 log::info!(
                     "sky glow from the lamps: {raw:.3} (taken {:.3})",
                     step.exp()

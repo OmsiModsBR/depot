@@ -563,29 +563,27 @@ flags! {
     CONDENSATION = "OMSI_CONDENSATION", Text, Diagnostic, "omsi-app::offscreen";
     /// Offscreen: the rain on the glass as the bus would meet it at this speed (m/s).
     GLASS_WIND = "OMSI_GLASS_WIND", Number, Diagnostic, "omsi-app::offscreen";
-    /// Offscreen: with LAN, the other buses' sounds heard at the camera (for the logs).
-    LAN_AUDIO = "OMSI_LAN_AUDIO", Switch, Test, "omsi-app::offscreen";
 
     // --- omsi-render: switches a phone's env.txt may set
 
     /// The settings as they are on a weak graphics chip too (no lighter defaults).
-    FULL_GPU = "OMSI_FULL_GPU", Switch, User, "omsi-render::api::renderer", env_txt;
+    FULL_GPU = "OMSI_FULL_GPU", Switch, User, "omsi-render::gpu::debug", env_txt;
     /// `default` or `downlevel`: pretend the graphics card can do only that much.
-    GPU_LIMITS = "OMSI_GPU_LIMITS", Text, Diagnostic, "omsi-render::api::renderer", env_txt;
+    GPU_LIMITS = "OMSI_GPU_LIMITS", Text, Diagnostic, "omsi-render::gpu::debug", env_txt;
     /// Only the simple pipelines, for drivers whose shader compiler fails on the others.
-    BASIC_PIPELINES = "OMSI_BASIC_PIPELINES", Switch, User, "omsi-render::gpu::open", env_txt;
+    BASIC_PIPELINES = "OMSI_BASIC_PIPELINES", Switch, User, "omsi-render::gpu::debug", env_txt;
     /// Time each pass on the GPU (with `OMSI_PROFILE`).
-    GPU_TIMERS = "OMSI_GPU_TIMERS", Switch, Diagnostic, "omsi-render::api::renderer", env_txt;
+    GPU_TIMERS = "OMSI_GPU_TIMERS", Switch, Diagnostic, "omsi-render::gpu::debug", env_txt;
     /// No shadows.
     NO_SHADOWS = "OMSI_NO_SHADOWS", Switch, User, "omsi-app::settings", env_txt;
     /// No coronas round the lamps.
     NO_CORONAS = "OMSI_NO_CORONAS", Switch, User, "omsi-app::settings", env_txt;
     /// One-sided faces drawn from both sides.
-    NO_CULL = "OMSI_NO_CULL", Switch, Diagnostic, "omsi-render::passes::draw", env_txt;
+    NO_CULL = "OMSI_NO_CULL", Switch, Diagnostic, "omsi-render::gpu::debug", env_txt;
     /// Textures uploaded as RGBA, not compressed on the GPU.
-    NO_BC = "OMSI_NO_BC", Switch, User, "omsi-render::api::renderer", env_txt;
+    NO_BC = "OMSI_NO_BC", Switch, User, "omsi-render::gpu::debug", env_txt;
     /// No compression of loose pictures.
-    NO_TEXCOMPRESS = "OMSI_NO_TEXCOMPRESS", Switch, User, "omsi-render::api::renderer", env_txt;
+    NO_TEXCOMPRESS = "OMSI_NO_TEXCOMPRESS", Switch, User, "omsi-render::gpu::debug", env_txt;
     /// No FXAA.
     NO_FXAA = "OMSI_NO_FXAA", Switch, User, "omsi-app::settings", env_txt;
     /// No ambient occlusion.
@@ -594,65 +592,65 @@ flags! {
     // --- omsi-render: its own settings and diagnostics
 
     /// On an Intel Vulkan adapter on Windows, the settings asked for instead of the stable driver profile.
-    INTEL_FULL_GPU = "OMSI_INTEL_FULL_GPU", Switch, User, "omsi-render::api::renderer";
+    INTEL_FULL_GPU = "OMSI_INTEL_FULL_GPU", Switch, User, "omsi-render::gpu::debug";
     /// `textures` or `nostorage`: read the scene's arrays as an older graphics chip has to.
-    GPU_ARRAYS = "OMSI_GPU_ARRAYS", Text, Diagnostic, "omsi-render::api::renderer";
+    GPU_ARRAYS = "OMSI_GPU_ARRAYS", Text, Diagnostic, "omsi-render::gpu::debug";
     /// With `OMSI_GPU_ARRAYS`, keep to OpenGL's sixteen texture units, as such a chip does.
-    GL_TEXTURE_UNITS = "OMSI_GL_TEXTURE_UNITS", Switch, Diagnostic, "omsi-render::gpu::caps";
+    GL_TEXTURE_UNITS = "OMSI_GL_TEXTURE_UNITS", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// No thread that keeps the GPU's work moving between frames.
-    NO_POLL_THREAD = "OMSI_NO_POLL_THREAD", Switch, Diagnostic, "omsi-render::gpu::open";
+    NO_POLL_THREAD = "OMSI_NO_POLL_THREAD", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The draw lists encoded on the frame's own thread, not on a pool.
-    NO_RENDER_POOL = "OMSI_NO_RENDER_POOL", Switch, Diagnostic, "omsi-render::gpu::context";
+    NO_RENDER_POOL = "OMSI_NO_RENDER_POOL", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Every instance's bounds worked out again each frame.
-    NO_BOUNDS_CACHE = "OMSI_NO_BOUNDS_CACHE", Switch, Diagnostic, "omsi-render::api::scene";
+    NO_BOUNDS_CACHE = "OMSI_NO_BOUNDS_CACHE", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The main pass encoded directly, without render bundles.
-    NO_BUNDLES = "OMSI_NO_BUNDLES", Switch, Diagnostic, "omsi-render::renderer::encode";
+    NO_BUNDLES = "OMSI_NO_BUNDLES", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The main pass in one part, not split in two.
-    NO_MAIN_SPLIT = "OMSI_NO_MAIN_SPLIT", Switch, Diagnostic, "omsi-render::passes::main";
+    NO_MAIN_SPLIT = "OMSI_NO_MAIN_SPLIT", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// No multisampled depth prepass.
-    NO_MSAA_PREPASS = "OMSI_NO_MSAA_PREPASS", Switch, Diagnostic, "omsi-render::passes::main";
+    NO_MSAA_PREPASS = "OMSI_NO_MSAA_PREPASS", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The pipelines of these kinds left out (comma-separated numbers), to time what each costs.
-    SKIP_PIPE = "OMSI_SKIP_PIPE", Text, Diagnostic, "omsi-render::renderer::lists";
+    SKIP_PIPE = "OMSI_SKIP_PIPE", Text, Diagnostic, "omsi-render::gpu::debug";
     /// The depth bias of surfaces drawn on the ground (default -24).
-    SURFACE_BIAS = "OMSI_SURFACE_BIAS", Number, Diagnostic, "omsi-render::renderer::build";
+    SURFACE_BIAS = "OMSI_SURFACE_BIAS", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Only the surfaces drawn.
-    ONLY_SURFACES = "OMSI_ONLY_SURFACES", Switch, Diagnostic, "omsi-render::renderer::lists";
+    ONLY_SURFACES = "OMSI_ONLY_SURFACES", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The enhanced main pass shows one of its terms alone (a number).
-    DEBUG_ENHANCED = "OMSI_DEBUG_ENHANCED", Number, Diagnostic, "omsi-render::lighting::model";
+    DEBUG_ENHANCED = "OMSI_DEBUG_ENHANCED", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Log the automatic exposure.
-    DEBUG_EXPOSURE = "OMSI_DEBUG_EXPOSURE", Switch, Diagnostic, "omsi-render::lighting::exposure";
+    DEBUG_EXPOSURE = "OMSI_DEBUG_EXPOSURE", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The exposure meter's settings, up to six comma-separated numbers.
-    METER = "OMSI_METER", Text, Diagnostic, "omsi-render::lighting::exposure";
+    METER = "OMSI_METER", Text, Diagnostic, "omsi-render::gpu::debug";
     /// The tone curve's contrast by day and by night (`day[,night]`).
-    TONE_CONTRAST = "OMSI_TONE_CONTRAST", Text, Diagnostic, "omsi-render::lighting::exposure";
+    TONE_CONTRAST = "OMSI_TONE_CONTRAST", Text, Diagnostic, "omsi-render::gpu::debug";
     /// The air fixed for comparisons (`haze,angstrom[,height,strat]`).
-    DAY_AIR = "OMSI_DAY_AIR", Text, Diagnostic, "omsi-render::sky::air";
+    DAY_AIR = "OMSI_DAY_AIR", Text, Diagnostic, "omsi-render::gpu::debug";
     /// Log the sky, its cloud cover and the lamps' glow on it.
-    DEBUG_SKY = "OMSI_DEBUG_SKY", Switch, Diagnostic, "omsi-render::renderer::sky";
+    DEBUG_SKY = "OMSI_DEBUG_SKY", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The strength of the `[matl_envmap]` photo on reflections (default 1, 0 leaves it out).
-    ENV_PHOTO = "OMSI_ENV_PHOTO", Number, Diagnostic, "omsi-render::renderer::sky";
+    ENV_PHOTO = "OMSI_ENV_PHOTO", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Log how much of the view the lamps light.
-    DEBUG_VIEW_LAMPS = "OMSI_DEBUG_VIEW_LAMPS", Switch, Diagnostic, "omsi-render::renderer::frame";
+    DEBUG_VIEW_LAMPS = "OMSI_DEBUG_VIEW_LAMPS", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Log the lights a full cell of the light grid leaves out.
-    DEBUG_LIGHT_GRID = "OMSI_DEBUG_LIGHT_GRID", Switch, Diagnostic, "omsi-render::renderer::lights";
+    DEBUG_LIGHT_GRID = "OMSI_DEBUG_LIGHT_GRID", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Log the draw counts and the instances changed each frame.
-    DEBUG_DRAWS = "OMSI_DEBUG_DRAWS", Switch, Diagnostic, "omsi-render::renderer::lists";
+    DEBUG_DRAWS = "OMSI_DEBUG_DRAWS", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Log the culling of instances within 150 m; `x,y,radius` logs those near that point.
-    DEBUG_CULL = "OMSI_DEBUG_CULL", Text, Diagnostic, "omsi-render::renderer::lists";
+    DEBUG_CULL = "OMSI_DEBUG_CULL", Text, Diagnostic, "omsi-render::gpu::debug";
     /// Log the near instances drawn in one frame and not in the next.
-    DEBUG_FLICKER = "OMSI_DEBUG_FLICKER", Switch, Diagnostic, "omsi-render::renderer::lists";
+    DEBUG_FLICKER = "OMSI_DEBUG_FLICKER", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Log the shadow casters at least this large (a radius, default 3).
-    DEBUG_SHADOW = "OMSI_DEBUG_SHADOW", Number, Diagnostic, "omsi-render::renderer::lists";
+    DEBUG_SHADOW = "OMSI_DEBUG_SHADOW", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Log why the far shadow map is drawn again.
-    DEBUG_SHADOW_FAR = "OMSI_DEBUG_SHADOW_FAR", Switch, Diagnostic, "omsi-render::passes::shadow";
+    DEBUG_SHADOW_FAR = "OMSI_DEBUG_SHADOW_FAR", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The near shadow map drawn again every frame.
-    SHADOW_NEAR_EVERY_FRAME = "OMSI_SHADOW_NEAR_EVERY_FRAME", Switch, Diagnostic, "omsi-render::passes::shadow";
+    SHADOW_NEAR_EVERY_FRAME = "OMSI_SHADOW_NEAR_EVERY_FRAME", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The far shadow map drawn again every frame.
-    SHADOW_FAR_EVERY_FRAME = "OMSI_SHADOW_FAR_EVERY_FRAME", Switch, Diagnostic, "omsi-render::passes::shadow";
+    SHADOW_FAR_EVERY_FRAME = "OMSI_SHADOW_FAR_EVERY_FRAME", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Log the fog lamps, light shafts and glare of a frame.
-    DEBUG_FOG_LAMPS = "OMSI_DEBUG_FOG_LAMPS", Switch, Diagnostic, "omsi-render::passes::fog_lamps";
+    DEBUG_FOG_LAMPS = "OMSI_DEBUG_FOG_LAMPS", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// No glare from the sun.
-    NO_GLARE = "OMSI_NO_GLARE", Switch, Diagnostic, "omsi-render::passes::fog_lamps";
+    NO_GLARE = "OMSI_NO_GLARE", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// No smoke.
     NO_SMOKE = "OMSI_NO_SMOKE", Switch, Diagnostic, "omsi-app::settings";
     /// No falling snow.
@@ -662,21 +660,21 @@ flags! {
     /// Wet roads reflect no scene.
     NO_PUDDLE_REFLECTIONS = "OMSI_NO_PUDDLE_REFLECTIONS", Switch, Diagnostic, "omsi-app::settings";
     /// Puddles reflect no vehicles.
-    NO_PUDDLE_VEHICLE = "OMSI_NO_PUDDLE_VEHICLE", Switch, Diagnostic, "omsi-render::effects::puddles";
+    NO_PUDDLE_VEHICLE = "OMSI_NO_PUDDLE_VEHICLE", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Puddles reflect glass without its depth.
-    NO_PUDDLE_GLASS_DEPTH = "OMSI_NO_PUDDLE_GLASS_DEPTH", Switch, Diagnostic, "omsi-render::effects::puddles";
+    NO_PUDDLE_GLASS_DEPTH = "OMSI_NO_PUDDLE_GLASS_DEPTH", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The puddle reflection shows one of its terms (a number).
-    DEBUG_PUDDLES = "OMSI_DEBUG_PUDDLES", Number, Diagnostic, "omsi-render::effects::puddles";
+    DEBUG_PUDDLES = "OMSI_DEBUG_PUDDLES", Number, Diagnostic, "omsi-render::gpu::debug";
     /// The thickness of the puddle reflection's ray test (default 0.12).
-    PUDDLE_THICKNESS = "OMSI_PUDDLE_THICKNESS", Number, Diagnostic, "omsi-render::effects::puddles";
+    PUDDLE_THICKNESS = "OMSI_PUDDLE_THICKNESS", Number, Diagnostic, "omsi-render::gpu::debug";
     /// The reflectance of puddles head on (default 0.08, kept between 0.02 and 0.2).
-    PUDDLE_F0 = "OMSI_PUDDLE_F0", Number, Diagnostic, "omsi-render::renderer::sky";
+    PUDDLE_F0 = "OMSI_PUDDLE_F0", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Log the GPU's raw time stamps (with `OMSI_GPU_TIMERS`).
-    GPU_TIMERS_RAW = "OMSI_GPU_TIMERS_RAW", Switch, Diagnostic, "omsi-render::output::diagnostics";
+    GPU_TIMERS_RAW = "OMSI_GPU_TIMERS_RAW", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// Start the animation clock this many seconds later, for offscreen stills.
-    RENDER_CLOCK = "OMSI_RENDER_CLOCK", Number, Test, "omsi-render::renderer::build";
+    RENDER_CLOCK = "OMSI_RENDER_CLOCK", Number, Test, "omsi-render::gpu::debug";
     /// Fail the graphics on purpose to test the fallbacks (`open`, `open-panic`, `build`, `lost-build`, `pipeline`, `frame`, `lost`, `lost-poll`, `oom`).
-    FAKE_GPU_ERROR = "OMSI_FAKE_GPU_ERROR", Text, Test, "omsi-render";
+    FAKE_GPU_ERROR = "OMSI_FAKE_GPU_ERROR", Text, Test, "omsi-render::gpu::fault";
 
     // --- omsi-app: the launcher
 
