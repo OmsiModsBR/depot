@@ -460,7 +460,9 @@ impl VehicleInstance {
         for (i, w) in rb.wheels.iter_mut().enumerate() {
             w.spring_factor = self.spring_factor(i / 2, i % 2);
         }
+        self.feed_steer_axles(&mut rb);
         rb = self.collide_and_step(rb, dt, m_wheel, brakes, steer, &mut hits);
+        self.show_steer_locked(&rb);
         let (mut energy, mut worst) = Self::wheel_crashes(&rb);
         self.record_hits(&hits, &mut energy, &mut worst);
         self.apply_crash(energy, worst);

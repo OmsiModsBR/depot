@@ -207,3 +207,35 @@ pub(in crate::physics) fn axle_angle(body: &RigidBody, i: usize) -> f32 {
     body.steer_state(body.wheel_axle[i])
         .map_or(0.0, |s| s.angle)
 }
+
+impl RigidBody {
+    /// The numbers (in the section) of its steerable axles (`D-6`).
+    pub fn steerable_axles(&self) -> impl Iterator<Item = usize> + '_ {
+        self.steer_axles.iter().map(|(a, _)| a.axle)
+    }
+
+    /// What the scripts ask of steerable axle `axle` this frame (`D-6`): its mode and the
+    /// angle (rad) it takes in [`SteerMode::ScriptAngle`].
+    pub fn set_steer_input(&mut self, axle: usize, mode: SteerMode, script_angle: f32) {
+        if let Some((_, s)) = self.steer_axles.iter_mut().find(|(a, _)| a.axle == axle) {
+            s.mode = mode;
+            s.script_angle = script_angle;
+        }
+    }
+
+    /// Steerable axle `axle` is locked straight: locked by the scripts and back at 0 (`D-6`).
+    pub fn steer_axle_locked(&self, axle: usize) -> bool {
+        self.steer_state(axle)
+            .is_some_and(|s| s.mode == SteerMode::Locked && s.angle == 0.0)
+    }
+
+    /// Put steerable axle `axle` at `angle` (rad), within its lock, as a saved situation
+    /// left it.
+    pub fn set_steer_angle(&mut self, axle: usize, angle: f32) {
+        if let Some((a, s)) = self.steer_axles.iter_mut().find(|(a, _)| a.axle == axle) {
+            if angle.is_finite() {
+                s.angle = angle.clamp(-a.lock, a.lock);
+            }
+        }
+    }
+}
