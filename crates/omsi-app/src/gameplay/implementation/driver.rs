@@ -9,7 +9,7 @@
 //! is its `[newanim]` origin frame, its rim the farthest ring of its vertices round that
 //! axis and its centre the middle of that ring on the axis (the origin is often the foot of
 //! the column: the Urbino's lies 12 cm under the hub, and the hands held the air under and
-//! past the rim). Both hands hold the rim at ten to two, closed round it in fists whose
+//! past the rim). Both hands hold the rim a little below its sides, closed round it in fists whose
 //! wrists continue the forearms (the hand turned onto a fixed frame on the rim bent the
 //! wrists sharply), and turn with it, the wheel's angle read from its own animation
 //! variable. Turned out of its reach a hand lets go and takes the rim again further back
@@ -49,14 +49,16 @@ use omsi_sim::VehicleInstance;
 use std::sync::Arc;
 
 /// Where the hands rest on the rim, from the top, clockwise seen by the driver (degrees):
-/// a little above the sides, ten to two as bus drivers hold a flat wheel.
-const REST: [f32; 2] = [-70.0, 70.0];
+/// a little below the sides, where a bus's tilted wheel comes nearest the driver, so that he
+/// sits back in his seat with his arms held out to it. (At ten to two, the top of the wheel
+/// being its far side, the driver had to be brought up over the wheel to reach it.)
+const REST: [f32; 2] = [-100.0, 100.0];
 /// Where each hand can hold the rim (degrees from the top): the hands turn with the wheel
 /// within it; a hand turned out of it lets go and takes the rim again further back (the
 /// other hand holding on meanwhile), as a driver shuffles the wheel through his hands. (The
 /// figure used to keep its hands still and let the rim slide through them past a small
 /// range: the wheel seemed to turn by itself under hands frozen in the air.)
-const RANGE: [(f32, f32); 2] = [(-150.0, -20.0), (20.0, 150.0)];
+const RANGE: [(f32, f32); 2] = [(-170.0, -35.0), (35.0, 170.0)];
 /// A hand lets go this far (degrees) past its range at most before the rim slides.
 const SLIP: f32 = 25.0;
 /// How far a fist rolls round the rim (degrees, see `hand_targets`) and the time constant
@@ -69,6 +71,9 @@ const ROLL_EASE: f32 = 0.12;
 /// and the most they move for it in a frame (m).
 const FIX_EASE: f32 = 0.25;
 const FIX_STEP: f32 = 0.002;
+/// A wrist further than this (m) from its target is short of it: its fingers' hold is left
+/// as it is meanwhile.
+const FIX_REACHED: f32 = 0.01;
 /// Time constant (s) a hand turns into the frame its hold asks for.
 const FRAME_EASE: f32 = 0.07;
 /// How far a hand that lets go reaches back (degrees short of the far end of its range).
@@ -99,7 +104,7 @@ const SLIDE_MAX: f32 = 0.45;
 /// wrist is this fraction of the arm's length from the shoulder (1 is an arm stretched out,
 /// 0.9 an elbow bent about 130 degrees); `UPPER_ARM` is the shoulder-to-elbow length (m) of
 /// the stock figure.
-const ARM_RATIO: f32 = 0.98;
+const ARM_RATIO: f32 = 0.94;
 const UPPER_ARM: f32 = 0.30;
 /// A hand lets go this many seconds ahead of the moment it would leave its range (at most
 /// `LEAD_MAX` degrees ahead), and a lone hand (the other at the gear lever) goes this far
@@ -581,7 +586,16 @@ impl DriverFigure {
             // (drawn this frame as posed; the next frame holds the rim) - a hand on its way
             // to a new hold keeps the correction it had
             let tubes = t.tubes.map(|q| self.to_person(q));
-            let holding = [0, 1].map(|k| self.hands[k].mv.is_none());
+            // ... and so does a wrist short of its target: what the fingers miss then is the
+            // reach, which moving the target on would only make worse (out at arm's length the
+            // correction ran away, 5 cm forward and down, and the hand left the rim)
+            let reached = |k: usize| {
+                input
+                    .grips
+                    .map(|g| (posed.wrist[k] - g[k]).length() < FIX_REACHED)
+                    .unwrap_or(false)
+            };
+            let holding = [0, 1].map(|k| self.hands[k].mv.is_none() && reached(k));
             let off =
                 self.correct_grips(&posed.bones, tubes, 1.0 - (-dt / FIX_EASE).exp(), holding);
             if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
