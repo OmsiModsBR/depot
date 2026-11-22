@@ -4,6 +4,7 @@
 use crate::physics::domain::params::{SCRUB_FULL_ANGLE, SUBSTEP_DT};
 use crate::physics::domain::{RigidBody, SteerAxle, SteerMode, SteerState};
 use omsi_vehicle::Vehicle;
+use std::borrow::Borrow;
 
 /// Closer than this (m) to the turning line, an axle stands on it.
 const ON_LINE: f32 = 1e-3;
@@ -34,13 +35,18 @@ pub(in crate::physics) fn steer_axles(def: &Vehicle) -> Vec<SteerAxle> {
 /// `kappa`: where each axle points on the body's centre line, `y − tan(angle) / κ` (its own
 /// place for a straight axle), weighted by its load, so that the tyres' slip balances;
 /// `fallback`, the `C-6` line, when nothing weighs.
-pub fn turning_line(axles: &[(f32, f32, f32)], kappa: f32, fallback: f32) -> f32 {
+pub fn turning_line<A: Borrow<(f32, f32, f32)>>(
+    axles: impl IntoIterator<Item = A>,
+    kappa: f32,
+    fallback: f32,
+) -> f32 {
     let k = if kappa.abs() < MIN_KAPPA {
         MIN_KAPPA.copysign(kappa)
     } else {
         kappa
     };
-    let (sum_w, sum_wy) = axles.iter().fold((0.0, 0.0), |(w, wy), &(y, load, angle)| {
+    let (sum_w, sum_wy) = axles.into_iter().fold((0.0, 0.0), |(w, wy), a| {
+        let &(y, load, angle) = a.borrow();
         (w + load, wy + load * (y - angle.tan() / k))
     });
     if sum_w > 0.0 {
@@ -124,26 +130,27 @@ impl RigidBody {
     /// when every other axle steers.
     fn depot_turning_line(&self) -> f32 {
         let drivers = self.drivers_axle_y();
-        let axles: Vec<(f32, f32, f32)> = self
-            .wheels
-            .iter()
-            .zip(&self.wheel_axle)
-            .step_by(2)
-            .filter(|(w, _)| Some(w.attach.y) != drivers)
-            .map(|(w, &a)| {
-                let angle = self.steer_state(a).map_or(0.0, |s| s.angle);
-                (w.attach.y, w.rest_load, angle)
-            })
-            .collect();
-        if axles.len() == self.steer_axles.len() {
+        // (counted over again rather than gathered: this runs a few times every substep)
+        let axles = || {
+            self.wheels
+                .iter()
+                .zip(&self.wheel_axle)
+                .step_by(2)
+                .filter(move |(w, _)| Some(w.attach.y) != drivers)
+                .map(|(w, &a)| {
+                    let angle = self.steer_state(a).map_or(0.0, |s| s.angle);
+                    (w.attach.y, w.rest_load, angle)
+                })
+        };
+        if axles().count() == self.steer_axles.len() {
             return self.file_turn_line;
         }
-        let rearmost = axles.iter().map(|a| a.0).fold(f32::MAX, f32::min);
+        let rearmost = axles().map(|a| a.0).fold(f32::MAX, f32::min);
         let foremost = drivers.map_or_else(
-            || axles.iter().map(|a| a.0).fold(f32::MIN, f32::max),
+            || axles().map(|a| a.0).fold(f32::MIN, f32::max),
             |y| y - MIN_ARM,
         );
-        turning_line(&axles, self.kappa, self.file_turn_line)
+        turning_line(axles(), self.kappa, self.file_turn_line)
             .min(foremost)
             .max(rearmost)
     }
@@ -159,12 +166,15 @@ pub(in crate::physics) fn body_full_lock(body: &RigidBody) -> f32 {
 }
 
 /// The start of a substep for a section with steerable axles on curvature `kappa` (`D-5` to
-/// `D-7`), `full_lock` the leading section's full-lock curvature (`s = κ / κ_max`; behind a
-/// joint `κ` is the joint's, `s_f`): its turning line, each steerable axle a substep on in its
-/// mode, the tyres of the driver's and steerable axles square to the line from the centre of
-/// their turn (Ackermann), the rigid axles straight, and which tyres scrub.
-pub(in crate::physics) fn steer_to(body: &mut RigidBody, kappa: f32, full_lock: f32) {
+/// `D-7`), `lead_full_lock` the leading section's full-lock curvature behind a joint (`κ` is
+/// then the joint's, `s_f = κ / κ_max`), none for the leading section itself (`s = κ / κ_max`
+/// with its own): its turning line, each steerable axle a substep on in its mode, the tyres of
+/// the driver's and steerable axles square to the line from the centre of their turn
+/// (Ackermann), the rigid axles straight, and which tyres scrub.
+pub(in crate::physics) fn steer_to(body: &mut RigidBody, kappa: f32, lead_full_lock: Option<f32>) {
     let y_turn = body.depot_turning_line();
+    let full_lock = lead_full_lock
+        .unwrap_or_else(|| full_lock(body.max_steer_deg.to_radians(), body.front_axle_y(), y_turn));
     let s = if full_lock != 0.0 {
         kappa / full_lock
     } else {
@@ -173,20 +183,21 @@ pub(in crate::physics) fn steer_to(body: &mut RigidBody, kappa: f32, full_lock: 
     let drivers = body.drivers_axle_y();
     body.kappa = kappa;
     body.rot_pnt_long = y_turn;
-    let longs: Vec<f32> = body
-        .steer_axles
-        .iter()
-        .map(|(a, _)| body.wheels[2 * a.axle].attach.y)
-        .collect();
-    for ((axle, state), y) in body.steer_axles.iter_mut().zip(longs) {
+    let RigidBody {
+        wheels,
+        wheel_axle,
+        steer_axles,
+        ..
+    } = body;
+    for (axle, state) in steer_axles.iter_mut() {
+        let y = wheels[2 * axle.axle].attach.y;
         *state = advance(axle, *state, side(y, y_turn), s, SUBSTEP_DT);
     }
-    let angles: Vec<Option<f32>> = body
-        .wheel_axle
-        .iter()
-        .map(|&a| body.steer_state(a).map(|s| s.angle))
-        .collect();
-    for (w, angle) in body.wheels.iter_mut().zip(angles) {
+    for (w, a) in wheels.iter_mut().zip(wheel_axle.iter()) {
+        let angle = steer_axles
+            .iter()
+            .find(|(s, _)| s.axle == *a)
+            .map(|(_, s)| s.angle);
         let arm = w.attach.y - y_turn;
         // the tyre square to the line from the centre of a turn of curvature `k` to itself
         let ackermann = |k: f32| (arm * k / (1.0 - w.attach.x * k).max(0.2)).atan();

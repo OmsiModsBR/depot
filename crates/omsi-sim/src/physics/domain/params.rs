@@ -115,7 +115,12 @@ pub const RELAXATION_LENGTH: f32 = 0.6;
 /// 5°) before it takes the road's whole grip across while it scrubs (`D-7`): below it, the
 /// share it takes grows with the angle, as a tyre's side force grows with its slip angle. With
 /// the whole grip at any angle (Coulomb), a tag axle a fraction of a degree off the centre at
-/// a slight steer dragged the bus as hard as a locked one in a tight turn. *tuned*
+/// a slight steer dragged the bus as hard as a locked one in a tight turn. *tuned* on V2 with
+/// its tag axle steering (spec 004, T040): from 1° to 12° no value kicks the body as the
+/// steering is turned slowly through it (the yaw's jerk stays under the rigid bus's at 3, 7 and
+/// 12 m/s); at 3° and below a tag axle pulling away in a turn costs more drive than a rigid
+/// one; at 5° it does not, and with the tag axle locked the bus needs 3.5 times the drive at
+/// full lock (SC-006).
 pub const SCRUB_FULL_ANGLE: f32 = 0.087_266_46;
 
 // The ground under a tyre.
