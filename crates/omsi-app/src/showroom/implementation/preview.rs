@@ -414,7 +414,7 @@ impl Preview {
             log::warn!(
                 "launcher: the preview helper stopped ({}; its log: {})",
                 code.as_deref().unwrap_or("still ending"),
-                helper_log().display()
+                omsi_launcher_lib::launcher_log_path().display()
             );
             self.link = None;
             self.live = false;

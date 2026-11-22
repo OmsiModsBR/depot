@@ -1319,21 +1319,38 @@ fn shared_depot_names() -> Vec<String> {
     names
 }
 
-/// One line into ~/.depot/launcher.log.
-fn log_line(line: &str) {
+/// The launcher's log, `~/.depot/launcher.log`: written by the launcher and by the preview
+/// helper it starts, each line saying which of the two wrote it.
+pub fn launcher_log_path() -> PathBuf {
+    data_dir().join("launcher.log")
+}
+
+/// A line of `launcher.log` for `line` said by `source` at `now` (seconds since the epoch).
+pub fn launcher_log_line(now: u64, source: &str, line: &str) -> String {
+    format!("{now} [{source}] {line}\n")
+}
+
+/// Add `line`, said by `source`, to the log file `path`. The file is opened to append and the
+/// line goes out in one write, so lines of the launcher and of the helper, written at the
+/// same time, do not break into each other.
+pub fn append_log_line(path: &Path, source: &str, line: &str) {
     use std::io::Write;
-    let p = data_dir().join("launcher.log");
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&p)
+        .open(path)
     {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let _ = writeln!(f, "{now} {line}");
+        let _ = f.write_all(launcher_log_line(now, source, line).as_bytes());
     }
+}
+
+/// One line into ~/.depot/launcher.log.
+fn log_line(line: &str) {
+    append_log_line(&launcher_log_path(), "launcher", line);
 }
 
 /// Puts the depot files of the root folders `hof`/`hofs` (any letter case) beside every
@@ -5361,19 +5378,7 @@ pub fn check_join(text: &str) -> Value {
 
 /// A line into ~/.depot/launcher.log.
 pub fn log_to_file(line: &str) {
-    use std::io::Write;
-    let p = data_dir().join("launcher.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&p)
-    {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let _ = writeln!(f, "{now} {line}");
-    }
+    log_line(line);
 }
 
 /// What interrupted installs left behind (and the old unzip folder): cleaned up once when
