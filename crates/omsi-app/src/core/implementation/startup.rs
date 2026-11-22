@@ -89,6 +89,73 @@ pub fn log_source(args: &[String]) -> Option<&'static str> {
     }
 }
 
+/// What `--log-level` says on the command line `args` (`--log-level debug` or
+/// `--log-level=debug`; the last one counts), read before the arguments are parsed: the
+/// logger starts first, so that parsing them can be logged.
+pub fn log_level_arg(args: &[String]) -> Option<&str> {
+    let mut found = None;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if arg == "--log-level" {
+            found = rest.next().map(String::as_str).or(found);
+        } else if let Some(value) = arg.strip_prefix("--log-level=") {
+            found = Some(value);
+        }
+    }
+    found
+}
+
+/// What the logger is set up with, and what to say about it once it runs.
+#[derive(Debug, PartialEq, Eq)]
+pub struct LogSetup {
+    /// The logger's filter.
+    pub filter: String,
+    /// A warning for the log's first lines: a level that was not understood, or a
+    /// `RUST_LOG` that overrides the level asked for.
+    pub warning: Option<String>,
+    /// A note for the log's first lines: the level in use, when one was asked for.
+    pub note: Option<String>,
+}
+
+/// The logger's filter for the command line's `--log-level` value `asked` and the
+/// environment's `RUST_LOG` value `env`. A `RUST_LOG` that says something wins (the
+/// specialist's override, any filter the logger reads); else the level asked for; else
+/// `info`. A level that is none of the four is `info`, with a warning.
+pub fn log_setup(asked: Option<&str>, env: Option<&str>) -> LogSetup {
+    use omsi_cfg::logfile::LogLevel;
+    if let Some(env) = env.map(str::trim).filter(|e| !e.is_empty()) {
+        return LogSetup {
+            filter: env.to_string(),
+            warning: asked.map(|a| {
+                format!("log level: RUST_LOG={env} is set and wins over --log-level {a}")
+            }),
+            note: None,
+        };
+    }
+    let Some(asked) = asked else {
+        return LogSetup {
+            filter: LogLevel::default().filter(),
+            warning: None,
+            note: None,
+        };
+    };
+    match LogLevel::parse(asked) {
+        Some(level) => LogSetup {
+            filter: level.filter(),
+            warning: None,
+            note: Some(format!("log level: {}", level.name())),
+        },
+        None => LogSetup {
+            filter: LogLevel::default().filter(),
+            warning: Some(format!(
+                "log level: \"{asked}\" is none of error, warn, info, debug; using {}",
+                LogLevel::default().name()
+            )),
+            note: None,
+        },
+    }
+}
+
 impl<W: std::io::Write> std::io::Write for Tee<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let _ = std::io::stderr().write_all(buf);

@@ -14,7 +14,7 @@ comparison run.
 Launcher → Settings → Developer → *Enable developer mode*. It is **off by default**.
 
 - It is the launcher's own setting. It is stored as `developer_mode` in `settings.cfg`, as
-  *Detailed log* is, but the game never reads it. `omsi_launcher_lib::developer_mode_on()` is
+  the *Log level* is, but the game never reads it. `omsi_launcher_lib::developer_mode_on()` is
   what the launcher asks.
 - Off means off: no window, no local connection, no extra work in the game. A game started
   with the switch off is the game started before this setting existed.

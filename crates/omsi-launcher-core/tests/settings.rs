@@ -51,7 +51,10 @@ fn a_saved_directx9_api_is_read_as_vanilla() {
     }
     for api in ["auto", "vulkan", "dx12", "gl"] {
         let v = settings_from_text(Some(&format!("graphics=enhanced\ngraphics_api={api}\n")));
-        assert_eq!((v["graphics"].as_str(), v["graphics_api"].as_str()), (Some("enhanced"), Some(api)));
+        assert_eq!(
+            (v["graphics"].as_str(), v["graphics_api"].as_str()),
+            (Some("enhanced"), Some(api))
+        );
     }
 }
 
@@ -88,4 +91,33 @@ fn the_physics_setting_reads_and_is_saved_as_the_contract_says() {
     // a value that is not a mode is not written as it is
     let text = settings_to_text(&json!({ "physics": "nonsense" }), None);
     assert!(text.lines().any(|l| l == "physics=classic"), "{text}");
+}
+
+/// The log level: `info` without a file, one of the four names kept, anything else `info`;
+/// the switch "Detailed log" of older files is read as `debug` when it was on, and its line
+/// is gone once the file is written again.
+#[test]
+fn the_log_level_is_kept_and_the_old_detailed_log_switch_becomes_debug() {
+    use omsi_launcher_lib::{log_level_of, settings_from_text, settings_to_text};
+    assert_eq!(settings_from_text(None)["log_level"], "info");
+    for (text, level) in [
+        ("log_level=error\n", "error"),
+        ("log_level=WARN\n", "warn"),
+        ("log_level=debug\n", "debug"),
+        ("log_level=loud\n", "info"),
+        ("detailed_log=1\n", "debug"),
+        ("detailed_log=0\n", "info"),
+    ] {
+        let v = settings_from_text(Some(text));
+        assert_eq!(v["log_level"], level, "{text}");
+        let written = settings_to_text(&v, Some(text));
+        assert!(
+            written.contains(&format!("log_level={level}\n")),
+            "{written}"
+        );
+        assert!(!written.contains("detailed_log"), "{written}");
+        assert_eq!(settings_from_text(Some(&written))["log_level"], level);
+    }
+    assert_eq!(log_level_of("yes").name(), "debug");
+    assert_eq!(log_level_of("").name(), "info");
 }

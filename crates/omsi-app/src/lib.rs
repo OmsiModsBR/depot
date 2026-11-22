@@ -89,13 +89,18 @@ pub fn run() -> Result<()> {
     if !std::env::args().any(|a| a == "--preview-helper") {
         startup::attach_parent_console();
     }
-    let mut logger =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
     // well: a session's go to its `game.log`, but the launcher's own window has no console on
     // Windows, and what it said went nowhere.
     let args_now: Vec<String> = std::env::args().collect();
     let launcher_process = startup::launcher_process(&args_now);
+    // The level: `--log-level` (the launcher passes its setting), unless `RUST_LOG` is set.
+    let log_setup = startup::log_setup(
+        startup::log_level_arg(&args_now),
+        std::env::var("RUST_LOG").ok().as_deref(),
+    );
+    let mut logger = env_logger::Builder::new();
+    logger.parse_filters(&log_setup.filter);
     // Every log file stops at the cap (`omsi_cfg::logfile`), its last line saying so.
     match startup::log_source(&args_now) {
         Some(_) if launcher_process => {
@@ -163,6 +168,12 @@ pub fn run() -> Result<()> {
         );
         default_hook(info);
     }));
+    if let Some(warning) = &log_setup.warning {
+        log::warn!("{warning}");
+    }
+    if let Some(note) = &log_setup.note {
+        log::info!("{note}");
+    }
     log::info!(
         "Project Depot {VERSION}, build {BUILD}{}",
         if std::env::var_os("MallocLargeCache").is_some() {

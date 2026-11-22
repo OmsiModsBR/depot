@@ -55,7 +55,7 @@ request behind every item, is in the [changelog](CHANGELOG.md#030---2026-10-30);
   Profile and Sessions in one page, a Timetable planning page, Setup and Settings rebuilt, accent colours, a sidebar or
   a top bar, tooltips on every button, and a launcher that opens at once.
 * **Diagnostics.** Integrity check of maps and vehicles (also against a baseline folder), the AI traffic tab
-  with editing of a map's AI lists and parking lists, and a detailed log switch.
+  with editing of a map's AI lists and parking lists, and a log level setting.
 * **Vehicle physics and passengers.** The vehicle physics refactor is complete; the weight of the
   passengers aboard is added; steering linearity is on by default; articulated buses no longer fold into an L
   at speed; AI vehicles steer by their own `.bus` files; passengers use every door of an articulated bus,
@@ -288,7 +288,7 @@ shown identical to OMSI 2 in a recorded comparison in the game; the deliberate i
   force, the chance of each vehicle, and a 3D preview. **Edit lists** changes car groups, weights, parking lists
   and bus fleets and which AI group a tour takes its buses from; nothing is written until *Save*, which keeps
   a copy of every changed file, and a backup can be put back safely.
-* A *Detailed log* switch writes every file the game reads, every probe that found nothing and every archive it
+* The *Log level* setting, at Debug, writes every file the game reads, every probe that found nothing and every archive it
   mounts, to find why content does not load.
 
 | | Before 0.3.0 | Now |

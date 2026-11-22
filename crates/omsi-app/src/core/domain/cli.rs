@@ -20,6 +20,11 @@ pub struct Args {
     /// Map to load, relative to root (e.g. maps/Grundorf/global.cfg).
     #[arg(long, default_value = "maps/Grundorf/global.cfg")]
     pub map: String,
+    /// How much the log holds: error, warn, info (the default) or debug (also every file
+    /// the game loads and every failure). Anything else is info, with a warning in the log.
+    /// A `RUST_LOG` in the environment wins over it.
+    #[arg(long = "log-level")]
+    pub log_level: Option<String>,
     /// Render one frame to this PNG instead of opening a window.
     #[arg(long)]
     pub offscreen: Option<PathBuf>,
