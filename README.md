@@ -448,6 +448,7 @@ The pages live in [`docs/`](docs) and are also published as the website
 | [Physics models](docs/physics/README.md) | the equations of the two vehicle physics engines, OMSI Classic and Project Depot Physics |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
 | [Privacy](docs/PRIVACY.md) | what the program sends over the network (nothing unless you ask) and where its logs stay |
+| [Logs](docs/LOGS.md) | where the logs are, what each one contains, how to get more detail and what to attach to a report |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.PATCH` scheme and how a release is made |
 | [Release notes](docs/releases) | one page per release: [0.3.0](docs/releases/0.3.0.md), [0.2.52](docs/releases/0.2.52.md), [0.2.17](docs/releases/0.2.17.md) |
 | [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |
