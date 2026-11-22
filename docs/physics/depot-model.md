@@ -388,8 +388,11 @@ reach that grows with how far it points off the centre of the turn, `δ_off`:
 reach_i = min( |δ_off,i| / SCRUB_FULL_ANGLE , 1 ) · μ · grip_i · h        SCRUB_FULL_ANGLE = 5°
 ```
 
-as a tyre's side force grows with its slip angle up to the road's grip. A tyre that points at the
-centre takes nothing across and slides nowhere; one far off it scrubs with the road's whole grip. A
+as a tyre's side force grows with its slip angle up to the road's grip. The 5° is tuned on V2
+with its tag axle steering: no angle from 1° to 12° kicks the body as the steering passes
+through it; at 3° and below a tag axle pulling away in a turn costs more drive than a rigid one;
+at 5° it does not, and with the tag axle locked the bus needs 3.5 times the drive at full lock
+(SC-006). A tyre that points at the centre takes nothing across and slides nowhere; one far off it scrubs with the road's whole grip. A
 section with steerable axles behind a joint is held at each tyre rather than at its turning line
 (`C-9`), so its rigid axles scrub as well, and its driver's axle is none: every tyre's reach follows
 the rule above. These forces across enter `D-3`'s balance with the others.

@@ -442,12 +442,8 @@ impl RigidBody {
         // (a section with steerable axles: `D-5` to `D-7`, its axles in the basic mode following
         // the steering, or behind a joint the joint's bend over the leading section's full lock)
         if self.steers_axles() {
-            let full_lock = if follower {
-                lead_full_lock
-            } else {
-                depot::steering::body_full_lock(self)
-            };
-            return depot::steering::steer_to(self, kappa, full_lock);
+            let lead = follower.then_some(lead_full_lock);
+            return depot::steering::steer_to(self, kappa, lead);
         }
         self.kappa = kappa;
         let front = self

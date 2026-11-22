@@ -252,10 +252,10 @@ articulation angle and swept path against the closed forms (SC-006a).
 
 ## Phase 6: Polish & cross-cutting concerns
 
-- [ ] T039 [ph 5] Measure frame time of V2/V5 with steerable axles against copies without the parameters, same machine and
+- [x] T039 [ph 5] Measure frame time of V2/V5 with steerable axles against copies without the parameters, same machine and
   scenario (`cargo run -p omsi-sim --example handling` and in game), and put the numbers in the phase 5
   pull request (SC-007, Principle VII)
-- [ ] T040 [P] [ph 5] Tune `SCRUB_FULL_ANGLE` on V2 so SC-006 holds without a kick at the threshold;
+- [x] T040 [P] [ph 5] Tune `SCRUB_FULL_ANGLE` on V2 so SC-006 holds without a kick at the threshold;
   record the value's origin in `domain/params.rs` and `D-7`
 - [ ] T041 [ph 6] Maintainer in game: 6x2 with a steerable tag axle (tighter turn, script lock at speed, mode 2) and
   articulated bus with a steered last axle (SC-008); findings go to `fix/` pull requests with their
