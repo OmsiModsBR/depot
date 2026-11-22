@@ -20,7 +20,7 @@ presents to the window or reads a texture back on its own.
    Entry           api                          (only pub; nothing imports from it)
 8  Orchestration   renderer                     (builds the one mode, in `renderer/build.rs` only)
    Outputs         output                       (window, image, xr, triple, diagnostics)
-   Modes           modes/vanilla_plus  modes/enhanced   (a mode never imports the other; not yet in place)
+   Modes           modes/vanilla_plus  modes/enhanced   (a mode never imports the other; thin for now)
    Interface       interface                    (what the core and the modes agree on: the frame plan)
 7  Effects         effects                      (draw into the targets with the passes' parts)
 6  Passes          passes                       (draw into the targets)
@@ -38,8 +38,8 @@ presents to the window or reads a texture back on its own.
 | --- | --- | --- |
 | Entry | `api` | The facade: every `pub fn` on `Renderer` (opening, settings, scene, assets, lights, `render*`), split into `renderer`, `scene`, `assets`, `lights`, `options` (`RenderOptions` and the public constants) and `types` (re-exports). Thin forwarding only, no GPU logic |
 | 8 | `renderer` | The internal state of `Renderer`, building it, the asset life cycle on it (uploads, materials, freed slots), the frame (`FrameContext` and its stages, with the lights, coronas, smoke and sky uploaded for it), ending by handing the frame to an `output` destination |
-| Modes | `modes/vanilla_plus`, `modes/enhanced` | The two shading paths, each in its own folder (not yet in place: spec 001, phase C5). A mode imports the core and `interface` only, never `output`, `renderer` or `api`; only `renderer/build.rs` names a mode; a mode's `shaders/` folder is included by that mode alone |
-| Interface | `interface` | What the core and the modes agree on: `frame_plan` (`FramePlan`, `PlanBatch`, `PlanKind`, `PlanSink`: what a picture draws, as data, the contract with the Vanilla renderer) |
+| Modes | `modes/vanilla_plus`, `modes/enhanced` | The two shading paths, each in its own folder. Thin today (spec 001, phase C4): a mode answers how a picture is shaded, which pipelines draw it, its light records and what the leading view feeds it (`interface::RenderMode`); the code of each moves into its folder in phase C5. A mode imports the core and `interface` only, never `output`, `renderer` or `api`; only `renderer/build.rs` names a mode; a mode's `shaders/` folder is included by that mode alone |
+| Interface | `interface` | What the core and the modes agree on: `mode` (the `RenderMode` trait and the data it takes and gives), `frame_plan` (`FramePlan`, `PlanBatch`, `PlanKind`, `PlanSink`: what a picture draws, as data, the contract with the Vanilla renderer) |
 | Outputs | `output` | The frame's destinations: `window` (`SurfaceState`, `winit_window`, the `Presenter`: presenting with upscale, FXAA, overlay and HUD), `image` (texture read-back), `xr` (the eyes, the headset UI), `triple` (the panels' culling), `diagnostics` (`stats`, `counts`, `GpuTimers`, GPU pass times, exposure log, draw audit) |
 | 7 | `effects` | Self-contained features with their own pipelines and targets: `puddles` |
 | 6 | `passes` | One module per pass, each holding its pipelines, its `#[repr(C)]` uniform, its bind group layout and its `encode_*`: `draw` (batches, pipeline codes), `shadow` (with the cascades' ranges), `depth` (prepass and SSAO), `sky`, `main`, `glass`, `fog_lamps`, `lights` (coronas, smoke), `post` (enhanced post, exposure) |
