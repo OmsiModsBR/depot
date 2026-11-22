@@ -368,6 +368,9 @@ pub struct Navigator {
     /// The route mesh (buffer 1): the route and traffic versions and the anchor it was
     /// built for, and its size.
     pub(in crate::hud) route_mesh: (u64, u64, DVec2, u32, usize),
+    /// The vertices of the minimap's background, vehicles and interface (buffer 2), kept from
+    /// frame to frame so that their vector grows once instead of each redraw.
+    pub(in crate::hud) scratch_verts: Vec<omsi_ui::Vertex>,
     /// Per lane of the traffic: how congested it is (0 free … 1 standing), smoothed.
     pub(in crate::hud) congestion: HashMap<usize, f32>,
     /// The same for the route's lanes ahead (in the route's network), and a version that

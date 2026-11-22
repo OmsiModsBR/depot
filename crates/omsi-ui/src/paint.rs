@@ -192,6 +192,12 @@ impl Painter {
             scale: 1.0,
         }
     }
+    /// A painter that draws into `verts` (emptied first), so that a vector kept from the last
+    /// frame is reused and its room with it.
+    pub fn with_verts(mut verts: Vec<Vertex>) -> Painter {
+        verts.clear();
+        Painter { verts, scale: 1.0 }
+    }
     pub fn with_scale(scale: f32) -> Painter {
         Painter {
             verts: Vec::new(),
