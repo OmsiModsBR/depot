@@ -149,7 +149,11 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     // (the report is copied and sent: a log of before the placeholders, or a line written
     // past the logger, must not carry the user's folder or name out)
     Some((
-        core::redact_for_report(&what.chars().take(600).collect::<String>()),
+        // (replaced before it is cut: a cut inside a folder's name would leave its start)
+        core::redact_for_report(&what)
+            .chars()
+            .take(600)
+            .collect::<String>(),
         core::redact_for_report(&tail),
     ))
 }
