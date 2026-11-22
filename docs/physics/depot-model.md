@@ -251,8 +251,8 @@ f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
 
 ## D-5. Steerable axles and the turning line
 
-> In the game for the leading section, in the basic mode (spec 004, phase 3). The modes the
-> scripts pick come with phase 4; a section behind a joint keeps `C-9` until phase 5.
+> In the game for the leading section, with the modes the scripts pick (spec 004, phases 3 and 4);
+> a section behind a joint keeps `C-9` until phase 5.
 
 - **Inputs**: `achse_steer_angle` (`lock_i`, the axle's own lock) and `achse_steer_centring` of each
   steerable axle (`docs/FORMATS.md`), `achse_long` (`y_i`), each axle's load at rest `F_i` (`D-1`),
@@ -318,7 +318,7 @@ loads and line.
 
 ## D-6. Modes of a steerable axle
 
-> As `D-5`: the basic mode is in the game; the scripts' variables come with phase 4.
+> As `D-5`: in the game for the leading section.
 
 - **Inputs**: the axle's mode `Axle_Steer_Mode_<n>` and angle `Axle_Steer_Angle_<n>` from the
   scripts (`docs/FORMATS.md`), `lock_i` and the centring rate `c_i` (`achse_steer_centring`, °/s),

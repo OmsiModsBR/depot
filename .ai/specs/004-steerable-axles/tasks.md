@@ -179,15 +179,15 @@ turn (SC-004).
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] [ph 4] Ramp and continuity tests in `crates/omsi-sim/tests/steer_axles.rs`:
+- [x] T025 [P] [US2] [ph 4] Ramp and continuity tests in `crates/omsi-sim/tests/steer_axles.rs`:
   locking and unlocking by mode in a steady turn at 25 km/h never makes the yaw rate jump by more than
   2 % between two frames (SC-003); angle at most `centring` per second
-- [ ] T026 [P] [US2] [ph 4] Script-mode tests in `crates/omsi-sim/tests/steer_axles.rs` with a small
+- [x] T026 [P] [US2] [ph 4] Script-mode tests in `crates/omsi-sim/tests/steer_axles.rs` with a small
   test script: modes 0, 1, 2 take effect in the first physics step after being written (SC-004);
   mode 2 angle clamped to the lock; unknown mode and not-a-number angle behave as mode 0 with one log
   line per vehicle (SC-005); `Axle_Steer_Locked_<n>` 1 only when the axle is straight in mode 1;
   mode 2 counts by its angle for the turning line, as every axle (`D-5`)
-- [ ] T027 [P] [US2] [ph 4] Situation test: a saved situation restores each steerable axle's angle; an old
+- [x] T027 [P] [US2] [ph 4] Situation test: a saved situation restores each steerable axle's angle; an old
   situation starts at `angle = 0`, in
   `crates/omsi-sim/tests/steer_axles.rs`
 
@@ -196,13 +196,13 @@ turn (SC-004).
 - [x] T028 [US2] [ph 4] Engagement and angle ramps for all modes in `implementation/depot/steering.rs`
   (research R-6) (done in phase 3: the rigid V2 of T016/T017 needs a locked axle; the engagement
   dropped there too, 2026-11-21: the turning line follows each axle's angle, research R-4)
-- [ ] T029 [US2] [ph 4] Read `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` once per frame before the
+- [x] T029 [US2] [ph 4] Read `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` once per frame before the
   physics step and write `Axle_Steer_Locked_<n>`, numbered over the whole vehicle, in
   `vehicle/physics_bridge.rs` and `vehicle.rs` (variable ids like `v_springfactor`); match the names
   whole, never by prefix (`Axle_Steer_` is a prefix of `Axle_Steering_`, see `vehicle/builtins.rs`)
-- [ ] T030 [US2] [ph 4] Save and restore `SteerState` with the situation in `vehicle.rs` /
+- [x] T030 [US2] [ph 4] Save and restore `SteerState` with the situation in `vehicle.rs` /
   `vehicle/motion.rs`
-- [ ] T031 [US2] [ph 4] Add the player-facing line to **Unreleased** in `CHANGELOG.md`; run the trace
+- [x] T031 [US2] [ph 4] Add the player-facing line to **Unreleased** in `CHANGELOG.md`; run the trace
   diff; label `physics-delta`
 
 **Checkpoint**: a script can lock the tag axle at speed with no jerk and steer it by its own law.

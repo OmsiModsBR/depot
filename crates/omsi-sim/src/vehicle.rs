@@ -171,6 +171,20 @@ pub struct VehicleInstance {
     v_accel: [Option<omsi_script::VarId>; 3],
     v_wheels: Vec<[[Option<omsi_script::VarId>; 6]; 2]>,
     v_springfactor: Vec<[Option<omsi_script::VarId>; 2]>,
+    /// The scripts' variables of each steerable axle (spec 004, see [`SteerVars`]).
+    v_steer: Vec<SteerVars>,
+    /// A script has handed a steerable axle a mode or an angle it does not know (logged once).
+    steer_input_noted: bool,
+}
+
+/// `Axle_Steer_Mode_<n>`, `Axle_Steer_Angle_<n>` and `Axle_Steer_Locked_<n>` of steerable axle
+/// `axle` (`<n>` over the whole vehicle), as far as the varlists declare them.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SteerVars {
+    pub(crate) axle: usize,
+    pub(crate) mode: Option<omsi_script::VarId>,
+    pub(crate) angle: Option<omsi_script::VarId>,
+    pub(crate) locked: Option<omsi_script::VarId>,
 }
 
 impl VehicleInstance {
@@ -432,6 +446,19 @@ impl VehicleInstance {
                 ]
             })
             .collect();
+        let v_steer = ty
+            .def
+            .axles
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.steer.is_some())
+            .map(|(axle, _)| SteerVars {
+                axle,
+                mode: v(&format!("Axle_Steer_Mode_{axle}")),
+                angle: v(&format!("Axle_Steer_Angle_{axle}")),
+                locked: v(&format!("Axle_Steer_Locked_{axle}")),
+            })
+            .collect();
         let rest_sag = crate::physics::kinematic_rest_sag(
             &ty.def,
             &ty.hub_heights(0, Engine::Classic),
@@ -446,6 +473,8 @@ impl VehicleInstance {
             ),
             light_fade: Vec::new(),
             v_springfactor,
+            v_steer,
+            steer_input_noted: false,
             rest_sag,
             ai_lift,
             contact: None,
