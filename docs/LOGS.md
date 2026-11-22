@@ -53,4 +53,19 @@ Attach `game.log` (the part around the problem is enough). For a problem in the 
 
 ## Privacy
 
-Logs are written on your computer and nothing sends them. They can contain paths on your computer (including your user name), the graphics card and the maps and vehicles you loaded: look through them before posting. See [PRIVACY](PRIVACY.md).
+Logs are written on your computer and nothing sends them.
+
+Your user folder is not written to them. Wherever a line would hold it (`C:\Users\<you>` on Windows, `/home/<you>` on Linux, `/Users/<you>` on macOS), the log holds the word `USER_FOLDER`, and the rest of the path stays, so it still says which file is meant:
+
+```
+loaded USER_FOLDER\.depot\settings.cfg (912 bytes)
+loaded D:\OMSI 2\Vehicles\MAN_SD200\MAN_SD80.bus (5120 bytes)
+```
+
+- Both slash styles and any letter case of the folder are recognised (`c:/users/<you>/...` too), and so are paths written with doubled backslashes.
+- A path that is not under your user folder is left as it is, the OMSI 2 folder and your content folder included.
+- Where your account name is a piece of another path (`/run/media/<you>/...`, `D:\Profiles\<you>\...`), it is written as `USER_NAME`; the computer's name in a network path (`\\<computer>\share`) is written as `COMPUTER_NAME`. Names of fewer than three characters are only replaced as part of the user folder. The program never writes your account name or your computer's name on its own.
+- The same replacement is made in the text the program hands out for a report: the crash dialog's "Copy report" and "Report on GitHub", and the integrity report (copied or saved).
+- It applies to `game.log` and `launcher.log`. A game started by hand in a terminal prints to the terminal as it is. What the system or a graphics driver writes to the game's error output on its own does not pass through it.
+
+Logs still contain the graphics card, the maps and vehicles you loaded, and paths outside your user folder: look through them before posting. See [PRIVACY](PRIVACY.md).

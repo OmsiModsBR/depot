@@ -87,3 +87,43 @@ fn the_report_has_the_computer_and_a_clean_title() {
     assert!(end.contains("352.71 s") && !end.contains("placed tile 0,0"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A crash report is copied and sent: the user's folder in the log's lines goes out as the
+/// placeholder, also from a log written before the logs had it (#648).
+#[test]
+fn a_crash_report_holds_the_placeholder_and_not_the_users_folder() {
+    let Some(home) = ["HOME", "USERPROFILE"]
+        .into_iter()
+        .find_map(|k| std::env::var(k).ok())
+        .filter(|h| h.len() > 3)
+    else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("depot-crash-private-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    let sep = std::path::MAIN_SEPARATOR;
+    std::fs::write(
+        &p,
+        format!(
+            "[t INFO openomsi_game] command line: {home}{sep}Depot{sep}depot --no-menu\n\
+             [t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n\
+             \x20   cannot read {home}{sep}.depot{sep}settings.cfg\n\n   0: std::backtrace\n"
+        ),
+    )
+    .unwrap();
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    for text in [&what, &tail] {
+        assert!(!text.contains(&home), "{text}");
+        assert!(text.contains("USER_FOLDER"), "{text}");
+    }
+    assert!(
+        what.contains(&format!("USER_FOLDER{sep}.depot{sep}settings.cfg")),
+        "{what}"
+    );
+    assert!(
+        tail.contains(&format!("USER_FOLDER{sep}Depot{sep}depot --no-menu")),
+        "{tail}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

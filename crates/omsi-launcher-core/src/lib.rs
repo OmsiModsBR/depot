@@ -1338,7 +1338,8 @@ static OWN_LOG: std::sync::Mutex<Option<omsi_cfg::logfile::CappedFile>> =
 /// Write `bytes` (whole lines) to `launcher.log` through this program's handle. The file is
 /// opened to append and a line goes out in one write, so lines of the launcher and of the
 /// helper, written at the same time, do not break into each other; past the cap the file
-/// gets the truncation marker and nothing more.
+/// gets the truncation marker and nothing more. The user's folder and name are written as
+/// their placeholders.
 fn write_own_log(bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut own = OWN_LOG.lock().unwrap_or_else(|e| e.into_inner());
@@ -1348,10 +1349,22 @@ fn write_own_log(bytes: &[u8]) -> std::io::Result<()> {
             omsi_cfg::logfile::LOG_CAP_BYTES,
         )?);
     }
-    match own.as_mut() {
-        Some(f) => f.write_all(bytes),
-        None => Ok(()),
+    // (the user's folder and name as placeholders, like every log)
+    let redactor = omsi_cfg::logfile::Redactor::of_this_machine();
+    match (own.as_mut(), std::str::from_utf8(bytes)) {
+        (Some(f), Ok(text)) => f.write_all(redactor.redact(text).as_bytes()),
+        (Some(f), Err(_)) => f.write_all(bytes),
+        (None, _) => Ok(()),
     }
+}
+
+/// `text` as it may leave the computer in a report (a copied crash report, an exported
+/// integrity report): the user's folder, the account's name and the computer's name replaced
+/// by their placeholders, as in the logs.
+pub fn redact_for_report(text: &str) -> String {
+    omsi_cfg::logfile::Redactor::of_this_machine()
+        .redact(text)
+        .into_owned()
 }
 
 /// Where the launcher's logger writes: `launcher.log`, through the handle `log_line` uses.

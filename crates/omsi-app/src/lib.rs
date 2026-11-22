@@ -101,7 +101,12 @@ pub fn run() -> Result<()> {
     );
     let mut logger = env_logger::Builder::new();
     logger.parse_filters(&log_setup.filter);
-    // Every log file stops at the cap (`omsi_cfg::logfile`), its last line saying so.
+    // Every log file stops at the cap (`omsi_cfg::logfile`), its last line saying so, and
+    // holds a placeholder where the user's folder or name would show.
+    let private = omsi_cfg::logfile::Redactor::of_this_machine();
+    // (whether this program's lines go to a file: a game started by hand in a terminal
+    // writes to the terminal, as it is)
+    let mut log_is_a_file = true;
     match startup::log_source(&args_now) {
         Some(_) if launcher_process => {
             let file = omsi_launcher_lib::launcher_log_path();
@@ -122,17 +127,23 @@ pub fn run() -> Result<()> {
                 &omsi_launcher_lib::launcher_log_path(),
                 omsi_cfg::logfile::LOG_CAP_BYTES,
             ) {
-                logger.target(env_logger::Target::Pipe(Box::new(f)));
+                logger.target(env_logger::Target::Pipe(Box::new(
+                    omsi_cfg::logfile::Redacting::new(f, private),
+                )));
             }
         }
         // (a game: the launcher made its error output the session's `game.log`; started by
         // hand in a terminal, nothing is a file and nothing is capped)
         None => {
-            if !std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+            log_is_a_file = !std::io::IsTerminal::is_terminal(&std::io::stderr());
+            if log_is_a_file {
                 logger.target(env_logger::Target::Pipe(Box::new(
-                    omsi_cfg::logfile::Capped::new(
-                        std::io::stderr(),
-                        omsi_cfg::logfile::LOG_CAP_BYTES,
+                    omsi_cfg::logfile::Redacting::new(
+                        omsi_cfg::logfile::Capped::new(
+                            std::io::stderr(),
+                            omsi_cfg::logfile::LOG_CAP_BYTES,
+                        ),
+                        private,
                     ),
                 )));
             }
@@ -166,7 +177,11 @@ pub fn run() -> Result<()> {
             "the game stopped on an error (build {BUILD}): {info}\n{}",
             std::backtrace::Backtrace::force_capture()
         );
-        default_hook(info);
+        // (the line above is the record in a log file; the standard message would say it
+        // again past the logger, with the paths as they are and beyond the file's cap)
+        if !log_is_a_file {
+            default_hook(info);
+        }
     }));
     if let Some(warning) = &log_setup.warning {
         log::warn!("{warning}");
