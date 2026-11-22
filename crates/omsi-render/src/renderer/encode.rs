@@ -59,7 +59,7 @@ impl Renderer {
         // has to load the first one's targets back into the GPU's tile memory, which cost
         // more GPU time than it saved on the CPU.)
         let main_bundles = if !crate::gpu::debug().no_bundles {
-            let pp = self.main_pass(enhanced, reflection_frame);
+            let pp = self.main_pass(f.pipe_set);
             let format = if masked_frame {
                 HDR_FORMAT
             } else {
@@ -157,6 +157,7 @@ impl Renderer {
             width,
             height,
             &f.features,
+            f.pipe_set,
             has_presurface,
             &clock.tset,
             &mut clock.timed,
@@ -217,6 +218,7 @@ impl Renderer {
             width,
             height,
             &f.features,
+            f.pipe_set,
             puddles_on,
         );
         self.encode_reflection_resolve(

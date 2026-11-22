@@ -6,6 +6,7 @@ mod effects;
 mod gpu;
 mod interface;
 mod lighting;
+mod modes;
 mod output;
 mod passes;
 mod renderer;

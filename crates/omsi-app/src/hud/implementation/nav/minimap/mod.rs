@@ -77,6 +77,7 @@ impl Navigator {
             roads_job: None,
             route: Route::default(),
             route_mesh: (u64::MAX, 0, DVec2::ZERO, 0, 0),
+            scratch_verts: Vec::new(),
             congestion: HashMap::new(),
             route_jam: HashMap::new(),
             jam_version: 0,

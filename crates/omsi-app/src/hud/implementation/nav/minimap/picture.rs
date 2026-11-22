@@ -205,8 +205,10 @@ impl Navigator {
         }
 
         // --- background (half transparent), traffic, markers, text
-        let mut bg = Painter::new();
-        bg.rounded(
+        // (one painter for the three layers, background, vehicles and interface, in this order:
+        // they end up in one buffer, and its vector is kept from frame to frame)
+        let mut ui = Painter::with_verts(std::mem::take(&mut self.scratch_verts));
+        ui.rounded(
             panel,
             radius,
             if self.cockpit_display {
@@ -217,11 +219,10 @@ impl Navigator {
         );
         // the map's own ground under the roads (the panel's opacity setting dims it as it does the panel)
         if let (true, Some(sf)) = (self.show_surface, self.surface.as_ref()) {
-            bg.rect(map, sf.palette(self.light).land);
+            ui.rect(map, sf.palette(self.light).land);
         }
-        let n_bg = bg.len();
+        let n_bg = ui.len();
 
-        let mut dy = Painter::new();
         // other roads where the traffic is heavy or stands
         if let Some(net) = f.traffic.map(|t| &t.net) {
             for (&lane, &c) in &self.congestion {
@@ -236,7 +237,7 @@ impl Navigator {
                     continue;
                 }
                 let pts: Vec<Vec3> = l.points.iter().map(|p| rel(*p)).collect();
-                dy.ribbon(
+                ui.ribbon(
                     &pts,
                     l.width.max(2.5) * 0.6,
                     2.0,
@@ -245,7 +246,7 @@ impl Navigator {
                 );
             }
         }
-        let n_traffic = dy.len();
+        let n_traffic = ui.len() - n_bg;
         // the other vehicles: blue dots, as the other drivers in ETS2; the public transport in
         // its own colours (trolleybus, bus, tram), a little bigger, its line beside it
         let mut lines: Vec<(DVec3, Color, String)> = Vec::new();
@@ -258,11 +259,11 @@ impl Navigator {
                 }
                 let (color, line, icon) = traffic_kind(c, self.surface.as_deref(), f.car_line);
                 if color == DOT {
-                    dy.world_disc(rel(c.vehicle.position), 1.7, 3.6, Color::rgba(8, 8, 8, 0.9));
-                    dy.world_disc(rel(c.vehicle.position), 1.2, 2.6, color);
+                    ui.world_disc(rel(c.vehicle.position), 1.7, 3.6, Color::rgba(8, 8, 8, 0.9));
+                    ui.world_disc(rel(c.vehicle.position), 1.2, 2.6, color);
                 } else {
                     vehicle_icon(
-                        &mut dy,
+                        &mut ui,
                         rel(c.vehicle.position),
                         c.vehicle.heading,
                         color,
@@ -275,9 +276,9 @@ impl Navigator {
                 }
             }
         }
-        let n_world = dy.len();
+        let n_world = ui.len() - n_bg;
+        let n_ui_start = ui.len();
 
-        let mut ui = Painter::new();
         // the far end of the map fades into the panel
         ui.gradient(
             Rect::new(map.x, map.y, map.w, map.h * 0.3),
@@ -952,6 +953,7 @@ impl Navigator {
         // --- to the GPU
         let (Some(gpu), device, queue) = (self.gpu.as_mut(), &renderer.device, &renderer.queue)
         else {
+            self.scratch_verts = ui.verts;
             return;
         };
         if let Some(v) = road_verts {
@@ -966,11 +968,7 @@ impl Navigator {
         if let Some(v) = route_verts {
             gpu.upload(device, queue, 1, &v);
         }
-        let mut all = bg.verts;
-        all.extend(dy.verts);
-        let n_ui_start = all.len() as u32;
-        all.extend(ui.verts);
-        gpu.upload(device, queue, 2, &all);
+        gpu.upload(device, queue, 2, &ui.verts);
         if self.icon_tex.is_none() {
             if let Some(sheet) = self.surface.as_ref().and_then(|s| s.sheet()) {
                 self.icon_tex = Some(gpu.add_image(device, queue, sheet.w, sheet.h, &sheet.rgba));
@@ -1040,7 +1038,7 @@ impl Navigator {
             },
             Draw {
                 buffer: 2,
-                range: n_ui_start..all.len() as u32,
+                range: n_ui_start..ui.len(),
                 layer: 0,
                 texture: 0,
             },
@@ -1068,6 +1066,9 @@ impl Navigator {
             &draws,
         );
         queue.submit([enc.finish()]);
+        // (the vector goes back empty, with the room it grew to)
+        self.scratch_verts = ui.verts;
+        self.scratch_verts.clear();
     }
 }
 

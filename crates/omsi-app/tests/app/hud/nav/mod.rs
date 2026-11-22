@@ -478,25 +478,9 @@ fn the_minimap_draws_over_the_picture() {
     draw_the_town(false);
 }
 
-fn draw_the_town(city: bool) {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(
-        &instance,
-        None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        omsi_render::RenderOptions {
-            msaa: 1,
-            ssao: false,
-            shadow_size: 1024,
-            fxaa: false,
-            render_scale: 1.0,
-            ..Default::default()
-        },
-    )) else {
-        eprintln!("no graphics adapter: skipped");
-        return;
-    };
-    let mut scene = renderer.new_scene();
+/// The test town: a grid of streets every 150 m, a trip along it, four stops and a frame with
+/// the bus on it. The navigator is the minimap's, or (`city`) has the city map open.
+fn town(city: bool) -> (Navigator, NavFrame<'static>) {
     // streets every 150 m both ways, each block a lane of its own each way
     let mut lanes = Vec::new();
     let mut route = Vec::new();
@@ -573,6 +557,29 @@ fn draw_the_town(city: bool) {
         dt: 1.0 / 60.0,
         info_rect: None,
     };
+    (nav, frame)
+}
+
+fn draw_the_town(city: bool) {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        omsi_render::RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    )) else {
+        eprintln!("no graphics adapter: skipped");
+        return;
+    };
+    let mut scene = renderer.new_scene();
+    let (mut nav, frame) = town(city);
     // (a few frames: the bus is found on the route, the views settle)
     for _ in 0..4 {
         scene.overlays.clear();
@@ -624,6 +631,95 @@ fn draw_the_town(city: bool) {
     };
     let mid = at(((r[0] + r[2]) * 0.5) as u32, (r[3] - 40.0) as u32);
     assert!(mid.iter().all(|&c| c < 90), "{mid:?}");
+}
+
+/// The minimap's pictures over a short drive through the town, one hash of the window's
+/// pixels per frame, against the ones recorded in `minimap_golden.txt`: a change that should
+/// leave the minimap as it was (its buffers kept from one frame to the next, say) leaves
+/// every hash as it is. Set `DEPOT_UPDATE_GOLDEN=1` to write the file again after a change
+/// that is meant to alter the picture; the hashes belong to the graphics adapter that made
+/// them, so the file is written and checked on the same machine.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn the_minimap_draws_the_same_pictures_over_a_drive_as_recorded() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let Ok(mut renderer) = pollster::block_on(omsi_render::Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        omsi_render::RenderOptions {
+            msaa: 1,
+            ssao: false,
+            shadow_size: 1024,
+            fxaa: false,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    )) else {
+        eprintln!("no graphics adapter: skipped");
+        return;
+    };
+    let mut scene = renderer.new_scene();
+    let (mut nav, mut frame) = town(false);
+    let camera = omsi_render::Camera {
+        position: DVec3::new(0.0, 0.0, 2.0),
+        yaw: 0.0,
+        pitch: 0.0,
+        roll: 0.0,
+        fov_deg: 60.0,
+        near: 0.1,
+        far: 2000.0,
+    };
+    let lighting = omsi_render::Lighting {
+        shadows: false,
+        ..Default::default()
+    };
+    let mut hashes = Vec::new();
+    for k in 0..10 {
+        // (east along the route, then north; the speed, the clock and the delay move on)
+        let step = 30.0 * k as f64;
+        frame.bus = if k < 6 {
+            DVec3::new(-420.0 + step, -2.0, 0.0)
+        } else {
+            DVec3::new(600.0, -2.0 + 25.0 * (k - 5) as f64, 0.0)
+        };
+        frame.heading = if k < 6 { 90.0 } else { 0.0 };
+        frame.speed_kmh = 20.0 + 3.0 * k as f32;
+        frame.time += 1.0;
+        frame.delay = Some(30.0 - 4.0 * k as f64);
+        for _ in 0..2 {
+            scene.overlays.clear();
+            nav.frame(&renderer, &mut scene, &frame);
+        }
+        let pixels = renderer
+            .render_to_image(&mut scene, 1672, 941, &camera, &lighting)
+            .unwrap();
+        // (FNV-1a: the same on every Rust version, unlike `DefaultHasher`)
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for b in &pixels {
+            h = (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+        hashes.push(format!("{h:016x}"));
+    }
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/app/hud/nav/minimap_golden.txt"
+    );
+    if std::env::var_os("DEPOT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(
+            path,
+            hashes.join(
+                "
+",
+            ) + "
+",
+        )
+        .unwrap();
+        return;
+    }
+    let recorded = std::fs::read_to_string(path).expect("minimap_golden.txt");
+    let recorded: Vec<&str> = recorded.lines().collect();
+    assert_eq!(recorded, hashes, "the minimap's pictures changed");
 }
 
 /// A bar along the bottom lifts a navigator in a bottom corner above it where they would lie

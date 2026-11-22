@@ -336,6 +336,7 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
         ("essentials-top", one_row(false, true), Accent::Amber),
     ];
     let mut heights = Vec::new();
+    let mut hashes = Vec::new();
     for (name, info, accent) in cases {
         set_accent(accent);
         let mut scene = r.new_scene();
@@ -369,10 +370,16 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
             assert!(rect[3] > size.1 as f32 * 0.9, "{rect:?}");
         }
         heights.push((collapsed, rect[3] - rect[1]));
+        let img = r
+            .render_to_image(&mut scene, size.0, size.1, &camera, &lighting)
+            .unwrap();
+        // (FNV-1a: the same on every Rust version, unlike `DefaultHasher`)
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for b in &img {
+            h = (h ^ *b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+        hashes.push(format!("{name} {h:016x}"));
         if let Some(dir) = out.as_ref() {
-            let img = r
-                .render_to_image(&mut scene, size.0, size.1, &camera, &lighting)
-                .unwrap();
             std::fs::create_dir_all(dir).unwrap();
             image::save_buffer(
                 format!("{dir}/{name}.png"),
@@ -386,4 +393,27 @@ fn the_two_tier_information_bar_draws_with_its_arrow() {
     }
     // (folded away, the bar is just the first tier: shorter than with the second)
     assert!(heights[3].1 < heights[0].1);
+    // The pictures against the ones recorded in `info_bar_golden.txt`: a change that should
+    // leave the bar as it was leaves every hash as it is. `DEPOT_UPDATE_GOLDEN=1` writes the
+    // file again after a change that is meant to alter a picture; the hashes belong to the
+    // graphics adapter that made them, so the file is written and checked on the same machine.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/app/ui/info_bar_golden.txt"
+    );
+    if std::env::var_os("DEPOT_UPDATE_GOLDEN").is_some() {
+        std::fs::write(
+            path,
+            hashes.join(
+                "
+",
+            ) + "
+",
+        )
+        .unwrap();
+        return;
+    }
+    let recorded = std::fs::read_to_string(path).expect("info_bar_golden.txt");
+    let recorded: Vec<&str> = recorded.lines().collect();
+    assert_eq!(recorded, hashes, "the information bar's pictures changed");
 }
