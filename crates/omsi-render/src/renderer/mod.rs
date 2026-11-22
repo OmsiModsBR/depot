@@ -20,6 +20,7 @@ mod state;
 mod targets;
 mod upload;
 
+pub(crate) use build::mode_for;
 pub use features::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 pub use mirror::{AssetMirror, MirrorEvent, MirrorTexture};
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};

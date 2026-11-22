@@ -9,7 +9,9 @@ use crate::gpu::{
     basic_pipelines, fault_is, sixteen_texture_units, target_2d, FaultHook, GpuContext, Samplers,
     GL_BACKEND,
 };
-use crate::lighting::LightMapAtlas;
+use crate::interface::RenderMode;
+use crate::lighting::{LightMapAtlas, ShadingPath};
+use crate::modes::{enhanced::Enhanced, vanilla_plus::VanillaPlus};
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::{
     ao_pipelines, fog_lamps_pipelines, post_pipelines, prepass_pipelines, snow_layout,
@@ -20,6 +22,15 @@ use crate::scene::{CameraUniform, CullHistory, Layouts};
 use crate::shaders::scene_shader_source;
 use crate::sky::{EnhancedUniform, SkyResources};
 use crate::targets::TargetCache;
+
+/// The render mode of a graphics path: the one function that names the modes. They keep no
+/// state of their own yet, so they are shared, and the path may change from frame to frame.
+pub(crate) fn mode_for(path: ShadingPath) -> &'static dyn RenderMode {
+    match path {
+        ShadingPath::Hdr => &Enhanced,
+        ShadingPath::Linear => &VanillaPlus,
+    }
+}
 
 impl Renderer {
     /// The pipelines, samplers and fixed textures of a renderer whose options are settled.
