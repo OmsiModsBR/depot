@@ -8,7 +8,6 @@ use super::super::domain::{
 };
 use super::{kept::*, preview::*, scene::*, wire::*};
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, TryRecvError};
 use std::time::{Duration, Instant};
 
@@ -205,12 +204,6 @@ pub fn helper_main() -> anyhow::Result<()> {
 
 /// The stack of the thread that draws the preview (as much as the game's main thread has).
 pub(super) const HELPER_STACK: usize = 64 << 20;
-
-/// The helper's log: its lines, written again for each helper (the launcher's own window has
-/// no console on Windows, and a helper's lines on its error output went nowhere).
-pub fn helper_log() -> PathBuf {
-    omsi_launcher_lib::data_dir().join("preview-helper.log")
-}
 
 /// The graphics interfaces the helper is tried on, in turn, as `OMSI_BACKEND` names them
 /// (None: the settings' own), for the settings' graphics interface `chosen`. On Windows

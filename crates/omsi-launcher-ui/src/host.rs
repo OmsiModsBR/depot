@@ -36,9 +36,6 @@ pub trait Host {
     /// The page that lists the project's releases (Settings > Reset and files links it).
     fn releases_url(&self) -> &'static str;
 
-    /// Where the preview helper writes its log.
-    fn helper_log(&self) -> std::path::PathBuf;
-
     /// An action's name as the Controls page shows it, in the language `lang` (OMSI 2's
     /// three letters) of the OMSI 2 folder `root`.
     fn action_text(&self, root: &str, lang: &str, action: &str) -> String;

@@ -71,6 +71,24 @@ pub(crate) fn end_with(pid: u32) {
 /// Log lines to the error output and to a file.
 pub(crate) struct Tee(pub std::fs::File);
 
+/// Whether this run is the launcher: started bare, or with `--launcher` (`args` as the
+/// process got them, the program's name first).
+pub(crate) fn launcher_process(args: &[String]) -> bool {
+    args.len() == 1 || args.iter().any(|a| a == "--launcher")
+}
+
+/// The name a line of this process carries in `launcher.log`, which the launcher and the
+/// preview helper both write; None for a game, whose lines go to its own `game.log`.
+pub(crate) fn log_source(args: &[String]) -> Option<&'static str> {
+    if args.iter().any(|a| a == "--preview-helper") {
+        Some("preview-helper")
+    } else if launcher_process(args) {
+        Some("launcher")
+    } else {
+        None
+    }
+}
+
 impl std::io::Write for Tee {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let _ = std::io::stderr().write_all(buf);
