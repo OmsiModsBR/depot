@@ -30,6 +30,8 @@ multiplayer or "playing now" feature: those were removed (see [CHANGELOG](../CHA
 
 ## Logs and problem reports
 
+Where the logs are and what they contain: [LOGS](LOGS.md).
+
 `game.log` and `launcher.log` are written locally and are replaced on each run (the launcher log may grow during a run). They can contain
 paths on your computer (including your Windows user name), the graphics card and the maps and
 vehicles you loaded. **Nothing sends them.** In the crash dialog, "Copy report" puts the end of the log on your

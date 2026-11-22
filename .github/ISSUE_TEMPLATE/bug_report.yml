@@ -145,7 +145,7 @@ body:
     attributes:
       label: Logs
       description: |
-        Paste the relevant part of `game.log` (or `launcher.log` for launcher problems). Both are in the `.openomsi` folder in your user folder - on Windows `C:\Users\<you>\.openomsi`. This will be automatically formatted as code.
+        Paste the relevant part of `game.log` (or `launcher.log` for launcher problems). Both are in the `.depot` folder in your user folder - on Windows `C:\Users\<you>\.depot`. See docs/LOGS.md for what each log contains and how to get more detail. This will be automatically formatted as code.
       render: shell
     validations:
       required: false
