@@ -28,6 +28,11 @@ const FORK_MEMORY: f64 = 10.0;
 /// its speed limit.
 const SPECIAL_ZONE: f64 = 4.0;
 
+/// How far to the side of a shoe's way (metres, along the ground) a switch or crossing
+/// object can stand and still be on that way: a 20 degree switch stands about 1 m off its
+/// straight wire, while the other direction's wire on a street runs some 3 m or more away.
+const SPECIAL_LANE: f64 = 2.25;
+
 /// The way on at a fork, and the kind of object it is: a switch sets itself by the
 /// vehicle's demand - with demand the shoes take its left way, without it its right way
 /// (on a Y the left and right branches, on a 20 degree switch the branch or the straight,
@@ -319,7 +324,7 @@ impl PoleSim {
         let wire_dir = walk::tangent(net, &cursor).unwrap_or(DVec3::Y);
         let (mut o, mut contact) = on_wire(decl, i, body, end, wire_dir);
         contact.wire_ended = wire_ended;
-        o.in_special = net.special_near(point, SPECIAL_ZONE);
+        o.in_special = net.special_near(point, wire_dir, SPECIAL_ZONE, SPECIAL_LANE);
         Some((o, contact))
     }
 

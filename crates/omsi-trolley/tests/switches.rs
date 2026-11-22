@@ -242,6 +242,56 @@ fn faster_than_the_limit_through_a_switch_the_poles_leave_the_wire() {
 }
 
 #[test]
+fn the_other_directions_switch_beside_the_wire_sets_no_limit() {
+    // a two-way street: the southbound line's branch switch stands 3.5 m left of the
+    // northbound wire, inside the zone's reach but not on the northbound way
+    let n = net(
+        vec![
+            spline(1, WIRE, [0.0, 0.0, 0.0], 0.0, 100.0, 0.0),
+            spline(2, WIRE, [-3.5, 100.0, 0.0], 180.0, 100.0, 0.0),
+        ],
+        vec![object(9, RIGHT, [-3.5, 50.0, 0.0], 180.0)],
+    );
+    let d = decl();
+    let mut sim = PoleSim::default();
+    let at = body(0.0, 20.0, 0.0);
+    sim.step(
+        &d,
+        &n,
+        &at,
+        PoleInputs {
+            grab: [true, true],
+            ..Default::default()
+        },
+        1.0 / 60.0,
+    );
+    for _ in 0..100 {
+        sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+    }
+    let (mut y, mut limited) = (20.0, false);
+    while y < 80.0 {
+        y += 50.0 / 3.6 / 60.0;
+        let o = sim.step(
+            &d,
+            &n,
+            &body(0.0, y, 0.0),
+            PoleInputs {
+                speed_kmh: 50.0,
+                ..Default::default()
+            },
+            1.0 / 60.0,
+        );
+        limited |= o.speed_limit_active;
+    }
+    assert!(!limited, "no limit from the other line's switch");
+    assert!(
+        sim.poles.iter().all(|p| p.dewire.is_none()),
+        "{:?}",
+        sim.events
+    );
+}
+
+#[test]
 fn two_switches_in_a_row_each_take_their_exit() {
     // a left branch switch, then 30 m on a Y
     let n = net(
