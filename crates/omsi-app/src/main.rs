@@ -18,6 +18,14 @@ pub static NvOptimusEnablement: u32 = 1;
 #[used]
 pub static AmdPowerXpressRequestHighPerformance: u32 = 1;
 
-fn main() -> anyhow::Result<()> {
-    openomsi_game::run()
+fn main() -> std::process::ExitCode {
+    // (the error is said by the program itself: returned from `main`, the standard
+    // library printed it past the logger, into `game.log` with the paths as they are)
+    match openomsi_game::run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            openomsi_game::say_final_error(&error);
+            std::process::ExitCode::FAILURE
+        }
+    }
 }

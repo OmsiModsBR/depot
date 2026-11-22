@@ -1351,10 +1351,11 @@ fn write_own_log(bytes: &[u8]) -> std::io::Result<()> {
     }
     // (the user's folder and name as placeholders, like every log)
     let redactor = omsi_cfg::logfile::Redactor::of_this_machine();
-    match (own.as_mut(), std::str::from_utf8(bytes)) {
-        (Some(f), Ok(text)) => f.write_all(redactor.redact(text).as_bytes()),
-        (Some(f), Err(_)) => f.write_all(bytes),
-        (None, _) => Ok(()),
+    // (bytes that are no text are made text first: nothing passes without the replacement)
+    let text = String::from_utf8_lossy(bytes);
+    match own.as_mut() {
+        Some(f) => f.write_all(redactor.redact(&text).as_bytes()),
+        None => Ok(()),
     }
 }
 

@@ -1,0 +1,10 @@
+[package]
+name = "omsi-devtools-record"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The run record of the developer tools: what the launcher receives from the game, written as JSON Lines, one capped file per session and the last five sessions kept"
+
+[dependencies]
+omsi-devtools-proto = { path = "../omsi-devtools-proto" }
+serde_json.workspace = true

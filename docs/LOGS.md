@@ -16,13 +16,17 @@ Each run replaces the previous `game.log`, so only the current session is kept. 
 
 ## Size
 
-Each log file holds 30 MB at most. A file that reaches the limit stops growing, and its last line says so:
+Each log file holds 30 MB at most. A file that reaches the limit stops taking ordinary lines, and a line says so:
 
 ```
-log truncated at 30 MB: the lines after this one were not written
+log truncated at 30 MB: of the lines after this one, only errors and the end of the game were written
 ```
 
-The line that did not fit and everything after it are not written; the room for that last line is kept free, so it is always there when a log was cut. The game goes on as before. `launcher.log` is written by two programs, so it keeps a small slack free as well (about half a megabyte) and each of the two programs ends its own lines with that line. A game started by hand in a terminal writes to the terminal and has no limit. What a graphics driver or the system writes to the game's error output on its own is not counted.
+- The last part of the 30 MB (1/64 of it, about half a megabyte) is kept for what must not be lost: errors, a panic with its backtrace, a lost graphics device and the line that says the game ended. Ordinary lines stop before it; those lines are still written after the truncation line, until the 30 MB are full. So a game that stops on an error after its log was cut still shows the crash dialog and has the error in its report.
+- The room for the truncation line is kept free too, so it is always there when a log was cut. The game goes on as before.
+- `launcher.log` is written by more than one program (the launcher and each preview helper), so it keeps a further slack of the same size free, and each program writes that line when it stops. With more than two programs writing at the same instant the file can pass the limit by a few lines.
+- A game started by hand in a terminal writes to the terminal and has no limit; a game whose error output is a pipe or a file is limited.
+- Not counted: what a graphics driver or the system writes to the game's error output on its own.
 
 ## Script errors
 
@@ -89,9 +93,12 @@ loaded D:\OMSI 2\Vehicles\MAN_SD200\MAN_SD80.bus (5120 bytes)
 ```
 
 - Both slash styles and any letter case of the folder are recognised (`c:/users/<you>/...` too), and so are paths written with doubled backslashes.
+- So are the short form Windows gives a long folder name (`C:\Users\JONATH~1`, as the temporary folder is often given) and a space written as `%20` in a `file:` address.
 - A path that is not under your user folder is left as it is, the OMSI 2 folder and your content folder included.
 - Where your account name is a piece of another path (`/run/media/<you>/...`, `D:\Profiles\<you>\...`), it is written as `USER_NAME`; the computer's name in a network path (`\\<computer>\share`) is written as `COMPUTER_NAME`. Names of fewer than three characters are only replaced as part of the user folder. The program never writes your account name or your computer's name on its own.
 - The same replacement is made in the text the program hands out for a report: the crash dialog's "Copy report" and "Report on GitHub", and the integrity report (copied or saved).
-- It applies to `game.log` and `launcher.log`. A game started by hand in a terminal prints to the terminal as it is. What the system or a graphics driver writes to the game's error output on its own does not pass through it.
+- It applies to `game.log` and `launcher.log` on Windows, Linux and macOS. The Android game log is written by the system's own log and does not pass through it.
+- What the program itself writes beside a log line (a message that the game cannot start, the error it ended on, a panic) goes into a log file once, as a log line with the replacement. In a terminal (a game or a launcher started by hand) everything is printed as it is.
+- Not covered: what the system or a graphics driver writes to the game's error output on its own; your name where it is not a piece of a path; a folder name the system gives in another Unicode form than the one in the path (accented names on macOS); characters other than the space written with `%` in an address.
 
 Logs still contain the graphics card, the maps and vehicles you loaded, and paths outside your user folder: look through them before posting. See [PRIVACY](PRIVACY.md).

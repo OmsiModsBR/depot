@@ -78,6 +78,8 @@ use launcher_link::open_launcher;
 use winit::event_loop::EventLoop;
 
 /// The game (and its launcher) from the command line: what `main` does.
+pub use crate::core::startup::say_final_error;
+
 pub fn run() -> Result<()> {
     let _ = startup::PROCESS_START.set(std::time::Instant::now());
     omsi_cfg::migrate_legacy_data_dir();
@@ -183,13 +185,12 @@ pub fn run() -> Result<()> {
         // again past the logger, with the paths as they are and beyond the file's cap)
         if !log_is_a_file {
             default_hook(info);
-        } else if !log::log_enabled!(log::Level::Error) {
+        } else {
             // (a `RUST_LOG` that leaves this module out dropped the line above: the panic
             // is said all the same, with the same replacement as a log line)
-            let said = format!("the game stopped on an error (build {BUILD}): {info}");
-            eprintln!(
-                "{}",
-                omsi_cfg::logfile::Redactor::of_this_machine().redact(&said)
+            startup::say_past_the_logger(
+                &format!("the game stopped on an error (build {BUILD}): {info}"),
+                log::log_enabled!(log::Level::Error),
             );
         }
     }));

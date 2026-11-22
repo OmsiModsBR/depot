@@ -32,6 +32,9 @@ enum Piece {
 pub struct Redactor {
     /// The user's folders, the longest first.
     folders: Vec<Vec<Piece>>,
+    /// For each user's folder, the folder it is in (with the separator after it) and its
+    /// own name as Windows shortens one (see [`short_name_at`]).
+    short: Vec<(Vec<Piece>, Vec<char>)>,
     /// The names replaced where they are a piece of a path, with what stands for each.
     names: Vec<(Vec<char>, &'static str)>,
     /// The first character of every folder and name, lower-cased where it is ASCII.
@@ -50,6 +53,7 @@ impl Redactor {
             .collect();
         pieces.sort_by_key(|p| std::cmp::Reverse(p.len()));
         pieces.dedup();
+        let short = pieces.iter().filter_map(|p| short_form(p)).collect();
         let mut names = Vec::new();
         for (name, stands) in [(account, USER_NAME), (computer, COMPUTER_NAME)] {
             let name: Vec<char> = name.unwrap_or("").trim().chars().collect();
@@ -71,6 +75,7 @@ impl Redactor {
         firsts.dedup();
         Self {
             folders: pieces,
+            short,
             names,
             firsts,
         }
@@ -119,7 +124,12 @@ impl Redactor {
             let found = self
                 .folders
                 .iter()
-                .find_map(|f| folder_at(here, f).map(|len| (len, USER_FOLDER)))
+                .find_map(|f| folder_at(here, f, before).map(|len| (len, USER_FOLDER)))
+                .or_else(|| {
+                    self.short.iter().find_map(|(parent, name)| {
+                        short_folder_at(here, parent, name, before).map(|len| (len, USER_FOLDER))
+                    })
+                })
                 .or_else(|| {
                     self.names.iter().find_map(|(name, stands)| {
                         name_at(here, name, before).map(|len| (len, *stands))
@@ -183,34 +193,110 @@ fn ends_a_name(next: Option<char>) -> bool {
     !next.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
-/// How many bytes of `text`, from its start, are the folder `folder`; None when it does not
-/// start with it.
-fn folder_at(text: &str, folder: &[Piece]) -> Option<usize> {
-    let mut rest = text.chars().peekable();
+/// How many bytes of `text`, from its start, are the pieces `pieces`, whatever follows; None
+/// when it does not start with them. A space of the folder is also met as `%20` (a path
+/// written as a `file:` address).
+fn pieces_at(text: &str, pieces: &[Piece]) -> Option<usize> {
     let mut len = 0;
-    for piece in folder {
+    for piece in pieces {
+        let rest = &text[len..];
         match piece {
+            Piece::Char(' ') if rest.starts_with("%20") => len += 3,
             Piece::Char(want) => {
-                let c = rest.next()?;
+                let c = rest.chars().next()?;
                 if !same_letter(c, *want) {
                     return None;
                 }
                 len += c.len_utf8();
             }
             Piece::Separators => {
-                let mut seen = false;
-                while let Some(c) = rest.peek().copied().filter(|c| *c == '/' || *c == '\\') {
-                    rest.next();
-                    len += c.len_utf8();
-                    seen = true;
-                }
-                if !seen {
+                let run = rest.chars().take_while(|c| *c == '/' || *c == '\\').count();
+                if run == 0 {
                     return None;
                 }
+                len += run;
             }
         }
     }
-    ends_a_name(rest.next()).then_some(len)
+    Some(len)
+}
+
+/// Whether a folder may start after the character `before`: not in the middle of another
+/// path (`/home/ann` in `/mnt/home/ann`), which is a folder of its own.
+fn starts_a_folder(folder: &[Piece], before: Option<char>) -> bool {
+    match folder.first() {
+        Some(Piece::Separators) => ends_a_name(before),
+        // (a drive letter: no letter before it)
+        _ => !before.is_some_and(|c| c.is_alphanumeric()),
+    }
+}
+
+/// How many bytes of `text`, from its start, are the folder `folder` (`before` is the
+/// character before it); None when it does not start with it.
+fn folder_at(text: &str, folder: &[Piece], before: Option<char>) -> Option<usize> {
+    if !starts_a_folder(folder, before) {
+        return None;
+    }
+    let len = pieces_at(text, folder)?;
+    ends_a_name(text[len..].chars().next()).then_some(len)
+}
+
+/// A user's folder split for its short Windows form: the folder it is in, with the
+/// separator after it, and its own name without the characters a short name leaves out
+/// (spaces and dots). None for a folder that is in no other.
+fn short_form(folder: &[Piece]) -> Option<(Vec<Piece>, Vec<char>)> {
+    let cut = folder.iter().rposition(|p| *p == Piece::Separators)?;
+    let name: Vec<char> = folder[cut + 1..]
+        .iter()
+        .filter_map(|p| match p {
+            Piece::Char(c) if *c != ' ' && *c != '.' => Some(*c),
+            _ => None,
+        })
+        .collect();
+    (cut > 0 && !name.is_empty()).then(|| (folder[..=cut].to_vec(), name))
+}
+
+/// How many bytes of `text`, from its start, are the short name Windows gives the folder
+/// name `name` (`JONATH~1` for `Jonathan Smith`: up to six of its characters, `~` and a
+/// number; with many folders alike, two of its characters, four of a checksum, `~` and a
+/// number). The temporary folder is often given with it. None when `text` starts with no
+/// such name.
+fn short_name_at(text: &str, name: &[char]) -> Option<usize> {
+    let end = text
+        .find(|c: char| !(c.is_alphanumeric() || matches!(c, '~' | '.' | '_' | '-' | '$')))
+        .unwrap_or(text.len());
+    let (stem, number) = text[..end].split_once('~')?;
+    let stem: Vec<char> = stem.chars().collect();
+    let same = stem
+        .iter()
+        .zip(name)
+        .take_while(|(a, b)| same_letter(**a, **b))
+        .count();
+    let own = !stem.is_empty()
+        && stem.len() <= 6
+        && same >= name.len().min(2)
+        && stem[same..].iter().all(|c| c.is_ascii_hexdigit());
+    // (the number, and an extension a folder with a dot in its name keeps)
+    let numbered = number.starts_with(|c: char| c.is_ascii_digit())
+        && number
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.');
+    (own && numbered).then_some(end)
+}
+
+/// How many bytes of `text`, from its start, are a user's folder with its own name in the
+/// short Windows form: the folder it is in (`parent`), then the short name of `name`.
+fn short_folder_at(
+    text: &str,
+    parent: &[Piece],
+    name: &[char],
+    before: Option<char>,
+) -> Option<usize> {
+    if !starts_a_folder(parent, before) {
+        return None;
+    }
+    let len = pieces_at(text, parent)?;
+    short_name_at(&text[len..], name).map(|short| len + short)
 }
 
 /// How many bytes of `text`, from its start, are the name `name` as a whole piece of a path
@@ -257,13 +343,11 @@ impl<W: std::io::Write> Redacting<W> {
 
 impl<W: std::io::Write> std::io::Write for Redacting<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match std::str::from_utf8(buf) {
-            Ok(text) => self
-                .inner
-                .write_all(self.redactor.redact(text).as_bytes())?,
-            // (the logger writes text; what is not text passes as it came)
-            Err(_) => self.inner.write_all(buf)?,
-        }
+        // (the logger writes text; bytes that are no text are made text first, so that
+        // nothing passes without the replacement)
+        let text = String::from_utf8_lossy(buf);
+        self.inner
+            .write_all(self.redactor.redact(&text).as_bytes())?;
         Ok(buf.len())
     }
 
