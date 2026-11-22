@@ -67,9 +67,12 @@ loaded D:\OMSI 2\Vehicles\MAN_SD200\MAN_SD80.bus (5120 bytes)
 ```
 
 - Both slash styles and any letter case of the folder are recognised (`c:/users/<you>/...` too), and so are paths written with doubled backslashes.
+- So are the short form Windows gives a long folder name (`C:\Users\JONATH~1`, as the temporary folder is often given) and a space written as `%20` in a `file:` address.
 - A path that is not under your user folder is left as it is, the OMSI 2 folder and your content folder included.
 - Where your account name is a piece of another path (`/run/media/<you>/...`, `D:\Profiles\<you>\...`), it is written as `USER_NAME`; the computer's name in a network path (`\\<computer>\share`) is written as `COMPUTER_NAME`. Names of fewer than three characters are only replaced as part of the user folder. The program never writes your account name or your computer's name on its own.
 - The same replacement is made in the text the program hands out for a report: the crash dialog's "Copy report" and "Report on GitHub", and the integrity report (copied or saved).
-- It applies to `game.log` and `launcher.log`. A game started by hand in a terminal prints to the terminal as it is. What the system or a graphics driver writes to the game's error output on its own does not pass through it.
+- It applies to `game.log` and `launcher.log` on Windows, Linux and macOS. The Android game log is written by the system's own log and does not pass through it.
+- What the program itself writes beside a log line (a message that the game cannot start, the error it ended on, a panic) goes into a log file once, as a log line with the replacement. In a terminal (a game or a launcher started by hand) everything is printed as it is.
+- Not covered: what the system or a graphics driver writes to the game's error output on its own; your name where it is not a piece of a path; a folder name the system gives in another Unicode form than the one in the path (accented names on macOS); characters other than the space written with `%` in an address.
 
 Logs still contain the graphics card, the maps and vehicles you loaded, and paths outside your user folder: look through them before posting. See [PRIVACY](PRIVACY.md).

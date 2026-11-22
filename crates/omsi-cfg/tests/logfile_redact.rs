@@ -175,3 +175,81 @@ fn a_whole_run_of_log_lines_holds_no_trace_of_the_account() {
     assert!(text.contains(r"--root D:\OMSI --log-level debug"), "{text}");
     assert!(text.contains(r"USER_FOLDER\Depot\depot.exe"), "{text}");
 }
+
+/// Windows gives a long folder name a short form too (`ZQ7FAK~1`), and the temporary folder
+/// often comes with it: that form is the user's folder as well.
+#[test]
+fn the_short_windows_form_of_the_user_folder_is_replaced() {
+    let r = Redactor::new(
+        &[r"C:\Users\Zq7fake Account"],
+        Some("Zq7fake Account"),
+        Some(COMPUTER),
+    );
+    for (line, want) in [
+        (
+            r"loaded C:\Users\ZQ7FAK~1\AppData\Local\Temp\x.tmp (3 bytes)",
+            r"loaded USER_FOLDER\AppData\Local\Temp\x.tmp (3 bytes)",
+        ),
+        ("c:/users/zq7fak~1/a.cfg", "USER_FOLDER/a.cfg"),
+        (r"C:\\Users\\ZQ7FAK~2\\a", r"USER_FOLDER\\a"),
+        // (many folders alike: two characters, a checksum, the number)
+        (r"C:\Users\ZQ3F2A~1\a", r"USER_FOLDER\a"),
+        (
+            r"no folder C:\Users\ZQ7FAK~1 was found",
+            "no folder USER_FOLDER was found",
+        ),
+    ] {
+        assert_eq!(r.redact(line), want, "{line}");
+    }
+    // another account's short name, and a short name elsewhere, stay
+    for line in [
+        r"C:\Users\OTHERS~1\a.cfg",
+        r"D:\OMSI2~1\Vehicles\a.bus",
+        r"C:\PROGRA~1\Depot\depot.exe",
+    ] {
+        assert!(matches!(r.redact(line), Cow::Borrowed(_)), "{line}");
+    }
+}
+
+/// A space of the folder written as `%20` (a `file:` address) is the same folder.
+#[test]
+fn a_folder_with_a_space_is_replaced_in_a_file_address() {
+    let r = Redactor::new(&[r"C:\Users\Zq7fake Account"], None, None);
+    assert_eq!(
+        r.redact("file:///C:/Users/Zq7fake%20Account/a.cfg"),
+        "file:///USER_FOLDER/a.cfg"
+    );
+    assert_eq!(
+        r.redact(r"C:\Users\Zq7fake Account\a.cfg"),
+        r"USER_FOLDER\a.cfg"
+    );
+}
+
+/// The user's folder in the middle of another path is that other path: the placeholder does
+/// not stick to the folder before it, and the account's name in it still goes.
+#[test]
+fn a_folder_inside_another_path_is_not_the_user_folder() {
+    assert_eq!(
+        linux().redact("/mnt/home/zq7fakeaccount/x"),
+        "/mnt/home/USER_NAME/x"
+    );
+    assert_eq!(
+        linux().redact("Z:/home/zq7fakeaccount/x"),
+        "Z:USER_FOLDER/x"
+    );
+    assert_eq!(linux().redact("=/home/zq7fakeaccount"), "=USER_FOLDER");
+}
+
+/// Bytes that are no text do not pass as they came: they are made text and go through the
+/// replacement like any line.
+#[test]
+fn a_line_that_is_no_text_is_still_redacted() {
+    static OWN: std::sync::OnceLock<Redactor> = std::sync::OnceLock::new();
+    let r = OWN.get_or_init(linux);
+    let mut out = Redacting::new(Vec::new(), r);
+    out.write_all(b"loaded /home/zq7fakeaccount/a\xff.cfg\n")
+        .unwrap();
+    let text = String::from_utf8(out.into_inner()).unwrap();
+    assert!(clean(&text), "{text}");
+    assert!(text.starts_with("loaded USER_FOLDER/a"), "{text}");
+}
