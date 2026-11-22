@@ -48,11 +48,7 @@ pub const LOG_CHANNELS: &[(&str, &[&str])] = &[
     ),
     (
         "network",
-        &[
-            "omsi_devtools_link",
-            "omsi_net",
-            "openomsi_game::steam",
-        ],
+        &["omsi_devtools_link", "omsi_net", "openomsi_game::steam"],
     ),
     (
         "render",
