@@ -96,14 +96,40 @@ pub fn run() -> Result<()> {
     // Windows, and what it said went nowhere.
     let args_now: Vec<String> = std::env::args().collect();
     let launcher_process = startup::launcher_process(&args_now);
-    if launcher_process {
-        let file = omsi_launcher_lib::launcher_log_path();
-        let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
-        // (replaced at each start, then opened to append: the preview helper writes the same
-        // file, and a handle that is not appending would write over its lines)
-        if std::fs::File::create(&file).is_ok() {
-            if let Ok(f) = std::fs::OpenOptions::new().append(true).open(&file) {
-                logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+    // Every log file stops at the cap (`omsi_cfg::logfile`), its last line saying so.
+    match startup::log_source(&args_now) {
+        Some(_) if launcher_process => {
+            let file = omsi_launcher_lib::launcher_log_path();
+            let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
+            // (replaced at each start; the lines then go through the launcher's one handle
+            // on it, opened to append: the preview helper writes the same file, and a
+            // handle that is not appending would write over its lines)
+            if std::fs::File::create(&file).is_ok() {
+                logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(
+                    omsi_launcher_lib::LauncherLog,
+                ))));
+            }
+        }
+        // (the preview helper: its lines go to the launcher's file, which its error output
+        // is too; the logger writes the file itself so that the cap is kept)
+        Some(_) => {
+            if let Ok(f) = omsi_cfg::logfile::CappedFile::open(
+                &omsi_launcher_lib::launcher_log_path(),
+                omsi_cfg::logfile::LOG_CAP_BYTES,
+            ) {
+                logger.target(env_logger::Target::Pipe(Box::new(f)));
+            }
+        }
+        // (a game: the launcher made its error output the session's `game.log`; started by
+        // hand in a terminal, nothing is a file and nothing is capped)
+        None => {
+            if !std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                logger.target(env_logger::Target::Pipe(Box::new(
+                    omsi_cfg::logfile::Capped::new(
+                        std::io::stderr(),
+                        omsi_cfg::logfile::LOG_CAP_BYTES,
+                    ),
+                )));
             }
         }
     }

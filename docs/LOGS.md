@@ -14,6 +14,16 @@ All logs are in the `.depot` folder in your user folder: `~/.depot` on Linux and
 
 Each run replaces the previous `game.log`, so only the current session is kept. `launcher.log` is replaced when the launcher starts and grows while it is open; a preview helper that is started again adds to it. The first line of each program says the build it was made from. There is no `preview-helper.log` any more; one left by an older version can be deleted.
 
+## Size
+
+Each log file holds 30 MB at most. A file that reaches the limit stops growing, and its last line says so:
+
+```
+log truncated at 30 MB: the lines after this one were not written
+```
+
+The line that did not fit and everything after it are not written; the room for that last line is kept free, so it is always there when a log was cut. The game goes on as before. `launcher.log` is written by two programs, so it keeps a small slack free as well (about half a megabyte) and each of the two programs ends its own lines with that line. A game started by hand in a terminal writes to the terminal and has no limit. What a graphics driver or the system writes to the game's error output on its own is not counted.
+
 ## Script errors
 
 There is no separate script log yet. Script read and compile problems appear in `game.log` as warnings in the form `file:line: message`, mixed with the other lines. If a script block panics, `game.log` lists the block and every macro it was called from.

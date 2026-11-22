@@ -68,8 +68,8 @@ pub(crate) fn end_with(pid: u32) {
     });
 }
 
-/// Log lines to the error output and to a file.
-pub(crate) struct Tee(pub std::fs::File);
+/// Log lines to the error output and to a log file's writer.
+pub(crate) struct Tee<W: std::io::Write>(pub W);
 
 /// Whether this run is the launcher: started bare, or with `--launcher` (`args` as the
 /// process got them, the program's name first).
@@ -89,7 +89,7 @@ pub fn log_source(args: &[String]) -> Option<&'static str> {
     }
 }
 
-impl std::io::Write for Tee {
+impl<W: std::io::Write> std::io::Write for Tee<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let _ = std::io::stderr().write_all(buf);
         self.0.write_all(buf)?;
