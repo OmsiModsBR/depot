@@ -16,13 +16,17 @@ Each run replaces the previous `game.log`, so only the current session is kept. 
 
 ## Size
 
-Each log file holds 30 MB at most. A file that reaches the limit stops growing, and its last line says so:
+Each log file holds 30 MB at most. A file that reaches the limit stops taking ordinary lines, and a line says so:
 
 ```
-log truncated at 30 MB: the lines after this one were not written
+log truncated at 30 MB: of the lines after this one, only errors and the end of the game were written
 ```
 
-The line that did not fit and everything after it are not written; the room for that last line is kept free, so it is always there when a log was cut. The game goes on as before. `launcher.log` is written by two programs, so it keeps a small slack free as well (about half a megabyte) and each of the two programs ends its own lines with that line. A game started by hand in a terminal writes to the terminal and has no limit. What a graphics driver or the system writes to the game's error output on its own is not counted.
+- The last part of the 30 MB (1/64 of it, about half a megabyte) is kept for what must not be lost: errors, a panic with its backtrace, a lost graphics device and the line that says the game ended. Ordinary lines stop before it; those lines are still written after the truncation line, until the 30 MB are full. So a game that stops on an error after its log was cut still shows the crash dialog and has the error in its report.
+- The room for the truncation line is kept free too, so it is always there when a log was cut. The game goes on as before.
+- `launcher.log` is written by more than one program (the launcher and each preview helper), so it keeps a further slack of the same size free, and each program writes that line when it stops. With more than two programs writing at the same instant the file can pass the limit by a few lines.
+- A game started by hand in a terminal writes to the terminal and has no limit; a game whose error output is a pipe or a file is limited.
+- Not counted: what a graphics driver or the system writes to the game's error output on its own.
 
 ## Script errors
 

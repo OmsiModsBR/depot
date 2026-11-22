@@ -3,6 +3,7 @@
 //! can ask it for every view and path (`tests/frame_features.rs`).
 
 use super::options::RenderOptions;
+use crate::interface::{ModeView, RenderMode};
 use crate::lighting::ShadingPath;
 use crate::output::Output;
 use crate::passes::FrameFeatures;
@@ -99,10 +100,25 @@ impl FrameFeatures {
     /// What a picture draws, from the graphics `path`, the renderer's `options` and the
     /// picture's `inputs`.
     pub fn decide(path: ShadingPath, options: &RenderOptions, i: &FrameInputs) -> FrameFeatures {
+        Self::decide_with(super::build::mode_for(path), options, i)
+    }
+
+    /// `decide` for the render `mode` of the graphics path.
+    pub(crate) fn decide_with(
+        mode: &dyn RenderMode,
+        options: &RenderOptions,
+        i: &FrameInputs,
+    ) -> FrameFeatures {
         let with_overlays = i.view.with_overlays();
         let xr_view = i.view.own_projection();
-        // the path's own pipelines are there
-        let enhanced_path = path == ShadingPath::Hdr && i.built.enhanced;
+        let shading = mode.shading(&ModeView {
+            with_overlays,
+            xr_view,
+            mirror_enhanced: options.mirror_enhanced,
+            built: i.built.enhanced,
+        });
+        // the mode's own post passes finish the picture
+        let enhanced_path = shading.own_post;
         // FXAA on the plain graphics too, where there is no multisampling to smooth the edges
         // (the Enhanced path has it in its post passes): the picture is drawn into a texture
         // of the window's size and smoothed on its way to the window, the HUD after
@@ -119,14 +135,8 @@ impl FrameFeatures {
             && options.glass_picture;
         let scaled =
             i.picture_size != i.full_size || fxaa_without_msaa || (glass_on && !enhanced_path);
-        // The mirrors are drawn with the plain shading even in Enhanced: without the depth
-        // prepass (sized for the window) every layer of a mirror's picture ran the enhanced
-        // shader, 12.7 ms of GPU time for one 256-pixel mirror against 5.8 ms for the whole
-        // window; plainly shaded it is 0.6 ms, and a mirror's small picture shows no
-        // difference worth that. `OMSI_MIRROR_ENHANCED=1` draws them enhanced again. The
-        // headset's eyes are the real picture as much as the window is (#784: VR showed the
-        // plain graphics with Enhanced on).
-        let enhanced = enhanced_path && (with_overlays || xr_view || options.mirror_enhanced);
+        // (which mirrors are shaded plainly is the mode's to say: `Enhanced::shading`)
+        let enhanced = shading.own_shading;
         // Rain reflections belong to all graphics modes. Classic shading uses the same
         // scene/mask targets, then presents their linear colour without Enhanced grading.
         let puddles_wanted = with_overlays

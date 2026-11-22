@@ -9,7 +9,7 @@
 //! is its `[newanim]` origin frame, its rim the farthest ring of its vertices round that
 //! axis and its centre the middle of that ring on the axis (the origin is often the foot of
 //! the column: the Urbino's lies 12 cm under the hub, and the hands held the air under and
-//! past the rim). Both hands hold the rim at ten to two, closed round it in fists whose
+//! past the rim). Both hands hold the rim a little below its sides, closed round it in fists whose
 //! wrists continue the forearms (the hand turned onto a fixed frame on the rim bent the
 //! wrists sharply), and turn with it, the wheel's angle read from its own animation
 //! variable. Turned out of its reach a hand lets go and takes the rim again further back
@@ -49,14 +49,16 @@ use omsi_sim::VehicleInstance;
 use std::sync::Arc;
 
 /// Where the hands rest on the rim, from the top, clockwise seen by the driver (degrees):
-/// a little above the sides, ten to two as bus drivers hold a flat wheel.
-const REST: [f32; 2] = [-70.0, 70.0];
+/// a little below the sides, where a bus's tilted wheel comes nearest the driver, so that he
+/// sits back in his seat with his arms held out to it. (At ten to two, the top of the wheel
+/// being its far side, the driver had to be brought up over the wheel to reach it.)
+const REST: [f32; 2] = [-100.0, 100.0];
 /// Where each hand can hold the rim (degrees from the top): the hands turn with the wheel
 /// within it; a hand turned out of it lets go and takes the rim again further back (the
 /// other hand holding on meanwhile), as a driver shuffles the wheel through his hands. (The
 /// figure used to keep its hands still and let the rim slide through them past a small
 /// range: the wheel seemed to turn by itself under hands frozen in the air.)
-const RANGE: [(f32, f32); 2] = [(-150.0, -20.0), (20.0, 150.0)];
+const RANGE: [(f32, f32); 2] = [(-170.0, -35.0), (35.0, 170.0)];
 /// A hand lets go this far (degrees) past its range at most before the rim slides.
 const SLIP: f32 = 25.0;
 /// How far a fist rolls round the rim (degrees, see `hand_targets`) and the time constant
@@ -69,6 +71,9 @@ const ROLL_EASE: f32 = 0.12;
 /// and the most they move for it in a frame (m).
 const FIX_EASE: f32 = 0.25;
 const FIX_STEP: f32 = 0.002;
+/// A wrist further than this (m) from its target is short of it: its fingers' hold is left
+/// as it is meanwhile.
+const FIX_REACHED: f32 = 0.01;
 /// Time constant (s) a hand turns into the frame its hold asks for.
 const FRAME_EASE: f32 = 0.07;
 /// How far a hand that lets go reaches back (degrees short of the far end of its range).
@@ -87,16 +92,19 @@ const SEAT_FRONT: f32 = 0.34;
 /// there is no wheel) and the fingers' half thickness.
 const GRIP_RADIUS: f32 = 0.026;
 const FINGER_HALF: f32 = 0.009;
-/// The most the seat is slid forward to bring the hands to the wheel (m); what is still
-/// missing is made up by leaning forward. Slid further, the driver sat in front of his seat
-/// (the interior mirror showed the seat empty).
-const SLIDE_MAX: f32 = 0.10;
-/// A driver at a wheel does not hold his arms out straight: the seat is slid up (and then the
-/// body leaned forward by at most `LEAN_COMFORT` degrees) until the wrist is this fraction of
-/// the arm's length from the shoulder (1 is an arm stretched out, 0.9 an elbow bent about 130
-/// degrees); `UPPER_ARM` is the shoulder-to-elbow length (m) of the stock figure.
-const ARM_RATIO: f32 = 0.98;
-const LEAN_COMFORT: f32 = 2.0;
+/// The most the seat is slid forward to bring the hands to the wheel (m). The body never
+/// leans for it: every driver sits as the one of the Caio Millennium V O500UA, whose wheel
+/// the arms reach from the seat as it is (sitting up, the neck about 7 cm in front of the
+/// hips), and a wheel further off brings the whole driver nearer instead. (The seat went
+/// 10 cm and then the body leaned up to 30 degrees, bending at the waist: the drivers of the
+/// MAN NL and the Trollino sat hunched over their wheels, whose `[drivpos]` lies 25 to 35 cm
+/// further back from the wheel than the O500UA's.)
+const SLIDE_MAX: f32 = 0.45;
+/// A driver at a wheel does not hold his arms out straight: the seat is slid up until the
+/// wrist is this fraction of the arm's length from the shoulder (1 is an arm stretched out,
+/// 0.9 an elbow bent about 130 degrees); `UPPER_ARM` is the shoulder-to-elbow length (m) of
+/// the stock figure.
+const ARM_RATIO: f32 = 0.94;
 const UPPER_ARM: f32 = 0.30;
 /// A hand lets go this many seconds ahead of the moment it would leave its range (at most
 /// `LEAD_MAX` degrees ahead), and a lone hand (the other at the gear lever) goes this far
@@ -330,8 +338,6 @@ impl DriverFigure {
             lamps: [-1; 4],
             wheel: None,
             sign: 0.0,
-            lean: 0.0,
-            base_lean: 0.0,
             show_hands_in_cab: false,
             shown: false,
             settled: false,
@@ -396,8 +402,6 @@ impl DriverFigure {
         self.pose = Pose::new(0x5eed_d71e);
         self.settled = false;
         self.slide = 0.0;
-        self.lean = 0.0;
-        self.base_lean = 0.0;
         self.hands_placed = false;
         self.elbows = None;
         self.frames = [None; 2];
@@ -489,8 +493,6 @@ impl DriverFigure {
         if !self.settled {
             // sat down already when first seen (an offscreen picture is one frame), the
             // seat slid up until the hands reach the rim
-            // how much of the lean is for the elbows' sake, not the reach
-            let mut comfort_extra = 0.0f32;
             for round in 0..28 {
                 let mut p = Pose::new(0x5eed_d71e);
                 let targets = self.hand_targets(v, 0.0);
@@ -528,40 +530,29 @@ impl DriverFigure {
                     }
                     _ => 0.0,
                 };
-                let comfort_left = self.slide < SLIDE_MAX || comfort_extra < LEAN_COMFORT - 0.01;
+                let comfort_left = self.slide < SLIDE_MAX;
                 let still_posing = miss < 0.02 && off < 0.01 && moved < 0.01;
                 if (still_posing && (excess < 0.02 || !comfort_left))
-                    || (self.slide >= SLIDE_MAX && self.lean >= 30.0)
+                    || (miss >= 0.02 && !comfort_left)
                     || round == 27
                 {
                     self.pose = p;
                     break;
                 }
                 if miss >= 0.02 {
-                    if self.slide < SLIDE_MAX {
-                        self.slide = (self.slide + miss * 0.8).min(SLIDE_MAX);
-                    } else {
-                        // about 1.1 cm of reach per degree of lean for a seated adult
-                        self.lean = (self.lean + (miss / 0.011).max(2.0)).min(30.0);
-                    }
+                    self.slide = (self.slide + miss * 0.8).min(SLIDE_MAX);
                 } else if excess >= 0.02 && comfort_left {
                     // reached, but with the arms straighter than a driver holds them: the seat
-                    // closer to the wheel first, then a little forward from the hips
-                    if self.slide < SLIDE_MAX {
-                        self.slide = (self.slide + excess * 0.8).min(SLIDE_MAX);
-                    } else {
-                        let add = (excess / 0.011)
-                            .clamp(1.0, 3.0)
-                            .min(LEAN_COMFORT - comfort_extra);
-                        self.lean += add;
-                        comfort_extra += add;
-                    }
+                    // closer to the wheel
+                    self.slide = (self.slide + excess * 0.8).min(SLIDE_MAX);
                 }
                 // (else only the fingers' hold or the forearm moved: pose again)
             }
             self.settled = true;
-            self.base_lean = self.lean;
-            log::debug!("driver: seat slid {:.2} m forward and {:.0} deg of lean to reach the wheel ({:.0} of them for the elbows)", self.slide, self.lean, comfort_extra);
+            log::debug!(
+                "driver: seat slid {:.2} m forward to reach the wheel",
+                self.slide
+            );
             return self.update(renderer, scene, v, render, dt, show, mirror_only);
         }
         let targets = self.hand_targets(v, dt);
@@ -585,18 +576,26 @@ impl DriverFigure {
         }
         if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
             log::info!(
-                "HANDP {dt:.4} {:?} {:?} {:?} lean {:.2}",
+                "HANDP {dt:.4} {:?} {:?} {:?}",
                 posed.wrist[0].to_array(),
                 posed.elbow[0].to_array(),
-                self.grip_fix[0].to_array(),
-                self.lean
+                self.grip_fix[0].to_array()
             );
         }
         if let (Some(t), true) = (&targets, posed.ok) {
             // (drawn this frame as posed; the next frame holds the rim) - a hand on its way
             // to a new hold keeps the correction it had
             let tubes = t.tubes.map(|q| self.to_person(q));
-            let holding = [0, 1].map(|k| self.hands[k].mv.is_none());
+            // ... and so does a wrist short of its target: what the fingers miss then is the
+            // reach, which moving the target on would only make worse (out at arm's length the
+            // correction ran away, 5 cm forward and down, and the hand left the rim)
+            let reached = |k: usize| {
+                input
+                    .grips
+                    .map(|g| (posed.wrist[k] - g[k]).length() < FIX_REACHED)
+                    .unwrap_or(false)
+            };
+            let holding = [0, 1].map(|k| self.hands[k].mv.is_none() && reached(k));
             let off =
                 self.correct_grips(&posed.bones, tubes, 1.0 - (-dt / FIX_EASE).exp(), holding);
             if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
@@ -606,31 +605,26 @@ impl DriverFigure {
                 );
             }
         }
-        // a hold the arms do not quite reach (the top of a tilted wheel is further off than
-        // its sides): lean towards it, and back again when the hands are nearer
-        if let (Some(g), true) = (input.grips, posed.ok && dt > 0.0) {
-            let miss = (0..2)
-                .map(|k| (posed.wrist[k] - g[k]).length())
-                .fold(0.0f32, f32::max);
-            if miss > 0.015 {
-                self.lean = (self.lean + (miss / 0.011) * dt * 4.0)
-                    .min(34.0)
-                    .min(self.base_lean + 6.0);
-            } else if miss < 0.006 {
-                self.lean = (self.lean - 4.0 * dt).max(self.base_lean);
-            }
-        }
+        // (a hold the arms do not quite reach - the top of a tilted wheel is further off than
+        // its sides - is reached for as far as the arms go: the driver no longer leans to it)
         if omsi_cfg::flags::DEBUG_DRIVER.is_set() {
             if let Some(g) = input.grips {
                 log::info!(
-                    "driver: wheel {:.0} deg (sign {}), hands at {:.0} {:.0}{}{}, lean {:.1}, miss {:.3} {:.3}",
+                    "driver: wheel {:.0} deg (sign {}), hands at {:.0} {:.0}{}{}, miss {:.3} {:.3}",
                     self.theta,
                     self.sign,
                     self.hands[0].seen(self.theta).0,
                     self.hands[1].seen(self.theta).0,
-                    if self.hands[0].mv.is_some() { " (left regrips)" } else { "" },
-                    if self.hands[1].mv.is_some() { " (right regrips)" } else { "" },
-                    self.lean,
+                    if self.hands[0].mv.is_some() {
+                        " (left regrips)"
+                    } else {
+                        ""
+                    },
+                    if self.hands[1].mv.is_some() {
+                        " (right regrips)"
+                    } else {
+                        ""
+                    },
                     (posed.wrist[0] - g[0]).length(),
                     (posed.wrist[1] - g[1]).length()
                 );
@@ -1059,7 +1053,6 @@ impl DriverFigure {
             look: Some(self.to_person(hip + fwd * 20.0 + Vec3::Z * 0.4)),
             grips: targets.map(|t| [0, 1].map(|k| self.to_person(t.grips[k]) + self.grip_fix[k])),
             grip_frames: targets.map(|t| t.frames.map(|(d, p)| (turn_person(d), turn_person(p)))),
-            grip_lean: self.lean,
             ..Default::default()
         }
     }
@@ -1139,14 +1132,13 @@ impl DriverFigure {
     /// Which hands are off at the gear lever (and so hold nothing).
     /// How far the wrists are (m, the worst of the two) from where a driver's would be: the
     /// shoulder-to-wrist distance over what an arm bent as a driver holds it allows
-    /// (`ARM_RATIO` of its length). The shoulders are taken from the hip and the lean; the
+    /// (`ARM_RATIO` of its length). The shoulders are taken from the hip (the body upright); the
     /// elbows and wrists are as posed (person frame).
     fn arm_excess(&self, elbow: &[Vec3], wrist: &[Vec3]) -> f32 {
         let h = self.heading.to_radians();
         let fwd = Vec3::new(h.sin(), h.cos(), 0.0);
         let hip = self.to_person(self.hip + fwd * self.slide);
-        let l = self.lean.to_radians();
-        let up = Vec3::new(0.0, l.sin(), l.cos());
+        let up = Vec3::Z;
         let mut worst = 0.0f32;
         for k in 0..2 {
             if k >= elbow.len() || k >= wrist.len() {

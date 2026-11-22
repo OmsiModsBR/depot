@@ -3,6 +3,7 @@
 
 use crate::assets::GpuTexture;
 use crate::gpu::target_2d;
+use crate::interface::PipeSet;
 use crate::lighting::Lighting;
 use crate::passes::{
     encode_enhanced_post, encode_glass, encode_main_pass, Batch, FrameFeatures, MainParts,
@@ -12,13 +13,11 @@ use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
 
 impl Renderer {
-    pub(crate) fn main_pass(&self, enhanced: bool, reflections: bool) -> &PassPipelines {
-        if enhanced {
-            self.hdr_pass.as_ref().unwrap()
-        } else if reflections {
-            self.reflection_pass.as_ref().unwrap()
-        } else {
-            &self.pass
+    pub(crate) fn main_pass(&self, set: PipeSet) -> &PassPipelines {
+        match set {
+            PipeSet::Own => self.hdr_pass.as_ref().unwrap(),
+            PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
+            PipeSet::Plain => &self.pass,
         }
     }
 
@@ -39,16 +38,16 @@ impl Renderer {
         width: u32,
         height: u32,
         features: &FrameFeatures,
+        pipe_set: PipeSet,
         has_presurface: bool,
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) -> Vec<wgpu::CommandEncoder> {
-        let pipes = if features.enhanced {
-            self.hdr_pass.as_ref().unwrap()
-        } else if features.reflection_frame {
-            self.reflection_pass.as_ref().unwrap()
-        } else {
-            &self.pass
+        // (the fields by name: `self.targets` is borrowed mutably below)
+        let pipes = match pipe_set {
+            PipeSet::Own => self.hdr_pass.as_ref().unwrap(),
+            PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
+            PipeSet::Plain => &self.pass,
         };
         encode_main_pass(
             MainParts {
@@ -98,13 +97,12 @@ impl Renderer {
         width: u32,
         height: u32,
         features: &FrameFeatures,
+        pipe_set: PipeSet,
         puddles_on: bool,
     ) {
         encode_glass(
             &self.targets,
-            &self
-                .main_pass(features.enhanced, features.reflection_frame)
-                .rain_pipelines,
+            &self.main_pass(pipe_set).rain_pipelines,
             scene,
             encoder,
             scene_view,

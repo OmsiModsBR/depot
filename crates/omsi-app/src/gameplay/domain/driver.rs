@@ -112,10 +112,6 @@ pub struct DriverFigure {
     /// The sign that turns the wheel variable's angle into the angle seen from the seat
     /// (found by comparing it with the mesh as turned; 0 until then).
     pub(crate) sign: f32,
-    /// Extra forward lean that brings the hands to the rim (degrees, see SLIDE_MAX), and
-    /// what it is with the hands at their places.
-    pub(crate) lean: f32,
-    pub(crate) base_lean: f32,
     /// Whether hands/arms should remain visible in cab (first-person) view behind settings.
     pub show_hands_in_cab: bool,
     pub(crate) shown: bool,

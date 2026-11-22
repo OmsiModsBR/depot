@@ -4,5 +4,5 @@
 mod cap;
 mod level;
 
-pub use cap::{truncation_marker, Capped, CappedFile, LOG_CAP_BYTES};
+pub use cap::{is_last_word, truncation_marker, Capped, CappedFile, LAST_WORDS, LOG_CAP_BYTES};
 pub use level::{LogLevel, GAME_LOG_TARGETS};
