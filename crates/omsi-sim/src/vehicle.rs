@@ -178,13 +178,41 @@ pub struct VehicleInstance {
 }
 
 /// `Axle_Steer_Mode_<n>`, `Axle_Steer_Angle_<n>` and `Axle_Steer_Locked_<n>` of steerable axle
-/// `axle` (`<n>` over the whole vehicle), as far as the varlists declare them.
+/// `local` of a section, `<n>` (`axle`) counted over the whole vehicle, as far as the varlists
+/// declare them.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SteerVars {
+    pub(crate) local: usize,
     pub(crate) axle: usize,
     pub(crate) mode: Option<omsi_script::VarId>,
     pub(crate) angle: Option<omsi_script::VarId>,
     pub(crate) locked: Option<omsi_script::VarId>,
+}
+
+impl SteerVars {
+    /// The variables of each steerable axle of section `def`, whose first axle is the vehicle's
+    /// `first_axle`, looked up by `var`.
+    pub(crate) fn of(
+        def: &omsi_vehicle::Vehicle,
+        first_axle: usize,
+        var: impl Fn(&str) -> Option<omsi_script::VarId>,
+    ) -> Vec<SteerVars> {
+        def.axles
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.steer.is_some())
+            .map(|(local, _)| {
+                let axle = first_axle + local;
+                SteerVars {
+                    local,
+                    axle,
+                    mode: var(&format!("Axle_Steer_Mode_{axle}")),
+                    angle: var(&format!("Axle_Steer_Angle_{axle}")),
+                    locked: var(&format!("Axle_Steer_Locked_{axle}")),
+                }
+            })
+            .collect()
+    }
 }
 
 impl VehicleInstance {
@@ -446,19 +474,7 @@ impl VehicleInstance {
                 ]
             })
             .collect();
-        let v_steer = ty
-            .def
-            .axles
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| a.steer.is_some())
-            .map(|(axle, _)| SteerVars {
-                axle,
-                mode: v(&format!("Axle_Steer_Mode_{axle}")),
-                angle: v(&format!("Axle_Steer_Angle_{axle}")),
-                locked: v(&format!("Axle_Steer_Locked_{axle}")),
-            })
-            .collect();
+        let v_steer = SteerVars::of(&ty.def, 0, &v);
         let rest_sag = crate::physics::kinematic_rest_sag(
             &ty.def,
             &ty.hub_heights(0, Engine::Classic),

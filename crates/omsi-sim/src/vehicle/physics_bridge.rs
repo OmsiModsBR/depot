@@ -12,7 +12,7 @@
 //! back `Axle_Steer_Locked_<n>`.
 
 use super::trailer::TrailerPart;
-use super::VehicleInstance;
+use super::{SteerVars, VehicleInstance};
 use glam::{Quat, Vec3};
 
 /// What the scripts left for the physics this frame.
@@ -94,12 +94,16 @@ impl VehicleInstance {
     }
 
     /// Each steerable axle's mode and angle (`Axle_Steer_Mode_<n>`, `Axle_Steer_Angle_<n>`) as
-    /// the scripts left them, into the body (`D-6`): any mode but 1 and 2, or a script angle
-    /// that is not a number, is the basic mode, with one log line per vehicle.
-    pub(super) fn feed_steer_axles(&mut self, rb: &mut crate::physics::RigidBody) {
+    /// the scripts left them, into the body of the section `steer` belongs to (`D-6`): any
+    /// mode but 1 and 2, or a script angle that is not a number, is the basic mode, with one
+    /// log line per vehicle.
+    pub(super) fn feed_steer_axles(
+        &mut self,
+        rb: &mut crate::physics::RigidBody,
+        steer: &[SteerVars],
+    ) {
         use crate::physics::SteerMode;
-        for i in 0..self.v_steer.len() {
-            let vars = self.v_steer[i];
+        for &vars in steer {
             let (value, angle) = (self.get(vars.mode), self.get(vars.angle));
             let mut mode = SteerMode::from_value(value);
             let unknown = !(value == 0.0 || mode != SteerMode::Basic);
@@ -115,14 +119,19 @@ impl VehicleInstance {
                     vars.axle
                 );
             }
-            rb.set_steer_input(vars.axle, mode, angle);
+            rb.set_steer_input(vars.local, mode, angle);
         }
     }
 
-    /// `Axle_Steer_Locked_<n>` of each steerable axle: 1 while locked straight (`D-6`).
-    pub(super) fn show_steer_locked(&mut self, rb: &crate::physics::RigidBody) {
-        for vars in self.v_steer.clone() {
-            let locked = rb.steer_axle_locked(vars.axle);
+    /// `Axle_Steer_Locked_<n>` of each steerable axle of a section (`steer`, its body `rb`): 1
+    /// while locked straight (`D-6`).
+    pub(super) fn show_steer_locked(
+        &mut self,
+        rb: &crate::physics::RigidBody,
+        steer: &[SteerVars],
+    ) {
+        for vars in steer {
+            let locked = rb.steer_axle_locked(vars.local);
             self.put(vars.locked, f32::from(u8::from(locked)));
         }
     }
@@ -135,7 +144,7 @@ impl VehicleInstance {
         };
         for vars in &self.v_steer {
             if let Some(a) = saved(&format!("Axle_Steering_{}_L", vars.axle)) {
-                rb.set_steer_angle(vars.axle, a);
+                rb.set_steer_angle(vars.local, a);
             }
         }
     }

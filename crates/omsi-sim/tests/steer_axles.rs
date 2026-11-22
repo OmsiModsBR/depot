@@ -1,7 +1,7 @@
 //! Steerable axles in Project Depot Physics (spec 004): the pure rules of
 //! `physics::implementation::depot::steering` against `D-5` and `D-6` of
 //! `docs/physics/depot-model.md`, and the conformance vehicles with steerable axles driven
-//! through a turn (`D-5` to `D-7`).
+//! through a turn (`D-5` to `D-7`), leading and behind a joint.
 
 mod support;
 
@@ -13,6 +13,7 @@ use omsi_sim::testing::physics::RigidBodyInternals;
 use support::model::{build, launch, step};
 use support::vehicles::{
     tag_6x2_4_long, twin_steer_8x2, v2_front_declared, v2_rigid_6x2, v2_tag_steer,
+    v5_articulated_8x2, v5_last_axle_steer,
 };
 
 fn axle(lock_deg: f32, centring_deg_s: f32) -> SteerAxle {
@@ -412,4 +413,180 @@ fn a_turning_line_far_behind_the_cog_does_not_rock_the_body_at_speed() {
     }
     assert!(bodies[0].holding());
     assert!(roll < 0.03, "roll {roll} rad/s");
+}
+
+/// V5's train after 25 s at 3 m/s with the steering at half; `lock` locks the rear section's
+/// steerable axle straight first.
+fn v5_at_half_steering(defs: &[omsi_vehicle::Vehicle], lock: bool) -> (Vec<RigidBody>, f32) {
+    let (mut bodies, joints) = depot(defs);
+    if lock {
+        lock_all(&mut bodies[1]);
+    }
+    let v = 3.0_f32;
+    launch(&mut bodies, v);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let radius = bodies[1].wheels()[0].radius();
+    for _ in 0..1500 {
+        let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+        let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+        let torque = ((v - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
+        step(&mut bodies, &joints, &brakes, torque, 0.5);
+    }
+    let alpha = joints[0].angles(&bodies).0;
+    (bodies, alpha)
+}
+
+/// `C-9`'s steady articulation angle (rad) of V5 at half steering with the rear section
+/// turning about `y_turn`: `R sin α + D cos α = d`, the ball 1.9 m behind the front
+/// section's line and `d` ahead of the rear one's.
+fn v5_closed_form_alpha(y_turn: f32) -> f32 {
+    let (r, ball, d) = (1.0 / (0.5 * 0.12_f32), -4.4 - -2.5_f32, 5.6 - y_turn);
+    (d / r.hypot(ball)).asin() - ball.atan2(r)
+}
+
+/// Checks: D-5, D-6, D-7, C-9 (SC-006a: the rear section turns about its rigid axle's line, its
+/// last axle against the bend, and its articulation angle is the closed form's)
+#[test]
+fn v5_rear_section_turns_about_its_steered_line() {
+    let (bodies, alpha) = v5_at_half_steering(&v5_last_axle_steer(), false);
+    let rear = &bodies[1];
+    assert!(rear.holding());
+    assert!(
+        (rear.rot_pnt_long() - 1.2).abs() < 0.05,
+        "line {}",
+        rear.rot_pnt_long()
+    );
+    // (21.7°)
+    let want = v5_closed_form_alpha(1.2);
+    assert!(
+        (alpha - want).abs() < 0.02 * want,
+        "alpha {} deg, want {} deg",
+        alpha.to_degrees(),
+        want.to_degrees()
+    );
+    // the fourth axle at -s_f lock, s_f the joint's curvature over the full lock (0.70)
+    let s_f = alpha.sin() / (5.6 - 1.2) / 0.12;
+    let fourth = rear.axle_steer(2);
+    let want = -s_f * 34.85f32.to_radians();
+    assert!(
+        (fourth - want).abs() < 0.02 * want.abs(),
+        "fourth axle {} deg, want {} deg",
+        fourth.to_degrees(),
+        want.to_degrees()
+    );
+    assert!(rear.wheels()[2].steered());
+    // the rigid third axle stands square and shows 0
+    assert_eq!(rear.axle_steer(0), 0.0);
+    assert!(!rear.wheels()[0].steered());
+}
+
+/// The load-weighted middle (m) of V5's rear axles at rest, the joint carrying its share.
+fn v5_rear_middle(rear: &RigidBody) -> f32 {
+    let w = rear.wheels();
+    let (a, b) = (w[0].rest_load(), w[2].rest_load());
+    (a * w[0].attach().y + b * w[2].attach().y) / (a + b)
+}
+
+/// Checks: D-5, D-7, C-9 (SC-006a: locked, the rear section turns about the load-weighted
+/// middle of its axles, and its articulation angle is the closed form's)
+#[test]
+fn v5_rear_section_with_its_last_axle_locked_turns_about_the_middle() {
+    let (bodies, alpha) = v5_at_half_steering(&v5_last_axle_steer(), true);
+    let rear = &bodies[1];
+    assert!(rear.holding());
+    let middle = v5_rear_middle(rear);
+    assert!(
+        (rear.rot_pnt_long() - middle).abs() < 0.05,
+        "line {}, want {middle}",
+        rear.rot_pnt_long()
+    );
+    // (30.1°)
+    let want = v5_closed_form_alpha(middle);
+    assert!(
+        (alpha - want).abs() < 0.02 * want,
+        "alpha {} deg, want {} deg",
+        alpha.to_degrees(),
+        want.to_degrees()
+    );
+    assert_eq!(rear.axle_steer(2), 0.0);
+}
+
+/// Checks: SC-006a (the rear section cuts the corner less with its last axle steering: its
+/// line, the nearest it comes to the centre, runs on a wider circle)
+#[test]
+fn v5_rear_section_cuts_the_corner_less_with_its_last_axle_steering() {
+    let (steering, _) = v5_at_half_steering(&v5_last_axle_steer(), false);
+    let (locked, _) = v5_at_half_steering(&v5_last_axle_steer(), true);
+    let (r_steering, r_locked) = (radius(&steering[1]), radius(&locked[1]));
+    // (16.19 m and 15.37 m)
+    assert!(
+        r_steering > r_locked + 0.5,
+        "rear line on {r_steering} m steering, {r_locked} m locked"
+    );
+}
+
+/// Checks: C-9 (a rear section without declarations turns about its file's line as before)
+#[test]
+fn v5_rear_section_without_declarations_keeps_its_file_line() {
+    let (bodies, alpha) = v5_at_half_steering(&v5_articulated_8x2(), false);
+    assert!(bodies[1].steer_axles().is_empty());
+    let want = v5_closed_form_alpha(1.2);
+    assert!(
+        (alpha - want).abs() < 0.02 * want,
+        "alpha {}",
+        alpha.to_degrees()
+    );
+    assert!(bodies[1].wheels().iter().all(|w| !w.steered()));
+}
+
+/// Checks: D-6 (behind a joint the axle follows the joint, not the steering wheel: with the
+/// joint straight it stands straight at full lock)
+#[test]
+fn v5_rear_axle_stands_straight_while_the_joint_is() {
+    let (mut bodies, joints) = depot(&v5_last_axle_steer());
+    launch(&mut bodies, 3.0);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    for _ in 0..60 {
+        step(&mut bodies, &joints, &brakes, 0.0, 0.0);
+    }
+    assert_eq!(bodies[1].axle_steer(2), 0.0);
+    step(&mut bodies, &joints, &brakes, 0.0, 1.0);
+    let alpha = joints[0].angles(&bodies).0;
+    assert!(
+        alpha.abs() < 0.5f32.to_radians(),
+        "alpha {}",
+        alpha.to_degrees()
+    );
+    assert!(
+        bodies[1].axle_steer(2).abs() < 0.5f32.to_radians(),
+        "fourth axle {} deg with the joint at {} deg",
+        bodies[1].axle_steer(2).to_degrees(),
+        alpha.to_degrees()
+    );
+}
+
+/// Checks: D-5, D-6 (locking the rear axle in a turn moves the rear section's line
+/// continuously, from its rigid axle to the load-weighted middle)
+#[test]
+fn locking_the_rear_axle_in_a_turn_moves_the_line_continuously() {
+    let (mut bodies, _) = v5_at_half_steering(&v5_last_axle_steer(), false);
+    let joints = depot(&v5_last_axle_steer()).1;
+    bodies[1].set_steer_input(1, SteerMode::Locked, 0.0);
+    let brakes: Vec<Vec<f32>> = bodies.iter().map(|b| vec![0.0; b.wheels().len()]).collect();
+    let radius = bodies[1].wheels()[0].radius();
+    let mut line = bodies[1].rot_pnt_long();
+    let mut worst = 0.0_f32;
+    for _ in 0..600 {
+        let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+        let rolling: f32 = bodies.iter().map(|b| b.rolling_resistance()).sum();
+        let torque = ((3.0 - bodies[0].forward_speed()) * mass * 2.0 + rolling) * radius;
+        step(&mut bodies, &joints, &brakes, torque, 0.5);
+        worst = worst.max((bodies[1].rot_pnt_long() - line).abs());
+        line = bodies[1].rot_pnt_long();
+    }
+    assert!(bodies[1].steer_axle_locked(1));
+    let middle = v5_rear_middle(&bodies[1]);
+    assert!((line - middle).abs() < 0.05, "line {line}, want {middle}");
+    // (the axle's 60°/s moves it about 0.1 m a frame over the 2.3 m; a jump would be all of it)
+    assert!(worst < 0.25, "the line moved {worst} m in a frame");
 }
