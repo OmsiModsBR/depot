@@ -1330,27 +1330,50 @@ pub fn launcher_log_line(now: u64, source: &str, line: &str) -> String {
     format!("{now} [{source}] {line}\n")
 }
 
-/// Add `line`, said by `source`, to the log file `path`. The file is opened to append and the
-/// line goes out in one write, so lines of the launcher and of the helper, written at the
-/// same time, do not break into each other.
-pub fn append_log_line(path: &Path, source: &str, line: &str) {
+/// This program's one handle on `launcher.log`, opened at its first line: every line of the
+/// launcher goes through it, so the file's cap is counted in one place.
+static OWN_LOG: std::sync::Mutex<Option<omsi_cfg::logfile::CappedFile>> =
+    std::sync::Mutex::new(None);
+
+/// Write `bytes` (whole lines) to `launcher.log` through this program's handle. The file is
+/// opened to append and a line goes out in one write, so lines of the launcher and of the
+/// helper, written at the same time, do not break into each other; past the cap the file
+/// gets the truncation marker and nothing more.
+fn write_own_log(bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-    {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let _ = f.write_all(launcher_log_line(now, source, line).as_bytes());
+    let mut own = OWN_LOG.lock().unwrap_or_else(|e| e.into_inner());
+    if own.is_none() {
+        *own = Some(omsi_cfg::logfile::CappedFile::open(
+            &launcher_log_path(),
+            omsi_cfg::logfile::LOG_CAP_BYTES,
+        )?);
+    }
+    match own.as_mut() {
+        Some(f) => f.write_all(bytes),
+        None => Ok(()),
+    }
+}
+
+/// Where the launcher's logger writes: `launcher.log`, through the handle `log_line` uses.
+pub struct LauncherLog;
+
+impl std::io::Write for LauncherLog {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        write_own_log(buf).map(|_| buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
 /// One line into ~/.depot/launcher.log.
 fn log_line(line: &str) {
-    append_log_line(&launcher_log_path(), "launcher", line);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let _ = write_own_log(launcher_log_line(now, "launcher", line).as_bytes());
 }
 
 /// Puts the depot files of the root folders `hof`/`hofs` (any letter case) beside every

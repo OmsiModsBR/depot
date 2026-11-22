@@ -31,6 +31,7 @@
 //!   data folder ([`paths`]);
 //! * `fs`: [`write_atomic`];
 //! * [`bytes`]: little-endian numbers in binary files;
+//! * [`logfile`]: the size cap of the log files;
 //! * [`env`](mod@env), [`flags`] and [`limits`]: the environment, the `OMSI_*` variables and the
 //!   ceilings of the parsers.
 
@@ -44,6 +45,7 @@ mod graphics;
 pub mod graphics_options;
 mod install;
 pub mod limits;
+pub mod logfile;
 mod physics;
 pub mod text;
 
