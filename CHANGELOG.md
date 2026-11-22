@@ -26,6 +26,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 - **Added.** [docs/PRIVACY.md](docs/PRIVACY.md) says what the program sends over the network (nothing unless you ask, and only to the named host), that there is no telemetry, analytics or identifier, that logs stay in `~/.depot`, and that the Steam connection is deliberate. No behaviour of the program changes. (#628)
 - **Changed.** The website serves Roboto, Roboto Mono and Material Icons from its own `site/fonts` (Apache-2.0, unmodified; recorded in [THIRD_PARTY.md](THIRD_PARTY.md)) instead of Google Fonts, and its content security policy now allows fonts only from the site itself, so the site itself loads nothing from Google; it still contacts `api.github.com`, and issue pages load avatars and any pictures the issue text points to. Checked in a browser for the fonts and icon ligatures. (#628)
 - **Fixed.** `SECURITY.md` no longer mentions a crash reporter, which the program does not have; it says the logs stay on the user's computer. (#628)
+- **Added.** [docs/LOGS.md](docs/LOGS.md) says where the logs are, what each one contains, how to get more detail and what to attach to a report; the bug report form now points to the `.depot` folder instead of a `.openomsi` one that does not exist. Documentation only; it describes today's behaviour. (#826)
 
 ### Diagnostics, integrity and AI traffic
 
