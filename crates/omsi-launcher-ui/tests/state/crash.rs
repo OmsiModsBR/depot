@@ -148,6 +148,58 @@ fn the_user_folder_is_replaced_before_the_error_is_cut() {
     std::fs::write(&p, format!("[t ERROR g] {lead}{fill} {home}/a.cfg\n")).unwrap();
     let (what, _) = omsi_launcher_ui::state::crash_of(&p).unwrap();
     assert!(what.ends_with(" US"), "{what}");
-    assert!(!what.ends_with(&home[..2]) || home.starts_with("US"), "{what}");
+    assert!(
+        !what.ends_with(&home[..2]) || home.starts_with("US"),
+        "{what}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A game that stops on an error after its log reached the size cap is still found: the
+/// panic is written after the truncation line, and so is the clean end of a game that
+/// went on (a cut log is no crash by itself).
+#[test]
+fn a_crash_after_the_log_was_cut_is_still_found() {
+    use omsi_cfg::logfile::Capped;
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("depot-crash-capped-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    let cap = 512 * 1024;
+    let fill = |log: &mut Capped<std::fs::File>| {
+        log.write_all(b"[t INFO  x] starting the game: omsi\n")
+            .unwrap();
+        let line = format!("[t DEBUG game] loaded {}\n", "x".repeat(100));
+        for _ in 0..(2 * cap as usize / line.len()) {
+            log.write_all(line.as_bytes()).unwrap();
+        }
+    };
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
+    drop(log);
+    assert!(std::fs::metadata(&p).unwrap().len() <= cap);
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    assert!(what.contains("index out of bounds"), "{what}");
+    assert!(tail.contains("log truncated at"), "{tail}");
+    // a lost graphics device after the cut
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t ERROR omsi_render] the graphics device was lost (Unknown)\n")
+        .unwrap();
+    log.write_all(b"[t INFO  openomsi_game::app_events] game ends\n")
+        .unwrap();
+    drop(log);
+    assert!(omsi_launcher_ui::state::crash_of(&p)
+        .unwrap()
+        .0
+        .contains("device was lost"));
+    // a clean end after the cut is no crash
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t INFO  openomsi_game::app_events] game ends\n")
+        .unwrap();
+    drop(log);
+    assert!(omsi_launcher_ui::state::crash_of(&p).is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
