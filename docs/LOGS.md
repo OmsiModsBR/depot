@@ -30,8 +30,20 @@ There is no separate script log yet. Script read and compile problems appear in 
 
 ## How to get more detail
 
-- **Detailed log** (launcher, Diagnostics page): off by default. When on, a game started from the launcher also writes debug lines from the game's own crates: every file it loads (`loaded <path> (<n> bytes)`), files it looked for and did not find, and a warning with path and reason for a file that exists but cannot be read. It does not turn on the graphics libraries' debug output.
-- **`RUST_LOG`**: for a game started by hand, or to override the setting for one launch (the environment variable wins over the Detailed log setting, and the log says so). The default is `info`.
+The log has four levels. Each level writes its own lines and those of the levels before it:
+
+| Level | What is written |
+|---|---|
+| `error` | errors only |
+| `warn` | errors and warnings |
+| `info` | what the program does, its warnings and errors. This is the default |
+| `debug` | also the debug lines of the game's own crates: every file it loads (`loaded <path> (<n> bytes)`), files it looked for and did not find, and a warning with path and reason for a file that exists but cannot be read. The graphics libraries stay at `info` |
+
+Every line says its level in its header: `[<time> WARN  <where>] <text>`.
+
+- **Log level** (launcher, Diagnostics page): Error, Warning, Info (the default) or Debug. It applies to the next games started from the launcher. A settings file from before the four levels, with the *Detailed log* switch on, is read as Debug.
+- **`--log-level <level>`**: the same choice on the game's command line (`depot --log-level debug ...`); the launcher passes its setting this way. A value that is none of the four is `info`, and the log starts with a warning that says so.
+- **`RUST_LOG`**: the specialist's override. When it is set, it wins over the level, and the log starts with a warning that says so. It takes any filter the logger reads, for instance `warn,omsi_script=debug`.
 - **`OMSI_PROFILE=1`**: with it, `game.log` gets one `profile window:` line every 30 seconds with the frame time and the cost of each stage, and the stage table when the game ends. Every profiling line carries the target `profile` in its header (`[<time> INFO  profile] profile window: ...`), so the profiling lines can be picked out of the file by that word. See [performance measurement](performance-measurement.md).
 - Other `OMSI_DEBUG_*` switches for single subjects are listed in [ENVIRONMENT](ENVIRONMENT.md).
 
