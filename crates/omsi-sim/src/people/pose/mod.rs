@@ -53,8 +53,7 @@ pub struct PoseInput<'a> {
     /// straight from the forearm.
     pub grip_frames: Option<[(Vec3, Vec3); 2]>,
     /// Extra forward lean towards the grips (degrees): a driver whose wheel is far off leans
-    /// to it from the seat instead of leaving it, the back pivoting straight at the hips (the
-    /// seated posture itself, bend of the waist and head included, stays as it is).
+    /// to it from the seat instead of leaving it.
     pub grip_lean: f32,
     /// Hold on to a handrail (0 … 1).
     pub hold: f32,

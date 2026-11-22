@@ -556,15 +556,6 @@ fn neck_lean(posed: &Posed) -> f32 {
     v.y.atan2(v.z).to_degrees()
 }
 
-/// The bend of the back at the waist: the trunk's turn against the pelvis (degrees).
-fn waist_bend(posed: &Posed) -> f32 {
-    let rot = |id| {
-        let b = posed.bones[slot_of(id).unwrap()];
-        glam::Quat::from_mat3a(&b.matrix3).normalize()
-    };
-    rot(BONE_HIP).angle_between(rot(BONE_MAIN)).to_degrees()
-}
-
 #[test]
 fn a_driver_sits_up_at_the_wheel() {
     // the wheel of the Caio Millennium V O500UA, reached from the seat as it is: the
@@ -579,31 +570,14 @@ fn a_driver_sits_up_at_the_wheel() {
 }
 
 #[test]
-fn a_far_wheel_is_reached_with_a_straight_back() {
-    // a wheel further off: the back pivots forward at the hips, as straight as in the
-    // seated posture - the waist bent no further, the head kept level
+fn a_wheel_further_off_leaves_the_back_as_it_is() {
+    // the arms reach further for it; the trunk does not bend towards it by itself (the
+    // driver is brought nearer the wheel instead, see `SLIDE_MAX` in the app's driver)
     let r = rig();
-    let near = driver_at_wheel(&r, 0.10, 0.0);
-    let far = driver_at_wheel(&r, 0.25, 12.0);
-    let (bend_near, bend_far) = (waist_bend(&near), waist_bend(&far));
+    let near = neck_lean(&driver_at_wheel(&r, 0.10, 0.0));
+    let far = neck_lean(&driver_at_wheel(&r, 0.22, 0.0));
     assert!(
-        (bend_far - bend_near).abs() < 0.5,
-        "waist bent {bend_near:.1} deg near, {bend_far:.1} far"
+        (far - near).abs() < 0.5,
+        "neck {near:.1} deg off the vertical near, {far:.1} far"
     );
-    let (lean_near, lean_far) = (neck_lean(&near), neck_lean(&far));
-    assert!(
-        lean_far > lean_near + 8.0,
-        "leaned {lean_near:.1} deg near, {lean_far:.1} far"
-    );
-    // the neck no further forward than a 12 degree pivot of the seated back takes it
-    assert!(lean_far < lean_near + 16.0, "leaned {lean_far:.1} deg");
-}
-
-#[test]
-fn the_extra_lean_is_capped() {
-    // asked for more than the pose allows, the back pivots no further
-    let r = rig();
-    let a = driver_at_wheel(&r, 0.25, 30.0);
-    let b = driver_at_wheel(&r, 0.25, 90.0);
-    assert!((neck_lean(&a) - neck_lean(&b)).abs() < 0.1);
 }
