@@ -31,9 +31,26 @@ pub fn records_in(dir: &Path) -> Vec<PathBuf> {
                     .is_some_and(|n| n.starts_with(RECORD_PREFIX))
         })
         .collect();
-    // (by the name without its extension: `run-…-101500` before `run-…-101500-2`)
-    records.sort_by(|a, b| a.file_stem().cmp(&b.file_stem()));
+    // (by time, then by the number of a session started in the same second: `…-101500`,
+    // `…-101500-2`, … `…-101500-10`)
+    records.sort_by_key(|path| order_of(path));
     records
+}
+
+/// Where a record file stands among the others: its time stamp, then its number among the
+/// sessions of that second (1 for the first, which has none in its name).
+fn order_of(path: &Path) -> (String, u64) {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let stem = stem.strip_prefix(RECORD_PREFIX).unwrap_or(stem);
+    // (`20261122-101500` or `20261122-101500-2`)
+    let mut parts = stem.splitn(3, '-');
+    let stamp = format!(
+        "{}-{}",
+        parts.next().unwrap_or(""),
+        parts.next().unwrap_or("")
+    );
+    let n = parts.next().and_then(|n| n.parse().ok()).unwrap_or(1);
+    (stamp, n)
 }
 
 /// Removes the oldest records of `dir` so that at most `keep` are left.
@@ -55,17 +72,25 @@ pub fn start_in(
     now: SystemTime,
 ) -> Result<(RunRecord<BufWriter<File>>, PathBuf)> {
     std::fs::create_dir_all(dir)?;
-    prune(dir, SESSIONS_KEPT.saturating_sub(1));
     let (y, mo, d, h, mi, s) = civil(now);
     let stamp = format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}");
-    // (two sessions started in the same second: the later one sorts after the first)
-    let path = (1..)
-        .map(|n| match n {
-            1 => dir.join(format!("{RECORD_PREFIX}{stamp}.{RECORD_EXTENSION}")),
-            n => dir.join(format!("{RECORD_PREFIX}{stamp}-{n}.{RECORD_EXTENSION}")),
-        })
-        .find(|path| !path.exists())
-        .expect("an endless range");
+    // (two sessions started in the same second: the later one is numbered after the last
+    // of them, counted before the old records go - a number set free by their removal
+    // would put the new session before older ones, and the next start would remove it)
+    let last = records_in(dir)
+        .iter()
+        .map(|path| order_of(path))
+        .filter(|(at, _)| *at == stamp)
+        .map(|(_, n)| n)
+        .max();
+    let path = match last {
+        None => dir.join(format!("{RECORD_PREFIX}{stamp}.{RECORD_EXTENSION}")),
+        Some(n) => dir.join(format!(
+            "{RECORD_PREFIX}{stamp}-{}.{RECORD_EXTENSION}",
+            n + 1
+        )),
+    };
+    prune(dir, SESSIONS_KEPT.saturating_sub(1));
     let file = File::create_new(&path)?;
     let record = RunRecord::start(BufWriter::new(file), RECORD_CAP_BYTES, game, now)?;
     Ok((record, path))

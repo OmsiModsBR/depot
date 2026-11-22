@@ -88,6 +88,24 @@ fn two_sessions_started_in_the_same_second_get_two_files_in_order() {
     assert_eq!(records_in(&dir), [first, second]);
 }
 
+/// More sessions in one second than are kept: the ones left are always the last five, in
+/// the order they started (a number set free by a removal is not used again).
+#[test]
+fn many_sessions_in_the_same_second_keep_the_last_five_in_order() {
+    let dir = temp_dir("same-many");
+    let mut last = PathBuf::new();
+    for _ in 0..12 {
+        let (record, path) = start_in(&dir, &hello(), at(0)).unwrap();
+        drop(record.finish().unwrap());
+        last = path;
+    }
+    assert_eq!(last, dir.join("run-20261122-101500-12.jsonl"));
+    assert_eq!(
+        names(&dir),
+        [8, 9, 10, 11, 12].map(|n| format!("run-20261122-101500-{n}.jsonl"))
+    );
+}
+
 #[test]
 fn only_record_files_are_counted_and_removed() {
     let dir = temp_dir("others");
