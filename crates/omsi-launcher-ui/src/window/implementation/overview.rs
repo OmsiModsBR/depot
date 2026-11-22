@@ -203,23 +203,15 @@ fn folder_card(f: &mut Frame, r: Rect) -> Option<Page> {
 fn log_card(f: &mut Frame, r: Rect) {
     let log = core::data_dir().join("game.log");
     card(f.ui, r, "The game's log", None);
-    let x = value_x(f.ui, r, &["File", "Launcher", "Preview helper"]);
+    let x = value_x(f.ui, r, &["File", "Launcher and preview helper"]);
     line(f.ui, r, r.y + 72.0, x, "File", &log.to_string_lossy());
     line(
         f.ui,
         r,
         r.y + 108.0,
         x,
-        "Launcher",
-        &core::data_dir().join("launcher.log").to_string_lossy(),
-    );
-    line(
-        f.ui,
-        r,
-        r.y + 144.0,
-        x,
-        "Preview helper",
-        &f.host.helper_log().to_string_lossy(),
+        "Launcher and preview helper",
+        &core::launcher_log_path().to_string_lossy(),
     );
     // (the next games started from here write what they load and every failure)
     let mut detailed = f
@@ -228,7 +220,7 @@ fn log_card(f: &mut Frame, r: Rect) {
         .get("detailed_log")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    let row = Rect::new(r.x + 19.0, r.y + 166.0, r.w - 38.0, 32.0);
+    let row = Rect::new(r.x + 19.0, r.y + 130.0, r.w - 38.0, 32.0);
     if f.ui.toggle(
         "diagnostics:detailed-log",
         row,
@@ -291,7 +283,7 @@ mod tests {
     /// under the button keeps the room at the card's foot the other cards give theirs.
     #[test]
     fn the_log_card_has_room_for_its_note() {
-        // (the switch's row ends at 198; the button and its note take the last 84)
-        assert!(LOG_CARD_H - 84.0 >= 206.0);
+        // (the switch's row ends at 162; the button and its note take the last 84)
+        assert!(LOG_CARD_H - 84.0 >= 170.0);
     }
 }

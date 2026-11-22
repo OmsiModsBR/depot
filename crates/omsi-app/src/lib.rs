@@ -94,14 +94,33 @@ pub fn run() -> Result<()> {
     // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
     // well: a session's go to its `game.log`, but the launcher's own window has no console on
     // Windows, and what it said went nowhere.
-    let launcher_process =
-        std::env::args().len() == 1 || std::env::args().any(|a| a == "--launcher");
+    let args_now: Vec<String> = std::env::args().collect();
+    let launcher_process = startup::launcher_process(&args_now);
     if launcher_process {
-        let file = omsi_launcher_lib::data_dir().join("launcher.log");
+        let file = omsi_launcher_lib::launcher_log_path();
         let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
-        if let Ok(f) = std::fs::File::create(&file) {
-            logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+        // (replaced at each start, then opened to append: the preview helper writes the same
+        // file, and a handle that is not appending would write over its lines)
+        if std::fs::File::create(&file).is_ok() {
+            if let Ok(f) = std::fs::OpenOptions::new().append(true).open(&file) {
+                logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+            }
         }
+    }
+    // The launcher's file holds two programs' lines, so each says which wrote it; a game's own
+    // lines (`game.log`) need no tag.
+    if let Some(source) = startup::log_source(&args_now) {
+        use std::io::Write;
+        logger.format(move |buf, r| {
+            writeln!(
+                buf,
+                "[{} {:<5} {}] [{source}] {}",
+                buf.timestamp(),
+                r.level(),
+                r.target(),
+                r.args()
+            )
+        });
     }
     logger.init();
     // a panic goes into the log (which the launcher keeps per session) with where it

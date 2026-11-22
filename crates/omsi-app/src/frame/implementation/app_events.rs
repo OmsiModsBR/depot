@@ -489,7 +489,7 @@ impl ApplicationHandler for App {
                                 .iter()
                                 .map(|(k, v)| format!("{k} {:.0}", v * 1000.0))
                                 .collect();
-                            log::info!(
+                            log::info!(target: "profile",
                                 "stutter: frame {} took {:.0} ms ({}; outside the stages {:.0} ms)",
                                 self.total_frames,
                                 raw_dt * 1000.0,
@@ -3865,35 +3865,35 @@ impl ApplicationHandler for App {
                             if omsi_cfg::flags::PROFILE.is_set() {
                                 let n = self.total_frames.max(1) as f64;
                                 for (k, v) in &self.profile {
-                                    log::info!("profile {k:10}: {:.1} ms/frame", v / n * 1000.0);
+                                    log::info!(target: "profile", "profile {k:10}: {:.1} ms/frame", v / n * 1000.0);
                                 }
                                 if let Some(h) = self.session.humans.as_ref() {
-                                    log::info!(
+                                    log::info!(target: "profile",
                                         "profile people: {} ({})",
                                         h.people.len(),
                                         h.summary()
                                     );
                                 }
                                 for (k, v) in r.stats.borrow().iter() {
-                                    log::info!(
+                                    log::info!(target: "profile",
                                         "profile render.{k:10}: {:.2} ms/frame",
                                         v / n * 1000.0
                                     );
                                 }
                                 for (k, v) in r.counts.borrow().iter() {
-                                    log::info!("profile count {k}: {:.0} a frame", v / n);
+                                    log::info!(target: "profile", "profile count {k}: {:.0} a frame", v / n);
                                 }
                                 for (pass, ms, frames) in r.gpu_pass_times() {
-                                    log::info!("profile gpu pass {pass:12}: {ms:.2} ms ({frames} frames measured)");
+                                    log::info!(target: "profile", "profile gpu pass {pass:12}: {ms:.2} ms ({frames} frames measured)");
                                 }
                                 if let (Some((c0, t0, f0)), Some(c1)) =
                                     (self.cpu_mark, process_cpu_seconds())
                                 {
                                     let frames = self.total_frames.saturating_sub(f0).max(1) as f64;
-                                    log::info!("profile: since 15 s {:.1} ms wall and {:.1} ms CPU (all threads) per frame, {:.1} cores busy", t0.elapsed().as_secs_f64() / frames * 1000.0, (c1 - c0) / frames * 1000.0, (c1 - c0) / t0.elapsed().as_secs_f64().max(1e-3));
+                                    log::info!(target: "profile", "profile: since 15 s {:.1} ms wall and {:.1} ms CPU (all threads) per frame, {:.1} cores busy", t0.elapsed().as_secs_f64() / frames * 1000.0, (c1 - c0) / frames * 1000.0, (c1 - c0) / t0.elapsed().as_secs_f64().max(1e-3));
                                 }
                                 let (sw, sh) = r.scene_size(s.config.width, s.config.height);
-                                log::info!(
+                                log::info!(target: "profile",
                                     "profile: window {}x{}, scene drawn at {sw}x{sh}, {}x MSAA",
                                     s.config.width,
                                     s.config.height,
@@ -3908,7 +3908,7 @@ impl ApplicationHandler for App {
                     if self.fps_t.elapsed().as_secs_f32() >= 1.0 {
                         if omsi_cfg::flags::PROFILE.is_set() {
                             let secs = self.fps_t.elapsed().as_secs_f32();
-                            log::info!(
+                            log::info!(target: "profile",
                                 "profile interval: {:.1} fps over {secs:.2} s",
                                 self.frames as f32 / secs
                             );

@@ -10,10 +10,9 @@ All logs are in the `.depot` folder in your user folder: `~/.depot` on Linux and
 |---|---|---|
 | `game.log` | the game, started from the launcher | the machine and the settings at the start, what the game loads and what fails, on-screen messages, a status line every minute, warnings and errors, and a panic with a backtrace if the game stops on an error |
 | `game-2.log`, `game-3.log` … | a second, third … game running at the same time | the same, one file per running game |
-| `launcher.log` | the launcher | the launcher's own lines, such as starting a game, installs and clean-up |
-| `preview-helper.log` | the helper process that draws the bus pictures in the launcher | its lines, rewritten for each helper |
+| `launcher.log` | the launcher and the helper process that draws the bus pictures in the launcher | the launcher's own lines, such as starting a game, installs and clean-up, and the preview helper's lines. Every line says which of the two wrote it: `[launcher]` or `[preview-helper]` |
 
-Each run replaces the previous `game.log`, so only the current session is kept. The launcher log may grow during a run. The first line of both says the build they were made from.
+Each run replaces the previous `game.log`, so only the current session is kept. `launcher.log` is replaced when the launcher starts and grows while it is open; a preview helper that is started again adds to it. The first line of each program says the build it was made from. There is no `preview-helper.log` any more; one left by an older version can be deleted.
 
 ## Script errors
 
@@ -23,12 +22,12 @@ There is no separate script log yet. Script read and compile problems appear in 
 
 - **Detailed log** (launcher, Diagnostics page): off by default. When on, a game started from the launcher also writes debug lines from the game's own crates: every file it loads (`loaded <path> (<n> bytes)`), files it looked for and did not find, and a warning with path and reason for a file that exists but cannot be read. It does not turn on the graphics libraries' debug output.
 - **`RUST_LOG`**: for a game started by hand, or to override the setting for one launch (the environment variable wins over the Detailed log setting, and the log says so). The default is `info`.
-- **`OMSI_PROFILE=1`**: with it, `game.log` gets one `profile window:` line every 30 seconds with the frame time and the cost of each stage. See [performance measurement](performance-measurement.md).
+- **`OMSI_PROFILE=1`**: with it, `game.log` gets one `profile window:` line every 30 seconds with the frame time and the cost of each stage, and the stage table when the game ends. Every profiling line carries the target `profile` in its header (`[<time> INFO  profile] profile window: ...`), so the profiling lines can be picked out of the file by that word. See [performance measurement](performance-measurement.md).
 - Other `OMSI_DEBUG_*` switches for single subjects are listed in [ENVIRONMENT](ENVIRONMENT.md).
 
 ## What to attach to a report
 
-Attach `game.log` (the part around the problem is enough). For a launcher problem, attach `launcher.log`. If the problem is in a bus preview, attach `preview-helper.log` too.
+Attach `game.log` (the part around the problem is enough). For a problem in the launcher or in a bus preview, attach `launcher.log`.
 
 ## Privacy
 
