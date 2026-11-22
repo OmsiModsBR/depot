@@ -525,3 +525,59 @@ fn feet_come_off_the_bus_floor() {
         p.describe()
     );
 }
+
+/// A driver at the wheel, posed for `secs` from the seat of the player's bus (the hip point
+/// `SEAT_FRONT` behind the feet, as `driver.rs` puts it) with the grips `grip_y` m in front
+/// of the feet and `grip_lean` degrees of extra lean.
+fn driver_at_wheel(r: &Rig, grip_y: f32, grip_lean: f32) -> Posed {
+    let mut p = Pose::new(0x5eed_d71e);
+    let input = PoseInput {
+        activity: Activity::Sit,
+        seat: Some(Vec3::new(0.0, -0.34, 0.45)),
+        grips: Some([
+            Vec3::new(-0.235, grip_y, 0.84),
+            Vec3::new(0.235, grip_y, 0.84),
+        ]),
+        grip_lean,
+        ..Default::default()
+    };
+    for _ in 0..120 {
+        p.advance(r, &input, 1.0 / 30.0);
+    }
+    let posed = p.bones(r);
+    assert!(posed.ok);
+    posed
+}
+
+/// How far (degrees) the neck is in front of the middle of the hips, off the vertical.
+fn neck_lean(posed: &Posed) -> f32 {
+    let hips = (posed.hip[0] + posed.hip[1]) * 0.5;
+    let v = posed.neck - hips;
+    v.y.atan2(v.z).to_degrees()
+}
+
+#[test]
+fn a_driver_sits_up_at_the_wheel() {
+    // the wheel of the Caio Millennium V O500UA, reached from the seat as it is: the
+    // driver sits up, the neck a few degrees in front of the hips, not stooped over it
+    let r = rig();
+    let posed = driver_at_wheel(&r, 0.10, 0.0);
+    let lean = neck_lean(&posed);
+    assert!(
+        lean > -2.0 && lean < 12.0,
+        "neck {lean:.1} deg off the vertical"
+    );
+}
+
+#[test]
+fn a_wheel_further_off_leaves_the_back_as_it_is() {
+    // the arms reach further for it; the trunk does not bend towards it by itself (the
+    // driver is brought nearer the wheel instead, see `SLIDE_MAX` in the app's driver)
+    let r = rig();
+    let near = neck_lean(&driver_at_wheel(&r, 0.10, 0.0));
+    let far = neck_lean(&driver_at_wheel(&r, 0.22, 0.0));
+    assert!(
+        (far - near).abs() < 0.5,
+        "neck {near:.1} deg off the vertical near, {far:.1} far"
+    );
+}
