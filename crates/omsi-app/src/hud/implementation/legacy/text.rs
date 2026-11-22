@@ -3,6 +3,7 @@
 
 use crate::hud::interface::output::{Renderer, Scene, TextureId};
 use ab_glyph::{Font, FontVec, PxScale, ScaleFont, VariableFont};
+use std::hash::{Hash, Hasher};
 
 /// Roboto (Apache 2.0), the interface font.
 pub const ROBOTO: &[u8] =
@@ -17,6 +18,25 @@ pub(super) struct Label {
     pub(super) used: u64,
 }
 
+/// A label's key by reference. It hashes and compares as the `(String, u32, [u8; 4])` the
+/// labels are kept under, so a text that is already there is found without making a `String`
+/// of it (the interface asks for every text of the frame again each frame).
+pub(super) struct KeyRef<'a>(pub(super) &'a str, pub(super) u32, pub(super) [u8; 4]);
+
+impl Hash for KeyRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+        self.2.hash(state);
+    }
+}
+
+impl hashbrown::Equivalent<(String, u32, [u8; 4])> for KeyRef<'_> {
+    fn equivalent(&self, key: &(String, u32, [u8; 4])) -> bool {
+        self.0 == key.0 && self.1 == key.1 && self.2 == key.2
+    }
+}
+
 /// Or'ed into a label's pixel size: the text in the bold weight.
 pub(super) const BOLD: u32 = 1 << 31;
 
@@ -28,6 +48,9 @@ pub struct TextCache {
     bold: FontVec,
     pub(super) labels: hashbrown::HashMap<(String, u32, [u8; 4]), Label>,
     pub(super) frame: u64,
+    /// Where the names of the shapes made to a size are written (`cached_as`), kept so that
+    /// none is allocated for each shape of each frame.
+    key_buf: String,
     /// How strongly the background plates are drawn this frame (`backdrop`).
     pub(super) backdrop: f32,
     /// No outline round the texts that ask for none (the game menu's: flat text on its card).
@@ -47,9 +70,28 @@ impl TextCache {
             bold,
             labels: hashbrown::HashMap::new(),
             frame: 0,
+            key_buf: String::new(),
             backdrop: 1.0,
             flat: false,
         })
+    }
+
+    /// The label kept under `(text, px, color)`, marked as used in this frame.
+    pub(super) fn hit(&mut self, text: &str, px: u32, color: [u8; 4]) -> Option<Label> {
+        let frame = self.frame;
+        let l = self.labels.get_mut(&KeyRef(text, px, color))?;
+        l.used = frame;
+        Some(*l)
+    }
+
+    pub(super) fn take_key_buf(&mut self) -> String {
+        let mut b = std::mem::take(&mut self.key_buf);
+        b.clear();
+        b
+    }
+
+    pub(super) fn put_key_buf(&mut self, b: String) {
+        self.key_buf = b;
     }
 
     /// The texture of `text` at `px` pixels in `color` (alpha = opacity of the outline), and
@@ -96,11 +138,10 @@ impl TextCache {
         // combining mark as one, as macOS gives file names - the weather "Eiseska\u{308}lte"
         // showed a box after its "a" in the menu's list)
         let text = &*omsi_ui::text::composed(text);
-        let key = (text.to_string(), px, color);
-        if let Some(l) = self.labels.get_mut(&key) {
-            l.used = self.frame;
-            return *l;
+        if let Some(l) = self.hit(text, px, color) {
+            return l;
         }
+        let key = (text.to_string(), px, color);
         let font = if px & BOLD != 0 {
             &self.bold
         } else {
