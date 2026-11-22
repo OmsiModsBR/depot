@@ -127,3 +127,27 @@ fn a_crash_report_holds_the_placeholder_and_not_the_users_folder() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The error's text is cut to its length after the user's folder is replaced: a cut in the
+/// middle of the folder left the start of it in the report.
+#[test]
+fn the_user_folder_is_replaced_before_the_error_is_cut() {
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return;
+    };
+    let home = home.to_string_lossy().to_string();
+    if home.len() < 4 {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("depot-crash-cut-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    // the folder starts two characters before the cut
+    let lead = "the game stopped on an error: ";
+    let fill = "x".repeat(598 - lead.len() - 1);
+    std::fs::write(&p, format!("[t ERROR g] {lead}{fill} {home}/a.cfg\n")).unwrap();
+    let (what, _) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    assert!(what.ends_with(" US"), "{what}");
+    assert!(!what.ends_with(&home[..2]) || home.starts_with("US"), "{what}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
