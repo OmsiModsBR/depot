@@ -46,8 +46,24 @@ struct Lean {
     reach_lean: f32,
     reach_twist: f32,
     grip_lean: f32,
+    /// The driver's back pivoted forward at the hips, straight, for a wheel further off
+    /// than the arms reach from the seated posture (see `GRIP_LEAN`).
+    grip_pivot: f32,
     lean_bus: Vec2,
 }
+
+/// How a driver sits at the wheel (degrees towards it, shared by the pelvis and the waist):
+/// as measured on the Caio Millennium V O500UA, whose wheel the arms reach from the seat as
+/// they are - the neck some 7 cm in front of the hips, 6 degrees off the vertical.
+pub(crate) const GRIP_LEAN: f32 = 16.0;
+/// A wheel further off is reached by the back pivoting forward at the hips, kept as
+/// straight as in that posture (the waist and the head as they are), at most this far
+/// (degrees of `PoseInput::grip_lean`) and by `GRIP_PIVOT_GAIN` degrees of the pelvis for
+/// each, the shoulders going as far forward as the bend at hips and waist took them.
+/// (Before, all of it bent the waist as well: the driver of a bus with a far wheel sat
+/// hunched over it, the neck 26 cm in front of the hips.)
+pub(crate) const GRIP_PIVOT_MAX: f32 = 30.0;
+pub(crate) const GRIP_PIVOT_GAIN: f32 = 1.2;
 
 /// The pelvis transform and the turns the trunk answers.
 #[derive(Clone, Copy)]
@@ -243,9 +259,11 @@ impl Pose {
         } else {
             (0.0, 0.0)
         };
-        // a driver sits up, leaning towards the wheel
-        let grip_lean =
-            d(16.0 + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
+        // a driver sits up, leaning a little towards the wheel, and pivots at the hips with
+        // a straight back for one further off
+        let g = smoothstep(0.0, 1.0, self.grip);
+        let grip_lean = d(GRIP_LEAN) * g;
+        let grip_pivot = d(self.grip_extra.clamp(0.0, GRIP_PIVOT_MAX) * GRIP_PIVOT_GAIN) * g;
         // swaying with the bus: the body goes with the pull (forwards when it brakes, outwards
         // in a bend), less when holding on or sitting
         let lean_bus = self.lean * (1.0 - 0.4 * self.hold) * (1.0 - 0.4 * s_ease);
@@ -254,6 +272,7 @@ impl Pose {
             reach_lean,
             reach_twist,
             grip_lean,
+            grip_pivot,
             lean_bus,
         }
     }
@@ -279,6 +298,7 @@ impl Pose {
         let Lean {
             reach_lean,
             grip_lean,
+            grip_pivot,
             lean_bus,
             ..
         } = *lean;
@@ -296,8 +316,10 @@ impl Pose {
         // the hip of the leg in front leads (about z, counter-clockwise positive)
         let pelvis_yaw = -d(5.0) * intensity * ph.cos();
         // forward tilt walking, backwards on a seat
-        let pelvis_tilt =
-            d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease + reach_lean * 0.5 + grip_lean * 0.7;
+        let pelvis_tilt = d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease
+            + reach_lean * 0.5
+            + grip_lean * 0.7
+            + grip_pivot;
         let bus_shift = Vec3::new(lean_bus.x * 0.012, lean_bus.y * 0.012, 0.0) * (1.0 - s_ease);
         let stand_z = rig.pelvis.z - 0.004 * rig.scale - 0.012 * walk - 0.035 * rig.scale * run
             + 0.002 * breath * still;
@@ -371,6 +393,7 @@ impl Pose {
             reach_twist,
             grip_lean,
             lean_bus,
+            ..
         } = *lean;
         let Pelvis {
             pelvis_m,

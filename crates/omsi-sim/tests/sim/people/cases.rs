@@ -525,3 +525,85 @@ fn feet_come_off_the_bus_floor() {
         p.describe()
     );
 }
+
+/// A driver at the wheel, posed for `secs` from the seat of the player's bus (the hip point
+/// `SEAT_FRONT` behind the feet, as `driver.rs` puts it) with the grips `grip_y` m in front
+/// of the feet and `grip_lean` degrees of extra lean.
+fn driver_at_wheel(r: &Rig, grip_y: f32, grip_lean: f32) -> Posed {
+    let mut p = Pose::new(0x5eed_d71e);
+    let input = PoseInput {
+        activity: Activity::Sit,
+        seat: Some(Vec3::new(0.0, -0.34, 0.45)),
+        grips: Some([
+            Vec3::new(-0.235, grip_y, 0.84),
+            Vec3::new(0.235, grip_y, 0.84),
+        ]),
+        grip_lean,
+        ..Default::default()
+    };
+    for _ in 0..120 {
+        p.advance(r, &input, 1.0 / 30.0);
+    }
+    let posed = p.bones(r);
+    assert!(posed.ok);
+    posed
+}
+
+/// How far (degrees) the neck is in front of the middle of the hips, off the vertical.
+fn neck_lean(posed: &Posed) -> f32 {
+    let hips = (posed.hip[0] + posed.hip[1]) * 0.5;
+    let v = posed.neck - hips;
+    v.y.atan2(v.z).to_degrees()
+}
+
+/// The bend of the back at the waist: the trunk's turn against the pelvis (degrees).
+fn waist_bend(posed: &Posed) -> f32 {
+    let rot = |id| {
+        let b = posed.bones[slot_of(id).unwrap()];
+        glam::Quat::from_mat3a(&b.matrix3).normalize()
+    };
+    rot(BONE_HIP).angle_between(rot(BONE_MAIN)).to_degrees()
+}
+
+#[test]
+fn a_driver_sits_up_at_the_wheel() {
+    // the wheel of the Caio Millennium V O500UA, reached from the seat as it is: the
+    // driver sits up, the neck a few degrees in front of the hips, not stooped over it
+    let r = rig();
+    let posed = driver_at_wheel(&r, 0.10, 0.0);
+    let lean = neck_lean(&posed);
+    assert!(
+        lean > -2.0 && lean < 12.0,
+        "neck {lean:.1} deg off the vertical"
+    );
+}
+
+#[test]
+fn a_far_wheel_is_reached_with_a_straight_back() {
+    // a wheel further off: the back pivots forward at the hips, as straight as in the
+    // seated posture - the waist bent no further, the head kept level
+    let r = rig();
+    let near = driver_at_wheel(&r, 0.10, 0.0);
+    let far = driver_at_wheel(&r, 0.25, 12.0);
+    let (bend_near, bend_far) = (waist_bend(&near), waist_bend(&far));
+    assert!(
+        (bend_far - bend_near).abs() < 0.5,
+        "waist bent {bend_near:.1} deg near, {bend_far:.1} far"
+    );
+    let (lean_near, lean_far) = (neck_lean(&near), neck_lean(&far));
+    assert!(
+        lean_far > lean_near + 8.0,
+        "leaned {lean_near:.1} deg near, {lean_far:.1} far"
+    );
+    // the neck no further forward than a 12 degree pivot of the seated back takes it
+    assert!(lean_far < lean_near + 16.0, "leaned {lean_far:.1} deg");
+}
+
+#[test]
+fn the_extra_lean_is_capped() {
+    // asked for more than the pose allows, the back pivots no further
+    let r = rig();
+    let a = driver_at_wheel(&r, 0.25, 30.0);
+    let b = driver_at_wheel(&r, 0.25, 90.0);
+    assert!((neck_lean(&a) - neck_lean(&b)).abs() < 0.1);
+}
