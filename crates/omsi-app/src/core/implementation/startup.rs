@@ -89,16 +89,19 @@ pub fn log_source(args: &[String]) -> Option<&'static str> {
     }
 }
 
-/// What `--log-level` says on the command line `args` (`--log-level debug` or
-/// `--log-level=debug`; the last one counts), read before the arguments are parsed: the
-/// logger starts first, so that parsing them can be logged.
-pub fn log_level_arg(args: &[String]) -> Option<&str> {
+/// What the parameter `name` (`--log-level`, `--log-channels`) says on the command line
+/// `args` (`--log-level debug` or `--log-level=debug`; the last one counts), read before
+/// the arguments are parsed: the logger starts first, so that parsing them can be logged.
+pub fn early_arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     let mut found = None;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
-        if arg == "--log-level" {
+        if arg == name {
             found = rest.next().map(String::as_str).or(found);
-        } else if let Some(value) = arg.strip_prefix("--log-level=") {
+        } else if let Some(value) = arg
+            .strip_prefix(name)
+            .and_then(|rest| rest.strip_prefix('='))
+        {
             found = Some(value);
         }
     }
@@ -110,49 +113,74 @@ pub fn log_level_arg(args: &[String]) -> Option<&str> {
 pub struct LogSetup {
     /// The logger's filter.
     pub filter: String,
-    /// A warning for the log's first lines: a level that was not understood, or a
-    /// `RUST_LOG` that overrides the level asked for.
-    pub warning: Option<String>,
+    /// Warnings for the log's first lines: a level or a channel that was not understood, or
+    /// a `RUST_LOG` that overrides what was asked for.
+    pub warnings: Vec<String>,
     /// A note for the log's first lines: the level in use, when one was asked for.
     pub note: Option<String>,
 }
 
-/// The logger's filter for the command line's `--log-level` value `asked` and the
-/// environment's `RUST_LOG` value `env`. A `RUST_LOG` that says something wins (the
-/// specialist's override, any filter the logger reads); else the level asked for; else
-/// `info`. A level that is none of the four is `info`, with a warning.
-pub fn log_setup(asked: Option<&str>, env: Option<&str>) -> LogSetup {
-    use omsi_cfg::logfile::LogLevel;
+/// The logger's filter for the command line's `--log-level` value `level`, its
+/// `--log-channels` value `channels` and the environment's `RUST_LOG` value `env`. A
+/// `RUST_LOG` that says something wins (the specialist's override, any filter the logger
+/// reads); else the level asked for, `info` without one, with the channels given a level of
+/// their own at theirs. A level that is none of the four is `info`, and a channel entry that
+/// is not understood is left out, each with a warning.
+pub fn log_setup(level: Option<&str>, channels: Option<&str>, env: Option<&str>) -> LogSetup {
+    use omsi_cfg::logfile::{ChannelLevels, LogLevel};
     if let Some(env) = env.map(str::trim).filter(|e| !e.is_empty()) {
+        let asked: Vec<String> = [("--log-level", level), ("--log-channels", channels)]
+            .into_iter()
+            .filter_map(|(name, value)| value.map(|v| format!("{name} {v}")))
+            .collect();
         return LogSetup {
             filter: env.to_string(),
-            warning: asked.map(|a| {
-                format!("log level: RUST_LOG={env} is set and wins over --log-level {a}")
-            }),
+            warnings: if asked.is_empty() {
+                Vec::new()
+            } else {
+                vec![format!(
+                    "log level: RUST_LOG={env} is set and wins over {}",
+                    asked.join(" and ")
+                )]
+            },
             note: None,
         };
     }
-    let Some(asked) = asked else {
-        return LogSetup {
-            filter: LogLevel::default().filter(),
-            warning: None,
-            note: None,
-        };
-    };
-    match LogLevel::parse(asked) {
-        Some(level) => LogSetup {
-            filter: level.filter(),
-            warning: None,
-            note: Some(format!("log level: {}", level.name())),
-        },
-        None => LogSetup {
-            filter: LogLevel::default().filter(),
-            warning: Some(format!(
+    let mut warnings = Vec::new();
+    let global = match level.map(|l| (l, LogLevel::parse(l))) {
+        Some((_, Some(level))) => level,
+        Some((asked, None)) => {
+            warnings.push(format!(
                 "log level: \"{asked}\" is none of error, warn, info, debug; using {}",
                 LogLevel::default().name()
-            )),
-            note: None,
+            ));
+            LogLevel::default()
+        }
+        None => LogLevel::default(),
+    };
+    let own = ChannelLevels::parse(channels.unwrap_or(""));
+    warnings.extend(
+        own.rejected
+            .iter()
+            .map(|why| format!("log channels: {why}; the entry is left out")),
+    );
+    let mut said: Vec<String> = Vec::new();
+    if level.is_some() {
+        said.push(global.name().to_string());
+    }
+    said.extend(
+        own.levels
+            .iter()
+            .map(|(channel, level)| format!("{channel}={}", level.name())),
+    );
+    LogSetup {
+        filter: if own.levels.is_empty() {
+            global.filter()
+        } else {
+            own.filter(global)
         },
+        warnings,
+        note: (!said.is_empty()).then(|| format!("log level: {}", said.join(", "))),
     }
 }
 

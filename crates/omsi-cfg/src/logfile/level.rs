@@ -1,29 +1,6 @@
 //! The level of the log: how much of what the program says is written.
 
-/// The game's own crates as the log names them: what `debug` is switched on for. The
-/// graphics libraries are left at `info`, their debug lines being theirs to read.
-pub const GAME_LOG_TARGETS: &[&str] = &[
-    "openomsi_game",
-    "omsi_audio",
-    "omsi_cfg",
-    "omsi_content",
-    "omsi_geometry",
-    "omsi_html",
-    "omsi_map",
-    "omsi_model",
-    "omsi_net",
-    "omsi_o3d",
-    "omsi_plugin",
-    "omsi_render",
-    "omsi_render_d3d9",
-    "omsi_scenery",
-    "omsi_script",
-    "omsi_sim",
-    "omsi_texture",
-    "omsi_timetable",
-    "omsi_ui",
-    "omsi_vehicle",
-];
+use super::channels::ChannelLevels;
 
 /// One of the four levels of the log, the quietest first. A level writes its own lines and
 /// those of every level before it.
@@ -71,17 +48,13 @@ impl LogLevel {
         }
     }
 
-    /// The logger's filter for this level: `error`, `warn` and `info` for every part of the
-    /// program; `debug` for the game's own crates over `info` for the rest.
+    /// The logger's filter for this level with no channel at a level of its own: `error`,
+    /// `warn` and `info` for every part of the program; `debug` for the game's own crates
+    /// over `info` for the rest (the graphics libraries, their debug lines being theirs to
+    /// read).
     pub fn filter(self) -> String {
         match self {
-            Self::Debug => {
-                let mut filter = String::from("info");
-                for target in GAME_LOG_TARGETS {
-                    filter.push_str(&format!(",{target}=debug"));
-                }
-                filter
-            }
+            Self::Debug => ChannelLevels::default().filter(self),
             level => level.name().to_string(),
         }
     }

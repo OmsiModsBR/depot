@@ -25,6 +25,12 @@ pub struct Args {
     /// A `RUST_LOG` in the environment wins over it.
     #[arg(long = "log-level")]
     pub log_level: Option<String>,
+    /// A level of their own for parts of the program, over `--log-level`:
+    /// `channel=level` entries separated by commas (`physics=debug,render=warn`). The
+    /// channels are script, content, audio, physics, ai, network, render, input and app.
+    /// An entry that is not understood is left out, with a warning in the log.
+    #[arg(long = "log-channels")]
+    pub log_channels: Option<String>,
     /// Render one frame to this PNG instead of opening a window.
     #[arg(long)]
     pub offscreen: Option<PathBuf>,
