@@ -618,8 +618,15 @@ fn slice(
                     .map_or(0.0, |j| j.kappa(bodies)),
             })
             .collect();
+        // (the leading section's full lock, which the steerable axles behind a joint follow
+        // their joint's bend against, `D-6`)
+        let behind = |(b, s): (&RigidBody, &Option<f32>)| s.is_none() && b.steers_axles();
+        let lead_full_lock = match steers.iter().position(Option::is_some) {
+            Some(i) if bodies.iter().zip(steers).any(behind) => bodies[i].steering_kappa(1.0),
+            _ => 0.0,
+        };
         for ((b, k), s) in bodies.iter_mut().zip(kappas).zip(steers.iter()) {
-            b.steer_to(k, s.is_none());
+            b.steer_to(k, s.is_none(), lead_full_lock);
         }
         let SolverScratch {
             subs,

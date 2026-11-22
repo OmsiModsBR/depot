@@ -7,10 +7,12 @@
 //! `Axle_Springfactor_<axle>_<side>`. What the physics hands back, for the scripts' next
 //! frame: `Velocity` and `Velocity_Ground` (km/h), `n_Wheel` (rpm), `A_Trans_*` (m/s²) and,
 //! per wheel, `Wheel_Rotation` (rad), `Wheel_RotationSpeed` (rpm), `Axle_Steering` (rad) and
-//! `Axle_Suspension` (m). The driver's controls go to `Throttle`, `Brake` and `Clutch`.
+//! `Axle_Suspension` (m). The driver's controls go to `Throttle`, `Brake` and `Clutch`. A
+//! steerable axle (spec 004) takes `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` and hands
+//! back `Axle_Steer_Locked_<n>`.
 
 use super::trailer::TrailerPart;
-use super::VehicleInstance;
+use super::{SteerVars, VehicleInstance};
 use glam::{Quat, Vec3};
 
 /// What the scripts left for the physics this frame.
@@ -89,6 +91,62 @@ impl VehicleInstance {
             .filter(|_| !self.springs_full)
             .map(|i| self.state.vars[i as usize])
             .unwrap_or(1.0)
+    }
+
+    /// Each steerable axle's mode and angle (`Axle_Steer_Mode_<n>`, `Axle_Steer_Angle_<n>`) as
+    /// the scripts left them, into the body of the section `steer` belongs to (`D-6`): any
+    /// mode but 1 and 2, or a script angle that is not a number, is the basic mode, with one
+    /// log line per vehicle.
+    pub(super) fn feed_steer_axles(
+        &mut self,
+        rb: &mut crate::physics::RigidBody,
+        steer: &[SteerVars],
+    ) {
+        use crate::physics::SteerMode;
+        for &vars in steer {
+            let (value, angle) = (self.get(vars.mode), self.get(vars.angle));
+            let mut mode = SteerMode::from_value(value);
+            let unknown = !(value == 0.0 || mode != SteerMode::Basic);
+            let not_a_number = mode == SteerMode::ScriptAngle && !angle.is_finite();
+            if not_a_number {
+                mode = SteerMode::Basic;
+            }
+            if (unknown || not_a_number) && !self.steer_input_noted {
+                self.steer_input_noted = true;
+                log::info!(
+                    "{}: steerable axle {}: mode {value}, angle {angle}: taken as mode 0",
+                    self.ty.def.path.display(),
+                    vars.axle
+                );
+            }
+            rb.set_steer_input(vars.local, mode, angle);
+        }
+    }
+
+    /// `Axle_Steer_Locked_<n>` of each steerable axle of a section (`steer`, its body `rb`): 1
+    /// while locked straight (`D-6`).
+    pub(super) fn show_steer_locked(
+        &mut self,
+        rb: &crate::physics::RigidBody,
+        steer: &[SteerVars],
+    ) {
+        for vars in steer {
+            let locked = rb.steer_axle_locked(vars.local);
+            self.put(vars.locked, f32::from(u8::from(locked)));
+        }
+    }
+
+    /// Each steerable axle at the angle a saved situation left it (`Axle_Steering_<n>_L`, rad,
+    /// through `saved`), so that it does not swing back from straight.
+    pub fn restore_steer_axles(&mut self, saved: impl Fn(&str) -> Option<f32>) {
+        let crate::physics::Dynamics::Rigid(rb) = &mut self.dynamics else {
+            return;
+        };
+        for vars in &self.v_steer {
+            if let Some(a) = saved(&format!("Axle_Steering_{}_L", vars.axle)) {
+                rb.set_steer_angle(vars.local, a);
+            }
+        }
     }
 
     /// `Velocity` and `Velocity_Ground` (km/h).

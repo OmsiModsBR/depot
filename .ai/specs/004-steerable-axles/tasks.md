@@ -179,15 +179,15 @@ turn (SC-004).
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] [ph 4] Ramp and continuity tests in `crates/omsi-sim/tests/steer_axles.rs`:
+- [x] T025 [P] [US2] [ph 4] Ramp and continuity tests in `crates/omsi-sim/tests/steer_axles.rs`:
   locking and unlocking by mode in a steady turn at 25 km/h never makes the yaw rate jump by more than
   2 % between two frames (SC-003); angle at most `centring` per second
-- [ ] T026 [P] [US2] [ph 4] Script-mode tests in `crates/omsi-sim/tests/steer_axles.rs` with a small
+- [x] T026 [P] [US2] [ph 4] Script-mode tests in `crates/omsi-sim/tests/steer_axles.rs` with a small
   test script: modes 0, 1, 2 take effect in the first physics step after being written (SC-004);
   mode 2 angle clamped to the lock; unknown mode and not-a-number angle behave as mode 0 with one log
   line per vehicle (SC-005); `Axle_Steer_Locked_<n>` 1 only when the axle is straight in mode 1;
   mode 2 counts by its angle for the turning line, as every axle (`D-5`)
-- [ ] T027 [P] [US2] [ph 4] Situation test: a saved situation restores each steerable axle's angle; an old
+- [x] T027 [P] [US2] [ph 4] Situation test: a saved situation restores each steerable axle's angle; an old
   situation starts at `angle = 0`, in
   `crates/omsi-sim/tests/steer_axles.rs`
 
@@ -196,13 +196,13 @@ turn (SC-004).
 - [x] T028 [US2] [ph 4] Engagement and angle ramps for all modes in `implementation/depot/steering.rs`
   (research R-6) (done in phase 3: the rigid V2 of T016/T017 needs a locked axle; the engagement
   dropped there too, 2026-11-21: the turning line follows each axle's angle, research R-4)
-- [ ] T029 [US2] [ph 4] Read `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` once per frame before the
+- [x] T029 [US2] [ph 4] Read `Axle_Steer_Mode_<n>` and `Axle_Steer_Angle_<n>` once per frame before the
   physics step and write `Axle_Steer_Locked_<n>`, numbered over the whole vehicle, in
   `vehicle/physics_bridge.rs` and `vehicle.rs` (variable ids like `v_springfactor`); match the names
   whole, never by prefix (`Axle_Steer_` is a prefix of `Axle_Steering_`, see `vehicle/builtins.rs`)
-- [ ] T030 [US2] [ph 4] Save and restore `SteerState` with the situation in `vehicle.rs` /
+- [x] T030 [US2] [ph 4] Save and restore `SteerState` with the situation in `vehicle.rs` /
   `vehicle/motion.rs`
-- [ ] T031 [US2] [ph 4] Add the player-facing line to **Unreleased** in `CHANGELOG.md`; run the trace
+- [x] T031 [US2] [ph 4] Add the player-facing line to **Unreleased** in `CHANGELOG.md`; run the trace
   diff; label `physics-delta`
 
 **Checkpoint**: a script can lock the tag axle at speed with no jerk and steer it by its own law.
@@ -219,29 +219,31 @@ articulation angle and swept path against the closed forms (SC-006a).
 
 ### Tests for User Story 3
 
-- [ ] T032 [P] [US3] [ph 5] V5 with its fourth axle declared steerable and V4 (a rear axle declared) in
+- [x] T032 [P] [US3] [ph 5] V5 with its fourth axle declared steerable and V4 (a rear axle declared) in
   `crates/omsi-sim/tests/support/vehicles.rs`
-- [ ] T033 [P] [US3] [ph 5] Closed-form tests in `crates/omsi-sim/tests/physics_model_depot.rs`: V5
+- [x] T033 [P] [US3] [ph 5] Closed-form tests in `crates/omsi-sim/tests/steer_axles.rs`, with V2's: V5
   articulation angle with the fourth axle steering and rigid within 2 %, narrower swept path with it
   steering (SC-006a); a rear section without declarations identical to today (`C-9`); with the joint
   straight the rear axles stand straight whatever the steering wheel does; mode 1 on the rear axle
   moves the line continuously
-- [ ] T034 [P] [US3] [ph 5] New articulated scenarios with steerable axles in `crates/omsi-sim/tests/physics_traces.rs`
+- [x] T034 [P] [US3] [ph 5] New articulated scenarios with steerable axles in `crates/omsi-sim/tests/physics_traces.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T035 [US3] [ph 5] In `implementation/train.rs`, give a section with steerable axles behind a joint its own
+- [x] T035 [US3] [ph 5] In `implementation/train.rs`, give a section with steerable axles behind a joint its own
   `y_turn` and measure the joint's arm from it (`Joint::follower_kappa`, `implementation/engine.rs`);
   mode 0 uses `s_f = clamp(κ_joint / κ_max, −1, 1)` with the leading section's current `κ_max`
-- [ ] T036 [US3] [ph 5] In `implementation/body.rs` (`steer_to`), let the steerable axles of a
+- [x] T036 [US3] [ph 5] In `implementation/body.rs` (`steer_to`), let the steerable axles of a
   follower steer their tyres (rigid ones stay square), and in `implementation/tyre.rs`
   (`lateral_start`) hold the tyres of such a follower at each tyre with the road's reach instead of on the
-  projected line (research R-8)
-- [ ] T037 [US3] [ph 5] Map each section's local axle to the vehicle-wide `<n>` for the three script
+  projected line (research R-8); done as `D-7` has it: each tyre with its scrub reach, and the section
+  held at its turning line within the road's reach of all its tyres, so that a locked axle turns it
+  about the load-weighted middle
+- [x] T037 [US3] [ph 5] Map each section's local axle to the vehicle-wide `<n>` for the three script
   variables in `vehicle/coupled/articulation.rs` and `vehicle/coupled/trailer.rs`
-- [ ] T038 [US3] [ph 5] Run the trace diff; label `physics-delta`
+- [x] T038 [US3] [ph 5] Run the trace diff; label `physics-delta`
 
-- [ ] T038a [US3] [ph 5] Add the player-facing line to **Unreleased** in `CHANGELOG.md` (steerable
+- [x] T038a [US3] [ph 5] Add the player-facing line to **Unreleased** in `CHANGELOG.md` (steerable
   axles on rear sections of articulated buses) (Principle IX)
 
 **Checkpoint**: an articulated bus with a steered last axle cuts the corner less.

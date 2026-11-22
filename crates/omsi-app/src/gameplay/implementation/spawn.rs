@@ -113,8 +113,9 @@ pub fn load_coupled_parts(
 }
 
 /// What a saved situation keeps beyond the scripts' own state, put back on a vehicle just
-/// spawned from it: the driver's brake pedal (`Brake`, or `brake_pedal`) and steering (from
-/// the axles' saved `Axle_Steering_*`, see `VehicleInstance::steering_for_axle_angles`) -
+/// spawned from it: the driver's brake pedal (`Brake`, or `brake_pedal`), steering (from
+/// the axles' saved `Axle_Steering_*`, see `VehicleInstance::steering_for_axle_angles`) and
+/// steerable axles' angles (`VehicleInstance::restore_steer_axles`) -
 /// each frame the controls write those variables again, so restored as variables alone the
 /// brake came off and the wheels went straight at once - and how the coupled parts stood
 /// against the vehicle (`bends`, degrees, from the front: `situation::coupled_bends`).
@@ -131,6 +132,7 @@ pub(crate) fn restore_saved_controls(p: &mut Player, vars: &[(String, f32)], ben
     if let Some(s) = p.vehicle.steering_for_axle_angles(saved) {
         p.axes.steering = s;
     }
+    p.vehicle.restore_steer_axles(saved);
     let c = p.vehicle.controls();
     p.vehicle.set_controls(omsi_sim::Controls {
         brake: p.axes.brake,

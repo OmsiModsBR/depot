@@ -430,15 +430,24 @@ impl RigidBody {
     }
 
     /// The start of a substep: the body turns on curvature `kappa` (1/m, positive to the right),
-    /// set by the steering or, for a section behind a joint (`follower`), by the joint's bend.
-    pub(super) fn steer_to(&mut self, kappa: f32, follower: bool) {
+    /// set by the steering or, for a section behind a joint (`follower`), by the joint's bend;
+    /// `lead_full_lock` is the leading section's full-lock curvature, which the steerable axles
+    /// of a section behind a joint measure that bend against (`D-6`).
+    pub(super) fn steer_to(&mut self, kappa: f32, follower: bool, lead_full_lock: f32) {
         // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
         // `[inv_min_turnradius]`) and every axle points at the centre of that turn on the
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
         // input's business (keys, mouse, wheel), not the axle's: the old fixed rate here
         // lagged every mouse and controller movement by up to 0.4 s.
-        if !follower && self.steers_axles() {
-            return depot::steering::steer_to(self, kappa);
+        // (a section with steerable axles: `D-5` to `D-7`, its axles in the basic mode following
+        // the steering, or behind a joint the joint's bend over the leading section's full lock)
+        if self.steers_axles() {
+            let full_lock = if follower {
+                lead_full_lock
+            } else {
+                depot::steering::body_full_lock(self)
+            };
+            return depot::steering::steer_to(self, kappa, full_lock);
         }
         self.kappa = kappa;
         let front = self
