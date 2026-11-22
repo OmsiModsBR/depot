@@ -1,7 +1,9 @@
 //! The size cap of the log files: a log stops at the cap, and its last line says that it was
 //! cut (the cap is injected small here; the files' own is 30 MB).
 
-use omsi_cfg::logfile::{truncation_marker, Capped, CappedFile, LOG_CAP_BYTES};
+use omsi_cfg::logfile::{
+    is_last_word, truncation_marker, Capped, CappedFile, LAST_WORDS, LOG_CAP_BYTES,
+};
 use std::io::Write;
 
 fn temp_log(name: &str) -> std::path::PathBuf {
@@ -16,7 +18,7 @@ fn the_files_cap_is_30_mb_and_the_marker_says_so() {
     assert_eq!(LOG_CAP_BYTES, 30 * 1024 * 1024);
     assert_eq!(
         truncation_marker(LOG_CAP_BYTES),
-        "log truncated at 30 MB: the lines after this one were not written\n"
+        "log truncated at 30 MB: of the lines after this one, only errors and the end of the game were written\n"
     );
     assert!(truncation_marker(300).starts_with("log truncated at 300 bytes"));
 }
@@ -31,11 +33,12 @@ fn a_log_under_the_cap_is_written_whole() {
 
 #[test]
 fn the_line_that_does_not_fit_becomes_the_marker_and_the_rest_is_dropped() {
-    let cap = 300;
+    // (1/64 of the cap is kept for errors: 100 bytes of 6400)
+    let cap = 6400;
     let marker = truncation_marker(cap);
     let line = format!("{}\n", "x".repeat(99));
     let mut log = Capped::new(Vec::new(), cap);
-    for _ in 0..50 {
+    for _ in 0..200 {
         // (a dropped line is no error: the program goes on)
         log.write_all(line.as_bytes()).unwrap();
     }
@@ -43,8 +46,91 @@ fn the_line_that_does_not_fit_becomes_the_marker_and_the_rest_is_dropped() {
     assert!(text.len() as u64 <= cap, "{} bytes", text.len());
     assert!(text.ends_with(&marker), "{text}");
     assert_eq!(text.matches("log truncated").count(), 1);
-    // whole lines only: two fit beside the marker's room, none is cut
-    assert_eq!(text, format!("{line}{line}{marker}"));
+    // whole lines only, up to the room kept for the marker and the errors: none is cut
+    let lines = (cap as usize - 100 - marker.len()) / line.len();
+    assert_eq!(text, format!("{}{marker}", line.repeat(lines)));
+}
+
+/// What the launcher looks for at the end of `game.log` to tell a crash is still there in
+/// a log that was cut: errors, the panic and the end of the game are written after the
+/// marker, ordinary lines are not.
+#[test]
+fn errors_a_panic_and_the_end_of_the_game_are_written_after_the_marker() {
+    let cap = 64_000;
+    let marker = truncation_marker(cap);
+    let mut log = Capped::new(Vec::new(), cap);
+    let line = format!("[t INFO  game] {}\n", "x".repeat(84));
+    for _ in 0..1000 {
+        log.write_all(line.as_bytes()).unwrap();
+    }
+    let error = "[t ERROR game] a texture could not be read\n";
+    let panic = "[t ERROR game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n   0: std::backtrace\n";
+    let lost = "[t WARN  render] the graphics device was lost (Unknown)\n";
+    let end = "[t INFO  game] game ends\n";
+    log.write_all(error.as_bytes()).unwrap();
+    log.write_all(line.as_bytes()).unwrap();
+    log.write_all(panic.as_bytes()).unwrap();
+    log.write_all(lost.as_bytes()).unwrap();
+    log.write_all(b"[t DEBUG game] loaded a file\n").unwrap();
+    log.write_all(end.as_bytes()).unwrap();
+    let text = String::from_utf8(log.into_inner()).unwrap();
+    assert!(text.len() as u64 <= cap, "{} bytes", text.len());
+    assert!(
+        text.ends_with(&format!("{line}{marker}{error}{panic}{lost}{end}")),
+        "{}",
+        &text[text.len() - 600..]
+    );
+}
+
+#[test]
+fn the_room_for_errors_ends_at_the_cap() {
+    let cap = 6400;
+    let mut log = Capped::new(Vec::new(), cap);
+    log.write_all("x".repeat(7000).as_bytes()).unwrap();
+    let error = "[t ERROR game] again\n";
+    for _ in 0..1000 {
+        log.write_all(error.as_bytes()).unwrap();
+    }
+    let text = String::from_utf8(log.into_inner()).unwrap();
+    assert!(text.len() as u64 <= cap, "{} bytes", text.len());
+    // (the marker, then whole error lines up to the cap)
+    let marker = truncation_marker(cap);
+    let errors = (cap as usize - marker.len()) / error.len();
+    assert_eq!(text, format!("{marker}{}", error.repeat(errors)));
+}
+
+#[test]
+fn every_last_word_is_one_and_an_ordinary_line_is_not() {
+    for word in LAST_WORDS {
+        assert!(
+            is_last_word(format!("[t x] a{word}b\n").as_bytes()),
+            "{word}"
+        );
+    }
+    assert!(!is_last_word(b"[t INFO  game] loaded a file\n"));
+    assert!(!is_last_word(b"[t WARN  game] an error in a script\n"));
+    assert!(!is_last_word(b""));
+}
+
+#[test]
+fn a_shared_file_takes_an_error_after_its_marker() {
+    let path = temp_log("shared-error");
+    let cap = 64_000;
+    let mut log = CappedFile::open(&path, cap).unwrap();
+    let line = format!("[t INFO  launcher] {}\n", "w".repeat(80));
+    for _ in 0..1000 {
+        log.write_all(line.as_bytes()).unwrap();
+    }
+    let error = "[t ERROR launcher] the install failed\n";
+    log.write_all(error.as_bytes()).unwrap();
+    log.write_all(line.as_bytes()).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.len() as u64 <= cap, "{} bytes", text.len());
+    assert!(
+        text.ends_with(&format!("{line}{}{error}", truncation_marker(cap))),
+        "{}",
+        &text[text.len() - 400..]
+    );
 }
 
 #[test]
