@@ -476,6 +476,7 @@ depot/
 │   ├── omsi-html/       the HTML engine behind in-vehicle screens
 │   ├── omsi-devtools-link/   the link for developer tools over any byte stream (not yet used)
 │   ├── omsi-devtools-proto/  messages for developer tools (not yet used by the game)
+│   ├── omsi-devtools-record/ the run record of developer tools as JSON Lines (not yet used)
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)
 │   ├── omsi-o3d/ omsi-model/ omsi-texture/ omsi-geometry/   meshes, models, textures, splines
