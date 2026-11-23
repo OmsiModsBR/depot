@@ -4,14 +4,14 @@
 //!
 //! The steps here are the ones that need nothing but data (what the frame is, the lights,
 //! the camera): the mode answers with a value, or changes the parts the core hands it. The
-//! passes themselves (the HDR frame, the post passes, the probe) are still recorded by the
+//! passes themselves (the HDR frame, the probe) are still recorded by the
 //! renderer; they move into the modes with phase C5.
 
-use crate::lighting::{GpuPointLight, Lighting, PointLight};
-use crate::passes::{Exposure, FrameFeatures, PassPipelines};
-use crate::scene::{Camera, Scene};
+use crate::lighting::{ExposureLog, GpuPointLight, Lighting, PointLight};
+use crate::passes::{Exposure, FrameFeatures, PassPipelines, PostPipelines};
+use crate::scene::{Camera, Scene, TextureId};
 use crate::sky::SkyResources;
-use crate::targets::GroupParts;
+use crate::targets::{GroupParts, TargetCache};
 use glam::{Mat4, Vec3};
 
 /// What a picture is, as the mode needs it to choose its shading.
@@ -80,6 +80,37 @@ pub(crate) struct FogLampsParts<'a> {
     pub timed: &'a mut Vec<&'static str>,
 }
 
+/// What the mode's post passes work with (`ModeResources::encode_post`): the core's post
+/// pipelines, the targets, the eye's adaptation and the sky it follows, and the picture.
+pub(crate) struct PostParts<'a> {
+    pub queue: &'a wgpu::Queue,
+    pub post: &'a PostPipelines,
+    pub targets: &'a TargetCache,
+    pub adaptation: &'a mut Exposure,
+    pub sky: &'a SkyResources,
+    /// The options' multisampling and FXAA.
+    pub msaa: u32,
+    pub fxaa: bool,
+    pub instant_exposure: bool,
+    /// The exposure log, when this picture is sampled into it (the window's, the device
+    /// not lost).
+    pub exposure_log: Option<&'a mut ExposureLog>,
+    /// The presenter's pipeline for the HUD overlays at full size.
+    pub overlay_pipeline_1x: &'a wgpu::RenderPipeline,
+    pub scene: &'a Scene,
+    pub encoder: &'a mut wgpu::CommandEncoder,
+    pub lighting: &'a Lighting,
+    pub scene_view: &'a wgpu::TextureView,
+    pub overlays: &'a [(TextureId, [f32; 4])],
+    pub width: u32,
+    pub height: u32,
+    pub dt: f32,
+    pub features: &'a FrameFeatures,
+    pub puddles_on: bool,
+    pub tset: &'a Option<wgpu::QuerySet>,
+    pub timed: &'a mut Vec<&'static str>,
+}
+
 /// A render mode: the steps of a frame that differ between the shading paths.
 pub(crate) trait RenderMode: Sync {
     /// How a picture of `view` is shaded.
@@ -132,4 +163,8 @@ pub(crate) trait ModeResources: Send + Sync {
     /// The lamps' light in the fog and the sun's shafts, over the picture before its glow
     /// and metering.
     fn encode_fog_lamps(&self, _parts: FogLampsParts<'_>) {}
+
+    /// The mode's post passes over its picture: glow, metering, adaptation, tone curve and
+    /// FXAA; nothing for a mode that leaves the picture as it was drawn.
+    fn encode_post(&self, _parts: PostParts<'_>) {}
 }
