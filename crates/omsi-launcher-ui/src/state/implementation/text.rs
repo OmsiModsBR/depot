@@ -76,8 +76,8 @@ pub fn disconnect_of(_log: &std::path::Path) -> Option<String> {
 }
 
 /// What a game's log says when the game ended on an error: the error (a panic, "no graphics
-/// adapter", a fatal message) and the last lines of the log. None for a game that ended as
-/// it should.
+/// adapter", a fatal message) and the last lines of the log, the user's folder and name
+/// replaced as in the logs. None for a game that ended as it should.
 pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     let bytes = std::fs::read(log).ok()?;
     let text = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(64 * 1024)..]).to_string();
@@ -146,7 +146,16 @@ pub fn crash_of(log: &std::path::Path) -> Option<(String, String)> {
     } else {
         format!("{}\n{CRASH_TAIL_GAP}\n{end}", machine.join("\n"))
     };
-    Some((what.chars().take(600).collect(), tail))
+    // (the report is copied and sent: a log of before the placeholders, or a line written
+    // past the logger, must not carry the user's folder or name out)
+    Some((
+        // (replaced before it is cut: a cut inside a folder's name would leave its start)
+        core::redact_for_report(&what)
+            .chars()
+            .take(600)
+            .collect::<String>(),
+        core::redact_for_report(&tail),
+    ))
 }
 
 /// The log lines that tell what a game ran on (see `crash_of`).

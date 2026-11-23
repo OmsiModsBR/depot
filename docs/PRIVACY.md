@@ -32,11 +32,13 @@ multiplayer or "playing now" feature: those were removed (see [CHANGELOG](../CHA
 
 Where the logs are and what they contain: [LOGS](LOGS.md).
 
-`game.log` and `launcher.log` are written locally and are replaced on each run (the launcher log may grow during a run). They can contain
-paths on your computer (including your Windows user name), the graphics card and the maps and
-vehicles you loaded. **Nothing sends them.** In the crash dialog, "Copy report" puts the end of the log on your
+`game.log` and `launcher.log` are written locally and are replaced on each run (the launcher log may grow during a run). Your user folder is written
+as the word `USER_FOLDER` in them (and your account name and your computer's name, where they are a piece of a path, as
+`USER_NAME` and `COMPUTER_NAME`), so a log does not carry your user name; they still contain other paths on your computer,
+the graphics card and the maps and vehicles you loaded. **Nothing sends them.** In the crash dialog, "Copy report" puts the end of the log on your
 clipboard, and "Report on GitHub" (like the launcher's "Report a problem" button) opens a new GitHub issue in your browser with a text you can read
-and edit; nothing is posted until you submit it yourself. Check the text for personal paths first.
+and edit; nothing is posted until you submit it yourself. That text and the integrity report go through the same replacement
+as the logs; check the text for other personal paths first. On Android the game log is the system's own and is not covered by the replacement; what else is not covered is listed in [LOGS](LOGS.md).
 
 ## The website
 

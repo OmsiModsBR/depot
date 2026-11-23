@@ -609,11 +609,54 @@ pub(crate) fn for_window<T>(
     ))
 }
 
+/// What the program writes to its error output itself, past the logger, for a text the
+/// logger was given too (`logged`: whether it took it). The error output of a game started
+/// from the launcher is its `game.log`, so:
+/// - in a terminal the text is printed as it is, as everything there is;
+/// - anywhere else nothing is printed when the logger wrote the line (it is in the log
+///   once, with the user's folder replaced and within the size cap);
+/// - and a text the logger left out (a `RUST_LOG` without errors, no logger yet) is printed
+///   with the same replacement as a log line.
+pub fn past_the_logger(text: &str, terminal: bool, logged: bool) -> Option<String> {
+    if terminal {
+        Some(text.to_string())
+    } else if logged {
+        None
+    } else {
+        Some(
+            omsi_cfg::logfile::Redactor::of_this_machine()
+                .redact(text)
+                .into_owned(),
+        )
+    }
+}
+
+/// Prints what [`past_the_logger`] says of `text` to the error output.
+pub(crate) fn say_past_the_logger(text: &str, logged: bool) {
+    let terminal = std::io::IsTerminal::is_terminal(&std::io::stderr());
+    if let Some(said) = past_the_logger(text, terminal, logged) {
+        eprintln!("{said}");
+    }
+}
+
+/// The error the program ended on, said once: in a terminal as the standard message of a
+/// failed `main`, anywhere else as an error line of the log (see [`past_the_logger`]).
+pub fn say_final_error(error: &anyhow::Error) {
+    let text = format!("Error: {error:?}");
+    if !std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+        log::error!("{text}");
+    }
+    say_past_the_logger(&text, log::log_enabled!(log::Level::Error));
+}
+
 /// Tell the player why the game cannot go on, also where there is no window yet (a message
 /// box on Windows; the log and the terminal elsewhere).
 pub(crate) fn fatal_message(text: &str) {
     log::error!("{text}");
-    eprintln!("Project Depot: {text}");
+    say_past_the_logger(
+        &format!("Project Depot: {text}"),
+        log::log_enabled!(log::Level::Error),
+    );
     #[cfg(windows)]
     {
         use windows::core::PCWSTR;

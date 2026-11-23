@@ -212,7 +212,8 @@ pub fn rows_of(r: &Report, only: Option<Category>, show: [bool; 3], search: &str
     rows
 }
 
-/// The text a report goes out as: what the export window chose, or the summary alone.
+/// The text a report goes out as: what the export window chose, or the summary alone, with
+/// the user's folder and name replaced as in the logs.
 /// `build` is the game's version and build (`Host::build`).
 fn report_text(
     d: &Done,
@@ -250,7 +251,8 @@ fn report_text(
             ..Default::default()
         },
     };
-    d.report.to_text(&o)
+    // (a report is made to be sent: the user's folder and name go out as placeholders)
+    omsi_launcher_lib::redact_for_report(&d.report.to_text(&o))
 }
 
 /// The report's file name: what was checked and when, without what a file name cannot hold.
