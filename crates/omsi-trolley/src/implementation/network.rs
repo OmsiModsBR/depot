@@ -369,10 +369,15 @@ impl WireNetwork {
         self.tiles.is_empty()
     }
 
-    /// Is a switch or crossing object within `radius` metres (along the ground) of `p`?
-    pub fn special_near(&self, p: DVec3, radius: f64) -> bool {
-        self.objects().any(|o| {
-            o.kind != WireObjectKind::SoundMarker && (o.position - p).truncate().length() <= radius
+    /// Is a switch or crossing object within `radius` metres (along the ground) of `p`, and
+    /// at most `lane` metres to the side of the way through `p` along `dir`? The side limit
+    /// keeps out the objects of a wire running beside it, such as the other direction's
+    /// switch a few metres away on a two-way street.
+    pub fn special_near(&self, p: DVec3, dir: DVec3, radius: f64, lane: f64) -> bool {
+        let d = dir.truncate().normalize_or_zero();
+        self.objects_near(p, radius).any(|o| {
+            let v = (o.position - p).truncate();
+            o.kind != WireObjectKind::SoundMarker && v.perp_dot(d).abs() <= lane
         })
     }
 
