@@ -44,10 +44,6 @@ impl omsi_launcher_ui::Host for GameHost {
         crate::about::RELEASES_URL
     }
 
-    fn helper_log(&self) -> std::path::PathBuf {
-        crate::showroom::helper_log()
-    }
-
     fn action_text(&self, root: &str, lang: &str, action: &str) -> String {
         let names = crate::describe::names(std::path::Path::new(root), lang);
         super::pages::action_text(names, action)

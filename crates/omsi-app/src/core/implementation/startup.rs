@@ -68,10 +68,123 @@ pub(crate) fn end_with(pid: u32) {
     });
 }
 
-/// Log lines to the error output and to a file.
-pub(crate) struct Tee(pub std::fs::File);
+/// Log lines to the error output and to a log file's writer.
+pub(crate) struct Tee<W: std::io::Write>(pub W);
 
-impl std::io::Write for Tee {
+/// Whether this run is the launcher: started bare, or with `--launcher` (`args` as the
+/// process got them, the program's name first).
+pub fn launcher_process(args: &[String]) -> bool {
+    args.len() == 1 || args.iter().any(|a| a == "--launcher")
+}
+
+/// The name a line of this process carries in `launcher.log`, which the launcher and the
+/// preview helper both write; None for a game, whose lines go to its own `game.log`.
+pub fn log_source(args: &[String]) -> Option<&'static str> {
+    if args.iter().any(|a| a == "--preview-helper") {
+        Some("preview-helper")
+    } else if launcher_process(args) {
+        Some("launcher")
+    } else {
+        None
+    }
+}
+
+/// What the parameter `name` (`--log-level`, `--log-channels`) says on the command line
+/// `args` (`--log-level debug` or `--log-level=debug`; the last one counts), read before
+/// the arguments are parsed: the logger starts first, so that parsing them can be logged.
+pub fn early_arg<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    let mut found = None;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if arg == name {
+            found = rest.next().map(String::as_str).or(found);
+        } else if let Some(value) = arg
+            .strip_prefix(name)
+            .and_then(|rest| rest.strip_prefix('='))
+        {
+            found = Some(value);
+        }
+    }
+    found
+}
+
+/// What the logger is set up with, and what to say about it once it runs.
+#[derive(Debug, PartialEq, Eq)]
+pub struct LogSetup {
+    /// The logger's filter.
+    pub filter: String,
+    /// Warnings for the log's first lines: a level or a channel that was not understood, or
+    /// a `RUST_LOG` that overrides what was asked for.
+    pub warnings: Vec<String>,
+    /// A note for the log's first lines: the level in use, when one was asked for.
+    pub note: Option<String>,
+}
+
+/// The logger's filter for the command line's `--log-level` value `level`, its
+/// `--log-channels` value `channels` and the environment's `RUST_LOG` value `env`. A
+/// `RUST_LOG` that says something wins (the specialist's override, any filter the logger
+/// reads); else the level asked for, `info` without one, with the channels given a level of
+/// their own at theirs. A level that is none of the four is `info`, and a channel entry that
+/// is not understood is left out, each with a warning.
+pub fn log_setup(level: Option<&str>, channels: Option<&str>, env: Option<&str>) -> LogSetup {
+    use omsi_cfg::logfile::{ChannelLevels, LogLevel};
+    if let Some(env) = env.map(str::trim).filter(|e| !e.is_empty()) {
+        let asked: Vec<String> = [("--log-level", level), ("--log-channels", channels)]
+            .into_iter()
+            .filter_map(|(name, value)| value.map(|v| format!("{name} {v}")))
+            .collect();
+        return LogSetup {
+            filter: env.to_string(),
+            warnings: if asked.is_empty() {
+                Vec::new()
+            } else {
+                vec![format!(
+                    "log level: RUST_LOG={env} is set and wins over {}",
+                    asked.join(" and ")
+                )]
+            },
+            note: None,
+        };
+    }
+    let mut warnings = Vec::new();
+    let global = match level.map(|l| (l, LogLevel::parse(l))) {
+        Some((_, Some(level))) => level,
+        Some((asked, None)) => {
+            warnings.push(format!(
+                "log level: \"{asked}\" is none of error, warn, info, debug; using {}",
+                LogLevel::default().name()
+            ));
+            LogLevel::default()
+        }
+        None => LogLevel::default(),
+    };
+    let own = ChannelLevels::parse(channels.unwrap_or(""));
+    warnings.extend(
+        own.rejected
+            .iter()
+            .map(|why| format!("log channels: {why}; the entry is left out")),
+    );
+    let mut said: Vec<String> = Vec::new();
+    if level.is_some() {
+        said.push(global.name().to_string());
+    }
+    said.extend(
+        own.levels
+            .iter()
+            .map(|(channel, level)| format!("{channel}={}", level.name())),
+    );
+    LogSetup {
+        filter: if own.levels.is_empty() {
+            global.filter()
+        } else {
+            own.filter(global)
+        },
+        warnings,
+        note: (!said.is_empty()).then(|| format!("log level: {}", said.join(", "))),
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for Tee<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let _ = std::io::stderr().write_all(buf);
         self.0.write_all(buf)?;
@@ -524,11 +637,54 @@ pub(crate) fn for_window<T>(
     ))
 }
 
+/// What the program writes to its error output itself, past the logger, for a text the
+/// logger was given too (`logged`: whether it took it). The error output of a game started
+/// from the launcher is its `game.log`, so:
+/// - in a terminal the text is printed as it is, as everything there is;
+/// - anywhere else nothing is printed when the logger wrote the line (it is in the log
+///   once, with the user's folder replaced and within the size cap);
+/// - and a text the logger left out (a `RUST_LOG` without errors, no logger yet) is printed
+///   with the same replacement as a log line.
+pub fn past_the_logger(text: &str, terminal: bool, logged: bool) -> Option<String> {
+    if terminal {
+        Some(text.to_string())
+    } else if logged {
+        None
+    } else {
+        Some(
+            omsi_cfg::logfile::Redactor::of_this_machine()
+                .redact(text)
+                .into_owned(),
+        )
+    }
+}
+
+/// Prints what [`past_the_logger`] says of `text` to the error output.
+pub(crate) fn say_past_the_logger(text: &str, logged: bool) {
+    let terminal = std::io::IsTerminal::is_terminal(&std::io::stderr());
+    if let Some(said) = past_the_logger(text, terminal, logged) {
+        eprintln!("{said}");
+    }
+}
+
+/// The error the program ended on, said once: in a terminal as the standard message of a
+/// failed `main`, anywhere else as an error line of the log (see [`past_the_logger`]).
+pub fn say_final_error(error: &anyhow::Error) {
+    let text = format!("Error: {error:?}");
+    if !std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+        log::error!("{text}");
+    }
+    say_past_the_logger(&text, log::log_enabled!(log::Level::Error));
+}
+
 /// Tell the player why the game cannot go on, also where there is no window yet (a message
 /// box on Windows; the log and the terminal elsewhere).
 pub(crate) fn fatal_message(text: &str) {
     log::error!("{text}");
-    eprintln!("Project Depot: {text}");
+    say_past_the_logger(
+        &format!("Project Depot: {text}"),
+        log::log_enabled!(log::Level::Error),
+    );
     #[cfg(windows)]
     {
         use windows::core::PCWSTR;

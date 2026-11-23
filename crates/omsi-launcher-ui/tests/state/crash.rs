@@ -87,3 +87,119 @@ fn the_report_has_the_computer_and_a_clean_title() {
     assert!(end.contains("352.71 s") && !end.contains("placed tile 0,0"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A crash report is copied and sent: the user's folder in the log's lines goes out as the
+/// placeholder, also from a log written before the logs had it (#648).
+#[test]
+fn a_crash_report_holds_the_placeholder_and_not_the_users_folder() {
+    let Some(home) = ["HOME", "USERPROFILE"]
+        .into_iter()
+        .find_map(|k| std::env::var(k).ok())
+        .filter(|h| h.len() > 3)
+    else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("depot-crash-private-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    let sep = std::path::MAIN_SEPARATOR;
+    std::fs::write(
+        &p,
+        format!(
+            "[t INFO openomsi_game] command line: {home}{sep}Depot{sep}depot --no-menu\n\
+             [t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n\
+             \x20   cannot read {home}{sep}.depot{sep}settings.cfg\n\n   0: std::backtrace\n"
+        ),
+    )
+    .unwrap();
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    for text in [&what, &tail] {
+        assert!(!text.contains(&home), "{text}");
+        assert!(text.contains("USER_FOLDER"), "{text}");
+    }
+    assert!(
+        what.contains(&format!("USER_FOLDER{sep}.depot{sep}settings.cfg")),
+        "{what}"
+    );
+    assert!(
+        tail.contains(&format!("USER_FOLDER{sep}Depot{sep}depot --no-menu")),
+        "{tail}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The error's text is cut to its length after the user's folder is replaced: a cut in the
+/// middle of the folder left the start of it in the report.
+#[test]
+fn the_user_folder_is_replaced_before_the_error_is_cut() {
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return;
+    };
+    let home = home.to_string_lossy().to_string();
+    if home.len() < 4 {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("depot-crash-cut-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    // the folder starts two characters before the cut
+    let lead = "the game stopped on an error: ";
+    let fill = "x".repeat(598 - lead.len() - 1);
+    std::fs::write(&p, format!("[t ERROR g] {lead}{fill} {home}/a.cfg\n")).unwrap();
+    let (what, _) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    assert!(what.ends_with(" US"), "{what}");
+    assert!(
+        !what.ends_with(&home[..2]) || home.starts_with("US"),
+        "{what}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A game that stops on an error after its log reached the size cap is still found: the
+/// panic is written after the truncation line, and so is the clean end of a game that
+/// went on (a cut log is no crash by itself).
+#[test]
+fn a_crash_after_the_log_was_cut_is_still_found() {
+    use omsi_cfg::logfile::Capped;
+    use std::io::Write;
+    let dir = std::env::temp_dir().join(format!("depot-crash-capped-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let p = dir.join("game.log");
+    let cap = 512 * 1024;
+    let fill = |log: &mut Capped<std::fs::File>| {
+        log.write_all(b"[t INFO  x] starting the game: omsi\n")
+            .unwrap();
+        let line = format!("[t DEBUG game] loaded {}\n", "x".repeat(100));
+        for _ in 0..(2 * cap as usize / line.len()) {
+            log.write_all(line.as_bytes()).unwrap();
+        }
+    };
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t ERROR openomsi_game] the game stopped on an error (build x): panicked at a.rs:1:1:\n    index out of bounds\n\n   0: std::backtrace\n").unwrap();
+    drop(log);
+    assert!(std::fs::metadata(&p).unwrap().len() <= cap);
+    let (what, tail) = omsi_launcher_ui::state::crash_of(&p).unwrap();
+    assert!(what.contains("index out of bounds"), "{what}");
+    assert!(tail.contains("log truncated at"), "{tail}");
+    // a lost graphics device after the cut
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t ERROR omsi_render] the graphics device was lost (Unknown)\n")
+        .unwrap();
+    log.write_all(b"[t INFO  openomsi_game::app_events] game ends\n")
+        .unwrap();
+    drop(log);
+    assert!(omsi_launcher_ui::state::crash_of(&p)
+        .unwrap()
+        .0
+        .contains("device was lost"));
+    // a clean end after the cut is no crash
+    let mut log = Capped::new(std::fs::File::create(&p).unwrap(), cap);
+    fill(&mut log);
+    log.write_all(b"[t INFO  openomsi_game::app_events] game ends\n")
+        .unwrap();
+    drop(log);
+    assert!(omsi_launcher_ui::state::crash_of(&p).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
