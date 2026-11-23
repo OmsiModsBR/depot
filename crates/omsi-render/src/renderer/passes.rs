@@ -15,10 +15,18 @@ use crate::scene::{Scene, TextureId};
 impl Renderer {
     pub(crate) fn main_pass(&self, set: PipeSet) -> &PassPipelines {
         match set {
-            PipeSet::Own => self.hdr_pass.as_ref().unwrap(),
+            PipeSet::Own => self.own_pipelines(),
             PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
             PipeSet::Plain => &self.pass,
         }
+    }
+
+    /// The pipelines in the enhanced mode's own shading.
+    fn own_pipelines(&self) -> &PassPipelines {
+        self.enhanced
+            .as_ref()
+            .and_then(|m| m.own_pipelines())
+            .expect("the enhanced mode's pipelines")
     }
 
     /// The main pass: the scene over the sky, with its depth from the prepass where it can
@@ -45,7 +53,11 @@ impl Renderer {
     ) -> Vec<wgpu::CommandEncoder> {
         // (the fields by name: `self.targets` is borrowed mutably below)
         let pipes = match pipe_set {
-            PipeSet::Own => self.hdr_pass.as_ref().unwrap(),
+            PipeSet::Own => self
+                .enhanced
+                .as_ref()
+                .and_then(|m| m.own_pipelines())
+                .expect("the enhanced mode's pipelines"),
             PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
             PipeSet::Plain => &self.pass,
         };
@@ -58,7 +70,7 @@ impl Renderer {
                 targets: &mut self.targets,
                 prepass: &self.prepass,
                 pipes,
-                sky_mirror_pipeline: self.sky_mirror_pipeline.as_ref(),
+                sky_mirror_pipeline: self.enhanced.as_ref().and_then(|m| m.sky_mirror_pipeline()),
                 sky: &self.sky,
                 sprites: &self.sprites,
                 overlay_pipeline: &self.presenter.overlay_pipeline,

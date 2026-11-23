@@ -1,6 +1,7 @@
 //! The renderer's tests that draw nothing: shaders, pipeline tables, draw lists, helpers.
 
 use super::*;
+use crate::modes::enhanced::FogLampUniform;
 
 #[test]
 fn noop_backend_initializes_renderer() {

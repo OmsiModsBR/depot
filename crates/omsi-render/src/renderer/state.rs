@@ -9,8 +9,8 @@ use crate::lighting::LightMapAtlas;
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::DrawItem;
 use crate::passes::{
-    Exposure, FogLampsPass, PassPipelines, PostPipelines, PrepassPipelines, ShadowResources,
-    SpriteResources, SsaoPass,
+    Exposure, PassPipelines, PostPipelines, PrepassPipelines, ShadowResources, SpriteResources,
+    SsaoPass,
 };
 use crate::scene::{Camera, CullHistory, Layouts, TextureId};
 use crate::sky::SkyResources;
@@ -34,10 +34,9 @@ pub struct Renderer {
     pub queue: wgpu::Queue,
     pub adapter_name: String,
     pub(crate) pass: PassPipelines,
-    pub(crate) hdr_pass: Option<PassPipelines>,
-    /// The enhanced sky tone-mapped into the plain pass's target: the sky of the mirrors
-    /// of an Enhanced picture (sky_enhanced.wgsl `fs_enhanced_mirror`).
-    pub(crate) sky_mirror_pipeline: Option<wgpu::RenderPipeline>,
+    /// What only the enhanced mode draws with (its pipelines, the sky of its mirrors, the
+    /// lamps' light in the fog); none where it is left out.
+    pub(crate) enhanced: Option<Box<dyn crate::interface::ModeResources>>,
     pub(crate) reflection_pass: Option<PassPipelines>,
     pub(crate) camera_buf: wgpu::Buffer,
     /// The settings this renderer was built with.
@@ -90,7 +89,6 @@ pub struct Renderer {
     pub(crate) sprites: SpriteResources,
     pub(crate) prepass: PrepassPipelines,
     pub(crate) ssao: SsaoPass,
-    pub(crate) fog_lamps: FogLampsPass,
     pub(crate) layouts: Layouts,
     pub(crate) samplers: Samplers,
     pub(crate) assets: AssetStore,
