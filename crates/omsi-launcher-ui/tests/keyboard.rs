@@ -21,9 +21,6 @@ impl omsi_launcher_ui::Host for Keys {
     fn releases_url(&self) -> &'static str {
         "https://example.org/depot/releases"
     }
-    fn helper_log(&self) -> std::path::PathBuf {
-        std::path::PathBuf::new()
-    }
     fn action_text(&self, _: &str, _: &str, action: &str) -> String {
         action.into()
     }

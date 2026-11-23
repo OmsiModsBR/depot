@@ -52,11 +52,15 @@ impl Link {
             });
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let log_file = helper_log();
+        // (its lines go to the launcher's own file, opened to append beside the launcher's
+        // lines, each marked as the helper's; a helper started again adds to them)
+        let log_file = omsi_launcher_lib::launcher_log_path();
         let _ = std::fs::create_dir_all(log_file.parent().unwrap_or(&log_file));
-        // (the last helper's lines stay beside it: the one that stopped is often the one before)
-        let _ = std::fs::rename(&log_file, log_file.with_extension("previous.log"));
-        let stderr = match std::fs::File::create(&log_file) {
+        let stderr = match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+        {
             Ok(f) => std::process::Stdio::from(f),
             Err(_) => std::process::Stdio::null(),
         };

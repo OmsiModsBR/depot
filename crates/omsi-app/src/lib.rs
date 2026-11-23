@@ -78,6 +78,8 @@ use launcher_link::open_launcher;
 use winit::event_loop::EventLoop;
 
 /// The game (and its launcher) from the command line: what `main` does.
+pub use crate::core::startup::say_final_error;
+
 pub fn run() -> Result<()> {
     let _ = startup::PROCESS_START.set(std::time::Instant::now());
     omsi_cfg::migrate_legacy_data_dir();
@@ -89,19 +91,82 @@ pub fn run() -> Result<()> {
     if !std::env::args().any(|a| a == "--preview-helper") {
         startup::attach_parent_console();
     }
-    let mut logger =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     // The launcher (started bare, or with --launcher) writes its lines to `launcher.log` as
     // well: a session's go to its `game.log`, but the launcher's own window has no console on
     // Windows, and what it said went nowhere.
-    let launcher_process =
-        std::env::args().len() == 1 || std::env::args().any(|a| a == "--launcher");
-    if launcher_process {
-        let file = omsi_launcher_lib::data_dir().join("launcher.log");
-        let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
-        if let Ok(f) = std::fs::File::create(&file) {
-            logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(f))));
+    let args_now: Vec<String> = std::env::args().collect();
+    let launcher_process = startup::launcher_process(&args_now);
+    // The level: `--log-level` (the launcher passes its setting) and the channels given one
+    // of their own by `--log-channels`, unless `RUST_LOG` is set.
+    let log_setup = startup::log_setup(
+        startup::early_arg(&args_now, "--log-level"),
+        startup::early_arg(&args_now, "--log-channels"),
+        std::env::var("RUST_LOG").ok().as_deref(),
+    );
+    let mut logger = env_logger::Builder::new();
+    logger.parse_filters(&log_setup.filter);
+    // Every log file stops at the cap (`omsi_cfg::logfile`), its last line saying so, and
+    // holds a placeholder where the user's folder or name would show.
+    let private = omsi_cfg::logfile::Redactor::of_this_machine();
+    // (whether this program's lines go to a file: a game started by hand in a terminal
+    // writes to the terminal, as it is)
+    let mut log_is_a_file = true;
+    match startup::log_source(&args_now) {
+        Some(_) if launcher_process => {
+            let file = omsi_launcher_lib::launcher_log_path();
+            let _ = std::fs::create_dir_all(omsi_launcher_lib::data_dir());
+            // (replaced at each start; the lines then go through the launcher's one handle
+            // on it, opened to append: the preview helper writes the same file, and a
+            // handle that is not appending would write over its lines)
+            if std::fs::File::create(&file).is_ok() {
+                logger.target(env_logger::Target::Pipe(Box::new(startup::Tee(
+                    omsi_launcher_lib::LauncherLog,
+                ))));
+            }
         }
+        // (the preview helper: its lines go to the launcher's file, which its error output
+        // is too; the logger writes the file itself so that the cap is kept)
+        Some(_) => {
+            if let Ok(f) = omsi_cfg::logfile::CappedFile::open(
+                &omsi_launcher_lib::launcher_log_path(),
+                omsi_cfg::logfile::LOG_CAP_BYTES,
+            ) {
+                logger.target(env_logger::Target::Pipe(Box::new(
+                    omsi_cfg::logfile::Redacting::new(f, private),
+                )));
+            }
+        }
+        // (a game: the launcher made its error output the session's `game.log`; started by
+        // hand in a terminal, nothing is a file and nothing is capped)
+        None => {
+            log_is_a_file = !std::io::IsTerminal::is_terminal(&std::io::stderr());
+            if log_is_a_file {
+                logger.target(env_logger::Target::Pipe(Box::new(
+                    omsi_cfg::logfile::Redacting::new(
+                        omsi_cfg::logfile::Capped::new(
+                            std::io::stderr(),
+                            omsi_cfg::logfile::LOG_CAP_BYTES,
+                        ),
+                        private,
+                    ),
+                )));
+            }
+        }
+    }
+    // The launcher's file holds two programs' lines, so each says which wrote it; a game's own
+    // lines (`game.log`) need no tag.
+    if let Some(source) = startup::log_source(&args_now) {
+        use std::io::Write;
+        logger.format(move |buf, r| {
+            writeln!(
+                buf,
+                "[{} {:<5} {}] [{source}] {}",
+                buf.timestamp(),
+                r.level(),
+                r.target(),
+                r.args()
+            )
+        });
     }
     logger.init();
     // a panic goes into the log (which the launcher keeps per session) with where it
@@ -116,8 +181,25 @@ pub fn run() -> Result<()> {
             "the game stopped on an error (build {BUILD}): {info}\n{}",
             std::backtrace::Backtrace::force_capture()
         );
-        default_hook(info);
+        // (the line above is the record in a log file; the standard message would say it
+        // again past the logger, with the paths as they are and beyond the file's cap)
+        if !log_is_a_file {
+            default_hook(info);
+        } else {
+            // (a `RUST_LOG` that leaves this module out dropped the line above: the panic
+            // is said all the same, with the same replacement as a log line)
+            startup::say_past_the_logger(
+                &format!("the game stopped on an error (build {BUILD}): {info}"),
+                log::log_enabled!(log::Level::Error),
+            );
+        }
     }));
+    for warning in &log_setup.warnings {
+        log::warn!("{warning}");
+    }
+    if let Some(note) = &log_setup.note {
+        log::info!("{note}");
+    }
     log::info!(
         "Project Depot {VERSION}, build {BUILD}{}",
         if std::env::var_os("MallocLargeCache").is_some() {

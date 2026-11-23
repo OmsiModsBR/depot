@@ -146,7 +146,7 @@ impl App {
             .iter()
             .map(|(k, ms)| format!("{k} {ms:.2}"))
             .collect();
-        log::info!(
+        log::info!(target: "profile",
             "profile window: {:.1} fps over {secs:.0} s, {:.1} ms a frame; {cars} AI vehicles (+{dormant} out of range), {people} people; ms a frame: {}",
             frames as f32 / secs.max(1e-3),
             secs / frames.max(1) as f32 * 1000.0,

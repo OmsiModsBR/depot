@@ -1319,21 +1319,75 @@ fn shared_depot_names() -> Vec<String> {
     names
 }
 
+/// The launcher's log, `~/.depot/launcher.log`: written by the launcher and by the preview
+/// helper it starts, each line saying which of the two wrote it.
+pub fn launcher_log_path() -> PathBuf {
+    data_dir().join("launcher.log")
+}
+
+/// A line of `launcher.log` for `line` said by `source` at `now` (seconds since the epoch).
+pub fn launcher_log_line(now: u64, source: &str, line: &str) -> String {
+    format!("{now} [{source}] {line}\n")
+}
+
+/// This program's one handle on `launcher.log`, opened at its first line: every line of the
+/// launcher goes through it, so the file's cap is counted in one place.
+static OWN_LOG: std::sync::Mutex<Option<omsi_cfg::logfile::CappedFile>> =
+    std::sync::Mutex::new(None);
+
+/// Write `bytes` (whole lines) to `launcher.log` through this program's handle. The file is
+/// opened to append and a line goes out in one write, so lines of the launcher and of the
+/// helper, written at the same time, do not break into each other; past the cap the file
+/// gets the truncation marker and nothing more. The user's folder and name are written as
+/// their placeholders.
+fn write_own_log(bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut own = OWN_LOG.lock().unwrap_or_else(|e| e.into_inner());
+    if own.is_none() {
+        *own = Some(omsi_cfg::logfile::CappedFile::open(
+            &launcher_log_path(),
+            omsi_cfg::logfile::LOG_CAP_BYTES,
+        )?);
+    }
+    // (the user's folder and name as placeholders, like every log)
+    let redactor = omsi_cfg::logfile::Redactor::of_this_machine();
+    // (bytes that are no text are made text first: nothing passes without the replacement)
+    let text = String::from_utf8_lossy(bytes);
+    match own.as_mut() {
+        Some(f) => f.write_all(redactor.redact(&text).as_bytes()),
+        None => Ok(()),
+    }
+}
+
+/// `text` as it may leave the computer in a report (a copied crash report, an exported
+/// integrity report): the user's folder, the account's name and the computer's name replaced
+/// by their placeholders, as in the logs.
+pub fn redact_for_report(text: &str) -> String {
+    omsi_cfg::logfile::Redactor::of_this_machine()
+        .redact(text)
+        .into_owned()
+}
+
+/// Where the launcher's logger writes: `launcher.log`, through the handle `log_line` uses.
+pub struct LauncherLog;
+
+impl std::io::Write for LauncherLog {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        write_own_log(buf).map(|_| buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// One line into ~/.depot/launcher.log.
 fn log_line(line: &str) {
-    use std::io::Write;
-    let p = data_dir().join("launcher.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&p)
-    {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let _ = writeln!(f, "{now} {line}");
-    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let _ = write_own_log(launcher_log_line(now, "launcher", line).as_bytes());
 }
 
 /// Puts the depot files of the root folders `hof`/`hofs` (any letter case) beside every
@@ -2949,6 +3003,8 @@ const SETTING_ALIASES: &[(&str, &str)] = &[
     ("texmemlimit", "texture_memory"),
     ("navigator_opacity", "ui_opacity"),
     ("gear_buttons_hold", "momentary_gears"),
+    // (the switch "Detailed log" of before the four levels: on was `debug`)
+    ("detailed_log", "log_level"),
 ];
 
 /// A window size as the settings keep it: "WxH" in pixels (each 320..16384), else "auto".
@@ -3234,8 +3290,9 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
     v["voice_chat"] = json!(true);
     // the launcher gives the graphics card up while a game runs (off: it stays drawn)
     v["launcher_rest"] = json!(true);
-    // the game's log with everything it loads and every failure (off: the usual log)
-    v["detailed_log"] = json!(false);
+    // how much the game's log holds: error, warn, info (the usual log) or debug (also
+    // everything it loads and every failure)
+    v["log_level"] = json!(omsi_cfg::logfile::LogLevel::default().name());
     // the developer tools of the launcher (off: nothing of them exists in a run, #500)
     v["developer_mode"] = json!(false);
     // the window's size in pixels, "auto" to fit the screen (#904)
@@ -3842,8 +3899,8 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "head_tracking_invert_z"
             | "voice_chat"
             | "launcher_rest"
-            | "detailed_log"
             | "developer_mode" => v[&k] = json!(b(val)),
+            "log_level" => v[&k] = json!(log_level_of(val).name()),
             // (how much of the mip chain an LED panel is held at, 0..4; a file from before
             // it was a number says 1 or 0)
             "led_mips" => {
@@ -4638,7 +4695,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         .filter(|x| x.is_finite())
         .unwrap_or(16.0)
         .clamp(-1.0, 360.0);
-    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\ndetailed_log={}\ndeveloper_mode={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), b("detailed_log", false), b("developer_mode", false));
+    let text = format!("{text}vr={}\nvr_scale={vr_scale}\nvr_head_smoothing_ms={vr_head_smoothing_ms}\nvr_mirror_rate={vr_mirror_rate}\nvr_desktop_mirror={}\nvoice_chat={}\nlauncher_rest={}\nlog_level={}\ndeveloper_mode={}\n", b("vr", false), b("vr_desktop_mirror", true), b("voice_chat", true), b("launcher_rest", true), log_level_of(v.get("log_level").and_then(|x| x.as_str()).unwrap_or("")).name(), b("developer_mode", false));
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
@@ -5292,13 +5349,22 @@ pub struct Launched {
     pub others: usize,
 }
 
-/// Whether the "detailed log" setting is on (the games started from here then write debug
-/// lines of the game's own crates to their log).
-pub fn detailed_log_on() -> bool {
+/// The log level a settings value names: one of the four levels, or the switch "Detailed
+/// log" of older files (on was `debug`); anything else is the default, `info`.
+pub fn log_level_of(val: &str) -> omsi_cfg::logfile::LogLevel {
+    use omsi_cfg::logfile::LogLevel;
+    LogLevel::parse(val).unwrap_or_else(|| match val.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => LogLevel::Debug,
+        _ => LogLevel::default(),
+    })
+}
+
+/// The "Log level" setting: how much the games started from here write to their log.
+pub fn log_level() -> omsi_cfg::logfile::LogLevel {
     get_settings()
         .ok()
-        .and_then(|v| v.get("detailed_log").and_then(|x| x.as_bool()))
-        .unwrap_or(false)
+        .and_then(|v| v.get("log_level").and_then(|x| x.as_str()).map(log_level_of))
+        .unwrap_or_default()
 }
 
 /// Whether the "developer mode" setting is on. Only the launcher reads it: the game never
@@ -5361,19 +5427,7 @@ pub fn check_join(text: &str) -> Value {
 
 /// A line into ~/.depot/launcher.log.
 pub fn log_to_file(line: &str) {
-    use std::io::Write;
-    let p = data_dir().join("launcher.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&p)
-    {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let _ = writeln!(f, "{now} {line}");
-    }
+    log_line(line);
 }
 
 /// What interrupted installs left behind (and the old unzip folder): cleaned up once when
@@ -5680,7 +5734,7 @@ mod tests {
             ("steer_look", json!(true)),
             ("voice_chat", json!(false)),
             ("launcher_rest", json!(false)),
-            ("detailed_log", json!(true)),
+            ("log_level", json!("debug")),
             ("developer_mode", json!(true)),
             ("camera_collision", json!(false)),
             ("brake_hold", json!(false)),
@@ -5724,7 +5778,7 @@ mod tests {
             "steer_look",
             "voice_chat",
             "launcher_rest",
-            "detailed_log",
+            "log_level",
             "developer_mode",
             "camera_collision",
             "brake_hold",

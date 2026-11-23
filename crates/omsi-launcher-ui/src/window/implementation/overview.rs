@@ -1,12 +1,13 @@
 //! The Diagnostics page's Overview tab: this build, the OMSI 2 folder and whether its essential
 //! files are there, the logs, and what the launcher watches (in the bar of the tabs). Nothing
-//! on it changes a setting, but the detailed log.
+//! on it changes a setting, but the log level.
 
 use super::super::domain::{frame::Frame, overview::Overview};
 use super::super::interface::output::{core, root_problem, Page, Ui};
 use crate::kit::{action, card, clipped, dot, text, Status};
 use crate::look::*;
 use glam::Vec2;
+use omsi_cfg::logfile::LogLevel;
 use omsi_ui::{Rect, Weight};
 
 /// The first tab: this build, the folder, the log and the games running.
@@ -86,6 +87,9 @@ pub fn diagnostics_status(f: &mut Frame, r: Rect, seen: &Overview) {
 /// The log card's least height: its three lines, the switch, the button and the note under
 /// it, with the room at its foot the other cards keep under theirs.
 const LOG_CARD_H: f32 = 290.0;
+
+/// The log levels as the Diagnostics page names them, in the order of `LogLevel::ALL`.
+const LOG_LEVEL_LABELS: [&str; 4] = ["Error", "Warning", "Info", "Debug"];
 
 /// Where the values of a card's lines start: the usual column, or after the longest of its
 /// labels when a translation is longer, the same for every line of the card so they align.
@@ -203,44 +207,56 @@ fn folder_card(f: &mut Frame, r: Rect) -> Option<Page> {
 fn log_card(f: &mut Frame, r: Rect) {
     let log = core::data_dir().join("game.log");
     card(f.ui, r, "The game's log", None);
-    let x = value_x(f.ui, r, &["File", "Launcher", "Preview helper"]);
+    let x = value_x(
+        f.ui,
+        r,
+        &["File", "Launcher and preview helper", "Log level"],
+    );
     line(f.ui, r, r.y + 72.0, x, "File", &log.to_string_lossy());
     line(
         f.ui,
         r,
         r.y + 108.0,
         x,
-        "Launcher",
-        &core::data_dir().join("launcher.log").to_string_lossy(),
+        "Launcher and preview helper",
+        &core::launcher_log_path().to_string_lossy(),
     );
-    line(
+    // (how much the next games started from here write: the level goes to them as
+    // `--log-level`)
+    let level = core::log_level_of(
+        f.state
+            .settings
+            .get("log_level")
+            .and_then(|v| v.as_str())
+            .unwrap_or(""),
+    );
+    let mut chosen = LogLevel::ALL
+        .iter()
+        .position(|l| *l == level)
+        .unwrap_or(0);
+    let row = Rect::new(r.x + 19.0, r.y + 130.0, r.w - 38.0, 32.0);
+    text(
         f.ui,
-        r,
-        r.y + 144.0,
-        x,
-        "Preview helper",
-        &f.host.helper_log().to_string_lossy(),
+        "Log level",
+        row.x,
+        row.y + 21.0,
+        13.0,
+        Weight::Regular,
+        MUTED,
     );
-    // (the next games started from here write what they load and every failure)
-    let mut detailed = f
-        .state
-        .settings
-        .get("detailed_log")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let row = Rect::new(r.x + 19.0, r.y + 166.0, r.w - 38.0, 32.0);
-    if f.ui.toggle(
-        "diagnostics:detailed-log",
-        row,
-        &mut detailed,
-        "Detailed log",
+    let levels = Rect::new(x, row.y, (row.right() - x).clamp(40.0, 380.0), row.h);
+    if f.ui.segmented(
+        "diagnostics:log-level",
+        levels,
+        &mut chosen,
+        &LOG_LEVEL_LABELS,
     ) {
-        f.state.settings["detailed_log"] = serde_json::json!(detailed);
+        f.state.settings["log_level"] = serde_json::json!(LogLevel::ALL[chosen].name());
         f.state.settings_dirty = 0.3;
     }
     f.ui.tooltip(
         row,
-        "Each is written again when it starts (the game's with each game). With the detailed log on, the next games also write everything they load and every failure, so the file is larger.",
+        "How much the next games started from here write to their log. Error: errors only. Warning: errors and warnings. Info: the usual log. Debug: also everything the game loads and every failure, so the file is larger. Each log is written again when its program starts.",
     );
     let b = Rect::new(r.x + 19.0, r.bottom() - 84.0, r.w - 38.0, 44.0);
     if action(
@@ -291,7 +307,7 @@ mod tests {
     /// under the button keeps the room at the card's foot the other cards give theirs.
     #[test]
     fn the_log_card_has_room_for_its_note() {
-        // (the switch's row ends at 198; the button and its note take the last 84)
-        assert!(LOG_CARD_H - 84.0 >= 206.0);
+        // (the switch's row ends at 162; the button and its note take the last 84)
+        assert!(LOG_CARD_H - 84.0 >= 170.0);
     }
 }

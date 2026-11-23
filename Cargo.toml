@@ -13,6 +13,7 @@ members = [
     "crates/omsi-integrity",
     "crates/omsi-devtools-link",
     "crates/omsi-devtools-proto",
+    "crates/omsi-devtools-record",
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",

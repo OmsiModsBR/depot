@@ -55,7 +55,7 @@ request behind every item, is in the [changelog](CHANGELOG.md#030---2026-10-30);
   Profile and Sessions in one page, a Timetable planning page, Setup and Settings rebuilt, accent colours, a sidebar or
   a top bar, tooltips on every button, and a launcher that opens at once.
 * **Diagnostics.** Integrity check of maps and vehicles (also against a baseline folder), the AI traffic tab
-  with editing of a map's AI lists and parking lists, and a detailed log switch.
+  with editing of a map's AI lists and parking lists, and a log level setting.
 * **Vehicle physics and passengers.** The vehicle physics refactor is complete; the weight of the
   passengers aboard is added; steering linearity is on by default; articulated buses no longer fold into an L
   at speed; AI vehicles steer by their own `.bus` files; passengers use every door of an articulated bus,
@@ -288,7 +288,7 @@ shown identical to OMSI 2 in a recorded comparison in the game; the deliberate i
   force, the chance of each vehicle, and a 3D preview. **Edit lists** changes car groups, weights, parking lists
   and bus fleets and which AI group a tour takes its buses from; nothing is written until *Save*, which keeps
   a copy of every changed file, and a backup can be put back safely.
-* A *Detailed log* switch writes every file the game reads, every probe that found nothing and every archive it
+* The *Log level* setting, at Debug, writes every file the game reads, every probe that found nothing and every archive it
   mounts, to find why content does not load.
 
 | | Before 0.3.0 | Now |
@@ -448,6 +448,7 @@ The pages live in [`docs/`](docs) and are also published as the website
 | [Physics models](docs/physics/README.md) | the equations of the two vehicle physics engines, OMSI Classic and Project Depot Physics |
 | [Routes](docs/ROUTES.md) | how the original runs timetables, chrono, HOF, IBIS |
 | [Privacy](docs/PRIVACY.md) | what the program sends over the network (nothing unless you ask) and where its logs stay |
+| [Logs](docs/LOGS.md) | where the logs are, what each one contains, how to get more detail and what to attach to a report |
 | [Versioning & releases](docs/VERSIONING.md) | the `MAJOR.MINOR.PATCH` scheme and how a release is made |
 | [Release notes](docs/releases) | one page per release: [0.3.0](docs/releases/0.3.0.md), [0.2.52](docs/releases/0.2.52.md), [0.2.17](docs/releases/0.2.17.md) |
 | [Changelog](CHANGELOG.md) | what changed in Project Depot ([upstream history](CHANGELOG_UPSTREAM.md), frozen) |
@@ -476,6 +477,7 @@ depot/
 │   ├── omsi-html/       the HTML engine behind in-vehicle screens
 │   ├── omsi-devtools-link/   the link for developer tools over any byte stream (not yet used)
 │   ├── omsi-devtools-proto/  messages for developer tools (not yet used by the game)
+│   ├── omsi-devtools-record/ the run record of developer tools as JSON Lines (not yet used)
 │   ├── omsi-cfg/        text files, code pages, virtual file system, content roots
 │   ├── omsi-script/     the OMSI script language (compiler + VM)
 │   ├── omsi-o3d/ omsi-model/ omsi-texture/ omsi-geometry/   meshes, models, textures, splines

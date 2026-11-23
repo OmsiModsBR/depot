@@ -2804,6 +2804,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "omsi-devtools-record"
+version = "0.1.0"
+dependencies = [
+ "omsi-devtools-proto",
+ "serde_json",
+]
+
+[[package]]
 name = "omsi-geometry"
 version = "0.1.0"
 dependencies = [
