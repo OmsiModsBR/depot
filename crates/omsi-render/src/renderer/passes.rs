@@ -3,11 +3,10 @@
 
 use crate::assets::GpuTexture;
 use crate::gpu::target_2d;
-use crate::interface::PipeSet;
+use crate::interface::{PipeSet, PostParts};
 use crate::lighting::Lighting;
 use crate::passes::{
-    encode_enhanced_post, encode_glass, encode_main_pass, Batch, FrameFeatures, MainParts,
-    PassPipelines, PostParts,
+    encode_glass, encode_main_pass, Batch, FrameFeatures, MainParts, PassPipelines,
 };
 use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
@@ -126,7 +125,8 @@ impl Renderer {
         );
     }
 
-    /// The enhanced path's post passes: glow, metering, adaptation, tone curve and FXAA.
+    /// The mode's post passes: glow, metering, adaptation, tone curve and FXAA (the plain
+    /// path has none).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_enhanced_post(
         &mut self,
@@ -143,25 +143,26 @@ impl Renderer {
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
+        let Some(mode) = self.enhanced.as_ref() else {
+            return;
+        };
         // (a device lost since this frame began took the meter's buffer as well)
         let lost = self.device_lost().is_some();
-        encode_enhanced_post(
-            PostParts {
-                queue: &self.queue,
-                post: &self.post,
-                targets: &self.targets,
-                adaptation: &mut self.adaptation,
-                sky: &self.sky,
-                msaa: self.options.msaa,
-                fxaa: self.options.fxaa,
-                instant_exposure: self.instant_exposure,
-                exposure_log: self
-                    .diagnostics
-                    .exposure_log
-                    .as_mut()
-                    .filter(|_| features.with_overlays && !lost),
-                overlay_pipeline_1x: &self.presenter.overlay_pipeline_1x,
-            },
+        mode.encode_post(PostParts {
+            queue: &self.queue,
+            post: &self.post,
+            targets: &self.targets,
+            adaptation: &mut self.adaptation,
+            sky: &self.sky,
+            msaa: self.options.msaa,
+            fxaa: self.options.fxaa,
+            instant_exposure: self.instant_exposure,
+            exposure_log: self
+                .diagnostics
+                .exposure_log
+                .as_mut()
+                .filter(|_| features.with_overlays && !lost),
+            overlay_pipeline_1x: &self.presenter.overlay_pipeline_1x,
             scene,
             encoder,
             lighting,
@@ -174,7 +175,7 @@ impl Renderer {
             puddles_on,
             tset,
             timed,
-        );
+        });
     }
 
     /// The scene's slot for the picture behind the glass (black until a frame is drawn).

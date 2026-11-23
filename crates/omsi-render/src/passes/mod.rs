@@ -28,9 +28,7 @@ pub use features::FrameFeatures;
 pub(crate) use glass::encode_glass;
 pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
 pub(crate) use pipelines::PathBuilders;
-#[cfg(test)]
-pub(crate) use post::PostUniform;
-pub(crate) use post::{encode_enhanced_post, post_pipelines, Exposure, PostParts, PostPipelines};
+pub(crate) use post::{post_pipelines, Exposure, PostPipelines, PostUniform};
 pub(crate) use scene_pipelines::SceneBuilder;
 pub(crate) use shadow::{
     shadow_pipe, ShadowResources, ShadowSchedule, LAMP_CASCADE, SHADOW_CLOSE_MAX,

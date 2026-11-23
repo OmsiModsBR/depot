@@ -2,9 +2,11 @@
 //! and tone mapping. Mirrors are shaded plainly unless asked otherwise.
 
 mod fog_lamps;
+mod post;
 
 use crate::interface::{
-    FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, RenderMode,
+    FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, PostParts,
+    RenderMode,
 };
 use crate::lighting::{
     drawn_by, gpu_light, lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight,
@@ -67,6 +69,10 @@ impl ModeResources for EnhancedResources {
 
     fn encode_fog_lamps(&self, parts: FogLampsParts<'_>) {
         self.fog_lamps.encode_fog_lamps(parts);
+    }
+
+    fn encode_post(&self, parts: PostParts<'_>) {
+        post::encode_post(parts);
     }
 }
 
