@@ -1,15 +1,13 @@
 //! The lamps' light in the fog: worked out at half size and added onto the picture.
 
-use super::draw::PostPass;
 use crate::gpu::{
     array_path, basic_pipelines, depth_texture_entry, fullscreen_pipeline, pass_timer,
     uniform_entry, ArrayPath,
 };
-use crate::lighting::Lighting;
-use crate::scene::Scene;
+use crate::interface::FogLampsParts;
+use crate::passes::PostPass;
 use crate::shaders::fog_lamps_shader_source;
 use crate::sky::enhanced_weather_fog;
-use glam::Mat4;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -106,25 +104,27 @@ pub(crate) fn fog_lamps_pipelines(
 impl FogLampsPass {
     /// The lamps' light in the weather's fog and the sun's shafts between the shadows, over the
     /// picture before its glow and metering.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_fog_lamps(
-        &self,
-        queue: &wgpu::Queue,
-        fog: Option<(&wgpu::TextureView, &[wgpu::BindGroup; 2])>,
-        picture: Option<&wgpu::TextureView>,
-        scene: &Scene,
-        encoder: &mut wgpu::CommandEncoder,
-        lighting: &Lighting,
-        vp_mat: Mat4,
-        width: u32,
-        height: u32,
-        enhanced: bool,
-        masked_frame: bool,
-        prepass_on: bool,
-        with_overlays: bool,
-        tset: &Option<wgpu::QuerySet>,
-        timed: &mut Vec<&'static str>,
-    ) {
+    pub(crate) fn encode_fog_lamps(&self, parts: FogLampsParts<'_>) {
+        let FogLampsParts {
+            queue,
+            fog,
+            picture,
+            scene,
+            encoder,
+            lighting,
+            vp_mat,
+            width,
+            height,
+            features,
+            tset,
+            timed,
+        } = parts;
+        let (enhanced, masked_frame, prepass_on, with_overlays) = (
+            features.enhanced,
+            features.masked_frame,
+            features.prepass_on,
+            features.with_overlays,
+        );
         // the lamps' light in the weather's fog and the sun's shafts between the shadows
         // (before the rain on the panes, which writes the prepass depth),
         // over the picture before its glow and metering (the window's picture; the mirrors

@@ -9,14 +9,16 @@ use crate::gpu::{
     basic_pipelines, fault_is, sixteen_texture_units, target_2d, FaultHook, GpuContext, Samplers,
     GL_BACKEND,
 };
-use crate::interface::RenderMode;
+use crate::interface::{ModeResources, RenderMode};
 use crate::lighting::{LightMapAtlas, ShadingPath};
-use crate::modes::{enhanced::Enhanced, vanilla_plus::VanillaPlus};
+use crate::modes::{
+    enhanced::{fog_lamps_pipelines, Enhanced, EnhancedResources},
+    vanilla_plus::VanillaPlus,
+};
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::{
-    ao_pipelines, fog_lamps_pipelines, post_pipelines, prepass_pipelines, snow_layout,
-    CoronaBuilder, Exposure, PathBuilders, SceneBuilder, ShadowResources, SkyBuilder, SnowBuilder,
-    SpriteResources,
+    ao_pipelines, post_pipelines, prepass_pipelines, snow_layout, CoronaBuilder, Exposure,
+    PathBuilders, SceneBuilder, ShadowResources, SkyBuilder, SnowBuilder, SpriteResources,
 };
 use crate::scene::{CameraUniform, CullHistory, Layouts};
 use crate::shaders::scene_shader_source;
@@ -108,8 +110,15 @@ impl Renderer {
             log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
         }
         let leave_out_enhanced = leave_out_enhanced || sixteen_texture_units();
-        let sky_mirror_pipeline = (!leave_out_enhanced).then(|| builders.sky_mirror(format));
-        let hdr_pass = (!leave_out_enhanced).then(|| builders.enhanced(hdr_format));
+        let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
+        // what only the enhanced mode draws with is its own
+        let enhanced: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
+            Box::new(EnhancedResources::new(
+                builders.enhanced(hdr_format),
+                builders.sky_mirror(format),
+                fog_lamps_pipelines(&device, &layouts.camera_layout, gl, hdr_format),
+            )) as Box<dyn ModeResources>
+        });
         let reflection_pass = (!leave_out_enhanced
             && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed))
         .then(|| builders.reflections(hdr_format));
@@ -117,7 +126,6 @@ impl Renderer {
         let presenter = Presenter::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         let ssao = ao_pipelines(&device, gl);
-        let fog_lamps = fog_lamps_pipelines(&device, &layouts.camera_layout, gl, hdr_format);
         let prepass = prepass_pipelines(
             &device,
             &layouts.camera_layout,
@@ -193,13 +201,11 @@ impl Renderer {
             ssao,
             layouts,
             prepass,
-            fog_lamps,
             device,
             queue,
             adapter_name,
             pass,
-            hdr_pass,
-            sky_mirror_pipeline,
+            enhanced,
             reflection_pass,
             sprites,
             camera_buf,

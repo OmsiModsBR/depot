@@ -280,7 +280,7 @@ impl Renderer {
                     && puddle_weather(lighting.wetness, lighting.snow)
                     && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0),
                 built: BuiltPasses {
-                    enhanced: self.hdr_pass.is_some(),
+                    enhanced: self.enhanced.is_some(),
                     reflections: self.reflection_pass.is_some(),
                     puddles: self.puddles.is_some(),
                     ssao: self.ssao.ssao_pipeline.is_some(),

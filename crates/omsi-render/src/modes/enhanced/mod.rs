@@ -1,14 +1,74 @@
 //! Enhanced: its own lighting in high range, with the lamps' glow on the night sky, metering
 //! and tone mapping. Mirrors are shaded plainly unless asked otherwise.
 
-use crate::interface::{LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
+mod fog_lamps;
+
+use crate::interface::{
+    FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, RenderMode,
+};
 use crate::lighting::{
     drawn_by, gpu_light, lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight,
 };
-use crate::passes::FrameFeatures;
+use crate::passes::{FrameFeatures, PassPipelines};
+use crate::targets::GroupParts;
 use glam::Vec3;
 
+#[cfg(test)]
+pub(crate) use fog_lamps::FogLampUniform;
+pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
+
 pub(crate) struct Enhanced;
+
+/// What only the enhanced mode draws with: its main-pass pipelines in high range, the sky of
+/// its mirrors, and the lamps' light in the fog.
+pub(crate) struct EnhancedResources {
+    pass: PassPipelines,
+    sky_mirror: wgpu::RenderPipeline,
+    fog_lamps: FogLampsPass,
+}
+
+impl EnhancedResources {
+    pub(crate) fn new(
+        pass: PassPipelines,
+        sky_mirror: wgpu::RenderPipeline,
+        fog_lamps: FogLampsPass,
+    ) -> Self {
+        Self {
+            pass,
+            sky_mirror,
+            fog_lamps,
+        }
+    }
+}
+
+impl ModeResources for EnhancedResources {
+    fn own_pipelines(&self) -> Option<&PassPipelines> {
+        Some(&self.pass)
+    }
+
+    #[cfg(test)]
+    fn own_pipelines_mut(&mut self) -> Option<&mut PassPipelines> {
+        Some(&mut self.pass)
+    }
+
+    fn sky_mirror_pipeline(&self) -> Option<&wgpu::RenderPipeline> {
+        Some(&self.sky_mirror)
+    }
+
+    fn fog_lamps_group(&self) -> Option<GroupParts<'_>> {
+        self.fog_lamps
+            .fog_lamps_pipeline
+            .is_some()
+            .then_some(GroupParts {
+                layout: &self.fog_lamps.fog_lamps_layout,
+                buf: &self.fog_lamps.fog_lamps_buf,
+            })
+    }
+
+    fn encode_fog_lamps(&self, parts: FogLampsParts<'_>) {
+        self.fog_lamps.encode_fog_lamps(parts);
+    }
+}
 
 impl RenderMode for Enhanced {
     fn shading(&self, view: &ModeView) -> ModeShading {

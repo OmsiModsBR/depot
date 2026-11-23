@@ -23,11 +23,9 @@ crates/omsi-render/src/
 │       ├── pipelines.rs                                        <- renderer/build.rs
 │       ├── frame.rs       HDR frame, masked frame, lead view  <- renderer/frame.rs, encode.rs, prepare.rs
 │       ├── lights.rs      linear colours, spot profiles       <- lighting/model.rs, renderer/lights.rs (its part)
-│       ├── post.rs                                             <- passes/post.rs
-│       ├── exposure.rs                                         <- lighting/exposure.rs
-│       ├── atmosphere/    atmosphere, air, clouds, probe       <- sky/{atmosphere,air,clouds,probe}.rs
-│       ├── fog_lamps.rs                                        <- passes/fog_lamps.rs
-│       ├── targets.rs                                          <- targets/hdr.rs
+│       ├── post.rs        the post passes (the state they run on, `Exposure` and `PostPipelines`,
+│       │                  stays in the core, see below)       <- passes/post.rs (its part)
+│       ├── fog_lamps.rs                                        <- passes/fog_lamps.rs (moved, phase C5-0)
 │       └── shaders/       enhanced.wgsl, enhanced_common.wgsl, sky_enhanced.wgsl, post.wgsl,
 │                          fog_lamps.wgsl, lamp_air.wgsl; corona, smoke and snow fragment entries
 ├── gpu/ assets/ lighting/ sky/ scene/ targets/ passes/ effects/ shaders/ output/
@@ -44,6 +42,23 @@ crates/omsi-app/src/output/implementation/
 ├── backend.rs         Backend::of(mode)
 └── vanilla.rs         FramePlan -> SceneFrame                  <- d3d9.rs
 ```
+
+**Found shared in phase C5-0, so they stay in the core** (the page said they would move whole;
+each is read by code both modes run, and the core may not import `modes`):
+
+- `lighting/exposure.rs`: `tone_contrast` (the sky's uniform) and `ExposureLog` (diagnostics).
+- `passes/post.rs`: `Exposure` (the puddles' pass reads its views and value in Vanilla+ too, and
+  the targets build their bind groups from it) and `PostPipelines` (the post sampler, which the
+  scaled and FXAA targets use in every mode). Only the encoding of the post passes is the mode's.
+- `sky/{atmosphere,air,clouds,probe}.rs`: `atmosphere` and `clouds` are public (the game's weather
+  uses them), and `SkyResources` (the clouds' noise, the probe, the sky bind groups) is built for
+  every mode.
+- `targets/hdr.rs`: the target cache holds the high-range targets, which Vanilla+'s puddles use.
+
+What moved whole is `passes/fog_lamps.rs`: its pass, pipelines and parameters are now
+`modes/enhanced/fog_lamps.rs`, held by the mode's `EnhancedResources` (the renderer reaches them
+through `interface::ModeResources`). Splitting the shared state out of the files above is what is
+left of the move (T058).
 
 A file listed with "(its part)" is split: the part both modes run stays where it is. Where a move
 finds that a file is used by both modes after all, it stays in the core and this page is corrected

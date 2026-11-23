@@ -4,6 +4,7 @@
 use super::frame::{DrawLists, FrameClock, FrameContext, FrameEncoders};
 use super::state::Renderer;
 use crate::gpu::HDR_FORMAT;
+use crate::interface::FogLampsParts;
 use crate::passes::record_bundles;
 use crate::scene::Scene;
 
@@ -20,7 +21,6 @@ impl Renderer {
     ) -> FrameEncoders {
         let (target, camera, lighting) = (f.target, f.camera, f.lighting);
         let scene_view = f.scene_view();
-        let with_overlays = f.with_overlays;
         let projection = f.projection;
         let ro = f.ro;
         let full_w = f.full_w;
@@ -193,23 +193,22 @@ impl Renderer {
                 .filter(|_| puddles_on)
                 .map_or(&h.view, |p| &p.view)
         });
-        self.fog_lamps.encode_fog_lamps(
-            &self.queue,
-            fog,
-            fog_picture,
-            scene,
-            &mut encoder,
-            lighting,
-            vp_mat,
-            width,
-            height,
-            enhanced,
-            masked_frame,
-            prepass_on,
-            with_overlays,
-            &clock.tset,
-            &mut clock.timed,
-        );
+        if let Some(mode) = self.enhanced.as_ref() {
+            mode.encode_fog_lamps(FogLampsParts {
+                queue: &self.queue,
+                fog,
+                picture: fog_picture,
+                scene,
+                encoder: &mut encoder,
+                lighting,
+                vp_mat,
+                width,
+                height,
+                features: &f.features,
+                tset: &clock.tset,
+                timed: &mut clock.timed,
+            });
+        }
         self.encode_glass(
             scene,
             &mut encoder,
