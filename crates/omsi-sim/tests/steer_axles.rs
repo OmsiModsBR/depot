@@ -590,3 +590,40 @@ fn locking_the_rear_axle_in_a_turn_moves_the_line_continuously() {
     // (the axle's 60°/s moves it about 0.1 m a frame over the 2.3 m; a jump would be all of it)
     assert!(worst < 0.25, "the line moved {worst} m in a frame");
 }
+
+/// Checks: D-7 (standing bent with its last axle locked and the brake almost off, V5's rear
+/// section stays still: the tyres' hold across rolls it again as soon as it stops - taking no
+/// roll there, it fed the roll of the springs into a sway across that rocked the bus in about a
+/// second, with no turn's pull to damp it)
+#[test]
+fn v5_standing_bent_with_its_last_axle_locked_does_not_sway() {
+    let (mut bodies, joints) = depot(&v5_last_axle_steer());
+    lock_all(&mut bodies[1]);
+    launch(&mut bodies, 1.5);
+    let brakes = |bodies: &[RigidBody], f: f32| -> Vec<Vec<f32>> {
+        bodies.iter().map(|b| vec![f; b.wheels().len()]).collect()
+    };
+    let radius = bodies[1].wheels()[0].radius();
+    let free = brakes(&bodies, 0.0);
+    for _ in 0..3000 {
+        if joints[0].angles(&bodies).0.abs() > 30f32.to_radians() {
+            break;
+        }
+        let mass: f32 = bodies.iter().map(|b| b.mass()).sum();
+        let torque = ((1.5 - bodies[0].forward_speed()) * mass * 2.0 + 3000.0) * radius;
+        step(&mut bodies, &joints, &free, torque, 1.0);
+    }
+    assert!(joints[0].angles(&bodies).0.abs() > 30f32.to_radians());
+    let (hard, weak) = (brakes(&bodies, 8000.0), brakes(&bodies, 150.0));
+    for _ in 0..180 {
+        step(&mut bodies, &joints, &hard, 0.0, 1.0);
+    }
+    let mut roll = 0.0_f32;
+    for frame in 0..600 {
+        step(&mut bodies, &joints, &weak, 0.0, 1.0);
+        if frame >= 120 {
+            roll = roll.max(bodies[1].omega().y.abs());
+        }
+    }
+    assert!(roll < 0.005, "rear section rolls at up to {roll} rad/s");
+}

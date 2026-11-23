@@ -379,9 +379,11 @@ impl RigidBody {
         // (with steerable axles, `D-7`, always while holding: their scrub rolled the body at
         // walking pace, and at speed a turning line far behind `[cog]` gives it more than
         // `GRIPPED_ACROSS` across, so the roll swapped from the tyres to the bend's pull and
-        // back in one step either way)
+        // back in one step either way; standing, the tyres take the roll again: held across
+        // with no roll, they fed the springs' roll into a sway that rocked a section standing
+        // bent with an axle locked, with no turn's pull to damp it)
         let own_axles = self.steers_axles();
-        let gripped = gripped || own_axles;
+        let gripped = gripped || (own_axles && self.velocity.dot(body_fwd).abs() > STANDING);
         // where each tyre is held across: at the tyre, or for a section behind a joint on its
         // turning line, level with the tyre, so that it turns about that line whatever axles
         // it has (`C-9`; one with steerable axles at the tyre, held at its line below, `D-7`)
