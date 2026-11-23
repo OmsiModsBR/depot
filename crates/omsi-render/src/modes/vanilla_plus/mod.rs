@@ -2,7 +2,7 @@
 //! multisampling and the puddles' own reflection pass.
 
 use crate::interface::{LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
-use crate::lighting::{drawn_by, gpu_light, GpuPointLight, PointLight};
+use crate::lighting::{gpu_light, lights_up, GpuPointLight, LightMode, PointLight};
 use crate::passes::FrameFeatures;
 use glam::Vec3;
 
@@ -25,11 +25,11 @@ impl RenderMode for VanillaPlus {
     }
 
     fn draws_light(&self, l: &PointLight, _features: &FrameFeatures) -> bool {
-        drawn_by(l, false)
+        lights_up(l) && l.mode != LightMode::Enhanced
     }
 
     fn light_record(&self, l: &PointLight, p: Vec3, _features: &FrameFeatures) -> GpuPointLight {
-        gpu_light(l, p, false)
+        gpu_light(l, p)
     }
 
     fn lamp_shadows(&self, _features: &FrameFeatures) -> bool {

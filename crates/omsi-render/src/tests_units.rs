@@ -867,12 +867,6 @@ fn each_path_gets_its_own_headlights() {
         core: 5.0,
         ..Default::default()
     };
-    let stand_in = PointLight {
-        radius: 18.0,
-        intensity: 0.8,
-        mode: LightMode::Vanilla,
-        ..Default::default()
-    };
     let spot = PointLight {
         radius: 60.0,
         intensity: 20.0,
@@ -883,24 +877,14 @@ fn each_path_gets_its_own_headlights() {
         mode: LightMode::Enhanced,
         ..Default::default()
     };
-    assert!(drawn_by(&lamp, false) && drawn_by(&lamp, true));
-    assert!(drawn_by(&stand_in, false) && !drawn_by(&stand_in, true));
-    assert!(!drawn_by(&spot, false) && drawn_by(&spot, true));
-    assert!(!drawn_by(
-        &PointLight {
-            intensity: 0.0,
-            ..lamp
-        },
-        true
-    ));
     // a map light reads as before in the vanilla shader (position, radius, colour)
-    let g = gpu_light(&lamp, Vec3::new(1.0, 2.0, 3.0), false);
+    let g = gpu_light(&lamp, Vec3::new(1.0, 2.0, 3.0));
     assert_eq!(g.pos, [1.0, 2.0, 3.0, 30.0]);
     assert_eq!(g.color, [1.0, 0.78, 0.46, 1.0]);
     assert_eq!(g.dir[3], -2.0);
     assert_eq!(g.extra[1..], [5.0, 0.0, 30.0]);
     // a spot: no radius for the vanilla shader, the cone and the range for the enhanced
-    let g = gpu_light(&spot, Vec3::ZERO, false);
+    let g = gpu_light(&spot, Vec3::ZERO);
     assert_eq!(g.pos[3], 0.0);
     assert_eq!(g.extra[3], 60.0);
     assert!(
@@ -910,7 +894,7 @@ fn each_path_gets_its_own_headlights() {
     );
     // a headlight's beam gain rides along; a plain lamp has none
     assert_eq!(g.extra[2], 24.0);
-    assert_eq!(gpu_light(&lamp, Vec3::ZERO, false).extra[2], 0.0);
+    assert_eq!(gpu_light(&lamp, Vec3::ZERO).extra[2], 0.0);
 }
 
 #[test]

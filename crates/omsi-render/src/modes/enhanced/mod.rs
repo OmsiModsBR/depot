@@ -2,15 +2,14 @@
 //! and tone mapping. Mirrors are shaded plainly unless asked otherwise.
 
 mod fog_lamps;
+mod lights;
 mod post;
 
 use crate::interface::{
     FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, PostParts,
     RenderMode,
 };
-use crate::lighting::{
-    drawn_by, gpu_light, lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight,
-};
+use crate::lighting::{lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight};
 use crate::passes::{FrameFeatures, PassPipelines};
 use crate::targets::GroupParts;
 use glam::Vec3;
@@ -101,12 +100,12 @@ impl RenderMode for Enhanced {
         }
     }
 
-    fn draws_light(&self, l: &PointLight, features: &FrameFeatures) -> bool {
-        drawn_by(l, features.enhanced)
+    fn draws_light(&self, l: &PointLight, _features: &FrameFeatures) -> bool {
+        lights::draws(l)
     }
 
-    fn light_record(&self, l: &PointLight, p: Vec3, features: &FrameFeatures) -> GpuPointLight {
-        gpu_light(l, p, features.enhanced)
+    fn light_record(&self, l: &PointLight, p: Vec3, _features: &FrameFeatures) -> GpuPointLight {
+        lights::record(l, p)
     }
 
     fn lamp_shadows(&self, features: &FrameFeatures) -> bool {
