@@ -5,7 +5,6 @@ mod corona;
 mod depth;
 mod draw;
 mod features;
-mod fog_lamps;
 mod glass;
 mod main;
 mod pipelines;
@@ -26,9 +25,6 @@ pub(crate) use draw::{
     PIPE_OPAQUE, PIPE_SURFACE_DEPTH, PIPE_TERRAIN_PAINT,
 };
 pub use features::FrameFeatures;
-#[cfg(test)]
-pub(crate) use fog_lamps::FogLampUniform;
-pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
 pub(crate) use glass::encode_glass;
 pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
 pub(crate) use pipelines::PathBuilders;

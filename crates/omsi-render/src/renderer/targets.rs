@@ -44,13 +44,7 @@ impl Renderer {
                 layout: &self.ssao.ao_layout,
                 buf: &self.ssao.ao_buf,
             },
-            self.fog_lamps
-                .fog_lamps_pipeline
-                .is_some()
-                .then_some(GroupParts {
-                    layout: &self.fog_lamps.fog_lamps_layout,
-                    buf: &self.fog_lamps.fog_lamps_buf,
-                }),
+            self.enhanced.as_ref().and_then(|m| m.fog_lamps_group()),
             self.puddles.is_some(),
             w,
             h,

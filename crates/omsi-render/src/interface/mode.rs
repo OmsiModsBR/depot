@@ -8,10 +8,11 @@
 //! renderer; they move into the modes with phase C5.
 
 use crate::lighting::{GpuPointLight, Lighting, PointLight};
-use crate::passes::{Exposure, FrameFeatures};
+use crate::passes::{Exposure, FrameFeatures, PassPipelines};
 use crate::scene::{Camera, Scene};
 use crate::sky::SkyResources;
-use glam::Vec3;
+use crate::targets::GroupParts;
+use glam::{Mat4, Vec3};
 
 /// What a picture is, as the mode needs it to choose its shading.
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +62,24 @@ pub(crate) struct LeadViewParts<'a> {
     pub sky: &'a mut SkyResources,
 }
 
+/// What the lamps' light in the fog is drawn from and into (`RenderMode::encode_fog_lamps`).
+pub(crate) struct FogLampsParts<'a> {
+    pub queue: &'a wgpu::Queue,
+    /// The fog's half-size target and its two bind groups.
+    pub fog: Option<(&'a wgpu::TextureView, &'a [wgpu::BindGroup; 2])>,
+    /// The picture the lamps' light is added onto.
+    pub picture: Option<&'a wgpu::TextureView>,
+    pub scene: &'a Scene,
+    pub encoder: &'a mut wgpu::CommandEncoder,
+    pub lighting: &'a Lighting,
+    pub vp_mat: Mat4,
+    pub width: u32,
+    pub height: u32,
+    pub features: &'a FrameFeatures,
+    pub tset: &'a Option<wgpu::QuerySet>,
+    pub timed: &'a mut Vec<&'static str>,
+}
+
 /// A render mode: the steps of a frame that differ between the shading paths.
 pub(crate) trait RenderMode: Sync {
     /// How a picture of `view` is shaded.
@@ -81,4 +100,36 @@ pub(crate) trait RenderMode: Sync {
     /// What the window's picture feeds the mode's own look before it is drawn (the lamps in
     /// view, the glow of the night sky); nothing for a mode with no such state.
     fn lead_view(&self, features: &FrameFeatures, parts: LeadViewParts<'_>);
+}
+
+/// What a mode draws with that only it needs, kept by the renderer for as long as the mode is
+/// built (none where the mode is left out). The steps of [`RenderMode`] are decisions;
+/// these are the mode's own pipelines and passes.
+pub(crate) trait ModeResources: Send + Sync {
+    /// The pipelines of the main pass in the mode's own shading .
+    fn own_pipelines(&self) -> Option<&PassPipelines> {
+        None
+    }
+
+    /// The same, to swap a pipeline in a test.
+    #[cfg(test)]
+    fn own_pipelines_mut(&mut self) -> Option<&mut PassPipelines> {
+        None
+    }
+
+    /// The enhanced sky tone-mapped into the plain pass's target, for the mirrors of a
+    /// picture in the mode's own shading.
+    fn sky_mirror_pipeline(&self) -> Option<&wgpu::RenderPipeline> {
+        None
+    }
+
+    /// The layout and parameters of the lamps' light in the fog, when the mode draws it
+    /// (the targets make the bind groups it is read through).
+    fn fog_lamps_group(&self) -> Option<GroupParts<'_>> {
+        None
+    }
+
+    /// The lamps' light in the fog and the sun's shafts, over the picture before its glow
+    /// and metering.
+    fn encode_fog_lamps(&self, _parts: FogLampsParts<'_>) {}
 }

@@ -1055,7 +1055,11 @@ fn terrain_paint_fast_path_preserves_composition() {
             let actual = renderer
                 .render_to_image(&mut scene, 64, 64, &camera, &lighting)
                 .unwrap();
-            let pp = renderer.hdr_pass.as_mut().unwrap();
+            let pp = renderer
+                .enhanced
+                .as_mut()
+                .and_then(|m| m.own_pipelines_mut())
+                .unwrap();
             let mut saved = Vec::new();
             for variant in 0..4 {
                 let original = pp.pipelines[PIPE_BLEND_NO_WRITE as usize * 4 + variant].clone();
@@ -1068,8 +1072,12 @@ fn terrain_paint_fast_path_preserves_composition() {
                 .render_to_image(&mut scene, 64, 64, &camera, &lighting)
                 .unwrap();
             for (variant, pipeline) in saved.into_iter().enumerate() {
-                renderer.hdr_pass.as_mut().unwrap().pipelines
-                    [PIPE_TERRAIN_PAINT as usize * 4 + variant] = pipeline;
+                renderer
+                    .enhanced
+                    .as_mut()
+                    .and_then(|m| m.own_pipelines_mut())
+                    .unwrap()
+                    .pipelines[PIPE_TERRAIN_PAINT as usize * 4 + variant] = pipeline;
             }
             let delta = actual
                 .iter()
