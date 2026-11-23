@@ -96,9 +96,11 @@ pub fn run() -> Result<()> {
     // Windows, and what it said went nowhere.
     let args_now: Vec<String> = std::env::args().collect();
     let launcher_process = startup::launcher_process(&args_now);
-    // The level: `--log-level` (the launcher passes its setting), unless `RUST_LOG` is set.
+    // The level: `--log-level` (the launcher passes its setting) and the channels given one
+    // of their own by `--log-channels`, unless `RUST_LOG` is set.
     let log_setup = startup::log_setup(
-        startup::log_level_arg(&args_now),
+        startup::early_arg(&args_now, "--log-level"),
+        startup::early_arg(&args_now, "--log-channels"),
         std::env::var("RUST_LOG").ok().as_deref(),
     );
     let mut logger = env_logger::Builder::new();
@@ -192,7 +194,7 @@ pub fn run() -> Result<()> {
             );
         }
     }));
-    if let Some(warning) = &log_setup.warning {
+    for warning in &log_setup.warnings {
         log::warn!("{warning}");
     }
     if let Some(note) = &log_setup.note {

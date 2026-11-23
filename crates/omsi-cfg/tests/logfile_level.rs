@@ -1,6 +1,6 @@
 //! The four levels of the log: how each reads, is written, and what filter the logger gets.
 
-use omsi_cfg::logfile::{LogLevel, GAME_LOG_TARGETS};
+use omsi_cfg::logfile::{LogLevel, LOG_CHANNELS};
 
 #[test]
 fn the_four_levels_read_in_any_letter_case() {
@@ -33,7 +33,7 @@ fn debug_is_for_the_games_own_crates_only() {
     assert_eq!(LogLevel::Info.filter(), "info");
     let debug = LogLevel::Debug.filter();
     assert!(debug.starts_with("info,"), "{debug}");
-    for target in GAME_LOG_TARGETS {
+    for target in LOG_CHANNELS.iter().flat_map(|(_, targets)| targets.iter()) {
         assert!(debug.contains(&format!(",{target}=debug")), "{target}");
     }
     assert!(!debug.contains("wgpu"), "{debug}");

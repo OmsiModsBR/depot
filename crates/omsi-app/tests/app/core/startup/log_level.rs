@@ -1,5 +1,10 @@
 use omsi_cfg::logfile::LogLevel;
-use openomsi_game::testing::core::startup::{log_level_arg, log_setup};
+use openomsi_game::testing::core::startup::{early_arg, log_setup};
+
+/// `--log-level` as the command line `list` gives it.
+fn log_level_arg(list: &[String]) -> Option<&str> {
+    early_arg(list, "--log-level")
+}
 
 fn args(list: &[&str]) -> Vec<String> {
     list.iter().map(|a| a.to_string()).collect()
@@ -50,8 +55,8 @@ fn each_level_shows_its_lines_and_hides_the_lines_below_it() {
         (LogLevel::Debug, [true, true, true, true]),
     ];
     for (level, shown) in expected {
-        let setup = log_setup(Some(level.name()), None);
-        assert_eq!(setup.warning, None);
+        let setup = log_setup(Some(level.name()), None, None);
+        assert_eq!(setup.warnings, Vec::<String>::new());
         for (line, shown) in [Error, Warn, Info, Debug].into_iter().zip(shown) {
             assert_eq!(
                 writes(&setup.filter, line, game),
@@ -66,7 +71,7 @@ fn each_level_shows_its_lines_and_hides_the_lines_below_it() {
 
 #[test]
 fn debug_leaves_the_graphics_libraries_at_info() {
-    let setup = log_setup(Some("debug"), None);
+    let setup = log_setup(Some("debug"), None, None);
     assert!(writes(
         &setup.filter,
         log::Level::Debug,
@@ -82,18 +87,18 @@ fn debug_leaves_the_graphics_libraries_at_info() {
 
 #[test]
 fn no_level_asked_for_is_info_and_says_nothing() {
-    let setup = log_setup(None, None);
+    let setup = log_setup(None, None, None);
     assert_eq!(setup.filter, LogLevel::Info.filter());
-    assert_eq!((setup.warning, setup.note), (None, None));
+    assert_eq!((setup.warnings.len(), setup.note), (0, None));
     // (an empty RUST_LOG says nothing either)
-    assert_eq!(log_setup(None, Some("  ")).filter, "info");
+    assert_eq!(log_setup(None, None, Some("  ")).filter, "info");
 }
 
 #[test]
 fn a_level_that_is_none_of_the_four_is_info_with_a_warning() {
-    let setup = log_setup(Some("loud"), None);
+    let setup = log_setup(Some("loud"), None, None);
     assert_eq!(setup.filter, LogLevel::Info.filter());
-    let warning = setup.warning.expect("a warning");
+    let warning = setup.warnings.first().expect("a warning");
     assert!(warning.contains("\"loud\""), "{warning}");
     assert!(warning.contains("using info"), "{warning}");
     assert!(writes(&setup.filter, log::Level::Warn, "openomsi_game"));
@@ -101,15 +106,24 @@ fn a_level_that_is_none_of_the_four_is_info_with_a_warning() {
 
 #[test]
 fn rust_log_wins_over_the_level_and_the_log_says_so() {
-    let setup = log_setup(Some("error"), Some("warn,omsi_script=debug"));
+    let setup = log_setup(Some("error"), None, Some("warn,omsi_script=debug"));
     assert_eq!(setup.filter, "warn,omsi_script=debug");
-    let warning = setup.warning.expect("a warning");
+    let warning = setup.warnings.first().expect("a warning");
     assert!(
         warning.contains("RUST_LOG=warn,omsi_script=debug"),
         "{warning}"
     );
     assert!(warning.contains("--log-level error"), "{warning}");
     // (alone, it is the filter and nothing is said)
-    let alone = log_setup(None, Some("debug"));
-    assert_eq!((alone.filter.as_str(), alone.warning), ("debug", None));
+    let alone = log_setup(None, None, Some("debug"));
+    assert_eq!((alone.filter.as_str(), alone.warnings.len()), ("debug", 0));
+}
+
+#[test]
+fn another_parameter_that_starts_the_same_way_is_not_the_level() {
+    let list = args(&["depot", "--log-levels=debug", "--log-level-x", "warn"]);
+    assert_eq!(early_arg(&list, "--log-level"), None);
+    let list = args(&["depot", "--log-channels", "ai=debug", "--log-level=warn"]);
+    assert_eq!(early_arg(&list, "--log-channels"), Some("ai=debug"));
+    assert_eq!(early_arg(&list, "--log-level"), Some("warn"));
 }

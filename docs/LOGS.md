@@ -51,6 +51,32 @@ Every line says its level in its header: `[<time> WARN  <where>] <text>`.
 - **`OMSI_PROFILE=1`**: with it, `game.log` gets one `profile window:` line every 30 seconds with the frame time and the cost of each stage, and the stage table when the game ends. Every profiling line carries the target `profile` in its header (`[<time> INFO  profile] profile window: ...`), so the profiling lines can be picked out of the file by that word. See [performance measurement](performance-measurement.md).
 - Other `OMSI_DEBUG_*` switches for single subjects are listed in [ENVIRONMENT](ENVIRONMENT.md).
 
+### Channels
+
+Parts of the program can be given a level of their own, over the level above, with `--log-channels` on the game's command line: `channel=level` entries separated by commas.
+
+```
+depot --log-channels physics=debug,render=warn ...
+```
+
+| Channel | Lines of |
+|---|---|
+| `script` | the script compiler and the script machine |
+| `content` | reading content: configuration files, maps, models, textures, timetables, vehicles, scenery, and the loading of the tiles |
+| `audio` | sound and the bus radio |
+| `physics` | vehicle physics, collisions, the trolleybus wires |
+| `ai` | AI vehicles, traffic and people |
+| `network` | the Steam status and the developer-mode link |
+| `render` | the renderers and the cameras |
+| `input` | keyboard, mouse, wheels and gamepads |
+| `app` | everything else of the game and the launcher |
+
+- A channel that is not listed follows the level (`--log-level`, or the launcher's setting).
+- A channel can be louder than the level (`physics=debug` at `info`) or quieter (`render=warn` at `debug`).
+- An entry whose channel or level is not known is left out, and the log starts with a warning that names it; the other entries still count.
+- `RUST_LOG`, when set, wins over the channels as well.
+- There is no setting for channels in the launcher: they are for a game started by hand. The graphics libraries are no channel and never write more than `info`.
+
 ## What to attach to a report
 
 Attach `game.log` (the part around the problem is enough). For a problem in the launcher or in a bus preview, attach `launcher.log`.
