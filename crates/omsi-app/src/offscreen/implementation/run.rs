@@ -514,6 +514,97 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 p.vehicle.dynamic_boxes = t.boxes(p.vehicle.position, 80.0);
             }
         }
+        let size = (w, h);
+        if let Some(h) = humans_off.as_mut() {
+            // keep density and time_of_day up to date every tick, as app_events.rs does
+            // (stop_target = enter_mean * density; without this it stays at the startup
+            // value and the new formula returns 0 for the whole session when the map has
+            // a low hourly density at the start time)
+            session::people_clock(h, &world, &settings, &run_clock, envir.as_ref());
+            // how late the duty's bus is, for the passengers' complaints, as the window sets it
+            h.delay = duty
+                .as_ref()
+                .map(|d| d.delay(run_clock.time))
+                .unwrap_or(0.0);
+            // populate stops near every LAN player every 2 seconds, as app_events.rs
+            // does every 2 s near the local player.  At startup `center` is ZERO (no
+            // player bus on a headless server), so stops on the actual map – which can
+            // be thousands of metres away – fall outside the 600 m filter in
+            // `populate_with` and are never seeded without this loop.
+            if i % 60 == 0 {
+                let remote_centers: Vec<glam::DVec3> = Vec::new();
+                let player_centers: Vec<glam::DVec3> = remote_centers
+                    .into_iter()
+                    .chain(player.as_ref().map(|p| p.vehicle.position))
+                    .collect();
+                for c in &player_centers {
+                    h.populate(&world, &renderer, &mut scene, *c);
+                }
+                // also update which stops the LAN players are near
+                h.lan_centers = player_centers;
+            }
+            // what the passengers must not be seen appearing in front of
+            let followed = traffic
+                .as_ref()
+                .and_then(|t| follow_id(args, Some(t)).and_then(|id| follow_camera(Some(t), id)));
+            let eye_cam = match player.as_ref() {
+                _ if followed.is_some() => followed.unwrap(),
+                Some(p) if args.cam.is_none() && args.view != "free" && args.follow.is_none() => {
+                    p.camera(&args.view, &camera)
+                }
+                _ => Camera {
+                    position: camera.position,
+                    yaw: camera.yaw,
+                    pitch: camera.pitch,
+                    roll: camera.roll,
+                    fov_deg: camera.fov_deg,
+                    near: camera.near,
+                    far: camera.far,
+                },
+            };
+            h.eye = Some(
+                humans::Eye::of(&eye_cam, view_aspect)
+                    .widened(triple_extent(&settings, &eye_cam, size.0, size.1)),
+            );
+            h.set_duty(duty.as_ref());
+            h.set_player_next_stop(duty.as_ref().and_then(|d| d.trip().stops.get(d.next_stop)));
+            let took = h.tick(
+                dt,
+                &world,
+                player.as_ref().map(|p| &p.vehicle),
+                traffic.as_ref(),
+                &renderer,
+                &mut scene,
+            );
+            session::people_after_tick(h, player.as_mut(), traffic.as_mut());
+            if let Some(m) = h.take_message() {
+                log::info!("HUD: {m}");
+            }
+            session::people_handover(h, &world, &renderer, &mut scene, player.as_mut(), took);
+            if h.tracing() {
+                // OMSI_TRACE_PAX wants every frame as a window would draw it
+                h.sync(&renderer, &mut scene, eye_cam.position);
+            }
+            career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
+            career.boarded = h.boarded as i32;
+            career.served = h.served as i32;
+            career.stepped_in = h.stepped_in as i32;
+            career.content = h.content as i32;
+            career.ticket_requests = h.ticket_requests as i32;
+            career.ticket_points = h.ticket_points as i32;
+            if let Some(p) = player.as_ref() {
+                let hurt = h.run_over(&p.vehicle);
+                if hurt > 0 {
+                    career.crashes[1] += hurt as i32;
+                    log::warn!("{hurt} pedestrian(s) knocked down");
+                }
+            }
+            if std::mem::take(&mut h.stop_request) {
+                if let Some(p) = player.as_mut() {
+                    p.vehicle.trigger("int_haltewunsch");
+                }
+            }
+        }
         if let Some(player) = player.as_mut() {
             player.tick_startup(dt);
             if let Some(d) = duty.as_mut() {
@@ -871,97 +962,6 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 player.as_ref().map(|p| &p.vehicle),
                 traffic.as_ref(),
             );
-        }
-        let size = (w, h);
-        if let Some(h) = humans_off.as_mut() {
-            // keep density and time_of_day up to date every tick, as app_events.rs does
-            // (stop_target = enter_mean * density; without this it stays at the startup
-            // value and the new formula returns 0 for the whole session when the map has
-            // a low hourly density at the start time)
-            session::people_clock(h, &world, &settings, &run_clock, envir.as_ref());
-            // how late the duty's bus is, for the passengers' complaints, as the window sets it
-            h.delay = duty
-                .as_ref()
-                .map(|d| d.delay(run_clock.time))
-                .unwrap_or(0.0);
-            // populate stops near every LAN player every 2 seconds, as app_events.rs
-            // does every 2 s near the local player.  At startup `center` is ZERO (no
-            // player bus on a headless server), so stops on the actual map – which can
-            // be thousands of metres away – fall outside the 600 m filter in
-            // `populate_with` and are never seeded without this loop.
-            if i % 60 == 0 {
-                let remote_centers: Vec<glam::DVec3> = Vec::new();
-                let player_centers: Vec<glam::DVec3> = remote_centers
-                    .into_iter()
-                    .chain(player.as_ref().map(|p| p.vehicle.position))
-                    .collect();
-                for c in &player_centers {
-                    h.populate(&world, &renderer, &mut scene, *c);
-                }
-                // also update which stops the LAN players are near
-                h.lan_centers = player_centers;
-            }
-            // what the passengers must not be seen appearing in front of
-            let followed = traffic
-                .as_ref()
-                .and_then(|t| follow_id(args, Some(t)).and_then(|id| follow_camera(Some(t), id)));
-            let eye_cam = match player.as_ref() {
-                _ if followed.is_some() => followed.unwrap(),
-                Some(p) if args.cam.is_none() && args.view != "free" && args.follow.is_none() => {
-                    p.camera(&args.view, &camera)
-                }
-                _ => Camera {
-                    position: camera.position,
-                    yaw: camera.yaw,
-                    pitch: camera.pitch,
-                    roll: camera.roll,
-                    fov_deg: camera.fov_deg,
-                    near: camera.near,
-                    far: camera.far,
-                },
-            };
-            h.eye = Some(
-                humans::Eye::of(&eye_cam, view_aspect)
-                    .widened(triple_extent(&settings, &eye_cam, size.0, size.1)),
-            );
-            h.set_duty(duty.as_ref());
-            h.set_player_next_stop(duty.as_ref().and_then(|d| d.trip().stops.get(d.next_stop)));
-            let took = h.tick(
-                dt,
-                &world,
-                player.as_ref().map(|p| &p.vehicle),
-                traffic.as_ref(),
-                &renderer,
-                &mut scene,
-            );
-            session::people_after_tick(h, player.as_mut(), traffic.as_mut());
-            if let Some(m) = h.take_message() {
-                log::info!("HUD: {m}");
-            }
-            session::people_handover(h, &world, &renderer, &mut scene, player.as_mut(), took);
-            if h.tracing() {
-                // OMSI_TRACE_PAX wants every frame as a window would draw it
-                h.sync(&renderer, &mut scene, eye_cam.position);
-            }
-            career.tickets = (h.tickets_sold as i32, h.ticket_cash as f64);
-            career.boarded = h.boarded as i32;
-            career.served = h.served as i32;
-            career.stepped_in = h.stepped_in as i32;
-            career.content = h.content as i32;
-            career.ticket_requests = h.ticket_requests as i32;
-            career.ticket_points = h.ticket_points as i32;
-            if let Some(p) = player.as_ref() {
-                let hurt = h.run_over(&p.vehicle);
-                if hurt > 0 {
-                    career.crashes[1] += hurt as i32;
-                    log::warn!("{hurt} pedestrian(s) knocked down");
-                }
-            }
-            if std::mem::take(&mut h.stop_request) {
-                if let Some(p) = player.as_mut() {
-                    p.vehicle.trigger("int_haltewunsch");
-                }
-            }
         }
         // the tyres' spray, frame by frame as the window throws it (the camera that matters
         // for its detail: the followed car's, else the player's bus)
