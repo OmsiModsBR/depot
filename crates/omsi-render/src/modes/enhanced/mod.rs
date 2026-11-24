@@ -6,12 +6,14 @@ mod lights;
 mod pipelines;
 mod post;
 
+use crate::effects::puddles::PuddleLook;
 use crate::interface::{
     FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, PostParts,
     RenderMode,
 };
-use crate::lighting::{lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight};
-use crate::passes::{FrameFeatures, PassPipelines, PathBuilders};
+use crate::lighting::{lamp_sky_glow, view_lamp_light, GpuPointLight, Lighting, PointLight};
+use crate::passes::{Exposure, FrameFeatures, PassPipelines, PathBuilders};
+use crate::sky::{atmosphere, SkyResources};
 use crate::targets::GroupParts;
 use glam::Vec3;
 
@@ -175,5 +177,29 @@ impl RenderMode for Enhanced {
                 step.exp()
             );
         }
+    }
+
+    fn puddle_look(
+        &self,
+        features: &FrameFeatures,
+        lighting: &Lighting,
+        sky: &SkyResources,
+        adaptation: &Exposure,
+    ) -> Option<PuddleLook> {
+        // (a mirror drawn plainly is lit plainly)
+        if !features.enhanced {
+            return Some(PuddleLook::plain(lighting));
+        }
+        let st = sky.sky_state.as_ref()?;
+        let surround = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z]
+            .into_iter()
+            .map(|n| atmosphere::sh_irradiance(&st.sh, n))
+            .sum::<Vec3>()
+            * (0.25 / (6.0 * std::f32::consts::PI));
+        Some(PuddleLook {
+            surround,
+            exposure: adaptation.exposure.unwrap_or(0.0).exp(),
+            own: true,
+        })
     }
 }

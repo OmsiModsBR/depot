@@ -18,7 +18,7 @@ use crate::passes::{
 #[cfg(test)]
 use crate::scene::MaterialId;
 use crate::scene::{Camera, CameraUniform, Scene, Vertex};
-use crate::sky::{atmosphere, SkyResources, PROBE_MIPS};
+use crate::sky::{SkyResources, PROBE_MIPS};
 use crate::targets::{PuddleTargets, TargetCache};
 #[cfg(test)]
 use crate::{RenderOptions, Renderer};
@@ -80,6 +80,26 @@ pub(crate) struct Pipelines {
     chassis: wgpu::RenderPipeline,
     vehicle_params: wgpu::Buffer,
     vehicle_bg: wgpu::BindGroup,
+}
+
+/// How a mode lights what the puddles reflect: the light around the surface, its exposure,
+/// and whether the picture is in the mode's own (high range) shading.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PuddleLook {
+    pub(crate) surround: Vec3,
+    pub(crate) exposure: f32,
+    pub(crate) own: bool,
+}
+
+impl PuddleLook {
+    /// The plain shading's: exactly the sky sheen replaced in shade_vanilla, with no exposure.
+    pub(crate) fn plain(lighting: &Lighting) -> Self {
+        Self {
+            surround: lighting.secondary * 0.5 + lighting.sun_color * lighting.sun_intensity * 0.35,
+            exposure: 1.0,
+            own: false,
+        }
+    }
 }
 
 /// What the puddles' reflections take from the rest of the renderer: the device, the post
@@ -516,12 +536,14 @@ impl Pipelines {
         projection: Option<Mat4>,
         cu: &CameraUniform,
         lighting: &Lighting,
+        look: Option<PuddleLook>,
         ro: DVec3,
     ) -> bool {
-        if targets.ao.is_none()
-            || ctx.sky.probe.is_none()
-            || (cu.post[0] > 0.5 && ctx.sky.sky_state.is_none())
-        {
+        // (no look: the mode cannot light the reflections yet, its sky is not there)
+        let Some(look) = look else {
+            return false;
+        };
+        if targets.ao.is_none() || ctx.sky.probe.is_none() {
             return false;
         }
         let Some(hdr) = targets.hdr_targets.get(&(w, h)) else {
@@ -555,23 +577,11 @@ impl Pipelines {
         let proj = projection.unwrap_or_else(|| {
             Mat4::perspective_rh(camera.fov_deg.to_radians(), aspect, camera.far, camera.near)
         });
-        let enhanced = cu.post[0] > 0.5;
-        let surround = if enhanced {
-            let st = ctx.sky.sky_state.as_ref().unwrap();
-            [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z]
-                .into_iter()
-                .map(|n| atmosphere::sh_irradiance(&st.sh, n))
-                .sum::<Vec3>()
-                * (0.25 / (6.0 * std::f32::consts::PI))
-        } else {
-            // Exactly the sky sheen replaced in shade_vanilla; no Enhanced exposure.
-            lighting.secondary * 0.5 + lighting.sun_color * lighting.sun_intensity * 0.35
-        };
-        let pre = if enhanced {
-            ctx.adaptation.exposure.unwrap_or(0.0).exp()
-        } else {
-            1.0
-        };
+        let PuddleLook {
+            surround,
+            exposure: pre,
+            own: enhanced,
+        } = look;
         let origins = vehicle_origins(lighting, camera);
         let mut parts = [<VehicleBox as bytemuck::Zeroable>::zeroed(); 4];
         for (part, (o, h, bb)) in parts

@@ -1,9 +1,11 @@
 //! Vanilla+: the plain shading in the swap chain's format, with FXAA where there is no
 //! multisampling and the puddles' own reflection pass.
 
+use crate::effects::puddles::PuddleLook;
 use crate::interface::{LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
-use crate::lighting::{gpu_light, lights_up, GpuPointLight, LightMode, PointLight};
-use crate::passes::FrameFeatures;
+use crate::lighting::{gpu_light, lights_up, GpuPointLight, LightMode, Lighting, PointLight};
+use crate::passes::{Exposure, FrameFeatures};
+use crate::sky::SkyResources;
 use glam::Vec3;
 
 pub(crate) struct VanillaPlus;
@@ -37,4 +39,14 @@ impl RenderMode for VanillaPlus {
     }
 
     fn lead_view(&self, _features: &FrameFeatures, _parts: LeadViewParts<'_>) {}
+
+    fn puddle_look(
+        &self,
+        _features: &FrameFeatures,
+        lighting: &Lighting,
+        _sky: &SkyResources,
+        _adaptation: &Exposure,
+    ) -> Option<PuddleLook> {
+        Some(PuddleLook::plain(lighting))
+    }
 }

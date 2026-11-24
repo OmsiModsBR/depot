@@ -4,7 +4,7 @@
 use super::Renderer;
 use crate::effects::puddles::PuddleParts;
 use crate::lighting::Lighting;
-use crate::passes::{Batch, PostPass};
+use crate::passes::{Batch, FrameFeatures, PostPass};
 use crate::scene::{Camera, CameraUniform, Scene, TextureId};
 use glam::{DVec3, Mat4};
 
@@ -55,6 +55,7 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         camera: &Camera,
         lighting: &Lighting,
+        features: &FrameFeatures,
         cu: &CameraUniform,
         list: &[u32],
         main_batches: &[Batch],
@@ -96,6 +97,12 @@ impl Renderer {
                     projection,
                     &cu,
                     lighting,
+                    super::build::mode_for(lighting.path).puddle_look(
+                        features,
+                        lighting,
+                        &self.sky,
+                        &self.adaptation,
+                    ),
                     ro,
                 )
             });
