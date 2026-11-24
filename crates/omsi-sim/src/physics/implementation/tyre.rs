@@ -59,7 +59,9 @@ pub struct Lateral {
     pub(super) j: Vec<f32>,
     pub(super) v: Vec3,
     pub(super) w: Vec3,
-    pub(super) reach: f32,
+    /// How much of the road's grip each tyre may take a substep (1: the road's reach;
+    /// infinite: whatever keeps it rolling where it points).
+    pub(super) reach: Vec<f32>,
     pub(super) gripped: bool,
     pub(super) slipping: bool,
     pub(super) m: f32,
@@ -67,6 +69,24 @@ pub struct Lateral {
     pub(super) joint_p: Vec3,
     pub(super) joint_l: Vec3,
     pub(super) jointed: bool,
+    /// Holding, a section with steerable axles is held at its turning line (`D-5`): no speed
+    /// across there, whatever its scrubbing tyres take (`D-7`).
+    pub(super) line: Option<LineHold>,
+}
+
+/// The hold across at a section's turning line (see [`Lateral::line`]): where it acts
+/// (relative to the centre of gravity, world), across which direction (world), its lever
+/// (body frame) with the inverse of its effective mass, and its impulse so far.
+#[derive(Clone, Copy)]
+pub struct LineHold {
+    at: Vec3,
+    right: Vec3,
+    arm: Vec3,
+    inv: f32,
+    j: f32,
+    /// The most impulse it may take a substep: unlimited for the leading section; behind a
+    /// joint, the road's reach of all its tyres (`D-7`).
+    cap: f32,
 }
 
 /// The buffers a body's substep works in besides its [`Substep`] and [`Lateral`], kept from
@@ -356,15 +376,23 @@ impl RigidBody {
         // (following its wheels: hardly any speed across the body)
         let gripped = self.velocity.dot(rot.mul_vec3(Vec3::X)).abs() < GRIPPED_ACROSS
             && self.velocity.dot(body_fwd).abs() > GRIPPED_ALONG;
+        // (with steerable axles, `D-7`, always while holding: their scrub rolled the body at
+        // walking pace, and at speed a turning line far behind `[cog]` gives it more than
+        // `GRIPPED_ACROSS` across, so the roll swapped from the tyres to the bend's pull and
+        // back in one step either way; standing, the tyres take the roll again: held across
+        // with no roll, they fed the springs' roll into a sway that rocked a section standing
+        // bent with an axle locked, with no turn's pull to damp it)
+        let own_axles = self.steers_axles();
+        let gripped = gripped || (own_axles && self.velocity.dot(body_fwd).abs() > STANDING);
         // where each tyre is held across: at the tyre, or for a section behind a joint on its
         // turning line, level with the tyre, so that it turns about that line whatever axles
-        // it has (`C-9`)
+        // it has (`C-9`; one with steerable axles at the tyre, held at its line below, `D-7`)
         let line = self.rot_pnt_long - self.cog.y;
         let at = &mut l.at;
         at.clear();
         at.extend(lat.iter().map(|&k| {
             let r = contacts[k].r;
-            if steered {
+            if steered || own_axles {
                 return r;
             }
             let tyre = rot.inverse().mul_vec3(r);
@@ -439,15 +467,40 @@ impl RigidBody {
         // them go. A section behind turns as its joint bends it, and its tyres hold by what
         // the road takes: taking any force, the driven axle of a pusher's rear section held
         // its line whatever pushed it sideways and folded the bus in two on uneven ground)
-        let reach = if self.holding && steered {
-            f32::INFINITY
-        } else {
-            1.0
-        };
+        // (a rigid or steerable axle of a section with steerable axles is held by a share of
+        // what the road takes, as far as it points off the centre of the turn: it scrubs, `D-7`)
+        let holds_all = self.holding && (steered || own_axles);
+        l.reach.clear();
+        l.reach.extend(lat.iter().map(|&k| {
+            if holds_all {
+                contacts[k]
+                    .wheel
+                    .map_or(f32::INFINITY, |i| self.wheels[i].hold_reach)
+            } else {
+                1.0
+            }
+        }));
+        l.line = (holds_all && own_axles).then(|| {
+            let mut arm = rot.inverse().mul_vec3(on_line).cross(Vec3::X);
+            if gripped {
+                arm.y = 0.0;
+            }
+            let inv = right.dot(lin(right)) + (arm / self.inertia).dot(arm);
+            // (behind a joint the road's reach still bounds the hold, as `C-9` holds the section
+            // with all its tyres' reach at its line)
+            let cap = if steered { f32::INFINITY } else { grip_all * h };
+            LineHold {
+                at: on_line,
+                right,
+                arm,
+                inv: inv.max(1e-9),
+                j: 0.0,
+                cap,
+            }
+        });
         l.j.clear();
         l.j.resize(lat.len(), 0.0);
-        (l.v, l.w, l.reach, l.gripped, l.slipping, l.m, l.mt) =
-            (v, w, reach, gripped, slipping, m, mt);
+        (l.v, l.w, l.gripped, l.slipping, l.m, l.mt) = (v, w, gripped, slipping, m, mt);
         (l.joint_p, l.joint_l, l.jointed) = (Vec3::ZERO, Vec3::ZERO, false);
     }
 
@@ -464,19 +517,29 @@ impl RigidBody {
             reach,
             m,
             mt,
+            line,
             ..
         } = l;
-        let (reach, m, mt) = (*reach, *m, *mt);
+        let (m, mt) = (*m, *mt);
         let lin = |p: Vec3| lin(p, body_fwd, m, mt);
         for (q, &k) in lat.iter().enumerate() {
             let c = &contacts[k];
             let v_lat = (*v + rot.mul_vec3(*w).cross(at[q])).dot(c.right);
-            let cap = c.mu * c.grip * h * reach;
+            let cap = c.mu * c.grip * h * reach[q];
             let before = j[q];
             j[q] = (before - v_lat / arms[q].1).clamp(-cap, cap);
             let dj = j[q] - before;
             *v += lin(c.right) * dj;
             *w += arms[q].0 / self.inertia * dj;
+        }
+        if let Some(lh) = line {
+            let mut dj = -(*v + rot.mul_vec3(*w).cross(lh.at)).dot(lh.right) / lh.inv;
+            if lh.cap.is_finite() {
+                dj = (lh.j + dj).clamp(-lh.cap, lh.cap) - lh.j;
+            }
+            lh.j += dj;
+            *v += lin(lh.right) * dj;
+            *w += lh.arm / self.inertia * dj;
         }
     }
 
@@ -501,10 +564,27 @@ impl RigidBody {
             *force += contacts[k].right * (j[q] / h);
             *torque += arms[q].0 * (j[q] / h);
         }
+        if let Some(lh) = &l.line {
+            *force += lh.right * (lh.j / h);
+            *torque += lh.arm * (lh.j / h);
+        }
+        let slow_across =
+            |r: Vec3, right: Vec3| (v + rot.mul_vec3(w).cross(r)).dot(right).abs() < REHOLD_SPEED;
+        // (behind a joint, where every tyre may scrub, the section's turning line stands for
+        // them: it holds there again, `D-7`)
+        let line_slow = self.leading || !self.steers_axles() || {
+            let on_line = rot.mul_vec3(Vec3::new(-self.cog.x, self.rot_pnt_long - self.cog.y, 0.0));
+            slow_across(on_line, rot.mul_vec3(Vec3::X))
+        };
         if !self.holding
             && !slipping
+            && line_slow
             && lat.iter().zip(at.iter()).all(|(&k, &r)| {
-                (v + rot.mul_vec3(w).cross(r)).dot(contacts[k].right).abs() < REHOLD_SPEED
+                // (a tyre that scrubs slides across by design, `D-7`)
+                contacts[k]
+                    .wheel
+                    .is_some_and(|i| self.wheels[i].hold_reach.is_finite())
+                    || slow_across(r, contacts[k].right)
             })
         {
             self.holding = true;

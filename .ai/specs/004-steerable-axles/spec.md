@@ -270,8 +270,7 @@ closed forms of the model document.
 
 - **Steerable axle declaration**: lock angle, centring rate; belongs to one
   `[newachse]` of a section's `.bus` file; valid or reported as invalid.
-- **Steerable axle state**: per steerable axle, its current angle, its engagement (1 steering, 0
-  locked straight, in between while changing mode), the mode chosen by the script and the script's
+- **Steerable axle state**: per steerable axle, its current angle, the mode chosen by the script and the script's
   angle; saved with the situation.
 - **Turning line**: per section, the longitudinal position the body turns about this step, derived
   from that section's non-steering axles and their loads (FR-006).
@@ -287,7 +286,10 @@ closed forms of the model document.
 - **SC-002**: The physics traces of every existing scenario (vehicles without the parameters) stay
   bit-identical, in both engines.
 - **SC-003**: Locking or unlocking the tag axle by script in a steady turn at 25 km/h never makes the yaw rate
-  jump by more than 2 % between two frames (automated test).
+  jump by more than 2 % between two frames (automated test), for an axle whose centring rate spreads
+  the change over a fifth of a second or more (4.5° at 20°/s in the test). (Clarified 2026-11-21: while the
+  tyres hold, the body turns as the axle does, so an axle that reaches its new angle in one frame
+  turns the body in one frame too.)
 - **SC-004**: Each script mode takes effect in the first physics step after the script writes it, in
   100 % of the test cases.
 - **SC-005**: No invalid declaration or script value in the test set (missing values, front axle,

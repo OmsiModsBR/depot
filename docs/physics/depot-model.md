@@ -251,18 +251,18 @@ f_body = f_body,empty · sqrt( m_empty / (m_empty + payload) )
 
 ## D-5. Steerable axles and the turning line
 
-> Planned (spec 004): the game runs `C-6` for every vehicle until phases 3 to 5 of that spec are
-> merged.
+> In the game for every section, leading or behind a joint, with the modes the scripts pick
+> (spec 004, phases 3 to 5).
 
 - **Inputs**: `achse_steer_angle` (`lock_i`, the axle's own lock) and `achse_steer_centring` of each
   steerable axle (`docs/FORMATS.md`), `achse_long` (`y_i`), each axle's load at rest `F_i` (`D-1`),
-  each steerable axle's engagement `e_i` and mode (`D-6`), `[inv_min_turnradius]`, `[rot_pnt_long]`
-  (`C-6`). **Outputs**: the section's turning line `y_turn`, the full-lock curvature `κ_max` and the
+  each steerable axle's angle `δ_i` (`D-6`), `[inv_min_turnradius]`, `[rot_pnt_long]` (`C-6`). **Outputs**: the section's turning line `y_turn`, the full-lock curvature `κ_max` and the
   driver's curvature `κ`. **Module**: `physics/implementation/depot/steering.rs` (`turning_line`,
   `full_lock`), chosen in `physics/implementation/engine.rs`; the values in
   `physics/domain/spec.rs` (`SteerAxle`).
-- **Basis**: *physics*: one rigid axle turns about its own line, several about a load-weighted
-  middle (the zero-slip point of tyres whose cornering stiffness is in proportion to their load).
+- **Basis**: *physics*: the body turns about the point where the side forces of its tyres
+  balance, each axle's in proportion to its load (cornering stiffness in proportion to load) and to
+  its slip; one rigid axle turns about its own line, several about their load-weighted middle.
   **Status**: checked by the conformance tests; no claim is made here about OMSI 2, which has no
   steerable axle of its own (the scripts only animate one). Classic, and a section with no steerable
   axle under Depot, keep `C-6` and `C-9` exactly.
@@ -272,12 +272,18 @@ every other axle is rigid, except the leading section's front axle, which the dr
 section and per substep:
 
 ```
-w_i     = F_i · r_i                     F_i: the axle's load at rest (D-1)
-r_i     = 1                             a rigid axle, and a steerable axle in mode 2 (the script holds it)
-r_i     = 1 − e_i                       a steerable axle in modes 0 and 1, e_i ∈ [0, 1] (D-6)
-y_turn  = Σ w_i · y_i / Σ w_i           over the section's axles but the leading front axle, if Σ w_i > 0
-y_turn  = the C-6 line                  otherwise (every axle steering)
+p_i     = y_i − tan(δ_i) / κ            where axle i points on the body's middle (y_i for a rigid one)
+y_turn  = Σ F_i · p_i / Σ F_i           over the section's axles but the leading front axle,
+                                        F_i the axle's load at rest (D-1); then kept between the
+                                        rearmost axle and 0.5 m behind the front one
+y_turn  = the C-6 line                  when every axle but the front one steers
 ```
+
+`κ` and `δ_i` are the substep before's (`D-6`); `|κ|` is taken as at least `10⁻³` 1/m, as straight
+on a steered axle points at no finite place (and the line then hardly matters). An axle that points
+at the centre of the turn about the line (`p_i = y_turn`) does not move it; one that turns less than
+that pulls the line its way, so that the rear axles' tyres share the slip and none fights the others
+alone.
 
 The front wheels keep the lock `C-6` gives them, from the file's `[rot_pnt_long]` line (`y_rot`);
 the full lock follows the current line:
@@ -296,26 +302,33 @@ loads and line.
 `[inv_min_turnradius]` 0.12 1/m):
 
 - **V2**, 6x2 rigid, axles at `4.4`, `−1.9`, `−5.2` m, `[cog]` y `0.4`, `y_rot = −1.9`; the loads at
-  rest share `0.478 : 0.306 : 0.216`, and `lock_front = atan(0.12 · 6.3) = 37.09°`. Tag axle steering
-  (`e = 1`): `y_turn = −1.9`, `κ_max = 0.120` 1/m, radius 8.33 m at the line. Tag axle locked
-  (`e = 0`): `y_turn = (0.306 · −1.9 + 0.216 · −5.2) / 0.522 = −3.265`, `κ_max = 0.0986` 1/m, radius
-  10.14 m. Locking the tag axle widens the full-lock circle by 1.8 m.
+  rest share `0.478 : 0.306 : 0.216`, and `lock_front = atan(0.12 · 6.3) = 37.09°`. Tag axle pointing
+  at the centre of a turn about the middle axle: `y_turn = −1.9`, `κ_max = 0.120` 1/m, radius 8.33 m
+  at the line. Tag axle at a 15° lock, which that full lock would ask 18.2° of: `y_turn = −2.285`,
+  `κ_max = 0.1131` 1/m, radius 8.84 m (solved together, the line and the full lock). Tag axle locked:
+  `y_turn = (0.306 · −1.9 + 0.216 · −5.2) / 0.522 = −3.265`, `κ_max = 0.0986` 1/m, radius 10.14 m.
+  Locking the tag axle widens the full-lock circle by 1.3 m (1.8 m from one that points at the
+  centre).
 - **V5**, articulated 8x2: the rear section has axles at `1.2` and `−4.2` m, `[cog]` y `0.6`, its
-  ball at `5.6`; the front section's line is at `−2.5`, its ball at `−4.4` (`D = 1.9` m). The rear
-  section's loads share `0.889 : 0.111`. Fourth axle steering: `y_turn = 1.2`, `d = 4.4` m; rigid
-  (locked): `y_turn = 0.6`, `d = 5.0` m. At the front section's full lock (`R = 8.33` m) the steady
-  articulation angle of `C-9`, `R · sin α + D · cos α = d`, is 18.1° steering and 23.0° rigid: the
-  rear section cuts the corner less with its last axle steering.
+  ball at `5.6`; the front section's line is at `−2.5`, its ball at `−4.4`, `1.9` m behind it
+  (`D = −1.9` m, counted forward). The joint carries part of the rear section, and its axles' loads
+  at rest share `0.571 : 0.429`. Fourth axle steerable by `34.85°`, which points it at the centre
+  of the turn at half steering: `y_turn = 1.2`, `d = 4.4` m, the axle at `−s_f · lock` with
+  `s_f = 0.70`; locked: `y_turn = 0.571 · 1.2 + 0.429 · −4.2 = −1.12`, `d = 6.72` m. At half
+  steering (`R = 16.67` m) the steady articulation angle of `C-9`, `R · sin α + D · cos α = d`, is
+  21.7° steering and 30.1° locked, and the rear section's line runs on a circle of 16.19 m and 15.37 m:
+  the rear section cuts the corner less with its last axle steering. Without the declaration it
+  turns about its file's line, here `1.2`, as `C-9` has it.
 
 ## D-6. Modes of a steerable axle
 
-> Planned (spec 004), as `D-5`.
+> As `D-5`: in the game for every section.
 
 - **Inputs**: the axle's mode `Axle_Steer_Mode_<n>` and angle `Axle_Steer_Angle_<n>` from the
   scripts (`docs/FORMATS.md`), `lock_i` and the centring rate `c_i` (`achse_steer_centring`, °/s),
   the driver's steering `s` (`D-5`) or, behind a joint, the joint's curvature `κ_joint` (`C-9`), the
   turning line `y_turn` (`D-5`). **Outputs**: the axle's angle `δ_i` (the scripts'
-  `Axle_Steering_<n>_L/R`), its engagement `e_i`, the locked flag `Axle_Steer_Locked_<n>`.
+  `Axle_Steering_<n>_L/R`), the locked flag `Axle_Steer_Locked_<n>`.
   **Module**: `physics/implementation/depot/steering.rs` (`target_angle`, `advance`), the state in
   `physics/domain/steering.rs` (`SteerState`).
 - **Basis**: *physics*: the proportional law is how the steered tag axle of a 6x2-4 is linked to
@@ -335,15 +348,14 @@ mode 1 (locked)  target = 0
 mode 2 (script)  target = clamp( Axle_Steer_Angle_<n>, −lock_i, lock_i )
 any other mode   mode 0, one log line per vehicle; a script angle that is not a number: mode 0
 
-e_i  → 1 in mode 0, → 0 in modes 1 and 2, at most  c_i / lock_i  per second
 δ_i  → target, at most  c_i  degrees per second, in every mode
-Axle_Steer_Locked_<n> = 1  while mode 1 has brought e_i to 0, else 0
+Axle_Steer_Locked_<n> = 1  while mode 1 has brought δ_i to 0, else 0
 ```
 
 `σ_i` and `s` use the turning line and the full lock of the substep before (1/240 s of lag), which
 breaks the loop between the line and the angles. Behind a joint the axle follows the joint's bend
 rather than the steering wheel, so it steers as the section enters the bend, not before. In a mode
-change the angle and the engagement move together at the centring rate: the line (`D-5`) and the
+change the angle moves at the centring rate, and the line (`D-5`), which follows the angle, and the
 full lock move without a jump, and so does the body. The rate limits the angle while following the
 steering too: a steering wheel turned faster than `c_i` (with a mouse, for example) makes the axle
 lag, so a mod sets `achse_steer_centring` high enough to keep up. A rigid axle of a section with
@@ -357,31 +369,62 @@ any other law (pointing at the centre of the turn, a speed-dependent ratio) and 
 
 ## D-7. Scrub
 
-> Planned (spec 004), as `D-5`.
+> As `D-5`: in the game for every section.
 
 - **Inputs**: each tyre's angle and the angle that points it at the centre of the turn (`C-6`), the
-  road's reach `μ · grip_i · h` (`C-7`). **Outputs**: where each tyre is held across while the
-  tyres hold, and its force across, which enters `D-3`. **Module**:
-  `physics/implementation/tyre.rs` (`lateral_start`), the tolerance `SCRUB_TOLERANCE` in
-  `physics/domain/params.rs`.
-- **Basis**: *physics* for the friction; *tuned* for the tolerance. **Status**: checked by the
+  road's reach `μ · grip_i · h` (`C-7`). **Outputs**: how much of the road's grip each tyre takes
+  across while the tyres hold, and its force across, which enters `D-3`. **Module**:
+  `physics/implementation/depot/steering.rs` (`scrub_reach`), `physics/implementation/tyre.rs`
+  (`lateral_start`), the angle `SCRUB_FULL_ANGLE` in `physics/domain/params.rs`.
+- **Basis**: *physics* for the friction; *tuned* for the angle. **Status**: checked by the
   conformance tests; no claim is made here about OMSI 2.
 
 Under `C-7` the leading section's tyres hold with unlimited reach, which is right only while every
-tyre points at the centre of the turn. In a section with steerable axles, while the tyres hold, a
-tyre whose angle differs from the one that points at the centre by more than `SCRUB_TOLERANCE` is
-held with the road's reach (at most `μ · grip_i · h` of impulse a substep), as every tyre of a
-section behind a joint already is. A section with steerable axles behind a joint is held at each
-tyre rather than at its turning line (`C-9`), so its rigid axles scrub as well. These forces across
-enter `D-3`'s balance with the others.
+tyre points at the centre of the turn. In a section with steerable axles, while the tyres hold, only
+the front axle's tyres keep the unlimited reach; every other tyre is held with a share of the road's
+reach that grows with how far it points off the centre of the turn, `δ_off`:
+
+```
+reach_i = min( |δ_off,i| / SCRUB_FULL_ANGLE , 1 ) · μ · grip_i · h        SCRUB_FULL_ANGLE = 5°
+```
+
+as a tyre's side force grows with its slip angle up to the road's grip. The 5° is tuned on V2
+with its tag axle steering: no angle from 1° to 12° kicks the body as the steering passes
+through it; at 3° and below a tag axle pulling away in a turn costs more drive than a rigid one;
+at 5° it does not, and with the tag axle locked the bus needs 3.5 times the drive at full lock
+(SC-006). A tyre that points at the centre takes nothing across and slides nowhere; one far off it scrubs with the road's whole grip. A
+section with steerable axles behind a joint is held at each tyre rather than at its turning line
+(`C-9`), so its rigid axles scrub as well, and its driver's axle is none: every tyre's reach follows
+the rule above. These forces across enter `D-3`'s balance with the others.
+
+While holding, the section is also held at its turning line (`D-5`): no speed across at the point
+of the line in the body's middle, with unlimited reach, as `C-9` holds a section behind a joint.
+Behind a joint that hold takes at most the road's reach of all the section's tyres, `Σ μ · grip_i ·
+h`, which is what `C-9` lets it take at its line, and the section holds again (`C-7`) only once the
+speed across at its line is under 0.1 m/s as well, since every tyre of it may scrub.
+Without it the scrubbing tyres alone would set where the body turns: with a locked tag axle, about
+the lighter axle instead of the load-weighted middle. A scrubbing tyre slides across by design, so it
+is left out of the speed check by which the tyres hold again (`C-7`).
+
+With steerable axles, while holding, the tyres take no roll across and the bend's pull rolls the
+body whatever the body's speed along and across (`C-7` does so only while the body follows its
+wheels: over 1 m/s along and under 0.5 m/s across at `[cog]`). Below 1 m/s the scrub rolled the body
+away from the turn, and it rocked back as it reached that speed; with the turning line well behind
+`[cog]`, as on a 6x2-4 whose line is on its driven axle, the speed across at `[cog]` passes 0.5 m/s in
+a turn at town speeds, and the roll swapped between the tyres and the bend's pull in one step.
 
 So a tandem's tyres slide across in a tight turn at walking speed, which costs drive and grip, and a
-tag axle locked in a tight turn drags. The solver already caps impulses at the road's reach: no new
-force model is needed.
+tag axle locked in a tight turn drags; a tag axle that turns less than the centre asks shares the
+slip with the other rear axles (`D-5`) and costs about what a rigid tandem does.
 
-**Risk**: the friction is Coulomb-like, so the drag does not grow with the error above the
-tolerance. If the bus kicks at the threshold in the game, the reach grows linearly with the error
-instead (a change of this entry).
+**Why not the road's whole grip at any angle.** With Coulomb friction for every tyre off the centre
+by more than a tolerance, a tag axle a fraction of a degree off it at a slight steer (a mouse's small
+corrections) either fought the other axles with unlimited reach below the tolerance or dragged with
+the whole grip above it: the bus needed far more drive to speed up, and crossing the tolerance gave
+it a jolt. The share that grows with the angle has neither. With the turning line of the rigid axles
+alone, a tag axle that turns less than the centre asks (as a linked one does) scrubbed alone against
+the line's unlimited hold, with the road's whole grip at a few degrees: in a turn the bus needed far
+more drive and spun its driven wheels. The line where the slip balances (`D-5`) shares it.
 
 ## Further `D-*`
 

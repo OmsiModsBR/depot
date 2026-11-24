@@ -33,7 +33,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use support::ground::{flat, road, step_at};
 use support::trace::{check_per_engine, dv3, engine, n32, n64, quat, v3, Trace};
-use support::vehicles::{bus, gn92};
+use support::vehicles::{bus, gn92, v2_rigid_6x2, v2_tag_steer, v5_last_axle_steer};
 
 type Probe<'a> = &'a dyn Fn(f64, f64, f64) -> GroundProbe;
 
@@ -225,7 +225,19 @@ scenarios!(
     b5_ai_vehicle_follows_a_lane,
     b6_kinematic_vehicle_crash,
     b7_articulated_vehicle_bends_on_ice,
+    b8_steerable_tag_axle,
+    b9_articulated_steered_rear_axle,
 );
+
+/// FR-004 of spec 004: under OMSI Classic a vehicle with steerable axles runs as the same
+/// vehicle without the parameters, to the bit (the thread's engine is Classic).
+#[test]
+fn classic_runs_steerable_axles_as_rigid_ones() {
+    assert_eq!(
+        scenarios::tag_axle_drive(v2_tag_steer().remove(0)),
+        scenarios::tag_axle_drive(v2_rigid_6x2().remove(0))
+    );
+}
 
 mod scenarios {
     use super::*;
@@ -1002,6 +1014,43 @@ mod scenarios {
         t.text
     }
 
+    /// The 6x2 `def` with its script variables: pulling away, a full-lock turn at walking
+    /// pace and back to straight, a turn at half lock at 25 km/h.
+    pub fn tag_axle_drive(def: Vehicle) -> String {
+        let mut t = Trace::default();
+        let names = var_names(3);
+        let mut v = instance(vehicle_type(def, 3));
+        v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
+        v.enable_rigid_body();
+        let hold = |kmh: f32, steering: f32| {
+            move |v: &VehicleInstance| Script {
+                m_wheel: if v.motion().speed < kmh / 3.6 {
+                    6000.0
+                } else {
+                    0.0
+                },
+                steering,
+                ..Default::default()
+            }
+        };
+        frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script {
+            brakeforce: 20_000.0,
+            ..Default::default()
+        });
+        frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, hold(8.0, 0.0));
+        frames(&mut t, &mut v, &names, 360, 1.0 / 60.0, hold(8.0, 1.0));
+        frames(&mut t, &mut v, &names, 120, 1.0 / 60.0, hold(8.0, 0.0));
+        frames(&mut t, &mut v, &names, 360, 1.0 / 60.0, hold(25.0, 0.0));
+        frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, hold(25.0, -0.5));
+        t.text
+    }
+
+    /// Spec 004: V2 with a steerable tag axle (a rigid one where the parameters are not
+    /// known, and under OMSI Classic).
+    pub fn b8_steerable_tag_axle() -> String {
+        tag_axle_drive(v2_tag_steer().remove(0))
+    }
+
     /// A section of `articulation`'s tests' `sections()`: `axles` are (position, driven).
     fn section(axles: &[(f32, bool)], mass: f32) -> Vehicle {
         Vehicle {
@@ -1235,6 +1284,44 @@ mod scenarios {
     /// B2's articulated bus on ice, into a bend at 13 km/h: the front section holds, and the
     /// rear one, its one axle on its own turning line, holds or slides by the pull of the bend
     /// its joint turns it on.
+    /// V5 with its last axle steerable (spec 004): pulls away, turns both ways at 10 km/h
+    /// with its rear axle following the joint, and stops (on a commit without the parameters
+    /// the axle is rigid: the diff shows what they change).
+    pub fn b9_articulated_steered_rear_axle() -> String {
+        let mut t = Trace::default();
+        let names = var_names(4);
+        let mut defs = v5_last_axle_steer();
+        let rear = vehicle_type(defs.remove(1), 4);
+        let mut v = instance(vehicle_type(defs.remove(0), 4));
+        v.contact = Some(Arc::new(flat) as Arc<dyn Ground>);
+        v.attach_trailer(rear);
+        v.enable_rigid_body();
+        let hold_10 = |steering: f32| {
+            move |v: &VehicleInstance| Script {
+                m_wheel: if v.motion().speed < 10.0 / 3.6 {
+                    6000.0
+                } else {
+                    0.0
+                },
+                steering,
+                ..Default::default()
+            }
+        };
+        frames(&mut t, &mut v, &names, 60, 1.0 / 60.0, |_| Script {
+            brakeforce: 20_000.0,
+            ..Default::default()
+        });
+        frames(&mut t, &mut v, &names, 300, 1.0 / 60.0, hold_10(0.0));
+        frames(&mut t, &mut v, &names, 480, 1.0 / 60.0, hold_10(0.7));
+        frames(&mut t, &mut v, &names, 240, 1.0 / 60.0, hold_10(0.0));
+        frames(&mut t, &mut v, &names, 480, 1.0 / 60.0, hold_10(-0.5));
+        frames(&mut t, &mut v, &names, 180, 1.0 / 60.0, |_| Script {
+            brakeforce: 40_000.0,
+            ..Default::default()
+        });
+        t.text
+    }
+
     pub fn b7_articulated_vehicle_bends_on_ice() -> String {
         let mut t = Trace::default();
         let names = var_names(3);

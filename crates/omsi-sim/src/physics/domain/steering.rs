@@ -33,9 +33,6 @@ impl SteerMode {
 pub struct SteerState {
     /// The axle's angle (rad, positive to the right).
     pub angle: f32,
-    /// How much the axle steers, 0..1: 1 steering (the basic mode reached), 0 held (locked or
-    /// held by the script). It weighs the axle in the turning line (`D-5`).
-    pub engagement: f32,
     /// The mode the scripts picked this frame.
     pub mode: SteerMode,
     /// The script's angle (rad), used in [`SteerMode::ScriptAngle`].
@@ -47,7 +44,6 @@ impl Default for SteerState {
     fn default() -> Self {
         SteerState {
             angle: 0.0,
-            engagement: 1.0,
             mode: SteerMode::Basic,
             script_angle: 0.0,
         }

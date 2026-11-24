@@ -26,28 +26,29 @@ with one log line per vehicle.
 | Field | Meaning |
 |---|---|
 | `angle` | current axle angle `δ_i` (rad, positive to the right) |
-| `engagement` | `e_i ∈ [0, 1]`: 1 steering, 0 locked straight |
 | `mode` | the `SteerMode` read this frame |
 | `script_angle` | the script's angle (rad), used in `ScriptAngle` |
 
-State transitions of `engagement` (target, then ramp at `centring / lock` per second):
+The angle's target (reached at `centring`):
 
 ```text
-Basic:        target = 1  (angle follows σ · s · lock at `centring`, s = κ / κ_max,
-                           σ = −1 behind the turning line, +1 ahead, 0 on it;
-                           behind a joint s = clamp(κ_joint / κ_max, −1, 1))
-Locked:       target = 0  (angle to 0 at `centring`)
-ScriptAngle:  target = 0  (angle follows script_angle, clamped to lock, at `centring`)
+Basic:        σ · s · lock, s = κ / κ_max, σ = −1 behind the turning line, +1 ahead, 0 on it;
+              behind a joint s = clamp(κ_joint / κ_max, −1, 1)
+Locked:       0
+ScriptAngle:  script_angle, clamped to lock
 ```
 
-Saved with the situation and restored on load; a situation without it starts with `angle = 0`,
-`engagement = 1`.
+(Changed 2026-11-21, in PR #820: the engagement `e_i` is gone; the turning line follows the angle
+itself, see below.)
+
+Saved with the situation and restored on load; a situation without it starts with `angle = 0`.
 
 ## Turning line (computed, per section and substep)
 
-`y_turn` from rigid axles (weight `F_i`) and steerable axles (weight `F_i · (1 − e_i)`), `F_i` the
-static load of `D-1`; the leading section's front axle excluded; `C-6` line when the weight is 0.
-Not stored: computed from the previous substep's states (research R-6).
+`y_turn` = the mean of where each axle points on the body's middle, `y_i − tan(δ_i) / κ` (`y_i` for
+a rigid axle), weighted by its static load `F_i` of `D-1`; the leading section's front axle
+excluded; the `C-6` line when every other axle steers. Not stored: computed from the previous
+substep's curvature and angles (research R-4, R-6).
 
 ## Script variables (per steerable axle, train-wide axle number `n`)
 

@@ -29,7 +29,7 @@ pub fn settled(defs: &[Vehicle], engine: Engine) -> Vec<RigidBody> {
 }
 
 /// The sections put down at the origin facing +y and joined in order.
-fn build(defs: &[Vehicle], engine: Engine) -> (Vec<RigidBody>, Vec<Joint>) {
+pub fn build(defs: &[Vehicle], engine: Engine) -> (Vec<RigidBody>, Vec<Joint>) {
     let mut bodies: Vec<RigidBody> = defs
         .iter()
         .map(|d| RigidBody::for_engine(d, &[], engine))
@@ -49,7 +49,13 @@ fn build(defs: &[Vehicle], engine: Engine) -> (Vec<RigidBody>, Vec<Joint>) {
 
 /// One frame of the train: the brake on every wheel of every section, the drive torque of
 /// the driven wheels and the steering (1 = full lock).
-fn step(bodies: &mut [RigidBody], joints: &[Joint], brakes: &[Vec<f32>], torque: f32, steer: f32) {
+pub fn step(
+    bodies: &mut [RigidBody],
+    joints: &[Joint],
+    brakes: &[Vec<f32>],
+    torque: f32,
+    steer: f32,
+) {
     let inputs: Vec<BodyInputs> = brakes
         .iter()
         .enumerate()
@@ -63,7 +69,7 @@ fn step(bodies: &mut [RigidBody], joints: &[Joint], brakes: &[Vec<f32>], torque:
 }
 
 /// Rolling at `v` m/s along +y, the wheels turning with the road.
-fn launch(bodies: &mut [RigidBody], v: f32) {
+pub fn launch(bodies: &mut [RigidBody], v: f32) {
     for b in bodies {
         b.set_velocity(b.orientation().mul_vec3(Vec3::Y) * v);
         for w in b.wheels_mut() {

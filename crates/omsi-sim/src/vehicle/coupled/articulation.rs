@@ -10,7 +10,7 @@
 use super::trailer::{body_reversed, joint_angles, TrailerPart, ARTICULATION_SIGN};
 use crate::physics::{BodyInputs, Engine, Joint, Payload, RigidBody};
 use crate::vehicle::physics_bridge::PartWheelVars;
-use crate::vehicle::VehicleInstance;
+use crate::vehicle::{SteerVars, VehicleInstance};
 use glam::{DVec3, Mat4, Vec3};
 use omsi_script::Program;
 use omsi_vehicle::Vehicle;
@@ -21,6 +21,8 @@ pub struct PartBody {
     /// Hung on its joint since the train was last put down (see [`TrailerPart::realign`]).
     pub(in crate::vehicle) placed: bool,
     vars: Vec<PartWheelVars>,
+    /// The scripts' variables of its steerable axles, numbered over the whole vehicle.
+    steer: Vec<SteerVars>,
 }
 
 impl PartBody {
@@ -32,6 +34,7 @@ impl PartBody {
         // line, `PhysicsSpec::turn_line`, not a section's)
         let mut rb = RigidBody::for_engine(&t.ty.def, &[], engine);
         rb.rot_pnt_long = t.ty.def.rot_pnt_long;
+        rb.file_turn_line = t.ty.def.rot_pnt_long;
         let vars = (0..rb.wheels.len())
             .map(|i| {
                 let (axle, side) = (t.first_axle + i / 2, ["L", "R"][i % 2]);
@@ -50,6 +53,7 @@ impl PartBody {
             rb,
             placed: false,
             vars,
+            steer: SteerVars::of(&t.ty.def, t.first_axle, |n| program.var(n)),
         }
     }
 }
@@ -169,7 +173,7 @@ impl VehicleInstance {
         let mut meta = Vec::with_capacity(parts.len());
         for p in parts {
             bodies.push(p.rb);
-            meta.push((p.placed, p.vars));
+            meta.push((p.placed, p.vars, p.steer));
         }
         if created || self.rest_loads_for != self.trailers.len() {
             self.rest_loads_for = self.trailers.len();
@@ -217,10 +221,11 @@ impl VehicleInstance {
             .map(|t| self.part_brakes(t).collect())
             .collect();
         let (friction, road) = (bodies[0].friction, bodies[0].road);
-        for (b, (_, vars)) in bodies[1..].iter_mut().zip(&meta) {
+        for (b, (_, vars, steer)) in bodies[1..].iter_mut().zip(&meta) {
             for (w, v) in b.wheels.iter_mut().zip(vars) {
                 w.spring_factor = self.part_spring_factor(v);
             }
+            self.feed_steer_axles(b, steer);
             match &road {
                 Some(road) => b.set_road(road),
                 None => b.set_friction(friction),
@@ -284,13 +289,19 @@ impl VehicleInstance {
         }
         let mut bodies = bodies.into_iter();
         let lead = bodies.next().unwrap();
-        for (k, (rb, (placed, vars))) in bodies.zip(meta).enumerate() {
+        for (k, (rb, (placed, vars, steer))) in bodies.zip(meta).enumerate() {
             let t = &mut self.trailers[k];
             t.position = rb.shown_origin();
             let (heading, pitch, bank) = rb.shown_heading_pitch_bank();
             (t.heading, t.pitch, t.bank) = (heading, pitch, bank);
             self.show_part_wheels(&rb, &vars);
-            self.trailers[k].body = Some(PartBody { rb, placed, vars });
+            self.show_steer_locked(&rb, &steer);
+            self.trailers[k].body = Some(PartBody {
+                rb,
+                placed,
+                vars,
+                steer,
+            });
         }
         lead
     }

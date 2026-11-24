@@ -10,7 +10,7 @@
 pub(crate) mod body;
 mod classic;
 mod collide;
-mod depot;
+pub(crate) mod depot;
 mod engine;
 pub(crate) mod ground;
 mod kinematic;

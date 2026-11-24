@@ -139,7 +139,6 @@ mod steer_axles {
         assert_eq!(axle.axle, 2);
         assert_eq!(state, SteerState::default());
         assert_eq!(state.angle, 0.0);
-        assert_eq!(state.engagement, 1.0);
         assert_eq!(state.mode, SteerMode::Basic);
     }
 

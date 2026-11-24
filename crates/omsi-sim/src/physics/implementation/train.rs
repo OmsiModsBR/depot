@@ -611,15 +611,22 @@ fn slice(
         // `[inv_min_turnradius]`); a body behind turns as its joint bends it.
         let kappas: Vec<f32> = (0..n)
             .map(|i| match steers[i] {
-                Some(s) => s.clamp(-1.0, 1.0) * bodies[i].inv_min_turn_radius,
+                Some(s) => bodies[i].steering_kappa(s),
                 None => joints
                     .iter()
                     .find(|j| j.follow == i)
                     .map_or(0.0, |j| j.kappa(bodies)),
             })
             .collect();
+        // (the leading section's full lock, which the steerable axles behind a joint follow
+        // their joint's bend against, `D-6`)
+        let behind = |(b, s): (&RigidBody, &Option<f32>)| s.is_none() && b.steers_axles();
+        let lead_full_lock = match steers.iter().position(Option::is_some) {
+            Some(i) if bodies.iter().zip(steers).any(behind) => bodies[i].steering_kappa(1.0),
+            _ => 0.0,
+        };
         for ((b, k), s) in bodies.iter_mut().zip(kappas).zip(steers.iter()) {
-            b.steer_to(k, s.is_none());
+            b.steer_to(k, s.is_none(), lead_full_lock);
         }
         let SolverScratch {
             subs,

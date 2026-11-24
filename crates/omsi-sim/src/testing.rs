@@ -186,6 +186,10 @@ pub mod physics {
         fn wheel_axle(&self) -> &[usize];
         fn rot_pnt_long(&self) -> f32;
         fn steer_axles(&self) -> &[(crate::physics::SteerAxle, crate::physics::SteerState)];
+        fn steer_axles_mut(
+            &mut self,
+        ) -> &mut [(crate::physics::SteerAxle, crate::physics::SteerState)];
+        fn hold_reach(&self, wheel: usize) -> f32;
     }
 
     impl RigidBodyInternals for RigidBody {
@@ -201,6 +205,14 @@ pub mod physics {
         fn steer_axles(&self) -> &[(crate::physics::SteerAxle, crate::physics::SteerState)] {
             &self.steer_axles
         }
+        fn steer_axles_mut(
+            &mut self,
+        ) -> &mut [(crate::physics::SteerAxle, crate::physics::SteerState)] {
+            &mut self.steer_axles
+        }
+        fn hold_reach(&self, wheel: usize) -> f32 {
+            self.wheels[wheel].hold_reach
+        }
     }
 
     pub mod domain {
@@ -215,6 +227,11 @@ pub mod physics {
 
         pub mod body {
             pub use crate::physics::implementation::body::*;
+        }
+        pub mod depot {
+            pub mod steering {
+                pub use crate::physics::implementation::depot::steering::*;
+            }
         }
         pub mod ground {
             pub use crate::physics::implementation::ground::*;
