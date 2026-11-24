@@ -12,7 +12,7 @@ use crate::gpu::{
 use crate::interface::{ModeResources, RenderMode};
 use crate::lighting::{LightMapAtlas, ShadingPath};
 use crate::modes::{
-    enhanced::{fog_lamps_pipelines, Enhanced, EnhancedResources},
+    enhanced::{Enhanced, EnhancedResources},
     vanilla_plus::VanillaPlus,
 };
 use crate::output::{Diagnostics, Presenter};
@@ -113,10 +113,13 @@ impl Renderer {
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         // what only the enhanced mode draws with is its own
         let enhanced: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
-            Box::new(EnhancedResources::new(
-                builders.enhanced(hdr_format),
-                builders.sky_mirror(format),
-                fog_lamps_pipelines(&device, &layouts.camera_layout, gl, hdr_format),
+            Box::new(EnhancedResources::build(
+                &builders,
+                &device,
+                &layouts.camera_layout,
+                format,
+                hdr_format,
+                gl,
             )) as Box<dyn ModeResources>
         });
         let reflection_pass = (!leave_out_enhanced

@@ -3,6 +3,7 @@
 
 mod fog_lamps;
 mod lights;
+mod pipelines;
 mod post;
 
 use crate::interface::{
@@ -10,7 +11,7 @@ use crate::interface::{
     RenderMode,
 };
 use crate::lighting::{lamp_sky_glow, view_lamp_light, GpuPointLight, PointLight};
-use crate::passes::{FrameFeatures, PassPipelines};
+use crate::passes::{FrameFeatures, PassPipelines, PathBuilders};
 use crate::targets::GroupParts;
 use glam::Vec3;
 
@@ -39,6 +40,22 @@ impl EnhancedResources {
             sky_mirror,
             fog_lamps,
         }
+    }
+
+    /// Everything the mode draws with, built from the core's pass builders.
+    pub(crate) fn build(
+        builders: &PathBuilders<'_>,
+        device: &wgpu::Device,
+        camera_layout: &wgpu::BindGroupLayout,
+        swap_format: wgpu::TextureFormat,
+        hdr_format: wgpu::TextureFormat,
+        gl: bool,
+    ) -> Self {
+        Self::new(
+            pipelines::main_pass(builders, hdr_format),
+            pipelines::sky_mirror(builders, swap_format),
+            fog_lamps_pipelines(device, camera_layout, gl, hdr_format),
+        )
     }
 }
 

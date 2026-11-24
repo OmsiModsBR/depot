@@ -14,6 +14,7 @@ mod shadow;
 mod sky;
 mod snow;
 
+pub(crate) use corona::additive;
 pub(crate) use corona::CoronaBuilder;
 pub(crate) use depth::{ao_pipelines, prepass_pipelines, PrepassPipelines, SsaoPass};
 pub(crate) use draw::{
@@ -27,7 +28,7 @@ pub(crate) use draw::{
 pub use features::FrameFeatures;
 pub(crate) use glass::encode_glass;
 pub(crate) use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
-pub(crate) use pipelines::PathBuilders;
+pub(crate) use pipelines::{PathBuilders, PathShaders};
 pub(crate) use post::{post_pipelines, Exposure, PostPipelines, PostUniform};
 pub(crate) use scene_pipelines::SceneBuilder;
 pub(crate) use shadow::{
