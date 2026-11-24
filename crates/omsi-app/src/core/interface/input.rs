@@ -14,6 +14,7 @@ pub(crate) mod app {
     pub(crate) use super::super::super::implementation::app::*;
 }
 pub(crate) use super::super::domain::cli;
+pub(crate) use super::super::implementation::launcher_link;
 #[cfg(target_os = "android")]
 pub(crate) use super::super::implementation::android;
 pub(crate) use super::super::implementation::applog;

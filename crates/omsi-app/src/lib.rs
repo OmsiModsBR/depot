@@ -36,7 +36,6 @@ mod core;
 mod diagnostics;
 mod input;
 mod lan_off;
-mod launcher_link;
 mod offscreen;
 mod plugins_off;
 mod route_arrows;
@@ -73,7 +72,7 @@ use crate::core::startup::{self, graphics_instance, BUILD, VERSION};
 use crate::core::{launcher_statics, make_app, prepare};
 use anyhow::Result;
 use clap::Parser;
-use launcher_link::open_launcher;
+use crate::core::launcher_link::open_launcher;
 use winit::event_loop::EventLoop;
 
 /// The game (and its launcher) from the command line: what `main` does.
