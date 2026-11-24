@@ -6,7 +6,7 @@
 
 Independent repository: https://github.com/OmsiModsBR/depot
 
-Current Depot release: **[0.3.0](https://github.com/OmsiModsBR/depot/releases/tag/v0.3.0)** (2026-10-30), based on openOMSI 0.2.16. Previous releases: [0.2.52](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52) and [0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17) (rebranding only).
+Current Depot release: **[0.4.0](https://github.com/OmsiModsBR/depot/releases/tag/v0.4.0)** (2026-11-24), based on openOMSI 0.2.16. Previous releases: [0.3.0](https://github.com/OmsiModsBR/depot/releases/tag/v0.3.0), [0.2.52](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.52) and [0.2.17](https://github.com/OmsiModsBR/depot/releases/tag/v0.2.17) (rebranding only).
 
 Historical source baseline from [openOMSI](https://github.com/openOMSI-org/openOMSI): `v0.2.16` (`2026-10-07`), commit
 `c85b2e0dda13d219fd12d0496c653d20cdb54145`.
@@ -32,6 +32,21 @@ target, not a claim that complete compatibility has already been achieved.
 Alongside that goal, **evolutions to the simulator's physics and simulation are
 a development priority**, while preserving compatibility and a stable base through
 selective upstream integration.
+
+## What's new in 0.4.0
+
+**Depot 0.4.0** (2026-11-24) adds features and removes some. The full list is in the
+[changelog](CHANGELOG.md#040---2026-11-24); the [release notes](docs/releases/0.4.0.md) summarise it in
+two parts, what's new and fixes. Highlights:
+
+* **Two vehicle physics engines:** OMSI Classic (the default, OMSI 2's rules) and Project Depot
+  Physics (passengers move the centre of gravity, grip axle by axle, steerable axles).
+* **Trolleybuses without plugins:** poles on the map's wires, switches and crossings, sounds and sparks.
+* **Graphics modes simplified:** Vanilla is drawn by Direct3D 9Ex on Windows; Vanilla+ and Enhanced
+  stay; Enhanced+ is removed. Real stars, the sun and the moon in every sky.
+* **Information bar:** pedals, road grade and a skid lamp in every layout.
+* **Fixes** to AI traffic density, passengers on AI buses, articulated buses, the driver's posture,
+  Enhanced lamps and envmaps, screenshots and the minimap.
 
 ## What's new in 0.3.0
 
@@ -367,11 +382,11 @@ navigator) will follow, taken on a freely distributable map.
 ## Download
 
 Project Depot is built and published for **Windows x64 only**. The current release is on the
-[**0.3.0 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.3.0):
+[**0.4.0 release page**](https://github.com/OmsiModsBR/depot/releases/tag/v0.4.0):
 
 | Platform | File |
 | --- | --- |
-| Windows x64 | `depot-0.3.0-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
+| Windows x64 | `depot-0.4.0-windows-x64.zip` - run `depot.exe`; also includes `depot-launcher.exe` |
 
 No ARM64, Linux, macOS or Android package is published, and none is promised: the supported hardware
 and system are a deliberate product decision, not a consequence of what the code can compile for.
