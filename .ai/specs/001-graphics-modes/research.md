@@ -417,7 +417,7 @@ it.
 
 - `led_glow` and `led_mips` act in Enhanced only: `led_glow` reaches the glow of the Enhanced
   post passes (`passes/post.rs`, inside `if enhanced`) and the `enh.led` uniform; `led_mips` is
-  read only by `fs_enhanced` (`scene/enhanced.wgsl`). Neither is offered in Vanilla+ any more.
+  read only by `fs_enhanced` (`modes/enhanced/shaders/enhanced.wgsl`). Neither is offered in Vanilla+ any more.
 - `night_brightness` acts in Enhanced only (the meter of the Enhanced post passes); it was
   offered in Vanilla+, where it did nothing.
 - The Vanilla effect switches act at once: `fewer_night_lights` (`lighting.lamp_cap`, every
@@ -478,7 +478,7 @@ What switching it at once would take, and why it is not done:
 
 - Keeping the maps in every material and gating them in the shaders: the factor
   (`material.params2.y`) is read at about ten places in `scene/shader.wgsl` and
-  `scene/enhanced.wgsl`, and Enhanced also takes "has a reflection map" as a sign for classifying
+  `modes/enhanced/shaders/enhanced.wgsl`, and Enhanced also takes "has a reflection map" as a sign for classifying
   glass and paint (`has_env`, the bump relief, the metal guess), so a plain multiplication would
   not draw what a fresh start without the maps draws (the FR-020e test).
 - Or making the scene's materials again (the callers hold the maps, the renderer does not): that
