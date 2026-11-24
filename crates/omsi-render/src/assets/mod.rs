@@ -17,12 +17,12 @@ pub(crate) use lifecycle::Freed;
 pub(crate) use material::{
     material_layout_entries, snow_texture_flag, BindKey, MaterialMaps, MaterialUniform,
 };
+#[cfg(feature = "test-support")]
+pub(crate) use mesh::mesh_bounds;
 pub(crate) use mesh::{
     make_meshes, mesh_page_bytes, mesh_vertices, MeshPage, MESH_PAGE_INDEX_BYTES,
     MESH_PAGE_VERTEX_BYTES,
 };
-#[cfg(feature = "test-support")]
-pub(crate) use mesh::mesh_bounds;
 #[cfg(test)]
 pub(crate) use mesh::{page_give, page_take};
 pub(crate) use store::AssetStore;
