@@ -203,7 +203,7 @@ pub(crate) struct App {
     pub(crate) teleport_pick: bool,
     // Steamworks API layer and it's last updated time
     #[cfg(steam)]
-    pub(crate) steam: Option<crate::steam::Steam>,
+    pub(crate) steam: Option<crate::core::steam::Steam>,
     /// Head tracking (Settings → head tracking), started with the first frame that wants it.
     pub(crate) headtrack: Option<crate::input::headtrack::HeadTracker>,
     /// When head tracking last failed to start (tried again a few seconds later).
