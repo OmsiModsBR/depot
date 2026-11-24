@@ -1,6 +1,7 @@
 //! The renderer's tests that draw nothing: shaders, pipeline tables, draw lists, helpers.
 
 use super::*;
+use crate::lighting::ShadingPath;
 use crate::modes::enhanced::FogLampUniform;
 
 #[test]
@@ -321,9 +322,18 @@ fn origin_lookup_keeps_float_equality_and_large_coordinates() {
 fn shaders_validate_and_match_the_uniforms() {
     use wgpu::naga;
     let modules = [
-        ("scene", scene_shader_source(false)),
-        ("scene opaque", scene_shader_source(false)),
-        ("scene terrain paint", scene_shader_source(false)),
+        (
+            "scene",
+            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+        ),
+        (
+            "scene opaque",
+            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+        ),
+        (
+            "scene terrain paint",
+            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+        ),
         ("sky", sky_shader_source()),
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
@@ -498,7 +508,7 @@ fn camera_wgsl_matches_camera_uniform() {
 fn the_scene_shader_translates_to_glsl() {
     use wgpu::naga;
     use wgpu::naga::back::glsl;
-    let src = scene_shader_source(true);
+    let src = crate::renderer::scene_shader_for(ShadingPath::Hdr, true);
     let module =
         naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     let info = naga::valid::Validator::new(
@@ -646,7 +656,10 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
             ],
         ),
     ] {
-        let src = arrays_as_textures(&scene_shader_text(true), path);
+        let src = arrays_as_textures(
+            &scene_shader_text(true, &crate::renderer::scene_own_text(ShadingPath::Hdr)),
+            path,
+        );
         assert!(
             !src.contains("models[")
                 && !src.contains("inst_params[")
@@ -776,7 +789,10 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
             || name == "fs_sky_cube"
     };
     for path in [ArrayPath::VertexTextures, ArrayPath::NoStorage] {
-        let scene = arrays_as_textures(&scene_shader_text(true), path);
+        let scene = arrays_as_textures(
+            &scene_shader_text(true, &crate::renderer::scene_own_text(ShadingPath::Hdr)),
+            path,
+        );
         for src in [scene, sky_shader_source(), corona_shader_source()] {
             for name in left_out(&src) {
                 assert!(

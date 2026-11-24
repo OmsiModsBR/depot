@@ -27,3 +27,15 @@ fn puddle_ripple(pattern_xy: vec2<f32>, time: f32, rain: f32, coverage: f32) -> 
     let bump = normalize(local + vec2<f32>(1e-5, 0.0)) * strength * 0.018;
     return vec3<f32>(bump, strength);
 }
+
+// How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
+const PUDDLE_SPREAD: f32 = 0.37;
+
+// The high-range pass's two targets (the Enhanced shading, and the plain shading drawn for the
+// puddles' reflections): the picture, and the screen mask (r: 1 on the bus's own screens,
+// carried by the coverage of what is drawn over them; g: 1 on an LED panel's own dots, see
+// MASK_FORMAT; b is the reflected-light weight of wet puddles).
+struct EnhancedOut {
+    @location(0) color: vec4<f32>,
+    @location(1) mask: vec4<f32>,
+};

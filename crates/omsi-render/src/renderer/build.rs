@@ -34,6 +34,20 @@ pub(crate) fn mode_for(path: ShadingPath) -> &'static dyn RenderMode {
     }
 }
 
+/// The scene module of a graphics path: the core's shader with the path's own fragment shader
+/// (Vanilla+ draws with the core's alone).
+pub(crate) fn scene_shader_for(path: ShadingPath, gl: bool) -> String {
+    scene_shader_source(gl, &scene_own_text(path))
+}
+
+/// The fragment shader a path adds to the core's scene module.
+pub(crate) fn scene_own_text(path: ShadingPath) -> String {
+    match path {
+        ShadingPath::Hdr => crate::modes::enhanced::scene_text(),
+        ShadingPath::Linear => String::new(),
+    }
+}
+
 impl Renderer {
     /// The pipelines, samplers and fixed textures of a renderer whose options are settled.
     pub(crate) fn build(
@@ -60,13 +74,32 @@ impl Renderer {
                 wgpu::TextureUsages::RENDER_ATTACHMENT,
             );
         }
+        // the enhanced path: its own lighting in all three
+        let leave_out_enhanced = options.no_enhanced
+            && (cfg!(target_os = "android")
+                || adapter_name.to_ascii_lowercase().contains("opengl")
+                || GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed));
+        // (its textures do not fit OpenGL's units here, see `sixteen_texture_units`)
+        if sixteen_texture_units() && !options.no_enhanced {
+            log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
+        }
+        let leave_out_enhanced = leave_out_enhanced || sixteen_texture_units();
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
-        // which the depth prepass relies on to the last bit (see `VsOut::clip`).
+        // which the depth prepass relies on to the last bit (see `VsOut::clip`). Where the
+        // enhanced mode is left out, the module has the core's shader alone.
         log::info!("renderer: compiling the scene shaders");
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("omsi"),
             source: wgpu::ShaderSource::Wgsl(
-                scene_shader_source(GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed)).into(),
+                scene_shader_for(
+                    if leave_out_enhanced {
+                        ShadingPath::Linear
+                    } else {
+                        ShadingPath::Hdr
+                    },
+                    GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed),
+                )
+                .into(),
             ),
         });
         let layouts = Layouts::new(&device);
@@ -100,16 +133,6 @@ impl Renderer {
             basic: basic_pipelines(),
         };
         let pass = builders.vanilla(format);
-        // the enhanced path: its own lighting in all three
-        let leave_out_enhanced = options.no_enhanced
-            && (cfg!(target_os = "android")
-                || adapter_name.to_ascii_lowercase().contains("opengl")
-                || GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed));
-        // (its textures do not fit OpenGL's units here, see `sixteen_texture_units`)
-        if sixteen_texture_units() && !options.no_enhanced {
-            log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
-        }
-        let leave_out_enhanced = leave_out_enhanced || sixteen_texture_units();
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         // what only the enhanced mode draws with is its own
         let enhanced: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {

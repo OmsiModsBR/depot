@@ -22,14 +22,15 @@ pub(crate) fn post_shader_source() -> String {
     )
 }
 
-/// The scene shader: the vanilla path and the enhanced fragment shader in one module.
+/// The scene shader: the core's vertex stage and base shading, and the mode's own fragment
+/// shader, in one module (the depth prepass relies on one vertex shader for both).
 ///
 /// On OpenGL a texture has one sampler (GLSL's combined sampler2D), so there the tile
 /// masks are read through `s_diffuse` at a UV clamped half a texel inside the tile, which
 /// is what `s_tile`'s clamp to edge gives; reading `t_trans`/`t_night` through both
 /// samplers fails the whole module ("Conflicting samplers").
-pub(crate) fn scene_shader_source(gl: bool) -> String {
-    arrays_as_textures(&scene_shader_text(gl), array_path())
+pub(crate) fn scene_shader_source(gl: bool, mode: &str) -> String {
+    arrays_as_textures(&scene_shader_text(gl, mode), array_path())
 }
 
 /// The scene module with its arrays read as `path` has them (see `ArrayPath`): each
@@ -126,7 +127,9 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
     out
 }
 
-pub(crate) fn scene_shader_text(gl: bool) -> String {
+/// The scene module's text: the core's sources, then `mode`, the fragment shader the mode
+/// draws the scene with (empty for a mode with none of its own).
+pub(crate) fn scene_shader_text(gl: bool, mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -135,14 +138,9 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
         include_str!("common/enhanced_common.wgsl"),
         include_str!("common/puddle_common.wgsl"),
         include_str!("common/lamp_air.wgsl"),
-        include_str!("scene/enhanced.wgsl"),
+        mode,
     ]
     .join("\n");
-    let src = if basic_pipelines() {
-        lean_scene(src)
-    } else {
-        src
-    };
     if !gl {
         return src;
     }
@@ -156,25 +154,6 @@ pub(crate) fn scene_shader_text(gl: bool) -> String {
         .replace("textureSample(t_trans, s_tile, uv)", &clamped("t_trans"))
         .replace("textureSample(t_night, s_tile, uv)", &clamped("t_night"));
     debug_assert!(!out.contains("s_tile, uv)"));
-    out
-}
-
-/// The scene shader without the parts 0.2.0 added to every pixel's lighting that a phone's
-/// shader compiler gives up on (`basic_pipelines`): the street lamps' shadow maps read in
-/// the loop over the lamps, and the sun's soft shadow taken a second and a third time for
-/// the moon and a debug view. Adreno 740/830 (Galaxy S23-S25) failed the scene pipelines
-/// with these inlined into the enhanced fragment shader, and every frame stopped on an
-/// invalid 'omsi' pipeline (#1633, #1663, #1708).
-pub(crate) fn lean_scene(src: String) -> String {
-    let out = src
-        .replace("irr = irr * lamp_shadow_at(li, p, n, thin);", "")
-        .replace("ms = sun_shadow_soft(in.world, n, thin);", "ms = 1.0;")
-        .replace(
-            "let sm = sun_shadow_soft(in.world, n, thin);",
-            "let sm = 1.0;",
-        );
-    debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
-    debug_assert!(!out.contains("* lamp_shadow_at("));
     out
 }
 

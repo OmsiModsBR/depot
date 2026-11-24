@@ -306,9 +306,6 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
 // most of the sky, and the dashboard lies right under the windscreen.
 const CAB_AMBIENT: f32 = 1.15;
 
-// How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
-const PUDDLE_SPREAD: f32 = 0.37;
-
 /// The mip level a pixel's footprint asks for, in levels of the texture whose size is
 /// `texels` (the usual `log2` of the larger derivative, held at 0 and up). An LED panel is
 /// sampled with this, held at `enh.led.y` (`Lighting::led_mips`): 0 point-samples it, which
@@ -342,14 +339,6 @@ fn perturb_normal(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>, tn: vec3<f32>) -> v
     let k = inverseSqrt(m);
     return safe_normal(t * k * tn.x + b * k * tn.y + n * max(tn.z, 0.05));
 }
-
-// The enhanced pass's two targets: the picture, and the screen mask (r: 1 on the bus's own
-// screens, carried by the coverage of what is drawn over them; g: 1 on an LED panel's own
-// dots, see MASK_FORMAT; b is the reflected-light weight of wet puddles).
-struct EnhancedOut {
-    @location(0) color: vec4<f32>,
-    @location(1) mask: vec4<f32>,
-};
 
 @fragment
 fn fs_enhanced(in: FsIn) -> EnhancedOut {

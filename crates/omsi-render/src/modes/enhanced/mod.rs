@@ -5,6 +5,7 @@ mod fog_lamps;
 mod lights;
 mod pipelines;
 mod post;
+mod scene_shader;
 
 use crate::effects::puddles::PuddleLook;
 use crate::interface::{
@@ -20,6 +21,7 @@ use glam::Vec3;
 #[cfg(test)]
 pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
+pub(crate) use scene_shader::scene_text;
 
 pub(crate) struct Enhanced;
 
