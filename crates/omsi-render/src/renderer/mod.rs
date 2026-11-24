@@ -21,6 +21,8 @@ mod targets;
 mod upload;
 
 pub(crate) use build::mode_for;
+#[cfg(test)]
+pub(crate) use build::{scene_own_text, scene_shader_for};
 pub use features::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 pub use mirror::{AssetMirror, MirrorEvent, MirrorTexture};
 pub use options::{RenderOptions, AUTO_SCALE_PIXELS};

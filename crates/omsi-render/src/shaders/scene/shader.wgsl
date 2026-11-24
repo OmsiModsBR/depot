@@ -1566,7 +1566,7 @@ fn road_puddle_coverage(world: vec3<f32>, normal: vec3<f32>, wet: f32) -> f32 {
         + vnoise_f(xy, 1.6, vec2<f32>(-4.0, 8.0)) * 0.3
         + vnoise_f(xy, 5.0, vec2<f32>(2.7, 11.3)) * 0.1;
     // The pools spread from the lowest spots as the road soaks, but they stay pools: a road
-    // wet through has standing water on about a fifth of it (PUDDLE_SPREAD in enhanced.wgsl,
+    // wet through has standing water on about a fifth of it (PUDDLE_SPREAD in common/puddle_common.wgsl,
     // the same in `omsi-app/src/puddles.rs`) and wet asphalt between.
     let threshold = 1.0 - wet * PUDDLE_SPREAD;
     return smoothstep(threshold - 0.02, threshold + 0.02, pn) * smoothstep(0.75, 0.95, normal.z);
