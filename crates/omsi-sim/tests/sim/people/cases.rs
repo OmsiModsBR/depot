@@ -557,22 +557,53 @@ fn neck_lean(posed: &Posed) -> f32 {
 }
 
 #[test]
-fn a_driver_sits_up_at_the_wheel() {
-    // the wheel of the Caio Millennium V O500UA, reached from the seat as it is: the
-    // driver sits up, the neck a few degrees in front of the hips, not stooped over it
+fn a_driver_sits_back_at_the_wheel() {
+    // with no lean asked for, the driver sits back against his seat's reclined back, the
+    // neck behind the hips, not stooped over the wheel
     let r = rig();
     let posed = driver_at_wheel(&r, 0.10, 0.0);
     let lean = neck_lean(&posed);
     assert!(
-        lean > -2.0 && lean < 12.0,
+        lean > -24.0 && lean < -8.0,
         "neck {lean:.1} deg off the vertical"
+    );
+}
+
+#[test]
+fn a_driver_leans_off_the_seat_for_the_wheel_and_back() {
+    // the seesaw: asked to lean (a hand up over the top of the rim) he comes forward off
+    // the seat's back, and sits back again once it is no longer asked
+    let r = rig();
+    let back = neck_lean(&driver_at_wheel(&r, 0.10, 0.0));
+    let leaning = neck_lean(&driver_at_wheel(&r, 0.10, 20.0));
+    assert!(
+        leaning > back + 15.0,
+        "neck {back:.1} deg sitting back, {leaning:.1} leaning"
+    );
+    let mut p = Pose::new(0x5eed_d71e);
+    let input = |grip_lean| PoseInput {
+        activity: Activity::Sit,
+        seat: Some(Vec3::new(0.0, -0.34, 0.45)),
+        grips: Some([Vec3::new(-0.235, 0.10, 0.84), Vec3::new(0.235, 0.10, 0.84)]),
+        grip_lean,
+        ..Default::default()
+    };
+    for lean in [20.0, 0.0] {
+        for _ in 0..120 {
+            p.advance(&r, &input(lean), 1.0 / 30.0);
+        }
+    }
+    let again = neck_lean(&p.bones(&r));
+    assert!(
+        (again - back).abs() < 0.5,
+        "back at {again:.1}, was {back:.1}"
     );
 }
 
 #[test]
 fn a_wheel_further_off_leaves_the_back_as_it_is() {
     // the arms reach further for it; the trunk does not bend towards it by itself (the
-    // driver is brought nearer the wheel instead, see `SLIDE_MAX` in the app's driver)
+    // driver leans only as far as he is asked, see `sway_wanted` in the app's driver)
     let r = rig();
     let near = neck_lean(&driver_at_wheel(&r, 0.10, 0.0));
     let far = neck_lean(&driver_at_wheel(&r, 0.22, 0.0));

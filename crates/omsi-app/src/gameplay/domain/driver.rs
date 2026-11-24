@@ -121,6 +121,11 @@ pub struct DriverFigure {
     /// the stock size on the LiAZ's `[drivpos]` sat 0.7 m behind its wheel with its arms
     /// stretched out in the air.
     pub(crate) slide: f32,
+    /// How far the driver leans forward off his seat's back (degrees), and how far he does with
+    /// the wheel held still (what the arms need to reach it there, see `LEAN_REST_MAX`): turning
+    /// it, he leans further for a hand up over the top of the rim (`SWAY_MAX`).
+    pub(crate) lean: f32,
+    pub(crate) base_lean: f32,
     /// Where each hand holds the rim, or is on its way to (see `steer_hands`).
     pub(crate) hands: [Hand; 2],
     pub(crate) hands_placed: bool,
