@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Dependencies
+
+- **Security.** `url` 2.5.8 -> 2.5.9 (and `form_urlencoded` 1.2.2 -> 1.2.3, lockfile only) for RUSTSEC-2026-0592, a stack overflow in `Url::origin()` on deeply nested `blob:` URLs. Project Depot never calls `Url::origin()`; `url` only arrives indirectly through `ureq`, `ashpd` and `zvariant`, so nothing was reachable, and the bump is preventive. Source: crates.io `url` (servo/rust-url), MIT OR Apache-2.0. Checked only with `cargo check` of the crates that use it; the full workspace build needs system libraries missing from the review machine. (#846)
+
 ## 0.4.0 - 2026-11-24
 
 Release notes: [docs/releases/0.4.0.md](docs/releases/0.4.0.md).
