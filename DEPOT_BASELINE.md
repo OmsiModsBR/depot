@@ -79,3 +79,11 @@ Published 2026-10-30 from tag `v0.3.0`, the first release numbered by hand (see
 openOMSI commit imported wholesale. It adds an optional DirectX 9 renderer, a new in-game interface
 and launcher, and removes the multiplayer and plugin code. Only a Windows x64 game/launcher package
 is published. See [release notes](docs/releases/0.3.0.md).
+
+## Depot 0.4.0
+
+Published 2026-11-24 from tag `v0.4.0`. It still derives from the openOMSI 0.2.16 baseline, with no later
+openOMSI commit imported wholesale. It adds two vehicle physics engines (OMSI Classic and Project
+Depot Physics), trolleybuses without plugins and simpler graphics modes (Vanilla on Direct3D 9Ex),
+and removes the Enhanced+ mode. Only a Windows x64 game/launcher package is published. See
+[release notes](docs/releases/0.4.0.md).

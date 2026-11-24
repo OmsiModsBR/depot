@@ -7,9 +7,8 @@ published by hand; a push to `main` publishes nothing. Inherited release workflo
 `docs/upstream-automation/`, not active under `.github/workflows/`. No automatic upstream
 synchronization is enabled.
 
-**Depot 0.3.0 is the current release** (2026-10-30, tag `v0.3.0`). See its
-[release notes](releases/0.3.0.md). **The next release is Depot 0.4.0**: it adds features and
-removes some, so `VERSION` holds `0.4`.
+**Depot 0.4.0 is the current release** (2026-11-24, tag `v0.4.0`). See its
+[release notes](releases/0.4.0.md).
 
 ## The version number: `MAJOR.MINOR.PATCH`
 
@@ -69,6 +68,7 @@ the release tag, for example
 
 | Release | Date | What it was |
 | --- | --- | --- |
+| [0.4.0](releases/0.4.0.md) | 2026-11-24 | Two vehicle physics engines, trolleybuses without plugins, steerable axles, Vanilla on Direct3D 9Ex, live graphics options, real stars, sun and moon; Enhanced+ removed |
 | [0.3.0](releases/0.3.0.md) | 2026-10-30 | First release numbered by hand: DirectX 9 renderer, new interface and launcher, integrity checks, physics and passenger fixes, multiplayer and plugin code removed |
 | [0.2.52](releases/0.2.52.md) | 2026-10-10 | First release with behaviour changes since the rebranding (articulated buses as separate bodies, vehicle physics refactor, navigator map packages, pusher joint, fixes) |
 | [0.2.17](releases/0.2.17.md) | 2026-10-09 | Rebranding only, from the openOMSI 0.2.16 baseline; no behaviour changes |

@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+## 0.4.0 - 2026-11-24
+
+Release notes: [docs/releases/0.4.0.md](docs/releases/0.4.0.md).
+
 ### Privacy and documentation
 
 - **Added.** The logs no longer carry your user name: wherever a line would hold your user folder (`C:\Users\<you>`, `/home/<you>`, `/Users/<you>`), `game.log` and `launcher.log` hold the word `USER_FOLDER`, and the rest of the path stays readable. Both slash styles, any letter case and doubled backslashes are recognised; a path outside the user folder is unchanged. Your account name as a piece of another path becomes `USER_NAME`, the computer's name in a network path `COMPUTER_NAME`. The crash dialog's copied report and its GitHub text, and the integrity report (copied or saved), go through the same replacement. The cost is about 0.4 microseconds a log line. The short form Windows gives a long folder name (`C:\Users\JONATH~1`) and a space written as `%20` are recognised too. When the log is a file, a panic, a message that the game cannot start and the error the program ended on are written once, by the logger, instead of a second time past it with the paths as they are. The Android game log is not covered. Checked by automated tests with a made-up account on the three systems' path styles; not yet looked at in a real run. (#831)

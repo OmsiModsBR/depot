@@ -4,7 +4,7 @@
 > platform is Windows x64 only. This page keeps the inherited openOMSI notes for the record
 > and is not a description of any Depot release.
 
-Depot 0.2.17 was a rebranding-only release, and neither it nor 0.2.52 or 0.3.0 includes an Android package.
+Depot 0.2.17 was a rebranding-only release, and neither it nor 0.2.52, 0.3.0 or 0.4.0 includes an Android package.
 This document describes inherited Android support and build instructions,
 not a published Depot APK or new functionality in any release.
 
