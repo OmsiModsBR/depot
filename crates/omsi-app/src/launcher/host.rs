@@ -20,11 +20,11 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn open_url(&self, url: &str) {
-        crate::about::open_url(url);
+        crate::core::about::open_url(url);
     }
 
     fn open_dotnet_download(&self) {
-        crate::about::open_dotnet_download();
+        crate::core::about::open_dotnet_download();
     }
 
     fn hide_content_from_gallery(&self) {
@@ -33,15 +33,15 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn version(&self) -> (&'static str, &'static str) {
-        (crate::about::current_version(), crate::core::startup::BUILD)
+        (crate::core::about::current_version(), crate::core::startup::BUILD)
     }
 
     fn repo_url(&self) -> &'static str {
-        crate::about::REPO_URL
+        crate::core::about::REPO_URL
     }
 
     fn releases_url(&self) -> &'static str {
-        crate::about::RELEASES_URL
+        crate::core::about::RELEASES_URL
     }
 
     fn action_text(&self, root: &str, lang: &str, action: &str) -> String {
