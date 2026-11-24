@@ -5,9 +5,40 @@ pub fn sky_shader_source() -> String {
     crate::shaders::sky_shader_source()
 }
 
-/// A light's colour as the Enhanced passes take it (`lighting::linear_light_colour`).
+/// A light's colour as the Enhanced passes take it (its light record's colour).
 pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
-    crate::lighting::linear_light_colour(c)
+    let lamp = crate::lighting::PointLight {
+        color: c,
+        intensity: 1.0,
+        ..Default::default()
+    };
+    let g = crate::renderer::mode_for(crate::lighting::ShadingPath::Hdr).light_record(
+        &lamp,
+        glam::Vec3::ZERO,
+        &FrameFeatures::decide(
+            crate::lighting::ShadingPath::Hdr,
+            &crate::renderer::RenderOptions::default(),
+            &FrameInputs {
+                view: ViewKind::Window,
+                lead_view: true,
+                full_size: (1280, 720),
+                picture_size: (1280, 720),
+                rain: 0.0,
+                wetness: 0.0,
+                snow: 0.0,
+                has_glass_slot: false,
+                has_puddle_material: false,
+                built: BuiltPasses {
+                    enhanced: true,
+                    reflections: true,
+                    puddles: true,
+                    ssao: true,
+                },
+                switches: FrameSwitches::default(),
+            },
+        ),
+    );
+    [g.color[0], g.color[1], g.color[2]]
 }
 
 pub use crate::renderer::lists::{shadow_caster, ShadowCaster};

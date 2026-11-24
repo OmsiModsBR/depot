@@ -128,6 +128,28 @@ fn a_lamp_is_drawn_by_the_mode_that_knows_its_kind() {
     let plain = features(ShadingPath::Linear, ViewKind::Window);
     assert!(draws_light(ShadingPath::Hdr, &spot, &enhanced));
     assert!(!draws_light(ShadingPath::Linear, &spot, &plain));
+    // a plain lamp is drawn by both; a headlight's stand-in only by the plain path
+    let lamp = PointLight {
+        radius: 30.0,
+        intensity: 1.0,
+        ..Default::default()
+    };
+    let stand_in = PointLight {
+        radius: 18.0,
+        intensity: 0.8,
+        mode: LightMode::Vanilla,
+        ..Default::default()
+    };
+    assert!(draws_light(ShadingPath::Hdr, &lamp, &enhanced));
+    assert!(draws_light(ShadingPath::Linear, &lamp, &plain));
+    assert!(draws_light(ShadingPath::Linear, &stand_in, &plain));
+    assert!(!draws_light(ShadingPath::Hdr, &stand_in, &enhanced));
+    // a lamp with no intensity gives no light
+    let dark = PointLight {
+        intensity: 0.0,
+        ..lamp
+    };
+    assert!(!draws_light(ShadingPath::Hdr, &dark, &enhanced));
     // (and the vanilla shader reads its radius as 0)
     assert_eq!(light_radius(ShadingPath::Linear, &spot, &plain), 0.0);
 }
