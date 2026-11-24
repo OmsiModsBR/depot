@@ -30,3 +30,9 @@ pub(crate) fn lean_scene(src: String) -> String {
     debug_assert!(!out.contains("* lamp_shadow_at("));
     out
 }
+
+/// The WGSL of the Enhanced sky (`fs_enhanced`, `fs_enhanced_mirror` and the night sky), for the
+/// sky module.
+pub(crate) fn sky_text() -> &'static str {
+    include_str!("shaders/sky.wgsl")
+}

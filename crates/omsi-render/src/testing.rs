@@ -2,7 +2,9 @@
 
 /// The sky and clouds shader as one WGSL module (all its entry points).
 pub fn sky_shader_source() -> String {
-    crate::shaders::sky_shader_source()
+    crate::shaders::sky_shader_source(crate::renderer::sky_own_text(
+        crate::lighting::ShadingPath::Hdr,
+    ))
 }
 
 /// A light's colour as the Enhanced passes take it (its light record's colour).

@@ -21,6 +21,8 @@ mod targets;
 mod upload;
 
 pub(crate) use build::mode_for;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use build::sky_own_text;
 #[cfg(test)]
 pub(crate) use build::{scene_own_text, scene_shader_for};
 pub use features::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};

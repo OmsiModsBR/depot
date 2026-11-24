@@ -161,8 +161,10 @@ pub(crate) fn scene_shader_text(gl: bool, mode: &str) -> String {
 /// to two across. Written into the sky shaders by `sky_shader_source`.
 pub(crate) const CLOUD_FIELD_TILE: f32 = 14000.0;
 
-/// The sky dome (both paths) and the enhanced reflection probe.
-pub(crate) fn sky_shader_source() -> String {
+/// The sky module: the dome of the plain path, the clouds' and the stars' pieces and the
+/// reflection probe every mode has, then `mode`, the mode's own sky fragment shaders (empty for
+/// a mode with none).
+pub(crate) fn sky_shader_source(mode: &str) -> String {
     let cloud_tile = format!("const CLOUD_FIELD_TILE: f32 = {CLOUD_FIELD_TILE:?};");
     [
         cloud_tile.as_str(),
@@ -173,7 +175,8 @@ pub(crate) fn sky_shader_source() -> String {
         include_str!("sky/sky.wgsl"),
         include_str!("sky/stars.wgsl"),
         include_str!("common/enhanced_common.wgsl"),
-        include_str!("sky/sky_enhanced.wgsl"),
+        include_str!("sky/sky_light.wgsl"),
+        mode,
     ]
     .join("\n")
 }
@@ -226,14 +229,16 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
     )
 }
 
-/// Enhanced: the lamps' light in the fog over the drawn picture (`fog_lamps.wgsl`; not
-/// without storage buffers, where there are no lamps).
-pub(crate) fn fog_lamps_shader_source() -> String {
+/// A full-screen pass that reads the scene's lamps and the sky's light (`own` is its
+/// fragment shader): the camera, math and full-screen pieces ahead of it, the sky's uniform,
+/// the lamps' bindings and the air's light after it. The lamps are none without storage
+/// buffers, so the pass is not built there.
+pub(crate) fn lamp_pass_source(own: &str) -> String {
     [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
         include_str!("common/fullscreen.wgsl"),
-        include_str!("lights/fog_lamps.wgsl"),
+        own,
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         include_str!("common/lamp_air.wgsl"),

@@ -40,6 +40,14 @@ pub(crate) fn scene_shader_for(path: ShadingPath, gl: bool) -> String {
     scene_shader_source(gl, &scene_own_text(path))
 }
 
+/// The sky fragment shaders a path adds to the core's sky module.
+pub(crate) fn sky_own_text(path: ShadingPath) -> &'static str {
+    match path {
+        ShadingPath::Hdr => crate::modes::enhanced::sky_text(),
+        ShadingPath::Linear => "",
+    }
+}
+
 /// The fragment shader a path adds to the core's scene module.
 pub(crate) fn scene_own_text(path: ShadingPath) -> String {
     match path {
@@ -128,7 +136,16 @@ impl Renderer {
             scene: scene_builder,
             corona: CoronaBuilder::new(&device, &layouts, &sprites.corona_layout, msaa),
             snow: SnowBuilder::new(&device, &layouts, &snow_layout, msaa),
-            sky: SkyBuilder::new(&device, &layouts, msaa),
+            sky: SkyBuilder::new(
+                &device,
+                &layouts,
+                msaa,
+                sky_own_text(if leave_out_enhanced {
+                    ShadingPath::Linear
+                } else {
+                    ShadingPath::Hdr
+                }),
+            ),
             msaa,
             basic: basic_pipelines(),
         };

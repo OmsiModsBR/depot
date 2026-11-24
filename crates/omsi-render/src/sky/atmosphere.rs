@@ -617,7 +617,7 @@ impl RawSky {
     }
 }
 
-/// Heights over the ground (m) of `SkyState::sun_at` (sky_enhanced.wgsl's cloud layer).
+/// Heights over the ground (m) of `SkyState::sun_at` (sky_light.wgsl's cloud layer).
 pub const CLOUD_SUN_HEIGHTS: [f32; 4] = [1400.0, 2100.0, 2800.0, 7000.0];
 
 /// Irradiance on a horizontal surface from the upper half of a sky table.
