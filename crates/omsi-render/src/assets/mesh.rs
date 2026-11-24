@@ -189,13 +189,26 @@ pub(crate) fn mesh_page_bytes(data: &MeshData) -> (u64, u64) {
     )
 }
 
+/// The sphere round what the mesh draws: the vertices its triangles use. A vertex no triangle
+/// uses is never drawn, and o3d files carry such leftovers - an articulated bus's lamp mesh
+/// has four at up to 6e25 m. Taken in, they made the sphere's radius infinite: the camera was
+/// always inside it, so the bus was ranked nearest of all and drawn over every pane in front
+/// of it (its own rear section's glass included), and the culling block holding the mesh got
+/// a centre of NaN, which the shadow pass never finds in its light box - every mesh beside it
+/// in the block (the bus's body among them) cast no shadow.
 pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-    for p in &data.positions {
+    let mut any = false;
+    for p in data
+        .indices
+        .iter()
+        .filter_map(|&i| data.positions.get(i as usize))
+    {
         lo = lo.min(*p);
         hi = hi.max(*p);
+        any = true;
     }
-    if data.positions.is_empty() {
+    if !any {
         lo = Vec3::ZERO;
         hi = Vec3::ZERO;
     }
