@@ -7,6 +7,7 @@
 //! passes themselves (the HDR frame, the probe) are still recorded by the
 //! renderer; they move into the modes with phase C5.
 
+use crate::effects::puddles::PuddleLook;
 use crate::lighting::{ExposureLog, GpuPointLight, Lighting, PointLight};
 use crate::passes::{Exposure, FrameFeatures, PassPipelines, PostPipelines};
 use crate::scene::{Camera, Scene, TextureId};
@@ -131,6 +132,16 @@ pub(crate) trait RenderMode: Sync {
     /// What the window's picture feeds the mode's own look before it is drawn (the lamps in
     /// view, the glow of the night sky); nothing for a mode with no such state.
     fn lead_view(&self, features: &FrameFeatures, parts: LeadViewParts<'_>);
+
+    /// How the puddles' reflections are lit in a picture of `features`, or none while the
+    /// mode's light is not ready (its sky is still being worked out).
+    fn puddle_look(
+        &self,
+        features: &FrameFeatures,
+        lighting: &Lighting,
+        sky: &SkyResources,
+        adaptation: &Exposure,
+    ) -> Option<PuddleLook>;
 }
 
 /// What a mode draws with that only it needs, kept by the renderer for as long as the mode is

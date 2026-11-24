@@ -167,6 +167,7 @@ impl Renderer {
             &mut encoder,
             camera,
             lighting,
+            &f.features,
             &cu,
             &list,
             &main_batches,
