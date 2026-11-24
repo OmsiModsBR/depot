@@ -1,6 +1,7 @@
 //! Tests of the game play package (`src/gameplay/`).
 
 mod bus_service;
+mod driver;
 mod humans;
 mod journey;
 mod line_times;
