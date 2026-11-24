@@ -8,7 +8,8 @@ published by hand; a push to `main` publishes nothing. Inherited release workflo
 synchronization is enabled.
 
 **Depot 0.3.0 is the current release** (2026-10-30, tag `v0.3.0`). See its
-[release notes](releases/0.3.0.md).
+[release notes](releases/0.3.0.md). **The next release is Depot 0.4.0**: it adds features and
+removes some, so `VERSION` holds `0.4`.
 
 ## The version number: `MAJOR.MINOR.PATCH`
 
