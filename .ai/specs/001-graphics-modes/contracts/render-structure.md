@@ -57,8 +57,19 @@ each is read by code both modes run, and the core may not import `modes`):
 
 What moved whole is `passes/fog_lamps.rs`: its pass, pipelines and parameters are now
 `modes/enhanced/fog_lamps.rs`, held by the mode's `EnhancedResources` (the renderer reaches them
-through `interface::ModeResources`). Splitting the shared state out of the files above is what is
-left of the move (T058).
+through `interface::ModeResources`). Splitting the shared state out of the files above (T058) moved
+the rest of what only Enhanced does:
+
+- the post passes: `modes/enhanced/post.rs`, run through `ModeResources::encode_post`;
+- the lamp rules and the linear light colour: `modes/enhanced/lights.rs`;
+- the fragment entry points of its main pass and its mirrors' sky, and the building of its
+  resources: `modes/enhanced/pipelines.rs`, `EnhancedResources::build`;
+- how the puddles' reflections are lit: `RenderMode::puddle_look`.
+
+**Found shared in phase C5 (T058), so they stay in the core:** the main pass's high-range frame
+(`passes/main.rs`: the masked targets and the screen mask) is also Vanilla+'s reflection frame, so
+it is the core's, and the mode chooses it through `FrameFeatures`. The per-frame sky light
+(`Renderer::prepare_enhanced`) works on `SkyResources`, which every mode has.
 
 A file listed with "(its part)" is split: the part both modes run stays where it is. Where a move
 finds that a file is used by both modes after all, it stays in the core and this page is corrected
