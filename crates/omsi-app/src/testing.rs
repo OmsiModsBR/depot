@@ -56,7 +56,8 @@ pub fn translate(lang: &str, key: &str) -> Option<String> {
 }
 
 pub mod about {
-    pub use crate::about::*;
+    pub use crate::core::domain::about::*;
+    pub use crate::core::implementation::about::*;
 }
 pub mod actions {
     pub use crate::input::actions::*;

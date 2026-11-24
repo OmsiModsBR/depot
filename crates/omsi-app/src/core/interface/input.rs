@@ -2,6 +2,12 @@
 //! command line, the start-up, the threads, the log, the memory budget, the platform and
 //! Android's entry point.
 
+/// The project's addresses, and opening its links in the browser.
+pub(crate) mod about {
+    pub(crate) use super::super::super::domain::about::*;
+    pub(crate) use super::super::super::implementation::about::*;
+}
+
 /// `App`, its state and its procedures.
 pub(crate) mod app {
     pub(crate) use super::super::super::domain::app::*;

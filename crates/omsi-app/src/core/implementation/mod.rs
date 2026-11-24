@@ -4,6 +4,7 @@
 
 #[cfg(target_os = "android")]
 pub(crate) mod android;
+pub(crate) mod about;
 pub(crate) mod app;
 pub(crate) mod applog;
 pub(crate) mod make;
