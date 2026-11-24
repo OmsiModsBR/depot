@@ -39,6 +39,14 @@ struct FeetTargets {
     swing_floor: [f32; 2],
 }
 
+/// How far (degrees) a driver at the wheel leans towards it when he sits back, shared by the
+/// pelvis (0.7 of it) and the waist (0.5): back, against the seat's reclined back, the neck
+/// some 16 degrees behind the hips (each degree here moves the neck about one). He leans
+/// forward from there (`PoseInput::grip_lean`) only for a wheel out of his reach. (At 16
+/// degrees towards the wheel the driver sat bent forward off his seat's back all the time,
+/// as no driver could for a day's work.)
+const GRIP_LEAN: f32 = -5.0;
+
 /// How the body leans: into the walk, towards a reach or the wheel, with the bus.
 #[derive(Clone, Copy)]
 struct Lean {
@@ -243,9 +251,9 @@ impl Pose {
         } else {
             (0.0, 0.0)
         };
-        // a driver sits up, leaning towards the wheel
+        // a driver sits up, leaning a little towards the wheel
         let grip_lean =
-            d(16.0 + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
+            d(GRIP_LEAN + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
         // swaying with the bus: the body goes with the pull (forwards when it brakes, outwards
         // in a bend), less when holding on or sitting
         let lean_bus = self.lean * (1.0 - 0.4 * self.hold) * (1.0 - 0.4 * s_ease);
