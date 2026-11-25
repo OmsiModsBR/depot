@@ -36,7 +36,7 @@ pub struct Renderer {
     pub(crate) pass: PassPipelines,
     /// What only the enhanced mode draws with (its pipelines, the sky of its mirrors, the
     /// lamps' light in the fog); none where it is left out.
-    pub(crate) enhanced: Option<Box<dyn crate::interface::ModeResources>>,
+    pub(crate) own_mode: Option<Box<dyn crate::interface::ModeResources>>,
     pub(crate) reflection_pass: Option<PassPipelines>,
     pub(crate) camera_buf: wgpu::Buffer,
     /// The settings this renderer was built with.

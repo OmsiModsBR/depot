@@ -31,7 +31,7 @@ pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
                 has_glass_slot: false,
                 has_puddle_material: false,
                 built: BuiltPasses {
-                    enhanced: true,
+                    own_mode: true,
                     reflections: true,
                     puddles: true,
                     ssao: true,
@@ -86,5 +86,30 @@ pub mod modes {
 
     pub fn lamp_shadows(path: ShadingPath, features: &FrameFeatures) -> bool {
         mode(path).lamp_shadows(features)
+    }
+
+    /// How far a picture sees through a fog of `density` (1/m) for a camera of the range `far`
+    /// (m), and whether the mode's fog is its own (`FogCull`).
+    pub fn fog_cull(
+        path: ShadingPath,
+        features: &FrameFeatures,
+        density: f32,
+        far: f32,
+    ) -> (f32, bool) {
+        let lighting = crate::lighting::Lighting {
+            fog_density: density,
+            ..Default::default()
+        };
+        let camera = crate::scene::Camera {
+            position: glam::DVec3::ZERO,
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+            fov_deg: 60.0,
+            near: 0.1,
+            far,
+        };
+        let cull = mode(path).fog_cull(features, &lighting, &camera);
+        (cull.far, cull.own)
     }
 }

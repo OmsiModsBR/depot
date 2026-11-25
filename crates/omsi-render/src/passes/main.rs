@@ -77,7 +77,7 @@ pub(crate) fn encode_main_pass(
     timed: &mut Vec<&'static str>,
 ) -> Vec<wgpu::CommandEncoder> {
     let FrameFeatures {
-        enhanced,
+        own_shading,
         masked_frame,
         prepass_on,
         ao_on,
@@ -121,7 +121,7 @@ pub(crate) fn encode_main_pass(
                 PIPE_ALPHA_TEST | PIPE_BLEND | PIPE_BLEND_NO_WRITE
             )
         });
-    let msaa_prepass = enhanced
+    let msaa_prepass = own_shading
         && !has_presurface
         && (with_overlays || xr_view)
         && !single
@@ -222,7 +222,10 @@ pub(crate) fn encode_main_pass(
         // `sky_mirror_pipeline`)
         let sky_pipe = match ctx.sky_mirror_pipeline {
             Some(p)
-                if lighting.hdr() && !enhanced && !with_overlays && ctx.sky.sky_state.is_some() =>
+                if lighting.hdr()
+                    && !own_shading
+                    && !with_overlays
+                    && ctx.sky.sky_state.is_some() =>
             {
                 p
             }

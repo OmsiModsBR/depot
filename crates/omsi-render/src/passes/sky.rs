@@ -92,7 +92,7 @@ impl SkyResources {
         &mut self,
         scene: &Scene,
         prepass_encoder: &mut wgpu::CommandEncoder,
-        enhanced: bool,
+        own_shading: bool,
         lead_view: bool,
         probe_redraw: bool,
         redraw_near: bool,
@@ -102,7 +102,7 @@ impl SkyResources {
     ) {
         // --- the enhanced sky cube: a face a frame (all six the first time and for a new
         // sky), drawn in the window's frame only
-        if enhanced && (lead_view || probe_redraw) {
+        if own_shading && (lead_view || probe_redraw) {
             if let (Some(probe), Some(sky_bg)) =
                 (self.probe.as_mut(), scene.sky_bind_group.as_ref())
             {

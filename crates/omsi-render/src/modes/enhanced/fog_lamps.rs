@@ -125,7 +125,7 @@ impl FogLampsPass {
             timed,
         } = parts;
         let (enhanced, masked_frame, prepass_on, with_overlays) = (
-            features.enhanced,
+            features.own_shading,
             features.masked_frame,
             features.prepass_on,
             features.with_overlays,

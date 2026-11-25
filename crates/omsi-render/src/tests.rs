@@ -1056,7 +1056,7 @@ fn terrain_paint_fast_path_preserves_composition() {
                 .render_to_image(&mut scene, 64, 64, &camera, &lighting)
                 .unwrap();
             let pp = renderer
-                .enhanced
+                .own_mode
                 .as_mut()
                 .and_then(|m| m.own_pipelines_mut())
                 .unwrap();
@@ -1073,7 +1073,7 @@ fn terrain_paint_fast_path_preserves_composition() {
                 .unwrap();
             for (variant, pipeline) in saved.into_iter().enumerate() {
                 renderer
-                    .enhanced
+                    .own_mode
                     .as_mut()
                     .and_then(|m| m.own_pipelines_mut())
                     .unwrap()

@@ -28,7 +28,7 @@ fn inputs(view: ViewKind) -> FrameInputs {
         has_glass_slot: true,
         has_puddle_material: true,
         built: BuiltPasses {
-            enhanced: true,
+            own_mode: true,
             reflections: true,
             puddles: true,
             ssao: true,
@@ -46,7 +46,7 @@ fn the_window_in_the_plain_path_smooths_its_edges_after_the_scene() {
     let f = decide(ShadingPath::Linear, &options(), &inputs(ViewKind::Window));
     assert!(f.with_overlays && f.fxaa_without_msaa && f.scaled);
     assert!(f.ao_on && f.prepass_on);
-    assert!(!f.enhanced && !f.masked_frame && !f.xr_view);
+    assert!(!f.own_shading && !f.masked_frame && !f.xr_view);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn multisampling_or_a_smaller_picture_leaves_the_fxaa_out() {
 #[test]
 fn the_window_in_enhanced_is_drawn_by_the_enhanced_path() {
     let f = decide(ShadingPath::Hdr, &options(), &inputs(ViewKind::Window));
-    assert!(f.enhanced && f.masked_frame && f.prepass_on && f.ao_on);
+    assert!(f.own_shading && f.masked_frame && f.prepass_on && f.ao_on);
     // (Enhanced has its FXAA in its post passes)
     assert!(!f.fxaa_without_msaa && !f.scaled);
 }
@@ -76,15 +76,15 @@ fn the_window_in_enhanced_is_drawn_by_the_enhanced_path() {
 #[test]
 fn enhanced_without_its_pipelines_draws_the_plain_path() {
     let mut i = inputs(ViewKind::Window);
-    i.built.enhanced = false;
+    i.built.own_mode = false;
     let f = decide(ShadingPath::Hdr, &options(), &i);
-    assert!(!f.enhanced && f.fxaa_without_msaa);
+    assert!(!f.own_shading && f.fxaa_without_msaa);
 }
 
 #[test]
 fn a_mirror_in_enhanced_uses_the_base_shading() {
     let f = decide(ShadingPath::Hdr, &options(), &inputs(ViewKind::Mirror));
-    assert!(!f.enhanced && !f.masked_frame);
+    assert!(!f.own_shading && !f.masked_frame);
     assert!(!f.with_overlays && !f.ao_on && !f.prepass_on && !f.xr_view);
     // OMSI_MIRROR_ENHANCED draws them enhanced again
     let f = decide(
@@ -95,7 +95,7 @@ fn a_mirror_in_enhanced_uses_the_base_shading() {
         },
         &inputs(ViewKind::Mirror),
     );
-    assert!(f.enhanced && f.masked_frame);
+    assert!(f.own_shading && f.masked_frame);
     // (still without the occlusion and the overlays of the window's picture)
     assert!(!f.ao_on && !f.with_overlays);
 }
@@ -109,17 +109,17 @@ fn a_mirror_in_the_plain_path_is_just_drawn() {
 #[test]
 fn the_headsets_eyes_are_the_real_picture_without_the_window_s_overlays() {
     let f = decide(ShadingPath::Hdr, &options(), &inputs(ViewKind::XrEye));
-    assert!(f.enhanced && f.xr_view && !f.with_overlays);
+    assert!(f.own_shading && f.xr_view && !f.with_overlays);
     // (the depth prepass keeps the costly shading to the visible surface; no occlusion)
     assert!(f.prepass_on && !f.ao_on);
     let f = decide(ShadingPath::Linear, &options(), &inputs(ViewKind::XrEye));
-    assert!(!f.enhanced && !f.prepass_on);
+    assert!(!f.own_shading && !f.prepass_on);
 }
 
 #[test]
 fn a_triple_screen_panel_is_the_windows_picture_with_a_projection() {
     let f = decide(ShadingPath::Hdr, &options(), &inputs(ViewKind::TriplePanel));
-    assert!(f.with_overlays && f.xr_view && f.enhanced && f.ao_on);
+    assert!(f.with_overlays && f.xr_view && f.own_shading && f.ao_on);
 }
 
 #[test]

@@ -49,6 +49,31 @@ pub enum PipeSet {
     Reflections,
 }
 
+/// How far a picture sees through the fog, for the draws that are left out beyond it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FogCull {
+    /// Nothing farther than this (m) is drawn, where the mode's fog is the plain one.
+    pub far: f32,
+    /// The mode's fog is its own: the ground and the big things are drawn whatever their
+    /// distance (the sky below the horizon is not the fog's colour), and the shadow blocks are
+    /// not left out by it.
+    pub own: bool,
+}
+
+impl FogCull {
+    /// The plain fog's: nothing behind it is drawn, where the fog has swallowed 99 % of a thing
+    /// there is nothing left to see of it (a storm's 700 m of sight cuts the draws of a city
+    /// map by two thirds).
+    pub fn plain(lighting: &Lighting, camera: &Camera) -> Self {
+        let far = if lighting.fog_density > 1e-7 {
+            (4.6 / lighting.fog_density).min(camera.far)
+        } else {
+            camera.far
+        };
+        Self { far, own: false }
+    }
+}
+
 /// What the mode may change when the window's picture leads the frame.
 pub(crate) struct LeadViewParts<'a> {
     pub scene: &'a Scene,
@@ -132,6 +157,9 @@ pub(crate) trait RenderMode: Sync {
     /// What the window's picture feeds the mode's own look before it is drawn (the lamps in
     /// view, the glow of the night sky); nothing for a mode with no such state.
     fn lead_view(&self, features: &FrameFeatures, parts: LeadViewParts<'_>);
+
+    /// How far a picture of `features` sees through the fog (nothing behind it is drawn).
+    fn fog_cull(&self, features: &FrameFeatures, lighting: &Lighting, camera: &Camera) -> FogCull;
 
     /// How the puddles' reflections are lit in a picture of `features`, or none while the
     /// mode's light is not ready (its sky is still being worked out).

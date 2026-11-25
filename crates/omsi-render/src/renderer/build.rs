@@ -177,7 +177,7 @@ impl Renderer {
         let pass = vanilla_plus::plain_pass(&builders, format);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         // what only the enhanced mode draws with is its own
-        let enhanced: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
+        let own_mode: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
             Box::new(EnhancedResources::build(
                 &builders,
                 &device,
@@ -273,7 +273,7 @@ impl Renderer {
             queue,
             adapter_name,
             pass,
-            enhanced,
+            own_mode,
             reflection_pass,
             sprites,
             camera_buf,
