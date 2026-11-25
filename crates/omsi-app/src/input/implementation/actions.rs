@@ -1554,7 +1554,6 @@ impl App {
         let snow = self.weather.as_ref().is_some_and(|x| x.snow);
         let on_road = self.weather.as_ref().is_some_and(|x| x.snow_on_road);
         let season = crate::world::world_load::season_folder_on(
-            &self.args,
             &w.global,
             self.clock.day_of_year,
             snow,

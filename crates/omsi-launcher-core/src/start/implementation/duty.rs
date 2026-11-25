@@ -44,7 +44,6 @@ impl Choice {
             profile: Some(profile.to_string()).filter(|p| !p.is_empty()),
             lan: Some(lan),
             lan_name: None,
-            season: Some(c.season.clone()).filter(|s| s != "auto"),
             tutorial: None,
             situation: None,
             monitor_at: None,

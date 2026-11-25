@@ -87,7 +87,6 @@ pub(in crate::hud) fn apply_pending(v: &mut serde_json::Value, pending: &[(Strin
             (serde_json::Value::Bool(_), serde_json::Value::Number(n)) => {
                 serde_json::Value::Bool(n.as_f64().unwrap_or(0.0) > 0.5)
             }
-            _ if key == "time_speed" => serde_json::Value::from(value.as_str()),
             _ => parsed,
         };
         v[key.as_str()] = parsed;

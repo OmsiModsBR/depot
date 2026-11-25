@@ -89,9 +89,6 @@ pub struct Args {
     /// Your name as the other players see it.
     #[arg(long, default_value = "Driver")]
     pub lan_name: String,
-    /// Season override: spring, summer, autumn or winter (else the date decides, as in OMSI).
-    #[arg(long)]
-    pub season: Option<String>,
     /// Fire script triggers after spawning: name[@seconds],… (times apply during --drive).
     #[arg(long)]
     pub triggers: Option<String>,

@@ -303,7 +303,6 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         stop_wishes: None,
         player_still: 0.0,
         day_time: 0.0,
-        time_scale: 1.0,
         weekday: 0,
         night: false,
         daylight: None,

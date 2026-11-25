@@ -1863,7 +1863,6 @@ fn step_time(f: &mut Frame, r: Rect) {
         .date_field("date", Rect::new(r.x + col + 12.0, y, col, 44.0), &mut d)
     {
         f.state.choice.date = d;
-        f.state.choice.season = "auto".into();
         f.state.load_lines();
         f.state.touched();
     }
@@ -1903,7 +1902,6 @@ fn step_time(f: &mut Frame, r: Rect) {
     {
         if let Some((yy, mo, d, _, _)) = omsi_launcher_lib::local_now() {
             f.state.choice.date = format!("{yy:04}-{mo:02}-{d:02}");
-            f.state.choice.season = "auto".into();
             f.state.load_lines();
             f.state.touched();
         }
@@ -1911,37 +1909,6 @@ fn step_time(f: &mut Frame, r: Rect) {
     if own_time || own_date {
         y += 44.0;
     }
-    let seasons = ["auto", "spring", "summer", "autumn", "winter"];
-    let mut s = seasons
-        .iter()
-        .position(|x| *x == f.state.choice.season)
-        .unwrap_or(0);
-    if f.ui.segmented(
-        "season",
-        Rect::new(r.x, y, r.w, 34.0),
-        &mut s,
-        &["By date", "Spring", "Summer", "Autumn", "Winter"],
-    ) {
-        f.state.choice.season = seasons[s].to_string();
-        if s > 0 {
-            let month = ["", "04", "07", "10", "01"][s];
-            let date = f.state.choice.date.clone();
-            let (yy, dd) = (
-                date.get(0..4).unwrap_or("1989").to_string(),
-                date.get(8..10).unwrap_or("15").to_string(),
-            );
-            f.state.choice.date = format!("{yy}-{month}-{dd}");
-            f.state.load_lines();
-        }
-        let w = f.state.choice.weather.clone();
-        if let Some(wi) = f.state.weathers.iter().find(|x| x.file == w).cloned() {
-            if !f.state.weather_fits(&wi) {
-                f.state.choice.weather.clear();
-            }
-        }
-        f.state.touched();
-    }
-    y += 46.0;
     let mut traffic = f.state.choice.traffic;
     if f.ui.slider(
         "traffic",

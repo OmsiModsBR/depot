@@ -347,7 +347,7 @@ fn a_queue_of_people_still_holds_the_doors() {
     assert!(left < 20.0 + CLOSE_MAX);
 }
 
-/// At a higher time speed the day clock runs faster than the frames: the limit is in the
+/// While the clock is wound on the day clock runs faster than the frames: the limit is in the
 /// frames' seconds, so a normal dwell is never cut short by it.
 #[test]
 fn the_hold_limit_does_not_follow_the_day_clock() {

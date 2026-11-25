@@ -485,7 +485,7 @@ impl BusService {
                 // kept past the normal dwell by people who cannot get in or out: the doors
                 // close (the people stay aboard or on the kerb for the next bus). Counted in
                 // the frames' own seconds (`phase_t`), not the day clock, which runs faster
-                // at a higher time speed; an early bus still waits for its departure time
+                // while the clock is wound on; an early bus still waits for its departure time
                 if !self.held_out && self.phase_t > boarding_time(ctx.id) + MAX_HELD {
                     self.held_out = true;
                     self.boarding = 0.0;

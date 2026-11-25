@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Settings
+
+- **Removed.** Three settings are gone, from the launcher, the in-game options, `settings.cfg` and the translations: **Time speed** (`time_speed`; the clock now always runs at real speed, and the autosave interval is in real minutes as before), the launcher's **Season** choice on the Drive page, the phone page and the start options (`start.season`; the season follows the start's date as in OMSI 2, through the map's season table, and the weather list still offers only what fits it; the game's `--season` parameter is removed too), and **Driver's hands in the cab view** (`hands_in_cab`; from the driver's seat the driver figure is only seen in the mirrors, as with the setting off, its default). An older `settings.cfg` or launcher file that still holds these keys is read without error and the keys are dropped the next time it is saved. Checked by automated tests only. (#PR)
+
 ### Graphics
 
 - **Fixed.** A vehicle whose model file holds vertices no triangle uses (leftovers some o3d exporters write, here up to 6e25 m away) is culled and sorted by what it draws. Those vertices made the mesh's bounding sphere infinite: the vehicle was always sorted nearest, so a model drawn in model order painted its interior over the panes in front of it (the front section of the Millennium BRT seen through the rear section's windows, without their tint and reflection), and the shadow pass dropped the 128-instance culling block holding the mesh, so most of that section's body cast no sun shadow. Checked by an automated test of the mesh's sphere; not yet looked at in the game.

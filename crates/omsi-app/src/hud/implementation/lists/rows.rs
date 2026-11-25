@@ -2,7 +2,7 @@
 
 use super::values::{option_now, toggle_now};
 use crate::core::app::App;
-use crate::hud::domain::lists::{Move, PAX, PEDAL, SPEEDS, TRAFFIC, VOLUME};
+use crate::hud::domain::lists::{Move, PAX, PEDAL, TRAFFIC, VOLUME};
 
 /// A row of a settings window (see `ui::MenuKind::Options` for the format).
 pub fn row(name: &str, kind: char, value: &str, desc: &str, frac: Option<f32>) -> String {
@@ -93,7 +93,6 @@ pub(in crate::hud) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "vr_nav_yaw" | "vr_nav_roll" => (-90..=90).map(|v| v as f32 * 2.0).collect(),
         "vr_nav_tilt" => (-40..=40).map(|v| v as f32 * 2.0).collect(),
         "vr_nav_opacity" => (6..=20).map(|v| v as f32 * 0.05).collect(),
-        "speed" => SPEEDS.iter().map(|&v| v as f32).collect(),
         "traffic" => TRAFFIC.iter().map(|&v| v as f32).collect(),
         "pax" => PAX.to_vec(),
         "volume" => VOLUME.to_vec(),

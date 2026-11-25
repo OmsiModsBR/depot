@@ -1,8 +1,7 @@
-//! The next start's choices: the bus, the map, the line and tour, the season and the trip.
+//! The next start's choices: the bus, the map, the line and tour, and the trip.
 
 use super::super::domain::state::*;
 use super::super::interface::output::core;
-use super::text::*;
 
 impl State {
     // --- helpers for the pages -------------------------------------------------------------
@@ -80,25 +79,7 @@ impl State {
         self.touched();
     }
 
-    /// The season `season` ("auto": by the date) chosen for the start: the date moves into it
-    /// (its timetable days with it), and a weather preset that does not fit it any more goes.
-    pub fn set_season(&mut self, season: &str) {
-        self.choice.season = season.to_string();
-        if let Some(month) = core::start::season_month(season) {
-            let date = self.choice.date.clone();
-            self.choice.date = date_in_month(&date, month);
-            self.load_lines();
-        }
-        let w = self.choice.weather.clone();
-        if let Some(wi) = self.weathers.iter().find(|x| x.file == w).cloned() {
-            if !self.weather_fits(&wi) {
-                self.choice.weather.clear();
-            }
-        }
-        self.touched();
-    }
-
-    /// The season the chosen date (or the override) means.
+    /// The season the chosen date means.
     pub fn season(&self) -> &str {
         self.choice.season()
     }

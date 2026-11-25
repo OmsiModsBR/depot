@@ -85,15 +85,6 @@ impl App {
 
     /// OMSI's weather dialog, the short way: the next weather of the Weather folder, in
     /// force at once (the roads keep their wetness until the rain changes it).
-    /// How fast the clock runs: the session's in LAN play (the host's, which its time speed
-    /// setting or its administration set), else the settings'.
-    pub(crate) fn time_speed(&self) -> f64 {
-        if self.real_time_locked() {
-            return 1.0;
-        }
-        self.settings.time_speed.clamp(1.0, 30.0)
-    }
-
     pub(crate) fn next_weather(&mut self) {
         self.step_weather();
     }

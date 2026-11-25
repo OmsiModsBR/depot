@@ -3347,7 +3347,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("collision_pedestrians", json!(true)),
         ("head_movement", json!(true)),
         ("driverview_smooth", json!(true)),
-        ("hands_in_cab", json!(false)),
         ("alt_view", json!(true)),
         ("precision_zoom", json!(false)),
     ] {
@@ -3383,7 +3382,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
         ("info_item_grade", json!(true)),
         ("info_item_skid", json!(true)),
         ("get_up", json!(false)),
-        ("time_speed", json!("1")),
         ("time_sync", json!(false)),
         ("metar_sync", json!(false)),
         ("metar_station", json!("")),
@@ -3684,7 +3682,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
             | "collision_pedestrians"
             | "head_movement"
             | "driverview_smooth"
-            | "hands_in_cab"
             | "alt_view"
             | "precision_zoom" => v[&k] = json!(b(val)),
             "ai_max_scheduled" => {
@@ -4184,21 +4181,6 @@ pub fn settings_from_text(text: Option<&str>) -> Value {
                 })
             }
             "muffle_outside" => v[&k] = json!(b(val)),
-            // (what is no finite number is the default, as the game reads it)
-            "time_speed" => {
-                v[&k] = json!(val
-                    .trim_start_matches(['x', 'X'])
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|x| x.is_finite())
-                    .map(|x| x.clamp(1.0, 30.0))
-                    .map(|x| if x.fract() == 0.0 {
-                        format!("{}", x as i64)
-                    } else {
-                        x.to_string()
-                    })
-                    .unwrap_or_else(|| "1".into()))
-            }
             "language" => v[&k] = json!(language_code(val)),
             "physics" => v[&k] = json!(omsi_cfg::PhysicsMode::parse(val).as_str()),
             "graphics" | "renderer" => graphics = Some(GraphicsMode::parse(val)),
@@ -4559,7 +4541,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // OMSI's own options (options.cfg): maintenance ([wear_lifespan]), the AI counts and
     // the share of random traffic, the real clock and calendar, collisions, head movement
     let text = format!(
-        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nhands_in_cab={}\nalt_view={}\nprecision_zoom={}\n",
+        "{text}maintenance={}\nai_unsched_factor={}\nai_max_scheduled={}\nai_max_random={}\nai_priority_scheduled={}\nai_max_parked={}\nai_max_humans={}\nuse_real_time={}\nuse_real_date={}\nuse_real_year={}\ncollision_vehicles={}\ncollision_objects={}\ncollision_pedestrians={}\nhead_movement={}\ndriverview_smooth={}\nalt_view={}\nprecision_zoom={}\n",
         n("maintenance", 0).clamp(0, 4),
         f("ai_unsched_factor", 100.0).clamp(1.0, 300.0),
         n("ai_max_scheduled", 1000).clamp(0, 1000),
@@ -4575,7 +4557,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("collision_pedestrians", true),
         b("head_movement", true),
         b("driverview_smooth", true),
-        b("hands_in_cab", false),
         b("alt_view", true),
         b("precision_zoom", false),
     );
@@ -4594,7 +4575,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("smoke_in_mirrors", true),
     );
     let text = format!(
-        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\ntime_speed={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
+        "{text}pax_voices={}\nnav_arrows={}\nnav_ai={}\nget_up={}\nshadow_casters={}\nshadow_blobs={}\nctrl_deadzone={}\nreflections={}\nmouse_sens={}\ngraphics_api={}\nctrl_off={}\nsteering_linear={}\nold_steering={}\nred_steer_spd={}\nff_invert={}\nwheel_range={}\nwheel_lock={}\nfov={}\ncamera_collision={}\npedal_throttle={}\npedal_brake={}\nseat_x={}\nseat_y={}\nseat_z={}\nseat_pitch_deg={}\nsteer_look={}\nhead_tracking={}\nhead_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\nff_enabled={}\nbrake_hold={}\nauto_clutch={}\nmomentary_gears={}\nauto_shift={}\nled_glow={}\nled_mips={}\nnight_brightness={}\nui_scale={}\nui_scale_window={}\nchat_size={}\nnotes={}\nmouse_steering={}\nmouse_right_off={}\nmouse_smooth={}\nblinker_cancel={}\nff_road_vib={}\nff_engine_vib={}\nff_fade={}\n",
         match v.get("pax_voices").and_then(|x| x.as_str()).unwrap_or("all") {
             "tickets" => "tickets",
             "off" => "off",
@@ -4603,11 +4584,6 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("nav_arrows", false),
         b("nav_ai", true),
         b("get_up", false),
-        match v.get("time_speed") {
-            Some(Value::String(x)) => x.trim().parse::<f64>().map(|x| x.clamp(1.0, 30.0)).unwrap_or(1.0),
-            Some(Value::Number(x)) => x.as_f64().unwrap_or(1.0).clamp(1.0, 30.0),
-            _ => 1.0,
-        },
         if v.get("shadow_casters").and_then(|x| x.as_str()) == Some("omsi") { "omsi" } else { "all" },
         b("shadow_blobs", true),
         f("ctrl_deadzone", 0.0).clamp(0.0, 0.3),
@@ -4985,8 +4961,6 @@ pub struct Duty {
     pub lan: Option<String>,
     /// The name the other LAN players see (default: the profile).
     pub lan_name: Option<String>,
-    /// Season override: spring / summer / autumn / winter (empty = by date).
-    pub season: Option<String>,
     /// One of OMSI's tutorials (1..4): its own situation, nothing else of the duty.
     #[serde(default)]
     pub tutorial: Option<usize>,
@@ -5293,14 +5267,6 @@ fn duty_args_without_monitor(d: &Duty, root: &Path) -> Result<Vec<String>> {
         .clone()
         .filter(|p| !p.trim().is_empty())
         .unwrap_or_else(|| load_config().profile);
-    if let Some(season) = d
-        .season
-        .as_deref()
-        .map(str::trim)
-        .filter(|x| !x.is_empty() && !x.eq_ignore_ascii_case("auto"))
-    {
-        a.extend(["--season".into(), season.to_ascii_lowercase()]);
-    }
     if let Some(lan) = d
         .lan
         .as_deref()

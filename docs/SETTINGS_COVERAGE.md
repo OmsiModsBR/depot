@@ -63,7 +63,6 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `get_up` | yes | yes | yes | yes |
 | `graphics` | yes | yes | yes | yes |
 | `graphics_api` | yes | - | yes | yes, known difference (game>launcher) |
-| `hands_in_cab` | yes | yes | yes | yes |
 | `head_idle` | yes | yes | yes | yes |
 | `head_idle_pace` | yes | yes | yes | yes |
 | `head_movement` | yes | yes | yes | yes |
@@ -168,7 +167,6 @@ Not covered by this inventory, and still to do under #151: the measured effect o
 | `steering_linear` | yes | yes | yes | yes |
 | `texture_compression` | yes | yes | yes | yes |
 | `texture_memory` | yes | yes | yes | yes |
-| `time_speed` | yes | yes | yes | yes, known difference (launcher>game) |
 | `time_sync` | yes | yes | yes | yes |
 | `tooltips` | yes | yes | yes | yes |
 | `triple_bezel_mm` | yes | yes | yes | yes |

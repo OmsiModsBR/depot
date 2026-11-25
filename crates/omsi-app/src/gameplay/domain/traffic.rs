@@ -331,8 +331,6 @@ pub struct Traffic {
     pub player_still: f32,
     /// Time of day (seconds since midnight); light cycles and timetables run on it.
     pub day_time: f64,
-    /// How fast the clock runs (the time speed): the timetable keeps to it.
-    pub time_scale: f64,
     /// Day of the week (0 Monday … 6 Sunday) for the traffic density curves.
     pub weekday: i32,
     /// Street lights on → AI vehicles switch their lights on.

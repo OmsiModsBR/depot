@@ -47,9 +47,7 @@ pub enum ListKind {
     PlaceHof(String, String),
 }
 
-/// The time speeds, traffic amounts and passenger shares the options step through.
-pub const SPEEDS: [f64; 5] = [1.0, 2.0, 4.0, 8.0, 15.0];
-
+/// The traffic amounts and passenger shares the options step through.
 pub const TRAFFIC: [usize; 7] = [0, 10, 20, 30, 50, 80, 120];
 
 pub(in crate::hud) const PAX: [f32; 6] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];

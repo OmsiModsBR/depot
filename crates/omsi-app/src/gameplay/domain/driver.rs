@@ -112,8 +112,6 @@ pub struct DriverFigure {
     /// The sign that turns the wheel variable's angle into the angle seen from the seat
     /// (found by comparing it with the mesh as turned; 0 until then).
     pub(crate) sign: f32,
-    /// Whether hands/arms should remain visible in cab (first-person) view behind settings.
-    pub show_hands_in_cab: bool,
     pub(crate) shown: bool,
     /// Posed at least once (the first pose is settled, not eased in from standing).
     pub(crate) settled: bool,
@@ -145,9 +143,6 @@ pub struct DriverFigure {
     /// Per mesh and vertex, the hand it belongs to (0 left, 1 right, -1 none), and a
     /// scratch copy of a mesh with a hand opening.
     pub(crate) hand_of: Vec<Vec<i8>>,
-    /// Per mesh and vertex, the arm (upper arm and forearm) it belongs to (0 left, 1 right,
-    /// -1 none): the arms stay in the cab view along with the hands.
-    pub(crate) arm_of: Vec<Vec<i8>>,
     pub(crate) blend: (Vec<Vec3>, Vec<Vec3>),
     /// The gear lever, when the bus's model has one near the seat, and what the hand
     /// working it is doing.
