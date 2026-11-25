@@ -33,11 +33,10 @@ mod showroom;
 mod core;
 mod diagnostics;
 mod input;
-mod lan_off;
 mod offscreen;
 mod plugins_off;
 mod route_arrows;
-use lan_off::{admin, lan};
+use crate::core::{admin, lan};
 
 mod services;
 mod situation;

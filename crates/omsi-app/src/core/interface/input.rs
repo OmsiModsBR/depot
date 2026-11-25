@@ -15,6 +15,16 @@ pub(crate) mod app {
 }
 pub(crate) use super::super::domain::cli;
 pub(crate) use super::super::implementation::launcher_link;
+
+/// What the game answers of a LAN session and the server admin list: none without LAN play.
+pub(crate) mod lan {
+    pub(crate) use super::super::super::domain::lan_off::lan::*;
+}
+
+/// The server admin list: never opened without LAN play.
+pub(crate) mod admin {
+    pub(crate) use super::super::super::domain::lan_off::admin::*;
+}
 #[cfg(steam)]
 pub(crate) mod steam {
     pub(crate) use super::super::super::domain::steam::*;
