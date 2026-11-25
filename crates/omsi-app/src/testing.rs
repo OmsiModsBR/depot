@@ -129,6 +129,9 @@ pub mod describe {
 pub mod diagnostics {
     pub use crate::diagnostics::*;
 }
+pub mod driver {
+    pub use crate::gameplay::driver::lever_grade;
+}
 #[cfg(windows)]
 pub mod dinput {
     pub use crate::input::dinput::*;

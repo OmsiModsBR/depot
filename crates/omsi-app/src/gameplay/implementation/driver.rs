@@ -1455,30 +1455,56 @@ fn lever_knob(positions: &[Vec3], pivot: Option<Vec3>) -> Option<(Vec3, Vec3)> {
 /// nearest winning. `OMSI_DRIVER_SHIFTER=<part of a variable or file name>` forces the pick.
 /// The hand that works it is the one on the lever's side of the seat (the lever stands right
 /// of a left-hand-drive driver and left of a right-hand-drive one).
+const LEVER_STRONG: &[&str] = &[
+    "gearlever",
+    "gear_lever",
+    "gearshift",
+    "gear_shift",
+    "shiftlever",
+    "shift_lever",
+    "shifter",
+    "gearstick",
+    "gear_stick",
+    "schalthebel",
+    "schaltknueppel",
+    "schaltung",
+    "antriebshebel",
+    "antriebhebel",
+    "antrieb_hebel",
+];
+/// "Antrieb" is what OMSI models usually call the gearbox / its lever; "schalt" is German for
+/// shifting gears - and for every switch (`Schalter`), hence the German words in `LEVER_NOT`.
+const LEVER_WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe"];
+/// Names of switches and controls that are no gear lever, in English and in German, as OMSI
+/// models are named. (The Trollino's wiper switch, `cockpit_wischer_drehschalter`, was taken
+/// for its gear lever: the driver's left hand went to it whenever the bus stopped or moved
+/// off, and he leaned forward to reach it.)
+const LEVER_NOT: &[&str] = &[
+    "light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "text",
+    "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn", "mirror", "heat", "fan",
+    "horn", "wisch", "licht", "blink", "schalter", "heiz", "luft", "lueft", "tuer", "spiegel",
+    "hupe", "kipp",
+];
+
+/// How well an animation variable's name says "gear lever": 0 not at all, 1 maybe, 2 surely,
+/// 3 named by `OMSI_DRIVER_SHIFTER` (`forced`, lower case).
+pub fn lever_grade(name: &str, forced: Option<&str>) -> u8 {
+    let n = name.to_ascii_lowercase();
+    if let Some(f) = forced {
+        return if n.contains(f) { 3 } else { 0 };
+    }
+    if LEVER_NOT.iter().any(|w| n.contains(w)) {
+        0
+    } else if LEVER_STRONG.iter().any(|w| n.contains(w)) {
+        2
+    } else if LEVER_WEAK.iter().any(|w| n.contains(w)) {
+        1
+    } else {
+        0
+    }
+}
+
 fn find_shifter(v: &VehicleInstance, hip: Vec3, heading: f32) -> Option<Shifter> {
-    const STRONG: &[&str] = &[
-        "gearlever",
-        "gear_lever",
-        "gearshift",
-        "gear_shift",
-        "shiftlever",
-        "shift_lever",
-        "shifter",
-        "gearstick",
-        "gear_stick",
-        "schalthebel",
-        "schaltknueppel",
-        "schaltung",
-        "antriebshebel",
-        "antriebhebel",
-        "antrieb_hebel",
-    ];
-    // "Antrieb" is what OMSI models usually call the gearbox / its lever.
-    const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe"];
-    const NOT: &[&str] = &[
-        "light", "lamp", "display", "indic", "sound", "retard", "park", "door", "wiper", "text",
-        "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn",
-    ];
     let forced = omsi_cfg::flags::DRIVER_SHIFTER
         .text()
         .map(|s| s.trim().to_ascii_lowercase())
@@ -1487,22 +1513,7 @@ fn find_shifter(v: &VehicleInstance, hip: Vec3, heading: f32) -> Option<Shifter>
     if matches!(forced.as_deref(), Some("off") | Some("none") | Some("0")) {
         return None;
     }
-    // How well a variable name says "gear lever": 0 not at all .. 3 forced.
-    let grade = |name: &str| -> u8 {
-        let n = name.to_ascii_lowercase();
-        if let Some(f) = &forced {
-            return if n.contains(f.as_str()) { 3 } else { 0 };
-        }
-        if NOT.iter().any(|w| n.contains(w)) {
-            0
-        } else if STRONG.iter().any(|w| n.contains(w)) {
-            2
-        } else if WEAK.iter().any(|w| n.contains(w)) {
-            1
-        } else {
-            0
-        }
-    };
+    let grade = |name: &str| lever_grade(name, forced.as_deref());
     let positions_of = |i: usize| -> Vec<Vec3> {
         let vm = &v.ty.meshes[i];
         let have: &[Vec3] = &vm.data.positions;
@@ -1541,7 +1552,7 @@ fn find_shifter(v: &VehicleInstance, hip: Vec3, heading: f32) -> Option<Shifter>
             let file = format!("{:?}", vm.file).to_ascii_lowercase();
             let by_file = match &forced {
                 Some(f) => file.contains(f.as_str()),
-                None => STRONG.iter().any(|w| file.contains(w)) || file.contains("antrieb"),
+                None => LEVER_STRONG.iter().any(|w| file.contains(w)) || file.contains("antrieb"),
             };
             if !by_file {
                 continue;
