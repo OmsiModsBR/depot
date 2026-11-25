@@ -7,9 +7,6 @@
 // it is, the o3d specular power how rough a surface without one is, [matl_bumpmap] bends
 // the normal. Everything is drawn pre-exposed into the high-range target.
 
-// Only painted terrain may skip empty brush-mask pixels.
-override TERRAIN_PAINT: bool = false;
-
 @group(0) @binding(12) var t_probe: texture_cube<f32>;
 
 fn d_ggx(nh: f32, a: f32) -> f32 {
