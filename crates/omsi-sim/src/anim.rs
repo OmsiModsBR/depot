@@ -50,6 +50,33 @@ pub fn origin_matrix(origins: &[AnimOrigin], pivot: Mat4) -> Mat4 {
     m
 }
 
+/// A wheel that would roll backwards: `anim_rot` by a `Wheel_Rotation_*` variable (which
+/// grows as the vehicle drives forwards) about a mirrored frame (a mesh matrix of determinant
+/// -1 taken by `origin_from_mesh`). Turned about such a frame the rotation changes its sense:
+/// the Millennium III's and the Apache VIP IV's AI models (MEP) store their wheels with y
+/// and z swapped, and their wheels rolled backwards here while they roll forwards in the
+/// original - while the Apache's left wheels, mirrored in x instead, rolled forwards. Which
+/// way a mirrored frame turns is not something the file says, the variable is: a wheel
+/// rolls forwards, so its top moves forwards. A frame that is not mirrored is left as the
+/// file has it (every stock wheel rolls forwards with it).
+fn rolls_backwards(a: &Animation, origin: Mat4) -> bool {
+    if a.kind != Some(AnimKind::Rot)
+        || !a
+            .variable
+            .to_ascii_lowercase()
+            .starts_with("wheel_rotation_")
+        || origin.determinant() >= 0.0
+    {
+        return false;
+    }
+    let turn = origin
+        * Mat4::from_quat(Quat::from_rotation_x(-(0.1 * a.factor).to_radians()))
+        * origin.inverse();
+    let hub = origin.w_axis.truncate();
+    let top = hub + Vec3::Z;
+    (turn.transform_point3(top) - top).y < 0.0
+}
+
 impl MeshAnimator {
     pub fn new(def: &MeshDef, pivot: Mat4, resolve: impl Fn(&str) -> Option<VarId>) -> Self {
         let anims = def
@@ -60,9 +87,14 @@ impl MeshAnimator {
                 if var.is_none() && !a.variable.is_empty() {
                     log::warn!("animation variable {} not found", a.variable);
                 }
+                let origin = origin_matrix(&a.origins, pivot);
+                let mut a = a.clone();
+                if rolls_backwards(&a, origin) {
+                    a.factor = -a.factor;
+                }
                 (
-                    a.clone(),
-                    origin_matrix(&a.origins, pivot),
+                    a,
+                    origin,
                     AnimState {
                         var,
                         value: 0.0,

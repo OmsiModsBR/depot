@@ -1186,6 +1186,8 @@ impl Traffic {
             controller_of_object,
             trailer_types: HashMap::new(),
             sound_cfgs: HashMap::new(),
+            trolley_types: HashMap::new(),
+            wire_sounds: Default::default(),
             root: root.to_path_buf(),
             held_at_red: 0,
             way_makers: HashMap::new(),
@@ -2985,6 +2987,25 @@ impl Traffic {
         let render = world.add_vehicle_shared(renderer, scene, &ty, scheme, None);
         let trailer_renders =
             self.attach_trailers(world, renderer, scene, &mut vehicle, scheme, &render);
+        // a trolleybus: its poles go up and follow its way by themselves
+        if let Some(convention) = world.trolley.as_ref() {
+            let parts: Vec<Arc<VehicleType>> =
+                vehicle.trailers.iter().map(|p| p.ty.clone()).collect();
+            let found = self
+                .trolley_types
+                .entry(ty.def.path.clone())
+                .or_insert_with(|| {
+                    crate::gameplay::implementation::spawn::trolley_declaration(
+                        convention, &ty, &parts,
+                    )
+                })
+                .clone();
+            if let Some((declaration, carrier)) = found {
+                let mut t = omsi_sim::Trolley::new(declaration, carrier, world.wires.clone());
+                t.auto = true;
+                vehicle.trolley = Some(Box::new(t));
+            }
+        }
         if !ty.model.text_textures.is_empty() || bus.is_some() {
             vehicle.init_text_textures(&mut world.fonts.lock(), &|p| {
                 omsi_texture::decode_file(p)
@@ -7311,6 +7332,24 @@ impl Traffic {
         }
         for mut s in self.orphan_sounds.drain(..) {
             s.stop_all(audio);
+        }
+        // the AI trolleybuses' switches, crossings and sparks (heard from outside)
+        for c in &mut self.cars {
+            let Some(t) = c.vehicle.trolley.as_mut() else {
+                continue;
+            };
+            let sounds = std::mem::take(&mut t.sim.sounds);
+            let (Some(params), false) = (t.declaration.sound, sounds.is_empty()) else {
+                continue;
+            };
+            let carrier = match t.carrier {
+                0 => Some(c.vehicle.world_transform()),
+                n => c.vehicle.trailers.get(n - 1).map(|p| p.world_transform()),
+            };
+            if let Some(xf) = carrier {
+                self.wire_sounds
+                    .play(audio, &params, &xf, &sounds, false, false);
+            }
         }
         let near = 250.0;
         for c in &mut self.cars {

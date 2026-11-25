@@ -115,6 +115,11 @@ pub struct PoleInputs {
     /// The ray under the mouse pointer (world origin and direction): a pole in the hand
     /// points where it leads. None: the pole stays where it was.
     pub aim: Option<(DVec3, DVec3)>,
+    /// The vehicle drives itself (an AI bus): a pole on its hook goes up by itself whenever
+    /// a wire is in reach over the hook, and at a switch the shoes take the way the vehicle
+    /// has taken - the one whose wire leads towards the pole's foot - instead of the way its
+    /// demand asks.
+    pub auto: bool,
 }
 
 /// What one pole shows.
@@ -229,6 +234,10 @@ pub struct PoleSim {
     /// so both shoes take the same branch.
     pub(crate) forks: Vec<((SpanId, usize), SpanId, f64)>,
     pub(crate) demand: bool,
+    /// The vehicle drives itself (see [`PoleInputs::auto`]).
+    pub(crate) auto: bool,
+    /// Seconds until a self-driven vehicle's pole on its hook tries the wire again.
+    pub(crate) auto_wait: [f64; 2],
     pub(crate) speed_kmh: f64,
     pub(crate) throttle: f64,
     pub(crate) weather: super::sound::WireWeather,

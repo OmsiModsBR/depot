@@ -39,8 +39,17 @@ const SPECIAL_LANE: f64 = 2.25;
 /// whichever lies on that side); a crossing runs straight; where the content has no object
 /// the shoe keeps to the closest, straightest wire.
 ///
+/// A self-driven vehicle (`toward`: its pole's foot, world) sets a switch the way it has
+/// gone itself: the shoes take the way whose wire leads closest towards the foot, which has
+/// passed the switch by the time the trailing shoe reaches it.
+///
 /// Also whether the way taken is the leftmost.
-fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObjectKind>, bool) {
+fn fork_way(
+    ways: &[Way],
+    travel: DVec3,
+    demand: bool,
+    toward: Option<DVec3>,
+) -> (usize, Option<WireObjectKind>, bool) {
     let rank = |k: &WireObjectKind| match k {
         WireObjectKind::SwitchY
         | WireObjectKind::SwitchBranchLeft
@@ -61,7 +70,21 @@ fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObj
             .unwrap_or(0)
     };
     let switch = kind.is_some_and(WireObjectKind::is_switch);
+    // degrees each way's wire runs off the line from its start to the foot
+    let off_foot = |w: &Way, foot: DVec3| {
+        let to = (foot - w.start).truncate().normalize_or_zero();
+        let h = w.heading.truncate().normalize_or_zero();
+        to.perp_dot(h).atan2(to.dot(h)).to_degrees().abs()
+    };
+    let foot = toward.filter(|f| {
+        ways.iter()
+            .all(|w| (*f - w.start).truncate().length() > MIN_TOWARD)
+    });
     let k = match (kind, demand) {
+        _ if switch && foot.is_some() => {
+            let f = foot.unwrap_or_default();
+            by(&|w| off_foot(w, f))
+        }
         (_, true) if switch => by(&|w| -turn(w)),
         (_, false) if switch => by(&|w| turn(w)),
         (Some(_), _) => by(&|w| turn(w).abs()),
@@ -69,6 +92,13 @@ fn fork_way(ways: &[Way], travel: DVec3, demand: bool) -> (usize, Option<WireObj
     };
     (k, kind, k == by(&|w| -turn(w)))
 }
+
+/// How far (metres, along the ground) past a switch a self-driven vehicle's pole foot must be
+/// for the way it has taken to be read from it.
+const MIN_TOWARD: f64 = 1.0;
+
+/// Seconds between a self-driven vehicle's tries to put a pole on its hook up on the wire.
+const AUTO_RETRY: f64 = 2.0;
 
 /// How the shoe sits on the wire this frame, for the dewirement rules.
 #[derive(Debug, Clone, Copy)]
@@ -103,6 +133,22 @@ impl PoleSim {
         }
         // a fork is set for the two shoes passing it; forget it a while after
         self.demand = inputs.switch_demand > decl.params.switch_threshold;
+        self.auto = inputs.auto;
+        // a self-driven vehicle puts a pole on its hook up now and then, as a click on it
+        // would (it goes up if a wire is in reach over the hook, else stays down)
+        let mut grab = inputs.grab;
+        if inputs.auto {
+            for i in 0..2 {
+                self.auto_wait[i] -= dt;
+                if self.poles[i].phase == PolePhase::Hooked
+                    && !self.grab_before[i]
+                    && self.auto_wait[i] <= 0.0
+                {
+                    grab[i] = true;
+                    self.auto_wait[i] = AUTO_RETRY;
+                }
+            }
+        }
         for f in self.forks.iter_mut() {
             f.2 += dt;
         }
@@ -126,21 +172,23 @@ impl PoleSim {
             ..Default::default()
         };
         for i in 0..2 {
-            let pressed = inputs.grab[i] && !self.grab_before[i];
-            self.grab_before[i] = inputs.grab[i];
+            let pressed = grab[i] && !self.grab_before[i];
+            self.grab_before[i] = grab[i];
             if retract {
                 self.retract(i, decl, net, body);
             }
             let hand = Hand {
                 pressed,
-                holding: inputs.grab[i],
+                holding: grab[i],
                 aim: inputs.aim,
             };
             out.poles[i] = self.step_pole(i, decl, net, body, hand, dt);
         }
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
         out.speed_limit_active = out.poles.iter().any(|p| p.on_wire && p.in_special);
-        out.overspeed = out.speed_limit_active && self.speed_kmh > decl.params.complex_speed_limit;
+        out.overspeed = !self.auto
+            && out.speed_limit_active
+            && self.speed_kmh > decl.params.complex_speed_limit;
         self.wire_sounds(decl, net, body, &mut out, dt);
         if let Some(c) = self.poles[0].cursor.filter(|_| out.poles[0].on_wire) {
             if let Some(span) = net.span(c.span) {
@@ -224,7 +272,9 @@ impl PoleSim {
         let state = &mut self.poles[i];
         match state.phase {
             PolePhase::OnWire => {
-                if let Some(reason) = dewirement(state, &p, &o, &contact, self.speed_kmh, dt) {
+                if let Some(reason) =
+                    dewirement(state, &p, &o, &contact, self.speed_kmh, self.auto, dt)
+                {
                     self.events.push(PoleEvent::Dewired { pole: i, reason });
                     *state = PoleState {
                         phase: PolePhase::Dewired,
@@ -272,6 +322,7 @@ impl PoleSim {
             wire_ended,
         } = {
             let (forks, events, demand) = (&mut self.forks, &mut self.events, self.demand);
+            let toward = self.auto.then(|| body.position + body.rotation * geo.base);
             let mut choose = |at: (SpanId, usize), ways: &[Way], travel: DVec3| -> usize {
                 if let Some(k) = forks
                     .iter()
@@ -280,7 +331,7 @@ impl PoleSim {
                 {
                     return k;
                 }
-                let (k, kind, left) = fork_way(ways, travel, demand);
+                let (k, kind, left) = fork_way(ways, travel, demand, toward);
                 forks.push((at, ways[k].cursor.span, 0.0));
                 events.push(PoleEvent::Fork {
                     pole: i,
@@ -361,13 +412,16 @@ fn foot_to_wire(decl: &TrolleyDeclaration, i: usize, body: &BodyPose) -> DVec3 {
 
 /// Does the pole leave the wire this frame, and why? Each condition with a time must hold
 /// that long without a break (so the frame rate does not change the outcome); a pole turned
-/// past its limit, or a wire that ends under the shoe, leaves at once.
+/// past its limit, or a wire that ends under the shoe, leaves at once. The switch speed limit
+/// is the player's to keep: a self-driven vehicle (`auto`) does not slow for it, so it does
+/// not apply to it.
 fn dewirement(
     state: &mut PoleState,
     p: &PoleParams,
     o: &PoleOutput,
     c: &Contact,
     speed_kmh: f64,
+    auto: bool,
     dt: f64,
 ) -> Option<DewireReason> {
     if c.wire_ended {
@@ -396,7 +450,7 @@ fn dewirement(
             DewireReason::SideForce,
         ),
         (
-            o.in_special && speed_kmh > p.complex_speed_limit,
+            !auto && o.in_special && speed_kmh > p.complex_speed_limit,
             p.complex_overspeed_grace,
             DewireReason::Overspeed,
         ),

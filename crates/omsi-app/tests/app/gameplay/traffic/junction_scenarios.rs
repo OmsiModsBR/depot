@@ -297,6 +297,8 @@ fn traffic_over(net: Network, lights: Vec<TrafficLightController>) -> Traffic {
         controller_of_object: HashMap::new(),
         trailer_types: HashMap::new(),
         sound_cfgs: HashMap::new(),
+        trolley_types: HashMap::new(),
+        wire_sounds: Default::default(),
         root: std::path::PathBuf::new(),
         held_at_red: 0,
         way_makers: Default::default(),

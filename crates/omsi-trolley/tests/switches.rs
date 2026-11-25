@@ -459,3 +459,110 @@ fn a_branch_starting_beside_the_straight_is_still_bridged() {
     let (_, coasting) = drive_north(&n, 0.0, 20.0, 66.0, 0.0);
     assert_eq!(coasting, [4, 4], "without it straight on");
 }
+
+/// A self-driven bus (an AI bus) driven along `path` (straight pieces between the points),
+/// its poles left to themselves from the start: which spline each shoe is on at the end.
+fn drive_auto(n: &WireNetwork, path: &[(f64, f64)], demand: f64, speed_kmh: f64) -> [i64; 2] {
+    let d = decl();
+    let mut sim = PoleSim::default();
+    let heading = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0).atan2(b.1 - a.1).to_degrees();
+    let auto = PoleInputs {
+        auto: true,
+        switch_demand: demand,
+        speed_kmh,
+        ..Default::default()
+    };
+    let at = body(path[0].0, path[0].1, heading(path[0], path[1]));
+    for _ in 0..150 {
+        sim.step(&d, n, &at, auto, 1.0 / 60.0);
+    }
+    assert!(
+        sim.poles.iter().all(|p| p.phase == PolePhase::OnWire),
+        "the poles went up by themselves: {:?}",
+        sim.poles.map(|p| p.phase)
+    );
+    for w in path.windows(2) {
+        let (a, b) = (DVec2::from(w[0]), DVec2::from(w[1]));
+        let h = heading(w[0], w[1]);
+        let len = a.distance(b);
+        let mut s = 0.0;
+        while s < len {
+            s = (s + 0.2).min(len);
+            let p = a.lerp(b, s / len);
+            let o = sim.step(&d, n, &body(p.x, p.y, h), auto, 1.0 / 60.0);
+            assert!(o.wire_present, "on the wire at {p}: {:?}", sim.events);
+        }
+    }
+    [0, 1].map(|i| n.span(sim.poles[i].cursor.unwrap().span).unwrap().spline_id)
+}
+
+#[test]
+fn a_self_driven_bus_puts_its_poles_up_and_its_shoes_follow_its_way_through_a_switch() {
+    let n = y_switch();
+    let t10 = 10f64.to_radians();
+    // along the left branch, though its demand asks for the right one, and the other way
+    let left = drive_auto(
+        &n,
+        &[
+            (0.0, 10.0),
+            (0.0, 50.0),
+            (-0.5, 52.85),
+            (-0.5 - 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
+        ],
+        0.0,
+        20.0,
+    );
+    assert_eq!(left, [2, 2]);
+    let right = drive_auto(
+        &n,
+        &[
+            (0.0, 10.0),
+            (0.0, 50.0),
+            (0.5, 52.85),
+            (0.5 + 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
+        ],
+        1.0,
+        20.0,
+    );
+    assert_eq!(right, [3, 3]);
+}
+
+#[test]
+fn a_self_driven_bus_with_no_wire_in_reach_keeps_its_poles_down() {
+    let n = y_switch();
+    let d = decl();
+    let mut sim = PoleSim::default();
+    let auto = PoleInputs {
+        auto: true,
+        ..Default::default()
+    };
+    // 30 m to the side of the wire
+    for _ in 0..600 {
+        sim.step(&d, &n, &body(30.0, 20.0, 0.0), auto, 1.0 / 60.0);
+    }
+    assert!(sim.poles.iter().all(|p| p.phase == PolePhase::Hooked));
+    // driven under the wire, they go up
+    for _ in 0..300 {
+        sim.step(&d, &n, &body(0.0, 20.0, 0.0), auto, 1.0 / 60.0);
+    }
+    assert!(sim.poles.iter().all(|p| p.phase == PolePhase::OnWire));
+}
+
+#[test]
+fn a_self_driven_bus_keeps_its_poles_on_the_wire_through_a_switch_at_any_speed() {
+    // the switch speed limit is the player's to keep: an AI bus does not slow for it
+    let n = y_switch();
+    let t10 = 10f64.to_radians();
+    let left = drive_auto(
+        &n,
+        &[
+            (0.0, 10.0),
+            (0.0, 50.0),
+            (-0.5, 52.85),
+            (-0.5 - 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
+        ],
+        0.0,
+        60.0,
+    );
+    assert_eq!(left, [2, 2]);
+}

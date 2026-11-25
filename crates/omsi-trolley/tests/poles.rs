@@ -124,6 +124,7 @@ fn grab(sim: &mut PoleSim, d: &TrolleyDeclaration, net: &WireNetwork, at: &BodyP
             speed_kmh: 0.0,
             weather: Default::default(),
             aim: None,
+            auto: false,
         },
         1.0 / 60.0,
     );
@@ -197,6 +198,7 @@ fn no_wire_in_reach_leaves_the_poles_down() {
             speed_kmh: 0.0,
             weather: Default::default(),
             aim: None,
+            auto: false,
         },
         0.016,
     );
@@ -367,6 +369,7 @@ fn raising_takes_the_same_time_at_any_frame_rate() {
                 speed_kmh: 0.0,
                 weather: Default::default(),
                 aim: None,
+                auto: false,
             },
             1.0 / fps,
         );
@@ -400,6 +403,7 @@ fn a_second_press_lowers_the_pole_to_its_hook() {
             speed_kmh: 0.0,
             weather: Default::default(),
             aim: None,
+            auto: false,
         },
         0.016,
     );
