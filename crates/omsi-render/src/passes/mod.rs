@@ -14,8 +14,8 @@ mod shadow;
 mod sky;
 mod snow;
 
-pub(crate) use corona::additive;
 pub(crate) use corona::CoronaBuilder;
+pub(crate) use corona::{additive, screen};
 pub(crate) use depth::{ao_pipelines, prepass_pipelines, PrepassPipelines, SsaoPass};
 pub(crate) use draw::{
     batch_items, culls_back_faces, depth_only_material, depth_prepass_kind, effective_render_phase,

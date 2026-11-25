@@ -2,7 +2,7 @@
 //! pass's own builder; the fragment entry points a path takes are the path's to name (the
 //! plain ones here, Enhanced's in its mode).
 
-use super::corona::{alpha_blend, screen, CoronaBuilder};
+use super::corona::{alpha_blend, CoronaBuilder};
 use super::main::PassPipelines;
 use super::scene_pipelines::SceneBuilder;
 use super::sky::SkyBuilder;
@@ -47,35 +47,5 @@ impl PathBuilders<'_> {
     /// The pipelines of a path's sky, drawn alone (the mirrors' sky of the enhanced mode).
     pub(crate) fn sky_only(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
         self.sky.pipeline(format, fs)
-    }
-
-    /// Vanilla+, drawn in the swap chain's format.
-    pub(crate) fn vanilla(&self, format: wgpu::TextureFormat) -> PassPipelines {
-        self.path(
-            format,
-            &PathShaders {
-                scene: "fs_main",
-                corona: "fs_main",
-                corona_blend: screen(),
-                smoke: "fs_smoke",
-                snow: "fs_snow",
-                sky: "fs_main",
-            },
-        )
-    }
-
-    /// The vanilla scene drawn in high range, for the puddles' reflections.
-    pub(crate) fn reflections(&self, hdr: wgpu::TextureFormat) -> PassPipelines {
-        self.path(
-            hdr,
-            &PathShaders {
-                scene: "fs_vanilla_reflections",
-                corona: "fs_main",
-                corona_blend: screen(),
-                smoke: "fs_smoke",
-                snow: "fs_snow",
-                sky: "fs_main",
-            },
-        )
     }
 }

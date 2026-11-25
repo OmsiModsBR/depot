@@ -1,14 +1,38 @@
 //! Vanilla+: the plain shading in the swap chain's format, with FXAA where there is no
 //! multisampling and the puddles' own reflection pass.
 
+mod pipelines;
+
 use crate::effects::puddles::PuddleLook;
 use crate::interface::{LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
 use crate::lighting::{gpu_light, lights_up, GpuPointLight, LightMode, Lighting, PointLight};
-use crate::passes::{Exposure, FrameFeatures};
+use crate::passes::{Exposure, FrameFeatures, PassPipelines, PathBuilders};
 use crate::sky::SkyResources;
 use glam::Vec3;
 
 pub(crate) struct VanillaPlus;
+
+/// The plain shading in the swap chain's format, which every picture without the other mode's
+/// shading is drawn with.
+pub(crate) fn plain_pass(
+    builders: &PathBuilders<'_>,
+    format: wgpu::TextureFormat,
+) -> PassPipelines {
+    pipelines::plain(builders, format)
+}
+
+/// The plain shading in high range, for the puddles' reflections.
+pub(crate) fn reflection_pass(
+    builders: &PathBuilders<'_>,
+    hdr: wgpu::TextureFormat,
+) -> PassPipelines {
+    pipelines::reflections(builders, hdr)
+}
+
+/// The WGSL Vanilla+ adds to the scene module (`fs_vanilla_reflections`).
+pub(crate) fn scene_text() -> &'static str {
+    include_str!("shaders/reflections.wgsl")
+}
 
 impl RenderMode for VanillaPlus {
     fn shading(&self, _view: &ModeView) -> ModeShading {

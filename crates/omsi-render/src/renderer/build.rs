@@ -13,7 +13,7 @@ use crate::interface::{ModeResources, RenderMode};
 use crate::lighting::{LightMapAtlas, ShadingPath};
 use crate::modes::{
     enhanced::{Enhanced, EnhancedResources},
-    vanilla_plus::VanillaPlus,
+    vanilla_plus::{self, VanillaPlus},
 };
 use crate::output::{Diagnostics, Presenter};
 use crate::passes::{
@@ -64,11 +64,16 @@ pub(crate) fn snow_own_text(path: ShadingPath) -> &'static str {
     }
 }
 
-/// The fragment shader a path adds to the core's scene module.
+/// The fragment shaders a path adds to the core's scene module: Vanilla+'s, which every build
+/// has (the plain shading is its own), then Enhanced's where it is built.
 pub(crate) fn scene_own_text(path: ShadingPath) -> String {
     match path {
-        ShadingPath::Hdr => crate::modes::enhanced::scene_text(),
-        ShadingPath::Linear => String::new(),
+        ShadingPath::Hdr => [
+            vanilla_plus::scene_text(),
+            &crate::modes::enhanced::scene_text(),
+        ]
+        .join("\n"),
+        ShadingPath::Linear => vanilla_plus::scene_text().to_string(),
     }
 }
 
@@ -169,7 +174,7 @@ impl Renderer {
             msaa,
             basic: basic_pipelines(),
         };
-        let pass = builders.vanilla(format);
+        let pass = vanilla_plus::plain_pass(&builders, format);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         // what only the enhanced mode draws with is its own
         let enhanced: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
@@ -184,7 +189,7 @@ impl Renderer {
         });
         let reflection_pass = (!leave_out_enhanced
             && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed))
-        .then(|| builders.reflections(hdr_format));
+        .then(|| vanilla_plus::reflection_pass(&builders, hdr_format));
         let sky_shader = &builders.sky.module;
         let presenter = Presenter::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
