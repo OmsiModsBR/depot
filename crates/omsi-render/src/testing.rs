@@ -43,6 +43,11 @@ pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
     [g.color[0], g.color[1], g.color[2]]
 }
 
+/// The sphere (centre, radius) a mesh is culled and sorted by.
+pub fn mesh_bounds(data: &omsi_geometry::MeshData) -> (glam::Vec3, f32) {
+    crate::assets::mesh_bounds(data)
+}
+
 pub use crate::renderer::lists::{shadow_caster, ShadowCaster};
 
 /// What a picture draws (`FrameFeatures::decide`), for tests without a graphics adapter.

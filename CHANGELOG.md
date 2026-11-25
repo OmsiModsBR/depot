@@ -21,6 +21,10 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ## Unreleased
 
+### Graphics
+
+- **Fixed.** A vehicle whose model file holds vertices no triangle uses (leftovers some o3d exporters write, here up to 6e25 m away) is culled and sorted by what it draws. Those vertices made the mesh's bounding sphere infinite: the vehicle was always sorted nearest, so a model drawn in model order painted its interior over the panes in front of it (the front section of the Millennium BRT seen through the rear section's windows, without their tint and reflection), and the shadow pass dropped the 128-instance culling block holding the mesh, so most of that section's body cast no sun shadow. Checked by an automated test of the mesh's sphere; not yet looked at in the game.
+
 ### Dependencies
 
 - **Security.** `url` 2.5.8 -> 2.5.9 (and `form_urlencoded` 1.2.2 -> 1.2.3, lockfile only) for RUSTSEC-2026-0592, a stack overflow in `Url::origin()` on deeply nested `blob:` URLs. Project Depot never calls `Url::origin()`; `url` only arrives indirectly through `ureq`, `ashpd` and `zvariant`, so nothing was reachable, and the bump is preventive. Source: crates.io `url` (servo/rust-url), MIT OR Apache-2.0. Checked only with `cargo check` of the crates that use it; the full workspace build needs system libraries missing from the review machine. (#846)
