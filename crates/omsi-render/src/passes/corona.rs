@@ -59,16 +59,18 @@ pub(crate) fn alpha_blend() -> wgpu::BlendState {
 
 impl<'a> CoronaBuilder<'a> {
     /// `corona_layout` is the sprites' bind group (`SpriteResources::corona_layout`).
+    /// `mode`: the mode's own fragment shaders, added to the module.
     pub(crate) fn new(
         device: &'a wgpu::Device,
         layouts: &Layouts,
         corona_layout: &wgpu::BindGroupLayout,
         msaa: u32,
+        mode: &str,
     ) -> Self {
         log::info!("renderer: compiling the coronas shaders");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("corona"),
-            source: wgpu::ShaderSource::Wgsl(corona_shader_source().into()),
+            source: wgpu::ShaderSource::Wgsl(corona_shader_source(mode).into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("corona"),

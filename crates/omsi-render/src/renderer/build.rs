@@ -48,6 +48,22 @@ pub(crate) fn sky_own_text(path: ShadingPath) -> &'static str {
     }
 }
 
+/// The corona and smoke fragment shaders a path adds to the core's corona module.
+pub(crate) fn corona_own_text(path: ShadingPath) -> String {
+    match path {
+        ShadingPath::Hdr => crate::modes::enhanced::corona_text(),
+        ShadingPath::Linear => String::new(),
+    }
+}
+
+/// The snowfall fragment shader a path adds to the core's snow module.
+pub(crate) fn snow_own_text(path: ShadingPath) -> &'static str {
+    match path {
+        ShadingPath::Hdr => crate::modes::enhanced::snow_text(),
+        ShadingPath::Linear => "",
+    }
+}
+
 /// The fragment shader a path adds to the core's scene module.
 pub(crate) fn scene_own_text(path: ShadingPath) -> String {
     match path {
@@ -132,20 +148,24 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let assets = AssetStore::new(&device, &queue);
+        // (the modes' own shaders of the passes drawn in the main pass: none where the
+        // enhanced mode is left out)
+        let path = if leave_out_enhanced {
+            ShadingPath::Linear
+        } else {
+            ShadingPath::Hdr
+        };
         let builders = PathBuilders {
             scene: scene_builder,
-            corona: CoronaBuilder::new(&device, &layouts, &sprites.corona_layout, msaa),
-            snow: SnowBuilder::new(&device, &layouts, &snow_layout, msaa),
-            sky: SkyBuilder::new(
+            corona: CoronaBuilder::new(
                 &device,
                 &layouts,
+                &sprites.corona_layout,
                 msaa,
-                sky_own_text(if leave_out_enhanced {
-                    ShadingPath::Linear
-                } else {
-                    ShadingPath::Hdr
-                }),
+                &corona_own_text(path),
             ),
+            snow: SnowBuilder::new(&device, &layouts, &snow_layout, msaa, snow_own_text(path)),
+            sky: SkyBuilder::new(&device, &layouts, msaa, sky_own_text(path)),
             msaa,
             basic: basic_pipelines(),
         };

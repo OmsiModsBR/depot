@@ -21,7 +21,7 @@ use glam::Vec3;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
 #[cfg(test)]
 pub(crate) use fog_lamps::{fog_lamps_shader_source, FogLampUniform};
-pub(crate) use scene_shader::{scene_text, sky_text};
+pub(crate) use scene_shader::{corona_text, scene_text, sky_text, snow_text};
 
 pub(crate) struct Enhanced;
 

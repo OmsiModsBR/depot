@@ -3,7 +3,7 @@
 //! The WGSL files sit beside this module, one folder per domain that draws with them;
 //! `common/` holds the pieces several shaders include.
 
-use crate::gpu::{array_path, basic_pipelines, ArrayPath, ARRAY_TEX_WIDTH};
+use crate::gpu::{array_path, ArrayPath, ARRAY_TEX_WIDTH};
 
 /// A full-screen pass's shader with the shared triangle (`common/fullscreen.wgsl`) ahead
 /// of it.
@@ -181,9 +181,9 @@ pub(crate) fn sky_shader_source(mode: &str) -> String {
     .join("\n")
 }
 
-/// The snowfall (snow.wgsl), with the lamps the enhanced picture lights it by (none
-/// without storage buffers).
-pub(crate) fn snow_shader_source() -> String {
+/// The snowfall (snow.wgsl) and `mode`, the mode's own fragment shader for it, with the lamps
+/// the mode may light it by (none without storage buffers).
+pub(crate) fn snow_shader_source(mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -191,6 +191,7 @@ pub(crate) fn snow_shader_source() -> String {
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         include_str!("common/lamp_air.wgsl"),
+        mode,
     ]
     .join("\n");
     if array_path() == ArrayPath::NoStorage {
@@ -253,8 +254,8 @@ pub(crate) const FOG_LAMP_LIGHTS: &str =
 @group(0) @binding(4) var<storage, read> grid: array<u32>;
 ";
 
-/// The light coronas (both paths).
-pub(crate) fn corona_shader_source() -> String {
+/// The light coronas and smoke: the plain fragment shaders, and `mode`, the mode's own.
+pub(crate) fn corona_shader_source(mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -263,18 +264,9 @@ pub(crate) fn corona_shader_source() -> String {
         include_str!("common/enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         include_str!("common/lamp_air.wgsl"),
+        mode,
     ]
     .join("\n");
-    // (the basic set lights rain by the sky alone: the loop over the lamps is one more
-    // thing a phone's compiler can fail on, see `lean_scene`)
-    let src = if basic_pipelines() {
-        src.replace(
-            "let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);",
-            "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;",
-        )
-    } else {
-        src
-    };
     // (without storage buffers the precipitation has no lamps to be lit by)
     if array_path() == ArrayPath::NoStorage {
         let src = src
