@@ -1572,17 +1572,6 @@ fn road_puddle_coverage(world: vec3<f32>, normal: vec3<f32>, wet: f32) -> f32 {
     return smoothstep(threshold - 0.02, threshold + 0.02, pn) * smoothstep(0.75, 0.95, normal.z);
 }
 
-@fragment
-fn fs_vanilla_reflections(in: FsIn) -> EnhancedOut {
-    var weight = 0.0;
-    let c = shade_vanilla(in, &weight, camera.cam_pos.xyz);
-    let coverage = select(c.a, 0.0, in.params2.w > 1.5);
-    var out: EnhancedOut;
-    out.color = c;
-    out.mask = vec4<f32>(0.0, weight * 0.49, weight, coverage);
-    return out;
-}
-
 fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) -> vec4<f32> {
     if (material.emissive.w > 1.5) {
         // a pane's film of water: drops, not the sliding texture
