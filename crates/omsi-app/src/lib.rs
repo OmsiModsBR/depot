@@ -21,8 +21,6 @@ mod menu;
 mod output;
 mod radio;
 mod screenshot_name;
-#[cfg(steam)]
-mod steam;
 mod tr_fill;
 mod ui;
 mod weather;

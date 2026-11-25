@@ -4,3 +4,5 @@ pub(crate) mod about;
 pub(crate) mod app;
 pub(crate) mod cli;
 pub(crate) mod launcher_link;
+#[cfg(steam)]
+pub(crate) mod steam;

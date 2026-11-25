@@ -11,5 +11,7 @@ pub(crate) mod launcher_link;
 pub(crate) mod make;
 pub(crate) mod memory;
 pub(crate) mod platform;
+#[cfg(steam)]
+pub(crate) mod steam;
 pub(crate) mod startup;
 pub(crate) mod threads;

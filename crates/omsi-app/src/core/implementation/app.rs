@@ -85,7 +85,7 @@ impl App {
         // Steam's rich presence starts before the game window (see `steam.rs`)
         #[cfg(steam)]
         if self.steam.is_none() {
-            self.steam = crate::steam::Steam::start();
+            self.steam = crate::core::steam::Steam::start();
         }
 
         // --size sets the window's size in points as well (1600x900 unless given)
