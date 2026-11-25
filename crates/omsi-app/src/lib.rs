@@ -34,7 +34,6 @@ mod core;
 mod diagnostics;
 mod input;
 mod offscreen;
-mod plugins_off;
 mod route_arrows;
 use crate::core::{admin, lan};
 

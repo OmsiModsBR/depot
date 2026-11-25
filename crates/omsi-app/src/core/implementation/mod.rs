@@ -9,6 +9,7 @@ pub(crate) mod app;
 pub(crate) mod applog;
 pub(crate) mod launcher_link;
 pub(crate) mod lan_off;
+pub(crate) mod plugins_off;
 pub(crate) mod make;
 pub(crate) mod memory;
 pub(crate) mod platform;
