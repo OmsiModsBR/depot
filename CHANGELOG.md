@@ -27,6 +27,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Graphics
 
+- **Fixed.** The wheels of a vehicle whose model stores them mirrored (`origin_from_mesh` on a mesh matrix of determinant -1, as MEP's Millennium III and Apache VIP IV AI buses do) no longer roll backwards. Turned about a mirrored frame a rotation changes its sense; a `Wheel_Rotation_*` wheel on such a frame that would roll backwards now rolls forwards. Wheels stored the usual way are not touched.
 - **Fixed.** A vehicle whose model file holds vertices no triangle uses (leftovers some o3d exporters write, here up to 6e25 m away) is culled and sorted by what it draws. Those vertices made the mesh's bounding sphere infinite: the vehicle was always sorted nearest, so a model drawn in model order painted its interior over the panes in front of it (the front section of the Millennium BRT seen through the rear section's windows, without their tint and reflection), and the shadow pass dropped the 128-instance culling block holding the mesh, so most of that section's body cast no sun shadow. Checked by an automated test of the mesh's sphere; not yet looked at in the game.
 
 ### Dependencies
