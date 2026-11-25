@@ -34,13 +34,13 @@ pub(crate) fn encode_post(parts: PostParts<'_>) {
         timed,
     } = parts;
     let FrameFeatures {
-        enhanced,
+        own_shading,
         lead_view,
         scaled,
         with_overlays,
         ..
     } = *features;
-    if enhanced {
+    if own_shading {
         // --- the post passes: glow, metering and adaptation, tone curve, FXAA
         let secs = |tau: f32| {
             if dt > 0.0 {

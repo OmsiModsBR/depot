@@ -31,7 +31,7 @@ impl Renderer {
         let scaled = f.features.scaled;
         let aspect = f.aspect;
         let lead_view = f.features.lead_view;
-        let enhanced = f.features.enhanced;
+        let own_shading = f.features.own_shading;
         let puddles_wanted = f.features.puddles_wanted;
         let reflection_frame = f.features.reflection_frame;
         let masked_frame = f.features.masked_frame;
@@ -129,7 +129,7 @@ impl Renderer {
         self.sky.encode_sky_cube(
             scene,
             &mut prepass_encoder,
-            enhanced,
+            own_shading,
             lead_view,
             probe_redraw,
             redraw_near,
@@ -194,7 +194,7 @@ impl Renderer {
                 .filter(|_| puddles_on)
                 .map_or(&h.view, |p| &p.view)
         });
-        if let Some(mode) = self.enhanced.as_ref() {
+        if let Some(mode) = self.own_mode.as_ref() {
             mode.encode_fog_lamps(FogLampsParts {
                 queue: &self.queue,
                 fog,

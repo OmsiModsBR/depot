@@ -19,7 +19,7 @@ pub struct FrameFeatures {
     /// The leading view: the one that moves the clocks, the exposure and the sky cube on.
     pub lead_view: bool,
     /// The picture is drawn by the Enhanced path.
-    pub enhanced: bool,
+    pub own_shading: bool,
     /// The puddles and their reflections (`reflection_frame` when drawn by their own pass).
     pub puddles_wanted: bool,
     pub reflection_frame: bool,

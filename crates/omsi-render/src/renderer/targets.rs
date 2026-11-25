@@ -44,7 +44,7 @@ impl Renderer {
                 layout: &self.ssao.ao_layout,
                 buf: &self.ssao.ao_buf,
             },
-            self.enhanced.as_ref().and_then(|m| m.fog_lamps_group()),
+            self.own_mode.as_ref().and_then(|m| m.fog_lamps_group()),
             self.puddles.is_some(),
             w,
             h,

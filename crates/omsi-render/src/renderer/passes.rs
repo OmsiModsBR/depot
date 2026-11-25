@@ -22,10 +22,10 @@ impl Renderer {
 
     /// The pipelines in the enhanced mode's own shading.
     fn own_pipelines(&self) -> &PassPipelines {
-        self.enhanced
+        self.own_mode
             .as_ref()
             .and_then(|m| m.own_pipelines())
-            .expect("the enhanced mode's pipelines")
+            .expect("the mode's own pipelines")
     }
 
     /// The main pass: the scene over the sky, with its depth from the prepass where it can
@@ -53,10 +53,10 @@ impl Renderer {
         // (the fields by name: `self.targets` is borrowed mutably below)
         let pipes = match pipe_set {
             PipeSet::Own => self
-                .enhanced
+                .own_mode
                 .as_ref()
                 .and_then(|m| m.own_pipelines())
-                .expect("the enhanced mode's pipelines"),
+                .expect("the mode's own pipelines"),
             PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
             PipeSet::Plain => &self.pass,
         };
@@ -69,7 +69,7 @@ impl Renderer {
                 targets: &mut self.targets,
                 prepass: &self.prepass,
                 pipes,
-                sky_mirror_pipeline: self.enhanced.as_ref().and_then(|m| m.sky_mirror_pipeline()),
+                sky_mirror_pipeline: self.own_mode.as_ref().and_then(|m| m.sky_mirror_pipeline()),
                 sky: &self.sky,
                 sprites: &self.sprites,
                 overlay_pipeline: &self.presenter.overlay_pipeline,
@@ -143,7 +143,7 @@ impl Renderer {
         tset: &Option<wgpu::QuerySet>,
         timed: &mut Vec<&'static str>,
     ) {
-        let Some(mode) = self.enhanced.as_ref() else {
+        let Some(mode) = self.own_mode.as_ref() else {
             return;
         };
         // (a device lost since this frame began took the meter's buffer as well)

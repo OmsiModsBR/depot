@@ -3,7 +3,9 @@
 //! which shading path was on.
 
 use glam::{DVec3, Vec3};
-use omsi_render::testing::modes::{draws_light, lamp_shadows, light_radius, pipe_set, shading};
+use omsi_render::testing::modes::{
+    draws_light, fog_cull, lamp_shadows, light_radius, pipe_set, shading,
+};
 use omsi_render::testing::{
     BuiltPasses, FrameFeatures, FrameInputs, FrameSwitches, ModeView, PipeSet, ViewKind,
 };
@@ -36,7 +38,7 @@ fn features(path: ShadingPath, view: ViewKind) -> FrameFeatures {
             has_glass_slot: false,
             has_puddle_material: false,
             built: BuiltPasses {
-                enhanced: true,
+                own_mode: true,
                 reflections: true,
                 puddles: true,
                 ssao: true,
@@ -152,4 +154,27 @@ fn a_lamp_is_drawn_by_the_mode_that_knows_its_kind() {
     assert!(!draws_light(ShadingPath::Hdr, &dark, &enhanced));
     // (and the vanilla shader reads its radius as 0)
     assert_eq!(light_radius(ShadingPath::Linear, &spot, &plain), 0.0);
+}
+
+#[test]
+fn each_mode_says_how_far_the_fog_lets_the_picture_see() {
+    let window_enhanced = features(ShadingPath::Hdr, ViewKind::Window);
+    let window_plain = features(ShadingPath::Linear, ViewKind::Window);
+    let mirror = features(ShadingPath::Hdr, ViewKind::Mirror);
+    // the plain fog: 99 % gone at 4.6 / density
+    let (far, own) = fog_cull(ShadingPath::Linear, &window_plain, 0.01, 5000.0);
+    assert!(!own && (far - 460.0).abs() < 1e-2);
+    // none at all: the camera's range
+    let (far, own) = fog_cull(ShadingPath::Linear, &window_plain, 0.0, 5000.0);
+    assert!(!own && far == 5000.0);
+    // Enhanced has no fog below the weather's 1e-4 (the clear air is the sky model's)...
+    let (far, own) = fog_cull(ShadingPath::Hdr, &window_enhanced, 5e-5, 5000.0);
+    assert!(own && far == 5000.0);
+    // ...and above it the layer thins with height, so a camera at the base sees as far as the
+    // plain density says
+    let (far, own) = fog_cull(ShadingPath::Hdr, &window_enhanced, 0.01, 5000.0);
+    assert!(own && far >= 460.0 && far <= 5000.0);
+    // a mirror shaded plainly has the plain fog, whatever the mode
+    let (far, own) = fog_cull(ShadingPath::Hdr, &mirror, 0.01, 5000.0);
+    assert!(!own && (far - 460.0).abs() < 1e-2);
 }

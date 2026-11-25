@@ -4,9 +4,10 @@
 mod pipelines;
 
 use crate::effects::puddles::PuddleLook;
-use crate::interface::{LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
+use crate::interface::{FogCull, LeadViewParts, ModeShading, ModeView, PipeSet, RenderMode};
 use crate::lighting::{gpu_light, lights_up, GpuPointLight, LightMode, Lighting, PointLight};
 use crate::passes::{Exposure, FrameFeatures, PassPipelines, PathBuilders};
+use crate::scene::Camera;
 use crate::sky::SkyResources;
 use glam::Vec3;
 
@@ -63,6 +64,10 @@ impl RenderMode for VanillaPlus {
     }
 
     fn lead_view(&self, _features: &FrameFeatures, _parts: LeadViewParts<'_>) {}
+
+    fn fog_cull(&self, _features: &FrameFeatures, lighting: &Lighting, camera: &Camera) -> FogCull {
+        FogCull::plain(lighting, camera)
+    }
 
     fn puddle_look(
         &self,

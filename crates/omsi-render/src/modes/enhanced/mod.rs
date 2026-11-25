@@ -9,11 +9,12 @@ mod scene_shader;
 
 use crate::effects::puddles::PuddleLook;
 use crate::interface::{
-    FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet, PostParts,
-    RenderMode,
+    FogCull, FogLampsParts, LeadViewParts, ModeResources, ModeShading, ModeView, PipeSet,
+    PostParts, RenderMode,
 };
 use crate::lighting::{lamp_sky_glow, view_lamp_light, GpuPointLight, Lighting, PointLight};
 use crate::passes::{Exposure, FrameFeatures, PassPipelines, PathBuilders};
+use crate::scene::Camera;
 use crate::sky::{atmosphere, SkyResources};
 use crate::targets::GroupParts;
 use glam::Vec3;
@@ -112,7 +113,7 @@ impl RenderMode for Enhanced {
     }
 
     fn pipe_set(&self, features: &FrameFeatures) -> PipeSet {
-        if features.enhanced {
+        if features.own_shading {
             PipeSet::Own
         } else if features.reflection_frame {
             PipeSet::Reflections
@@ -130,13 +131,13 @@ impl RenderMode for Enhanced {
     }
 
     fn lamp_shadows(&self, features: &FrameFeatures) -> bool {
-        features.enhanced
+        features.own_shading
     }
 
     fn lead_view(&self, features: &FrameFeatures, p: LeadViewParts<'_>) {
         // (a mirror takes the window's light - its own call would move the exposure on -
         // unless it comes before the window's first frame)
-        if !(features.enhanced && features.lead_view) {
+        if !(features.own_shading && features.lead_view) {
             return;
         }
         let LeadViewParts {
@@ -181,6 +182,36 @@ impl RenderMode for Enhanced {
         }
     }
 
+    fn fog_cull(&self, features: &FrameFeatures, lighting: &Lighting, camera: &Camera) -> FogCull {
+        // (a mirror drawn plainly has the plain fog)
+        if !features.own_shading {
+            return FogCull::plain(lighting, camera);
+        }
+        // The enhanced picture's fog is another one: none at all below the weather's 1e-4
+        // (the clear air there is the sky model's, kilometres deep), and above it a layer that
+        // thins out with height (`layer_depth` in enhanced_common.wgsl, 300 m scale height over
+        // the fog's base). Culled by the vanilla density, whatever stood in thin fog went
+        // missing in plain sight - most of all seen from above, with the camera zoomed out.
+        let far = if lighting.fog_density > 1e-4 {
+            let base = lighting
+                .fog_base
+                .or(lighting.inside.map(|v| v.0.z))
+                .unwrap_or(camera.position.z - 2.0);
+            let kh = ((camera.position.z - base).max(0.0) / 300.0) as f32;
+            // a point on the ground seen from the camera's height: the thinnest fog a line of
+            // sight down to the scenery passes through
+            let thin = if kh < 1e-3 {
+                1.0
+            } else {
+                (1.0 - (-kh).exp()) / kh
+            };
+            (4.6 / (lighting.fog_density * thin)).min(camera.far)
+        } else {
+            camera.far
+        };
+        FogCull { far, own: true }
+    }
+
     fn puddle_look(
         &self,
         features: &FrameFeatures,
@@ -189,7 +220,7 @@ impl RenderMode for Enhanced {
         adaptation: &Exposure,
     ) -> Option<PuddleLook> {
         // (a mirror drawn plainly is lit plainly)
-        if !features.enhanced {
+        if !features.own_shading {
             return Some(PuddleLook::plain(lighting));
         }
         let st = sky.sky_state.as_ref()?;

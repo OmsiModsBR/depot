@@ -580,7 +580,7 @@ impl Pipelines {
         let PuddleLook {
             surround,
             exposure: pre,
-            own: enhanced,
+            own: own_shading,
         } = look;
         let origins = vehicle_origins(lighting, camera);
         let mut parts = [<VehicleBox as bytemuck::Zeroable>::zeroed(); 4];
@@ -626,7 +626,7 @@ impl Pipelines {
                 origins.len() as f32,
                 w as f32,
                 h as f32,
-                if enhanced { 1.0 } else { -1.0 },
+                if own_shading { 1.0 } else { -1.0 },
             ],
             vehicle_parts: parts,
         };
@@ -1036,13 +1036,13 @@ mod tests {
         r.add_instance(scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![material])
     }
 
-    fn refraction_source(r: &Renderer, enhanced: bool) -> Vec<f32> {
+    fn refraction_source(r: &Renderer, own_shading: bool) -> Vec<f32> {
         let texture = r.targets.glass_picture.as_ref().unwrap().texture();
         let bytes = r.read_texture(texture, wgpu::TextureAspect::All).unwrap();
         if texture.format() != HDR_FORMAT {
             return bytes.into_iter().map(|v| v as f32 / 255.0).collect();
         }
-        let pre = if enhanced {
+        let pre = if own_shading {
             r.adaptation.exposure.unwrap().exp()
         } else {
             1.0

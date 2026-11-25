@@ -46,8 +46,8 @@ impl ViewKind {
 /// What this renderer was built with: a pass that is not there cannot be drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BuiltPasses {
-    /// The Enhanced path's pipelines.
-    pub enhanced: bool,
+    /// The mode's own pipelines.
+    pub own_mode: bool,
     /// The plain path's pipelines with the puddles' masks.
     pub reflections: bool,
     /// The puddles' ray pass.
@@ -115,7 +115,7 @@ impl FrameFeatures {
             with_overlays,
             xr_view,
             mirror_enhanced: options.mirror_enhanced,
-            built: i.built.enhanced,
+            built: i.built.own_mode,
         });
         // the mode's own post passes finish the picture
         let enhanced_path = shading.own_post;
@@ -136,7 +136,7 @@ impl FrameFeatures {
         let scaled =
             i.picture_size != i.full_size || fxaa_without_msaa || (glass_on && !enhanced_path);
         // (which mirrors are shaded plainly is the mode's to say: `Enhanced::shading`)
-        let enhanced = shading.own_shading;
+        let own_shading = shading.own_shading;
         // Rain reflections belong to all graphics modes. Classic shading uses the same
         // scene/mask targets, then presents their linear colour without Enhanced grading.
         let puddles_wanted = with_overlays
@@ -146,14 +146,14 @@ impl FrameFeatures {
             && puddle_weather(i.wetness, i.snow)
             && i.has_puddle_material
             && !i.switches.debug_view;
-        let reflection_frame = !enhanced && puddles_wanted && i.built.reflections;
-        let masked_frame = enhanced || reflection_frame;
+        let reflection_frame = !own_shading && puddles_wanted && i.built.reflections;
+        let masked_frame = own_shading || reflection_frame;
         // ambient occlusion only for the real picture, not for the mirrors
         let ao_on = with_overlays && options.ssao && i.built.ssao;
         // the enhanced path's shading is costly: the depth prepass keeps it to the visible
         // surface (without multisampling)
         let prepass_on =
-            ao_on || puddles_wanted || glass_on || (enhanced && (with_overlays || xr_view));
+            ao_on || puddles_wanted || glass_on || (own_shading && (with_overlays || xr_view));
         FrameFeatures {
             with_overlays,
             fxaa_without_msaa,
@@ -161,7 +161,7 @@ impl FrameFeatures {
             scaled,
             xr_view,
             lead_view: i.lead_view,
-            enhanced,
+            own_shading,
             puddles_wanted,
             reflection_frame,
             masked_frame,

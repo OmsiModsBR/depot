@@ -860,7 +860,6 @@ impl Renderer {
         let aspect = f.aspect;
         let cam_rel = f.cam_rel;
         let xr_view = f.features.xr_view;
-        let enhanced = f.features.enhanced;
         // Frustum culling by bounding sphere in view space. OpenXR projections
         // are asymmetric; the desktop field of view must not clip an eye's
         // wider side as the head turns.
@@ -883,36 +882,9 @@ impl Renderer {
         // nothing behind the fog is drawn: where the fog has swallowed 99 % of a thing
         // there is nothing left to see of it (a storm's 700 m of sight cuts the draws
         // of a city map by two thirds)
-        //
-        // The enhanced picture's fog is another one: none at all below the weather's
-        // 1e-4 (the clear air there is the sky model's, kilometres deep), and above it a
-        // layer that thins out with height (`layer_depth` in enhanced_common.wgsl, 300 m
-        // scale height over the fog's base). Culled by the vanilla density, whatever stood
-        // in thin fog went missing in plain sight - most of all seen from above, with the
-        // camera zoomed out.
-        let fog_far = if enhanced {
-            if lighting.fog_density > 1e-4 {
-                let base = lighting
-                    .fog_base
-                    .or(lighting.inside.map(|v| v.0.z))
-                    .unwrap_or(camera.position.z - 2.0);
-                let kh = ((camera.position.z - base).max(0.0) / 300.0) as f32;
-                // a point on the ground seen from the camera's height: the thinnest fog a
-                // line of sight down to the scenery passes through
-                let thin = if kh < 1e-3 {
-                    1.0
-                } else {
-                    (1.0 - (-kh).exp()) / kh
-                };
-                (4.6 / (lighting.fog_density * thin)).min(camera.far)
-            } else {
-                camera.far
-            }
-        } else if lighting.fog_density > 1e-7 {
-            (4.6 / lighting.fog_density).min(camera.far)
-        } else {
-            camera.far
-        };
+        // (how far the fog lets the picture see is the mode's to say: `RenderMode::fog_cull`)
+        let fog = super::build::mode_for(lighting.path).fog_cull(&f.features, lighting, camera);
+        let fog_far = fog.far;
         if let Some(p) = crate::gpu::debug().debug_cull.clone().and_then(|v| {
             let f: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
             (f.len() == 3).then(|| (DVec3::new(f[0], f[1], 0.0), f[2]))
@@ -991,7 +963,7 @@ impl Renderer {
             // (the enhanced sky is not the fog's colour below the horizon: ground
             // left out for the fog let it show through, road-shaped holes in the
             // terrain seen from above, so the ground is always drawn there)
-            if !inside && z - r > fog_far && !(enhanced && (inst.surface || r > 100.0)) {
+            if !inside && z - r > fog_far && !(fog.own && (inst.surface || r > 100.0)) {
                 return None;
             }
             if !inside && (v.x.abs() > z * tan_x + r / cos_x || v.y.abs() > z * tan_y + r / cos_y) {
@@ -1104,7 +1076,7 @@ impl Renderer {
                 return true;
             }
             !(z + r < camera.near
-                || (!enhanced && z - r > fog_far)
+                || (!fog.own && z - r > fog_far)
                 || v.x.abs() > z * tan_x + r / cos_x
                 || v.y.abs() > z * tan_y + r / cos_y)
         };

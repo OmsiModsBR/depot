@@ -280,7 +280,7 @@ impl Renderer {
                     && puddle_weather(lighting.wetness, lighting.snow)
                     && scene.materials.iter().any(|m| m.uniform.params2[2] > 0.0),
                 built: BuiltPasses {
-                    enhanced: self.enhanced.is_some(),
+                    own_mode: self.own_mode.is_some(),
                     reflections: self.reflection_pass.is_some(),
                     puddles: self.puddles.is_some(),
                     ssao: self.ssao.ssao_pipeline.is_some(),
@@ -291,7 +291,7 @@ impl Renderer {
         let FrameFeatures {
             glass_on,
             scaled,
-            enhanced,
+            own_shading,
             masked_frame,
             ao_on,
             prepass_on,
@@ -385,7 +385,7 @@ impl Renderer {
             scene.render_origin,
             lighting,
             cam_rel,
-            enhanced,
+            own_shading,
             with_overlays,
             projection,
             second_eye,
@@ -407,7 +407,7 @@ impl Renderer {
         }
         let cu = CameraUniform {
             post: [
-                if enhanced { 1.0 } else { 0.0 },
+                if own_shading { 1.0 } else { 0.0 },
                 self.started.elapsed().as_secs_f32(),
                 // (z: the roads are kept clear of the snow, `Lighting::roads_clear`)
                 if lighting.roads_clear { 1.0 } else { 0.0 },
@@ -508,7 +508,7 @@ impl Renderer {
             },
             flags: [
                 if lighting.detail { 1.0 } else { 0.0 },
-                if enhanced { 1.0 } else { 0.0 },
+                if own_shading { 1.0 } else { 0.0 },
                 // (below zero: the rain films have the clean current picture to look through,
                 // see `rain_behind`; above zero is an old branch never taken)
                 if glass_on { -1.0 } else { 0.0 },
@@ -589,7 +589,7 @@ impl Renderer {
                 sky: &mut self.sky,
             },
         );
-        let probe_redraw = enhanced
+        let probe_redraw = own_shading
             && (lead_view || self.sky.sky_state.is_none())
             && self.prepare_enhanced(lighting, cam_rel, ro, dt);
         Some((
