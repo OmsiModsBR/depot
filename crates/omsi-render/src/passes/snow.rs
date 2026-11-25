@@ -22,15 +22,17 @@ pub(crate) struct SnowBuilder<'a> {
 }
 
 impl<'a> SnowBuilder<'a> {
+    /// `mode`: the mode's own fragment shaders, added to the module.
     pub(crate) fn new(
         device: &'a wgpu::Device,
         layouts: &Layouts,
         snow_layout: &wgpu::BindGroupLayout,
         msaa: u32,
+        mode: &str,
     ) -> Self {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("snow"),
-            source: wgpu::ShaderSource::Wgsl(snow_shader_source().into()),
+            source: wgpu::ShaderSource::Wgsl(snow_shader_source(mode).into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("snow"),

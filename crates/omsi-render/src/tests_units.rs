@@ -339,9 +339,17 @@ fn shaders_validate_and_match_the_uniforms() {
             sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
         ),
         ("sky plain", sky_shader_source("")),
-        ("corona", corona_shader_source()),
+        (
+            "corona",
+            corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr)),
+        ),
+        ("corona plain", corona_shader_source("")),
         ("fog lamps", fog_lamps_shader_source()),
-        ("snow", snow_shader_source()),
+        (
+            "snow",
+            snow_shader_source(crate::renderer::snow_own_text(ShadingPath::Hdr)),
+        ),
+        ("snow plain", snow_shader_source("")),
         ("post", post_shader_source()),
         (
             "ssao",
@@ -571,7 +579,7 @@ fn the_scene_shader_translates_to_glsl() {
 fn the_corona_shader_translates_to_glsl() {
     use wgpu::naga;
     use wgpu::naga::back::glsl;
-    let src = corona_shader_source();
+    let src = corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr));
     let module =
         naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     let info = naga::valid::Validator::new(
@@ -800,7 +808,7 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
         for src in [
             scene,
             sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
-            corona_shader_source(),
+            corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr)),
         ] {
             for name in left_out(&src) {
                 assert!(

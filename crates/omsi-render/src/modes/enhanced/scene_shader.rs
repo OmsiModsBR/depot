@@ -36,3 +36,24 @@ pub(crate) fn lean_scene(src: String) -> String {
 pub(crate) fn sky_text() -> &'static str {
     include_str!("shaders/sky.wgsl")
 }
+
+/// The WGSL of the Enhanced coronas and smoke (`fs_enhanced`, `fs_smoke_enhanced`), for the
+/// corona module.
+pub(crate) fn corona_text() -> String {
+    let src = include_str!("shaders/corona.wgsl").to_string();
+    // (the basic set lights rain by the sky alone: the loop over the lamps is one more
+    // thing a phone's compiler can fail on, see `lean_scene`)
+    if basic_pipelines() {
+        src.replace(
+            "let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);",
+            "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;",
+        )
+    } else {
+        src
+    }
+}
+
+/// The WGSL of Enhanced's snowfall (`fs_snow_enhanced`), for the snow module.
+pub(crate) fn snow_text() -> &'static str {
+    include_str!("shaders/snow.wgsl")
+}
