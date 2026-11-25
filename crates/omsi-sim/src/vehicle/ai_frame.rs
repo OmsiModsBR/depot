@@ -199,6 +199,8 @@ impl VehicleInstance {
             self.update_trailers(dt);
             self.ai_visuals_missed = (self.ai_visuals_missed + dt).min(10.0);
         }
+        // a trolleybus's poles, once its parts stand where they are drawn
+        self.step_trolley(dt);
     }
 
     /// The Classic AI driver's pedals (`KA-2`): `Throttle` and `Brake` for the scripts.

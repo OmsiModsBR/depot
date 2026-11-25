@@ -317,6 +317,12 @@ pub struct Traffic {
     pub trailer_types: HashMap<std::path::PathBuf, Option<Arc<VehicleType>>>,
     /// `[sound_ai]` configurations by file.
     pub sound_cfgs: HashMap<std::path::PathBuf, Option<Arc<omsi_vehicle::SoundCfg>>>,
+    /// Each vehicle type's trolleybus declaration and the part that carries its poles, found
+    /// once per type (None: no trolleybus).
+    pub trolley_types:
+        HashMap<std::path::PathBuf, Option<(omsi_trolley::TrolleyDeclaration, usize)>>,
+    /// The AI trolleybuses' wire sounds.
+    pub wire_sounds: crate::gameplay::domain::wire_sounds::WireSounds,
     pub root: std::path::PathBuf,
     /// Car-frames spent waiting for a red light (statistics).
     pub held_at_red: usize,

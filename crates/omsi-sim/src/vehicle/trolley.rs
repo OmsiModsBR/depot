@@ -26,6 +26,9 @@ pub struct Trolley {
     /// The ray under the mouse pointer (world origin and direction), for a pole held in the
     /// hand; set by the game each frame.
     pub aim: Option<(glam::DVec3, glam::DVec3)>,
+    /// The vehicle drives itself (an AI bus): its poles go up by themselves and follow its
+    /// way through the switches (`PoleInputs::auto`), and what they do is not logged.
+    pub auto: bool,
     heartbeat: f32,
     /// The left shoe was right of the right one the last frame (logged once as it happens).
     crossed: bool,
@@ -43,6 +46,7 @@ impl Trolley {
             network,
             sim: PoleSim::default(),
             aim: None,
+            auto: false,
             heartbeat: 0.0,
             crossed: false,
         }
@@ -72,24 +76,34 @@ impl VehicleInstance {
                 rotation: Mat3::from_mat4(rotation).as_dmat3(),
             };
             let flag = |v: &VehicleInstance, name: &str| v.var(name).is_some_and(|x| x > 0.5);
-            let inputs = PoleInputs {
-                grab: [
-                    flag(self, "shtanga_manual_grab_left"),
-                    flag(self, "shtanga_manual_grab_right"),
-                ],
-                reset: flag(self, "shtanga_wire_reset"),
-                retract: flag(self, "shtanga_recolher_cmd"),
-                switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
-                speed_kmh: self.motion().velocity_kmh() as f64,
-                weather: self.wire_weather(),
-                aim: t.aim,
+            let inputs = if t.auto {
+                PoleInputs {
+                    auto: true,
+                    speed_kmh: self.motion().velocity_kmh() as f64,
+                    weather: self.wire_weather(),
+                    ..Default::default()
+                }
+            } else {
+                PoleInputs {
+                    grab: [
+                        flag(self, "shtanga_manual_grab_left"),
+                        flag(self, "shtanga_manual_grab_right"),
+                    ],
+                    reset: flag(self, "shtanga_wire_reset"),
+                    retract: flag(self, "shtanga_recolher_cmd"),
+                    switch_demand: self.var("shtanga_switch_pedal").unwrap_or(0.0) as f64,
+                    speed_kmh: self.motion().velocity_kmh() as f64,
+                    weather: self.wire_weather(),
+                    aim: t.aim,
+                    auto: false,
+                }
             };
             let (out, crossed) = {
                 let net = t.network.lock();
                 let out = t.sim.step(&t.declaration, &net, &body, inputs, dt as f64);
                 let crossed =
                     out.wire_present && out.poles[0].shoe_pos.x >= out.poles[1].shoe_pos.x;
-                if crossed && !t.crossed {
+                if crossed && !t.crossed && !t.auto {
                     // (which spline and which of its wires each shoe is on)
                     let wires = t.sim.poles.map(|p| {
                         p.cursor
@@ -103,8 +117,10 @@ impl VehicleInstance {
                 }
                 (out, crossed)
             };
-            for e in &t.sim.events {
-                log_event(e);
+            if !t.auto {
+                for e in &t.sim.events {
+                    log_event(e);
+                }
             }
             t.crossed = crossed;
             t.heartbeat += 1.0;
