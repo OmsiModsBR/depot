@@ -533,16 +533,6 @@ fn the_vehicle_and_world_options_pages_draw_in_the_new_look() {
         ),
         (
             row(
-                "Time speed",
-                'v',
-                "x1",
-                "How fast the clock runs",
-                Some(0.1),
-            ),
-            k("time_speed"),
-        ),
-        (
-            row(
                 "Real-time sync",
                 's',
                 "off",
@@ -552,10 +542,6 @@ fn the_vehicle_and_world_options_pages_draw_in_the_new_look() {
             k("time_sync"),
         ),
         (row("Date", 'i', "14.10.2026", "", None), k("noop")),
-        (
-            row("Season", 'c', "Autumn", "Leaves and snow", None),
-            k("season"),
-        ),
     ]);
     let items: Vec<(&str, &str)> = world
         .iter()

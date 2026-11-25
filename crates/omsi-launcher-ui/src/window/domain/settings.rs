@@ -468,13 +468,6 @@ pub(crate) const INFO_BAR_POSITIONS: &[(&str, &str)] = &[
     ("top", "Top of the screen"),
     ("bottom", "Bottom of the screen"),
 ];
-pub(crate) const SEASONS: &[(&str, &str)] = &[
-    ("auto", "By date"),
-    ("spring", "Spring"),
-    ("summer", "Summer"),
-    ("autumn", "Autumn"),
-    ("winter", "Winter"),
-];
 
 /// The Online options (chat, chat size, other players' names, voice chat), kept apart and
 /// off the page while multiplayer is disabled: the server will be a Depot feature of its
@@ -891,29 +884,6 @@ pub static OPTS: &[Opt] = &[
         "metar_sync",
         "Sync the weather with METAR",
         "Locks the weather",
-    ),
-    pick(
-        SIMULATION,
-        "Clock and weather",
-        "time_speed",
-        "Time speed",
-        "Not in multiplayer or with the real-time sync",
-        &[
-            ("1", "Real time"),
-            ("2", "x2"),
-            ("4", "x4"),
-            ("8", "x8"),
-            ("15", "x15"),
-            ("30", "x30"),
-        ],
-    ),
-    pick(
-        SIMULATION,
-        "Start of a drive",
-        "start.season",
-        "Season",
-        "By date follows the start's date",
-        SEASONS,
     ),
     toggle(
         SIMULATION,
@@ -1373,13 +1343,6 @@ pub static OPTS: &[Opt] = &[
         "Cameras and views",
         "driverview_smooth",
         "Camera glides between viewpoints",
-        "",
-    ),
-    toggle(
-        DISPLAY,
-        "Cameras and views",
-        "hands_in_cab",
-        "Driver's hands in the cab view",
         "",
     ),
     toggle(
@@ -2155,12 +2118,11 @@ impl Store<'_> {
 
 /// The start's choices this page shows, as values.
 pub fn start_values(c: &Choice) -> Value {
-    json!({"season": c.season, "autostart": c.autostart, "traffic": c.traffic, "passengers": c.passengers, "schedule": c.schedule})
+    json!({"autostart": c.autostart, "traffic": c.traffic, "passengers": c.passengers, "schedule": c.schedule})
 }
 
 /// The start's choices back from `start_values`.
 pub fn apply_start(c: &mut Choice, v: &Value) {
-    c.season = v["season"].as_str().unwrap_or("auto").to_string();
     c.autostart = v["autostart"].as_bool().unwrap_or(false);
     c.traffic = v["traffic"].as_f64().unwrap_or(30.0) as f32;
     c.passengers = v["passengers"].as_bool().unwrap_or(true);

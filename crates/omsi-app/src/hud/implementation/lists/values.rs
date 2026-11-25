@@ -72,7 +72,6 @@ pub(in crate::hud) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32
     }
     let s = &app.settings;
     Some(match verb {
-        "speed" => s.time_speed as f32,
         "traffic" => app.session.traffic.as_ref()?.target as f32,
         "pax" => s.pax_density,
         "volume" => s.volume,
@@ -152,10 +151,6 @@ pub(in crate::hud) fn option_set(
         return None; // Stored per bus, never in the desktop settings file.
     }
     match verb {
-        "speed" => {
-            app.settings.time_speed = v as f64;
-            Some(("time_speed", app.settings.time_speed.to_string()))
-        }
         "traffic" => {
             if let Some(t) = app.session.traffic.as_mut() {
                 t.target = v.round() as usize;
@@ -474,7 +469,6 @@ pub(in crate::hud) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "snow_road" => app.weather.as_ref().is_some_and(|w| w.snow_on_road),
         "camcoll" => s.camera_collision,
         "steer_look" => s.steer_look,
-        "hands_in_cab" => s.hands_in_cab,
         "ff" => s.ff_enabled,
         "brake_hold" => s.brake_hold,
         "auto_clutch" => s.auto_clutch,
@@ -640,8 +634,7 @@ pub(in crate::hud) fn toggle_set(
             app.settings.get_up = on;
             Some(("get_up", bit))
         }
-        // the real-time sync: the clock takes the device's date and time at once (a host's
-        // clock runs at real time while it is on, at its time speed again after)
+        // the real-time sync: the clock takes the device's date and time at once
         "time_sync" => {
             app.settings.time_sync = on;
             app.sync_real_time();
@@ -707,10 +700,6 @@ pub(in crate::hud) fn toggle_set(
         "steer_look" => {
             app.settings.steer_look = on;
             Some(("steer_look", bit))
-        }
-        "hands_in_cab" => {
-            app.settings.hands_in_cab = on;
-            Some(("hands_in_cab", bit))
         }
         "brake_hold" => {
             app.settings.brake_hold = on;

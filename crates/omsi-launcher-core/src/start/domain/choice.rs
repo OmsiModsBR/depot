@@ -27,8 +27,6 @@ pub struct Choice {
     pub time: i32,
     pub start_trip: Option<(String, String, usize, i32)>,
     pub date: String,
-    /// "auto", spring, summer, autumn, winter.
-    pub season: String,
     pub weather: String,
     pub traffic: f32,
     pub passengers: bool,
@@ -63,7 +61,6 @@ impl Default for Choice {
             time: 9 * 60,
             start_trip: None,
             date: "1989-05-30".into(),
-            season: "auto".into(),
             weather: String::new(),
             traffic: 30.0,
             passengers: true,
@@ -170,11 +167,8 @@ impl Choice {
         true
     }
 
-    /// The season the chosen date (or the override) means.
+    /// The season the chosen date means.
     pub fn season(&self) -> &str {
-        if self.season != "auto" {
-            return &self.season;
-        }
         let m: u32 = self
             .date
             .get(5..7)

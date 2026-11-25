@@ -181,10 +181,9 @@ impl Default for ShiftState {
     }
 }
 
-/// The upper-arm and forearm bone slots of each side (0 left, 1 right) in `Posed::bones`,
-/// numbered as in `omsi_sim::people` (thighs 0-1, shins 2-3, upper arms 4-5, forearms 6-7).
+/// The upper-arm bone slot of each side (0 left, 1 right) in `Posed::bones`, numbered as in
+/// `omsi_sim::people` (thighs 0-1, shins 2-3, upper arms 4-5, forearms 6-7).
 const UPPER_ARM_SLOT: [usize; 2] = [4, 5];
-const FORE_ARM_SLOT: [usize; 2] = [6, 7];
 
 impl Regrip {
     fn new(from: f32, to: f32, dur: f32, rate: f32) -> Regrip {
@@ -311,30 +310,6 @@ impl DriverFigure {
                     .collect()
             })
             .collect();
-        let arm_of: Vec<Vec<i8>> = ty
-            .meshes
-            .iter()
-            .map(|m| {
-                m.skin
-                    .iter()
-                    .map(|inf| {
-                        (0..2)
-                            .find(|&side| {
-                                let w: f32 = (0..inf.n.max(1) as usize)
-                                    .filter(|&j| {
-                                        let s = inf.slot[j] as usize;
-                                        s == UPPER_ARM_SLOT[side] || s == FORE_ARM_SLOT[side]
-                                    })
-                                    .map(|j| if inf.n <= 1 { 1.0 } else { inf.weight[j] })
-                                    .sum();
-                                w > 0.5
-                            })
-                            .map(|side| side as i8)
-                            .unwrap_or(-1)
-                    })
-                    .collect()
-            })
-            .collect();
         let grip_rest = grip_centres(&ty, GRIP_RADIUS);
         let mut f = DriverFigure {
             ty,
@@ -352,7 +327,6 @@ impl DriverFigure {
             lamps: [-1; 4],
             wheel: None,
             sign: 0.0,
-            show_hands_in_cab: false,
             shown: false,
             settled: false,
             slide: 0.0,
@@ -368,7 +342,6 @@ impl DriverFigure {
             frames: [None; 2],
             rolls: [None; 2],
             hand_of,
-            arm_of,
             blend: Default::default(),
             shifter: None,
             shift: ShiftState::default(),
@@ -481,19 +454,8 @@ impl DriverFigure {
             self.shown = show;
         }
 
-        // (in the cab with the hands shown: the figure is drawn in the window's picture too,
-        // with everything but the hands folded away, see the skinning below)
-        let force_visible_in_cab = mirror_only && self.show_hands_in_cab;
         for (_, inst) in &self.meshes {
-            renderer.set_mirror_only(
-                scene,
-                *inst,
-                if force_visible_in_cab {
-                    false
-                } else {
-                    mirror_only
-                },
-            );
+            renderer.set_mirror_only(scene, *inst, mirror_only);
         }
 
         if !show {
@@ -696,69 +658,6 @@ impl DriverFigure {
                 skin_from(m, blend, &posed.bones, pos, nrm);
             } else {
                 skin_from(m, &self.curled[k], &posed.bones, pos, nrm);
-            }
-
-            // In the cab view only the hands show: every other vertex is folded onto the
-            // nearer wrist (the middle of that hand's vertices), so that the body's triangles
-            // shrink to nothing and those joining a hand close it at the wrist. (Folded onto
-            // the figure's origin, the triangles from the wrists stretched to the seat.)
-            // The arms stay as they are: what is folded is the rest, onto the nearer upper arm
-            // (the hand's own vertices when a mesh has none).
-            if mirror_only && self.show_hands_in_cab {
-                let (hand_of, arm_of) = (&self.hand_of[k], &self.arm_of[k]);
-                let count = pos.len().min(hand_of.len()).min(arm_of.len());
-                let upper_w = |i: usize, side: usize| -> f32 {
-                    let inf = &m.skin[i];
-                    (0..inf.n.max(1) as usize)
-                        .filter(|&j| inf.slot[j] as usize == UPPER_ARM_SLOT[side])
-                        .map(|j| if inf.n <= 1 { 1.0 } else { inf.weight[j] })
-                        .sum()
-                };
-                let mut up_sum = [Vec3::ZERO; 2];
-                let mut up_n = [0.0f32; 2];
-                let mut hd_sum = [Vec3::ZERO; 2];
-                let mut hd_n = [0.0f32; 2];
-                for i in 0..count {
-                    for side in 0..2 {
-                        if arm_of[i] == side as i8 && upper_w(i, side) > 0.5 {
-                            up_sum[side] += pos[i];
-                            up_n[side] += 1.0;
-                        }
-                        if hand_of[i] == side as i8 {
-                            hd_sum[side] += pos[i];
-                            hd_n[side] += 1.0;
-                        }
-                    }
-                }
-                let anchors: Vec<Vec3> = (0..2)
-                    .filter_map(|h| {
-                        if up_n[h] > 0.0 {
-                            Some(up_sum[h] / up_n[h])
-                        } else if hd_n[h] > 0.0 {
-                            Some(hd_sum[h] / hd_n[h])
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                let fold = anchors
-                    .first()
-                    .copied()
-                    .or_else(|| pos.first().copied())
-                    .unwrap_or(Vec3::ZERO);
-                for i in 0..count {
-                    if hand_of[i] < 0 && arm_of[i] < 0 {
-                        let here = pos[i];
-                        pos[i] = anchors
-                            .iter()
-                            .copied()
-                            .min_by(|a, b| {
-                                a.distance_squared(here)
-                                    .total_cmp(&b.distance_squared(here))
-                            })
-                            .unwrap_or(fold);
-                    }
-                }
             }
 
             renderer.update_mesh(scene, self.meshes[k].0, pos, nrm, &m.data.uvs);

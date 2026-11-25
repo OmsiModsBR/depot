@@ -190,7 +190,6 @@ pub(in crate::hud) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "steer_look_response", "Steering view response", "How quickly the view follows the steering", &|v| format!("{:.0} ms", v * 1000.0)),
         slider_row(app, "head_idle", "Head sway at a standstill", "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop", &|v| if v <= 0.0 { "Off".to_string() } else { format!("{:.0}%", v * 100.0) }),
         slider_row(app, "head_idle_pace", "Sway pace", "How fast that sway moves (100% is the pace it is designed at)", &|v| format!("{:.0}%", v * 100.0)),
-        switch_row(app, "hands_in_cab", "Driver's hands in the cab view", "Shows the driver's hand on the steering wheel (Cockpit only)"),
         switch_row(app, "driver", "Driver at the wheel (outside views)", "Shows the driver in the outside views and in the mirrors"),
         switch_row(app, "headtrack", "Head tracking (native TrackIR / OpenTrack)", &format!("Use native TrackIR on Windows, or OpenTrack on UDP port {}", s.head_tracking_port)),
         slider_row(app, "head_tracking_yaw_sens", "TrackIR yaw sensitivity", "Left / right head movement. 100% is 1:1; the low end is deliberately finer.", &|v| format!("{v:.0}%")),
@@ -581,15 +580,6 @@ pub(in crate::hud) fn world_pages(app: &App) -> Vec<Page> {
                         "clock_ontime",
                     ));
                 }
-            }
-            if !app.in_lan_session() {
-                time.extend(slider_row(
-                    app,
-                    "speed",
-                    "Time speed",
-                    "How fast the world's clock runs",
-                    &|v| format!("x{v}"),
-                ));
             }
         }
         weather.extend(switch_row(

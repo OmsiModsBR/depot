@@ -98,13 +98,6 @@ fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
     assert_eq!(back.plate, "B-AB 1234");
 }
 
-#[test]
-fn a_season_keeps_the_day_within_its_month() {
-    assert_eq!(date_in_month("2026-03-31", "04"), "2026-04-30");
-    assert_eq!(date_in_month("2026-03-31", "07"), "2026-07-31");
-    assert_eq!(date_in_month("2026-11-05", "01"), "2026-01-05");
-}
-
 /// A start without a bus leaves the bus, its paint, number and plate and a depot file picked
 /// for it out of the duty, on foot - the choice itself keeps them for the next start.
 #[test]
@@ -199,8 +192,7 @@ fn a_picked_trip_holds_until_the_line_tour_or_time_change() {
     assert!(!Choice::default().pick_trip(1, 0.0, false));
 }
 
-/// The duty carries the choices; a free drive has no line, tour or trip, and the season
-/// "auto" is no override.
+/// The duty carries the choices; a free drive has no line, tour or trip.
 #[test]
 fn the_duty_carries_the_choices() {
     let mut c = Choice {
@@ -223,23 +215,20 @@ fn the_duty_carries_the_choices() {
     assert!(d.whole_tour);
     assert_eq!(d.profile.as_deref(), Some("Zane"));
     assert_eq!(d.paint.as_deref(), Some("Red"));
-    assert_eq!((d.plate.clone(), d.season.clone()), (None, None));
+    assert_eq!(d.plate, None);
     assert_eq!(d.lan.as_deref(), Some("off"));
     c.free = true;
-    c.season = "winter".into();
     let d = c.to_duty(String::new(), Some(2), "");
     assert_eq!(
         (d.line, d.tour, d.trip, d.hof, d.profile),
         (None, None, None, None, None)
     );
     assert!(!d.whole_tour);
-    assert_eq!(d.season.as_deref(), Some("winter"));
 }
 
-/// The season by the date, unless one is chosen; a chosen season moves the date into its
-/// month.
+/// The season follows the date.
 #[test]
-fn the_season_follows_the_date_unless_chosen() {
+fn the_season_follows_the_date() {
     let mut c = Choice {
         date: "2026-12-24".into(),
         ..Default::default()
@@ -251,10 +240,6 @@ fn the_season_follows_the_date_unless_chosen() {
     assert_eq!(c.season(), "summer");
     c.date = "2026-10-10".into();
     assert_eq!(c.season(), "autumn");
-    c.season = "winter".into();
-    assert_eq!(c.season(), "winter");
-    assert_eq!(season_month("autumn"), Some("10"));
-    assert_eq!(season_month("auto"), None);
 }
 
 fn weather(temp: f32, precip: &str, snow: bool) -> WeatherInfo {

@@ -310,13 +310,7 @@ pub fn settings(f: &mut Frame, view: &mut SettingsView, area: Rect) -> Outside {
         f.state.settings_dirty = 0.3;
     }
     if start_changed {
-        // (a season chosen moves the date into it, as it always did)
-        let season = start["season"].as_str().unwrap_or("auto").to_string();
-        let new_season = season != f.state.choice.season;
         apply_start(&mut f.state.choice, &start);
-        if new_season {
-            f.state.set_season(&season);
-        }
         f.state.touched();
     }
     if let Some(id) = out.modules.look {
@@ -1200,7 +1194,7 @@ pub fn reset_dialog(f: &mut Frame, view: &mut SettingsView, open: &mut bool) {
         TEXT,
         Align::Left,
     );
-    f.ui.paragraph("Every option on this page goes back to how it came, the start's choices (season, traffic, passengers) included. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
+    f.ui.paragraph("Every option on this page goes back to how it came, the start's choices (traffic, passengers) included. The language, the drivers, the key bindings and the game folder stay.", Vec2::new(inner.x, inner.y + 40.0), inner.w, 13.0, Weight::Regular, TEXT_DIM);
     let by = inner.bottom() - 38.0;
     if f.ui.button(
         "reset-no",
@@ -1246,13 +1240,8 @@ pub fn reset_dialog(f: &mut Frame, view: &mut SettingsView, open: &mut bool) {
         }
         f.state.settings_dirty = 0.3;
         omsi_ui::theme::set_accent(omsi_ui::theme::Accent::default());
-        // (the start's choices this page shows go back too, the season with what it brings)
-        let season_before = f.state.choice.season.clone();
+        // (the start's choices this page shows go back too)
         apply_start(&mut f.state.choice, &start_values(&Choice::default()));
-        let season = f.state.choice.season.clone();
-        if season != season_before {
-            f.state.set_season(&season);
-        }
         f.state.touched();
         *open = false;
         f.state

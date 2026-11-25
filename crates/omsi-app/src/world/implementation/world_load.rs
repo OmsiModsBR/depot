@@ -10,14 +10,13 @@ use glam::DVec3;
 use omsi_render::{Camera, Renderer, Scene};
 use std::time::Instant;
 
-/// The map's season for these arguments (kind, texture folder): `--season`, else the date
-/// as the map's season table has it; a snow weather puts the map into its snow textures
+/// The map's season for these arguments (kind, texture folder): the date as the map's season
+/// table has it; a snow weather puts the map into its snow textures
 /// whatever the calendar says - with snow on the road (`[snowOnRoad]`) into the snowy
 /// roads of `WinterSnowfall` too (see `omsi_texture::season_chain`).
 pub(crate) fn season_folder(args: &Args, global: &omsi_map::GlobalCfg) -> (i32, Option<String>) {
     let (snow, snow_on_road) = weather_snow(args);
     season_folder_on(
-        args,
         global,
         start_clock(args).day_of_year,
         snow,
@@ -28,22 +27,12 @@ pub(crate) fn season_folder(args: &Args, global: &omsi_map::GlobalCfg) -> (i32, 
 /// [`season_folder`] on day `day_of_year` in weather that is snowy or not (the date moves on
 /// at midnight, the weather changes).
 pub(crate) fn season_folder_on(
-    args: &Args,
     global: &omsi_map::GlobalCfg,
     day_of_year: i32,
     snow: bool,
     snow_on_road: bool,
 ) -> (i32, Option<String>) {
-    let mut kind = global.season_kind(day_of_year);
-    if let Some(sn) = args.season.as_deref() {
-        kind = match sn.to_ascii_lowercase().as_str() {
-            "spring" | "fruehling" => 1,
-            "autumn" | "fall" | "herbst" => 2,
-            "winter" => 3,
-            "summer" | "sommer" => 0,
-            _ => kind,
-        };
-    }
+    let kind = global.season_kind(day_of_year);
     let mut folder = omsi_map::global::Season::folder(kind).map(|f| f.to_string());
     if snow {
         folder = Some(

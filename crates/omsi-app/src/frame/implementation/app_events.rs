@@ -385,14 +385,13 @@ impl ApplicationHandler for App {
                 #[cfg(windows)]
                 self.poll_vr_cursor_position();
                 // OMSI's autosave of the last situation: every few minutes of play (five unless
-                // the settings say otherwise, 0 turns it off); the play time runs faster with the
-                // time speed raised, so the interval is stretched to stay in real minutes
+                // the settings say otherwise, 0 turns it off)
                 let autosave_minutes = self.settings.autosave_minutes;
                 if autosave_minutes > 0
                     && !self.paused
                     && self.player.is_some()
                     && self.clock.run_time - self.autosave_t
-                        >= f64::from(autosave_minutes) * 60.0 * self.time_speed().max(1.0)
+                        >= f64::from(autosave_minutes) * 60.0
                 {
                     self.autosave_t = self.clock.run_time;
                     self.save_last_situation();
@@ -1318,13 +1317,12 @@ impl ApplicationHandler for App {
                     // from the driver's seat the figure stays in the mirrors
                     // (from the driver's seat only the mirrors show him)
                     // (out of the seat: nobody at the wheel)
-                    p.sync_driver_hands(
+                    p.sync_driver(
                         r,
                         scene,
                         dt,
                         self.settings.driver && self.on_foot.is_none(),
                         self.view == "driver",
-                        self.settings.hands_in_cab,
                     );
                     if self.view != "free" && self.view != "foot" {
                         let key = crate::input::look_key_of(&self.view, Some(p.cam_choice));
@@ -2433,15 +2431,10 @@ impl ApplicationHandler for App {
                 // (the METAR sync: the report's weather, in real time)
                 self.tick_metar(dt);
                 if !self.paused {
-                    // (the time speed: the settings', or the session's in LAN play)
-                    let speed = self.time_speed();
-                    self.clock.advance(dt * speed as f32);
-                    // (the real-time sync: the device's date and time, whatever the speed was)
+                    self.clock.advance(dt);
+                    // (the real-time sync: the device's date and time)
                     self.sync_real_time();
-                    if let Some(t) = self.session.traffic.as_mut() {
-                        t.time_scale = speed;
-                    }
-                    self.tick_weather(dt * speed as f32);
+                    self.tick_weather(dt);
                 } else if self.weather_blend.is_some() {
                     // (a preset picked in the paused menu: the change goes over in real time)
                     self.tick_weather(dt);

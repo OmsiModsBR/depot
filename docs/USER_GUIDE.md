@@ -48,7 +48,7 @@ Everything can also be given on the command line, which then skips both:
 | `--drive-keys wasd` | let W/A/S/D drive instead of the arrow keys |
 | `--autostart` | put the bus into service before the run (as Shift+U does) |
 | `--click x,y[,dx,dy]` | press (and drag) the cockpit switch at that pixel, offscreen |
-| `--season winter` / `--situation x.osn` | season override, a saved situation |
+| `--situation x.osn` | a saved situation |
 | `--enhanced` / `--export-glb bus.glb` | the physically based renderer; write the bus as glTF (the launcher's preview) and quit |
 | `--launcher` / `--menu` / `--no-menu` | open the launcher (the default without arguments), the in-game menu, or neither |
 
@@ -562,11 +562,10 @@ and buses inside the archives.
 
 ## Season and weather
 
-The launcher's Departure card has a **Season** choice (spring / summer / autumn / winter,
-or by the date as in the original). Choosing one moves the date into that season, so the
-timetable and holidays follow, passes `--season` to the game (which picks the map's
-seasonal texture folder), and the weather list only offers what fits: snowfall and frost
-only in winter, no cold presets in summer.
+The season follows the start's date, as in the original: the game picks the map's seasonal
+texture folder from the date (the map's season table), and the launcher's weather list only
+offers what fits the date's season: snowfall and frost only in winter, no cold presets in
+summer.
 
 Weather presets (`Weather/*.owt`) change the light: overcast takes the sun away, rain and
 fog thicken the air, a snow preset puts any map into its winter textures with snow cover.

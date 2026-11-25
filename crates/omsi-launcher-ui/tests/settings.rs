@@ -99,7 +99,6 @@ const BEFORE: &[&str] = &[
     "steer_look_response",
     "head_movement",
     "driverview_smooth",
-    "hands_in_cab",
     "alt_view",
     "precision_zoom",
     "camera_collision",
@@ -156,7 +155,6 @@ const BEFORE: &[&str] = &[
     "use_real_date",
     "time_sync",
     "metar_sync",
-    "time_speed",
     "language",
     "launcher_rest",
     "developer_mode",
@@ -197,7 +195,6 @@ const BEFORE: &[&str] = &[
     "ui_dimming",
     "ui_corners",
     // (the Maps page's temporary window: the start's own choices)
-    "start.season",
     "start.traffic",
     "start.passengers",
     "start.schedule",

@@ -1071,43 +1071,6 @@ fn start_sheet(f: &mut Frame, r: Rect) -> bool {
         return false;
     }
 
-    let seasons = ["auto", "spring", "summer", "autumn", "winter"];
-    let labels: Vec<String> = ["By date", "Spring", "Summer", "Autumn", "Winter"]
-        .iter()
-        .map(|s| (*s).to_string())
-        .collect();
-    let mut season = seasons
-        .iter()
-        .position(|s| *s == f.state.choice.season)
-        .unwrap_or(0);
-    f.ui.label(Rect::new(inner.x, y, 112.0, ROW), "Season");
-    if f.ui.select(
-        "ps-season",
-        Rect::new(inner.x + 112.0, y, inner.w - 112.0, ROW),
-        &mut season,
-        &labels,
-    ) {
-        f.state.choice.season = seasons[season].to_string();
-        if season > 0 {
-            let month = ["", "04", "07", "10", "01"][season];
-            let date = f.state.choice.date.clone();
-            let (yy, dd) = (
-                date.get(0..4).unwrap_or("1989").to_string(),
-                date.get(8..10).unwrap_or("15").to_string(),
-            );
-            f.state.choice.date = format!("{yy}-{month}-{dd}");
-            f.state.load_lines();
-        }
-        let weather = f.state.choice.weather.clone();
-        if let Some(w) = f.state.weathers.iter().find(|x| x.file == weather).cloned() {
-            if !f.state.weather_fits(&w) {
-                f.state.choice.weather.clear();
-            }
-        }
-        f.state.touched();
-    }
-    y += ROW + 14.0;
-
     let mut traffic = f.state.choice.traffic;
     if f.ui.slider(
         "ps-traffic",
@@ -1471,7 +1434,6 @@ fn time_sheet(f: &mut Frame, r: Rect) -> bool {
         &mut d,
     ) {
         f.state.choice.date = d;
-        f.state.choice.season = "auto".into();
         f.state.load_lines();
         f.state.touched();
     }

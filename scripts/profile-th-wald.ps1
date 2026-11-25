@@ -46,7 +46,7 @@ try {
         '--root', ('"{0}"' -f $Root), '--no-menu', '--map', 'maps/TH_Wald/global.cfg',
         '--bus', ('"{0}"' -f $Bus), '--time', '09:03', '--hof', '"Thueringer Wald 2005"',
         '--date', '2017-10-07', '--traffic', '20', '--passengers', '--schedule',
-        '--season', 'autumn', '--spawn', '1792.7,1561.9,187,6.0', '--view', $View,
+        '--spawn', '1792.7,1561.9,187,6.0', '--view', $View,
         '--exit-after', $Seconds
     )
     $process = Start-Process -FilePath $binary -ArgumentList $arguments -WorkingDirectory $repo `

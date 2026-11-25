@@ -127,8 +127,6 @@ pub struct Settings {
     pub head_movement: bool,
     /// The interior camera glides between viewpoints (OMSI's `[driverview_smooth]`).
     pub driverview_smooth: bool,
-    /// The driver's hands on the wheel in the cab view (the rest of the figure left out).
-    pub hands_in_cab: bool,
     /// OMSI's `[altView]` (options.cfg): the right mouse button turns the view and
     /// Shift+right zooms. Off, the right button zooms and the middle one turns the view
     /// - OMSI's default, but on here by default: a
@@ -296,8 +294,6 @@ pub struct Settings {
     /// through a low-pass, as the game did before it mixed as OMSI 2 does. Off by default:
     /// OMSI 2 has no such filter.
     pub muffle_outside: bool,
-    /// How fast the clock runs (1 real time .. 30); in LAN play the host's decides.
-    pub time_speed: f64,
     /// The game's date and time follow this device's clock (the host's in LAN play); the
     /// time cannot be changed while it is on.
     pub time_sync: bool,
@@ -603,10 +599,8 @@ impl Settings {
             collision_pedestrians: true,
             head_movement: true,
             driverview_smooth: true,
-            hands_in_cab: false,
             alt_view: true,
             precision_zoom: false,
-            time_speed: 1.0,
             time_sync: false,
             metar_sync: false,
             metar_station: String::new(),
@@ -1103,18 +1097,8 @@ impl Settings {
                 "collision_pedestrians" => s.collision_pedestrians = b(v),
                 "head_movement" | "driverview_moving" => s.head_movement = b(v),
                 "driverview_smooth" => s.driverview_smooth = b(v),
-                "hands_in_cab" => s.hands_in_cab = b(v),
                 "alt_view" => s.alt_view = b(v),
                 "precision_zoom" => s.precision_zoom = b(v),
-                "time_speed" => {
-                    s.time_speed = v
-                        .trim_start_matches(['x', 'X'])
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .map(|x| x.clamp(1.0, 30.0))
-                        .unwrap_or(s.time_speed)
-                }
                 "time_sync" | "real_time_sync" => s.time_sync = b(v),
                 "metar_sync" => s.metar_sync = b(v),
                 "metar_station" => {

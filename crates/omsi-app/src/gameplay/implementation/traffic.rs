@@ -1192,7 +1192,6 @@ impl Traffic {
             stop_wishes: None,
             player_still: 0.0,
             day_time: 0.0,
-            time_scale: 1.0,
             weekday: 0,
             night: false,
             daylight: None,
@@ -5733,7 +5732,7 @@ impl Traffic {
         }
         let t_start = std::time::Instant::now();
         self.time += dt;
-        self.day_time += dt as f64 * self.time_scale;
+        self.day_time += dt as f64;
         self.last_dt = dt;
         self.held_at_red = 0;
         self.player = player;
@@ -8457,7 +8456,7 @@ impl Traffic {
     /// stop and jump points from the client's incomplete traffic requests.
     fn mirror_tick(&mut self, dt: f32) {
         self.time += dt;
-        self.day_time += dt as f64 * self.time_scale;
+        self.day_time += dt as f64;
         self.last_dt = dt;
         let day_time = self.day_time;
         for c in self.lights.iter_mut() {

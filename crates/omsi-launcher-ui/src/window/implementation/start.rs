@@ -165,7 +165,6 @@ pub fn card(f: &mut Frame, sv: &mut StartView, r: Rect) {
         ) {
             if let Some(iso) = date_typed(&text) {
                 f.state.choice.date = iso;
-                f.state.choice.season = "auto".into();
                 f.state.touched();
             }
         }
@@ -177,7 +176,6 @@ pub fn card(f: &mut Frame, sv: &mut StartView, r: Rect) {
             &mut d,
         ) {
             f.state.choice.date = d;
-            f.state.choice.season = "auto".into();
             f.state.touched();
         }
     }

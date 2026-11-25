@@ -23,8 +23,6 @@ pub fn hhmm(seconds: f64) -> String {
     format!("{:02}:{:02}", (s / 3600) % 24, (s % 3600) / 60)
 }
 
-pub use core::start::date_in_month;
-
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
     if b >= (1u64 << 30) as f64 {
