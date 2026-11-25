@@ -6,8 +6,13 @@ use crate::gpu::{
 };
 use crate::interface::FogLampsParts;
 use crate::passes::PostPass;
-use crate::shaders::fog_lamps_shader_source;
+use crate::shaders::lamp_pass_source;
 use crate::sky::enhanced_weather_fog;
+
+/// The pass's module: its own fragment shader in the core's lamp-pass frame.
+pub(crate) fn fog_lamps_shader_source() -> String {
+    lamp_pass_source(include_str!("shaders/fog_lamps.wgsl"))
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::lighting::ShadingPath;
-use crate::modes::enhanced::FogLampUniform;
+use crate::modes::enhanced::{fog_lamps_shader_source, FogLampUniform};
 
 #[test]
 fn noop_backend_initializes_renderer() {
@@ -334,7 +334,11 @@ fn shaders_validate_and_match_the_uniforms() {
             "scene terrain paint",
             crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
         ),
-        ("sky", sky_shader_source()),
+        (
+            "sky",
+            sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
+        ),
+        ("sky plain", sky_shader_source("")),
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
         ("snow", snow_shader_source()),
@@ -793,7 +797,11 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
             &scene_shader_text(true, &crate::renderer::scene_own_text(ShadingPath::Hdr)),
             path,
         );
-        for src in [scene, sky_shader_source(), corona_shader_source()] {
+        for src in [
+            scene,
+            sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
+            corona_shader_source(),
+        ] {
             for name in left_out(&src) {
                 assert!(
                     only_enhanced(&name),

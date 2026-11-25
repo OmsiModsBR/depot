@@ -24,11 +24,12 @@ const SKY_VERTEX: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
 };
 
 impl<'a> SkyBuilder<'a> {
-    pub(crate) fn new(device: &'a wgpu::Device, layouts: &Layouts, msaa: u32) -> Self {
+    /// `mode`: the mode's own sky fragment shaders, added to the module (see `sky_shader_source`).
+    pub(crate) fn new(device: &'a wgpu::Device, layouts: &Layouts, msaa: u32, mode: &str) -> Self {
         log::info!("renderer: compiling the sky and clouds shaders");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sky"),
-            source: wgpu::ShaderSource::Wgsl(sky_shader_source().into()),
+            source: wgpu::ShaderSource::Wgsl(sky_shader_source(mode).into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sky"),

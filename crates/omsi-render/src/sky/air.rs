@@ -13,7 +13,7 @@ pub(crate) const SUN_RADIUS: f32 = 0.0065;
 pub(crate) const MOON_RADIUS: f32 = 0.0062;
 
 /// How much of the sun the enhanced sky's cumulus lets through to the camera: the same
-/// cloud the sky shader draws (sky_enhanced.wgsl `cloud_base_shape`, `cloud_sigma`: the
+/// cloud the sky shader draws (sky_light.wgsl `cloud_base_shape`, `cloud_sigma`: the
 /// shape map's heaps cut by the cover, rounded with height, without the billows), its
 /// extinction integrated along the sun's direction through the layer, over a few rays a
 /// few tens of metres apart (the penumbra of a cloud a kilometre and a half up).

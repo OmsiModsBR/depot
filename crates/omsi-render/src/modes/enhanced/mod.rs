@@ -18,10 +18,10 @@ use crate::sky::{atmosphere, SkyResources};
 use crate::targets::GroupParts;
 use glam::Vec3;
 
-#[cfg(test)]
-pub(crate) use fog_lamps::FogLampUniform;
 pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
-pub(crate) use scene_shader::scene_text;
+#[cfg(test)]
+pub(crate) use fog_lamps::{fog_lamps_shader_source, FogLampUniform};
+pub(crate) use scene_shader::{scene_text, sky_text};
 
 pub(crate) struct Enhanced;
 
