@@ -186,7 +186,9 @@ impl PoleSim {
         }
         out.wire_present = out.poles.iter().all(|p| p.on_wire);
         out.speed_limit_active = out.poles.iter().any(|p| p.on_wire && p.in_special);
-        out.overspeed = out.speed_limit_active && self.speed_kmh > decl.params.complex_speed_limit;
+        out.overspeed = !self.auto
+            && out.speed_limit_active
+            && self.speed_kmh > decl.params.complex_speed_limit;
         self.wire_sounds(decl, net, body, &mut out, dt);
         if let Some(c) = self.poles[0].cursor.filter(|_| out.poles[0].on_wire) {
             if let Some(span) = net.span(c.span) {
@@ -270,7 +272,9 @@ impl PoleSim {
         let state = &mut self.poles[i];
         match state.phase {
             PolePhase::OnWire => {
-                if let Some(reason) = dewirement(state, &p, &o, &contact, self.speed_kmh, dt) {
+                if let Some(reason) =
+                    dewirement(state, &p, &o, &contact, self.speed_kmh, self.auto, dt)
+                {
                     self.events.push(PoleEvent::Dewired { pole: i, reason });
                     *state = PoleState {
                         phase: PolePhase::Dewired,
@@ -408,13 +412,16 @@ fn foot_to_wire(decl: &TrolleyDeclaration, i: usize, body: &BodyPose) -> DVec3 {
 
 /// Does the pole leave the wire this frame, and why? Each condition with a time must hold
 /// that long without a break (so the frame rate does not change the outcome); a pole turned
-/// past its limit, or a wire that ends under the shoe, leaves at once.
+/// past its limit, or a wire that ends under the shoe, leaves at once. The switch speed limit
+/// is the player's to keep: a self-driven vehicle (`auto`) does not slow for it, so it does
+/// not apply to it.
 fn dewirement(
     state: &mut PoleState,
     p: &PoleParams,
     o: &PoleOutput,
     c: &Contact,
     speed_kmh: f64,
+    auto: bool,
     dt: f64,
 ) -> Option<DewireReason> {
     if c.wire_ended {
@@ -443,7 +450,7 @@ fn dewirement(
             DewireReason::SideForce,
         ),
         (
-            o.in_special && speed_kmh > p.complex_speed_limit,
+            !auto && o.in_special && speed_kmh > p.complex_speed_limit,
             p.complex_overspeed_grace,
             DewireReason::Overspeed,
         ),

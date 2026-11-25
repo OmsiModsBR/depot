@@ -462,13 +462,14 @@ fn a_branch_starting_beside_the_straight_is_still_bridged() {
 
 /// A self-driven bus (an AI bus) driven along `path` (straight pieces between the points),
 /// its poles left to themselves from the start: which spline each shoe is on at the end.
-fn drive_auto(n: &WireNetwork, path: &[(f64, f64)], demand: f64) -> [i64; 2] {
+fn drive_auto(n: &WireNetwork, path: &[(f64, f64)], demand: f64, speed_kmh: f64) -> [i64; 2] {
     let d = decl();
     let mut sim = PoleSim::default();
     let heading = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0).atan2(b.1 - a.1).to_degrees();
     let auto = PoleInputs {
         auto: true,
         switch_demand: demand,
+        speed_kmh,
         ..Default::default()
     };
     let at = body(path[0].0, path[0].1, heading(path[0], path[1]));
@@ -509,6 +510,7 @@ fn a_self_driven_bus_puts_its_poles_up_and_its_shoes_follow_its_way_through_a_sw
             (-0.5 - 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
         ],
         0.0,
+        20.0,
     );
     assert_eq!(left, [2, 2]);
     let right = drive_auto(
@@ -520,6 +522,7 @@ fn a_self_driven_bus_puts_its_poles_up_and_its_shoes_follow_its_way_through_a_sw
             (0.5 + 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
         ],
         1.0,
+        20.0,
     );
     assert_eq!(right, [3, 3]);
 }
@@ -543,4 +546,23 @@ fn a_self_driven_bus_with_no_wire_in_reach_keeps_its_poles_down() {
         sim.step(&d, &n, &body(0.0, 20.0, 0.0), auto, 1.0 / 60.0);
     }
     assert!(sim.poles.iter().all(|p| p.phase == PolePhase::OnWire));
+}
+
+#[test]
+fn a_self_driven_bus_keeps_its_poles_on_the_wire_through_a_switch_at_any_speed() {
+    // the switch speed limit is the player's to keep: an AI bus does not slow for it
+    let n = y_switch();
+    let t10 = 10f64.to_radians();
+    let left = drive_auto(
+        &n,
+        &[
+            (0.0, 10.0),
+            (0.0, 50.0),
+            (-0.5, 52.85),
+            (-0.5 - 30.0 * t10.sin(), 52.85 + 30.0 * t10.cos()),
+        ],
+        0.0,
+        60.0,
+    );
+    assert_eq!(left, [2, 2]);
 }

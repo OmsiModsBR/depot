@@ -168,8 +168,9 @@ runs on the wire too. This is Depot's own: OMSI 2's plugin drives the player's t
 - **Switches.** The shoes take the way the bus has taken: the way whose wire leads towards the
   pole's foot, which has passed the switch by the time the trailing shoe reaches it. The
   throttle plays no part.
-- **Leaving the wire.** The same rules as for the player. A pole that left the wire goes back
-  to its hook and up again by itself.
+- **Leaving the wire.** The same rules as for the player, but for the switch and crossing
+  speed limit: an AI bus does not slow for it, so it does not apply. A pole that left the wire
+  goes back to its hook and up again by itself.
 - **Sounds.** Its switches, crossings and sparks are heard from outside.
 - **What the poles show.** The AI bus's model shows its poles with the same `shtanga_*`
   variables as the player's: its scripts' variable lists must name them, as the convention's
