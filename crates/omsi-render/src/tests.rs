@@ -1402,6 +1402,11 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
                 shadow_size: 1024,
                 fxaa: false,
                 render_scale: 1.0,
+                path: if enhanced {
+                    ShadingPath::Hdr
+                } else {
+                    ShadingPath::Linear
+                },
                 ..Default::default()
             },
         ))
@@ -2018,29 +2023,30 @@ fn smoke_puffs_are_drawn() {
         near: 0.1,
         far: 100.0,
     };
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-    let mut renderer = pollster::block_on(Renderer::new_with(
-        &instance,
-        None,
-        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-        RenderOptions {
-            msaa: 1,
-            ssao: false,
-            shadow_size: 1024,
-            fxaa: false,
-            render_scale: 1.0,
-            ..Default::default()
-        },
-    ))
-    .expect("test renderer");
-    renderer.set_smoke_texture(&omsi_texture::Image {
-        width: 4,
-        height: 4,
-        rgba: vec![255; 64],
-        has_alpha: true,
-    });
-    let mut scene = renderer.new_scene();
     for path in [ShadingPath::Linear, ShadingPath::Hdr] {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let mut renderer = pollster::block_on(Renderer::new_with(
+            &instance,
+            None,
+            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            RenderOptions {
+                msaa: 1,
+                ssao: false,
+                shadow_size: 1024,
+                fxaa: false,
+                render_scale: 1.0,
+                path,
+                ..Default::default()
+            },
+        ))
+        .expect("test renderer");
+        renderer.set_smoke_texture(&omsi_texture::Image {
+            width: 4,
+            height: 4,
+            rgba: vec![255; 64],
+            has_alpha: true,
+        });
+        let mut scene = renderer.new_scene();
         scene.smoke = vec![SmokeParticle {
             position: DVec3::new(0.0, 5.0, 0.0),
             size: 1.0,
@@ -2065,7 +2071,7 @@ fn smoke_puffs_are_drawn() {
     }
 }
 
-fn smoke_test_renderer() -> Renderer {
+fn smoke_test_renderer(path: ShadingPath) -> Renderer {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     pollster::block_on(Renderer::new_with(
         &instance,
@@ -2077,6 +2083,7 @@ fn smoke_test_renderer() -> Renderer {
             shadow_size: 1024,
             fxaa: false,
             render_scale: 1.0,
+            path,
             ..Default::default()
         },
     ))
@@ -2098,16 +2105,16 @@ fn a_smoke_puff_fades_into_its_ground() {
         near: 0.1,
         far: 100.0,
     };
-    let mut renderer = smoke_test_renderer();
-    renderer.set_smoke_texture(&omsi_texture::Image {
-        width: 4,
-        height: 4,
-        rgba: vec![255; 64],
-        has_alpha: true,
-    });
-    let mut scene = renderer.new_scene();
-    let red = |row: usize, rgba: &[u8]| rgba[(row * 64 + 32) * 4] as i32;
     for path in [ShadingPath::Linear, ShadingPath::Hdr] {
+        let mut renderer = smoke_test_renderer(path);
+        renderer.set_smoke_texture(&omsi_texture::Image {
+            width: 4,
+            height: 4,
+            rgba: vec![255; 64],
+            has_alpha: true,
+        });
+        let mut scene = renderer.new_scene();
+        let red = |row: usize, rgba: &[u8]| rgba[(row * 64 + 32) * 4] as i32;
         let lighting = Lighting {
             shadows: false,
             fog_density: 0.0,
@@ -2183,7 +2190,7 @@ fn a_smoke_puffs_picture_turns_with_its_spin() {
         near: 0.1,
         far: 100.0,
     };
-    let mut renderer = smoke_test_renderer();
+    let mut renderer = smoke_test_renderer(ShadingPath::Linear);
     let mut rgba = vec![255u8; 64];
     for px in 8..16 {
         rgba[px * 4 + 3] = 0;

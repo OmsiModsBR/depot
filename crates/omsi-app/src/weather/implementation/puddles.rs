@@ -24,8 +24,8 @@
 //! draws), only what standing water throws, which OMSI knows nothing of, on top.
 
 use glam::{DVec3, Mat4, Vec3};
-use omsi_geometry::util::smoothstep;
 use omsi_cfg::GraphicsMode;
+use omsi_geometry::util::smoothstep;
 use omsi_render::SmokeParticle;
 
 /// How far the puddle threshold drops with the wetness (`PUDDLE_SPREAD` in `enhanced.wgsl`

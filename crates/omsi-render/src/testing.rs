@@ -55,6 +55,22 @@ pub use crate::interface::{ModeShading, ModeView, PipeSet};
 pub use crate::passes::FrameFeatures;
 pub use crate::renderer::{BuiltPasses, FrameInputs, FrameSwitches, ViewKind};
 
+/// Which mode's own pipelines a renderer holds: Enhanced's (`own_mode`, with its HDR pipelines
+/// and the lamps' fog pass) and Vanilla+'s reflection pass. A renderer is built with one mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModesBuilt {
+    pub enhanced: bool,
+    pub vanilla_plus_reflections: bool,
+}
+
+/// The modes a renderer was built with (see [`ModesBuilt`]).
+pub fn modes_built(r: &crate::Renderer) -> ModesBuilt {
+    ModesBuilt {
+        enhanced: r.own_mode.is_some(),
+        vanilla_plus_reflections: r.reflection_pass.is_some(),
+    }
+}
+
 /// What the render mode of `path` answers for a frame (`interface::RenderMode`), for the tests
 /// that need no graphics adapter.
 pub mod modes {

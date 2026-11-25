@@ -3,6 +3,7 @@
 
 use super::state::SHADOW_SIZE;
 use crate::gpu::MSAA;
+use crate::lighting::ShadingPath;
 
 /// What the renderer is built with: the user's graphics settings.
 #[derive(Debug, Clone, Copy)]
@@ -41,11 +42,10 @@ pub struct RenderOptions {
     /// The materials' reflection maps (`[matl_envmap]`: the shine of paint, chrome and
     /// glass). Off, nothing mirrors the sky photo - some players find it too strong.
     pub reflections: bool,
-    /// Enhanced graphics are not asked for: a phone or OpenGL then leaves their pipelines
-    /// out (they would never be drawn, and compiling the ray-marched clouds' sky killed
-    /// Mali and Adreno drivers before the first frame, #364, #333, #316, #371). Asked for,
-    /// they are built on every device and graphics API; a computer always builds them.
-    pub no_enhanced: bool,
+    /// The graphics path to build: only that mode's pipelines, look-up tables and probe are
+    /// created (spec 001, FR-026). Enhanced on a device that cannot take it (OpenGL's
+    /// texture units) is built as Vanilla+, with a warning.
+    pub path: ShadingPath,
     /// The smoke systems show in the mirrors' pictures (OMSI's option "no smoke in
     /// reflections", off).
     pub smoke_in_mirrors: bool,
@@ -79,7 +79,7 @@ impl Default for RenderOptions {
             omsi_shadow_casters: false,
             shadow_blobs: true,
             reflections: true,
-            no_enhanced: false,
+            path: ShadingPath::Hdr,
             smoke_in_mirrors: true,
             sun_shadows: true,
             coronas: true,

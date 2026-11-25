@@ -712,13 +712,14 @@ fn add_floor(renderer: &Renderer, scene: &mut Scene) {
 
 /// The preview helper's renderer (see `helper`): a bus on a floor needs none of the game's
 /// costly passes - no ambient occlusion, a small shadow map, 4x MSAA for the edges whatever
-/// the game uses.
+/// the game uses, and only Vanilla+'s pipelines (its pictures are drawn in the plain shading).
 pub(super) fn showroom_options(settings: &crate::settings::Settings) -> omsi_render::RenderOptions {
     omsi_render::RenderOptions {
         msaa: 4,
         ssao: false,
         shadow_size: 1024,
         render_scale: 1.0,
+        path: omsi_render::ShadingPath::Linear,
         ..settings.render_options()
     }
 }

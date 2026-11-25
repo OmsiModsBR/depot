@@ -889,7 +889,7 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; checks transparent window reflection depth"]
     fn glass_hit_depth_preserves_receiver_depth_across_resizes() {
-        let mut r = test_renderer(4);
+        let mut r = test_renderer(4, ShadingPath::Hdr);
         let mut scene = r.new_scene();
         let back = test_material(
             &r,
@@ -973,7 +973,7 @@ mod tests {
         }
     }
 
-    fn test_renderer(msaa: u32) -> Renderer {
+    fn test_renderer(msaa: u32, path: ShadingPath) -> Renderer {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         pollster::block_on(Renderer::new_with(
             &instance,
@@ -985,6 +985,7 @@ mod tests {
                 fxaa: false,
                 shadow_size: 1024,
                 render_scale: 1.0,
+                path,
                 ..Default::default()
             },
         ))
@@ -1064,8 +1065,13 @@ mod tests {
     #[test]
     #[ignore = "requires a graphics adapter; renders wet roads through bus glass"]
     fn wet_scene_reflections_survive_bus_glass_in_every_graphics_mode() {
-        for msaa in [1, 4] {
-            let mut r = test_renderer(msaa);
+        for (msaa, path) in [
+            (1, ShadingPath::Linear),
+            (1, ShadingPath::Hdr),
+            (4, ShadingPath::Linear),
+            (4, ShadingPath::Hdr),
+        ] {
+            let mut r = test_renderer(msaa, path);
             let mut scene = r.new_scene();
             let road = test_material(
                 &r,
@@ -1163,7 +1169,7 @@ mod tests {
                 near: 0.1,
                 far: 100.0,
             };
-            for path in [ShadingPath::Linear, ShadingPath::Hdr] {
+            {
                 let lighting = Lighting {
                     path,
                     wetness: 1.0,

@@ -16,12 +16,7 @@ use std::time::Instant;
 /// roads of `WinterSnowfall` too (see `omsi_texture::season_chain`).
 pub(crate) fn season_folder(args: &Args, global: &omsi_map::GlobalCfg) -> (i32, Option<String>) {
     let (snow, snow_on_road) = weather_snow(args);
-    season_folder_on(
-        global,
-        start_clock(args).day_of_year,
-        snow,
-        snow_on_road,
-    )
+    season_folder_on(global, start_clock(args).day_of_year, snow, snow_on_road)
 }
 
 /// [`season_folder`] on day `day_of_year` in weather that is snowy or not (the date moves on

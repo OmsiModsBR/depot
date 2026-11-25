@@ -1712,7 +1712,11 @@ impl Settings {
             shadow_blobs: self.shadow_blobs,
             reflections: self.reflections,
             smoke_in_mirrors: self.smoke_in_mirrors,
-            no_enhanced: self.graphics != GraphicsMode::Enhanced,
+            path: if self.graphics == GraphicsMode::Enhanced {
+                omsi_render::ShadingPath::Hdr
+            } else {
+                omsi_render::ShadingPath::Linear
+            },
             // (what the environment leaves out: the game reads it here, once)
             sun_shadows: !omsi_cfg::flags::NO_SHADOWS.is_set(),
             coronas: !omsi_cfg::flags::NO_CORONAS.is_set(),

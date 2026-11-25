@@ -64,11 +64,11 @@ pub(crate) fn ui_language(code: &str) {
 }
 
 use crate::core::cli::Args;
+use crate::core::launcher_link::open_launcher;
 use crate::core::startup::{self, graphics_instance, BUILD, VERSION};
 use crate::core::{launcher_statics, make_app, prepare};
 use anyhow::Result;
 use clap::Parser;
-use crate::core::launcher_link::open_launcher;
 use winit::event_loop::EventLoop;
 
 /// The game (and its launcher) from the command line: what `main` does.
