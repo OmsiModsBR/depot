@@ -7,7 +7,7 @@ use crate::gameplay::player::Player;
 use crate::hud;
 use crate::hud::nav;
 use crate::menu;
-use crate::radio;
+use crate::gameplay::radio;
 use crate::settings;
 use crate::weather::ambience;
 use crate::weather::puddles;

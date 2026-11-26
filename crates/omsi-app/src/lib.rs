@@ -18,7 +18,6 @@ mod lights;
 mod mapview;
 mod menu;
 mod output;
-mod radio;
 mod tr_fill;
 mod ui;
 mod weather;

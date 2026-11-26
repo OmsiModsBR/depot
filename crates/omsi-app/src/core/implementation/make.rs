@@ -20,7 +20,7 @@ use crate::core::services::run_export;
 use crate::situation::apply_situation;
 use crate::ui_language;
 use crate::weather::{puddles, rain};
-use crate::{gameplay, hud, radio};
+use crate::{gameplay, hud};
 use anyhow::Result;
 use std::time::Instant;
 
@@ -252,7 +252,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         menu: None,
         populate_t: 0.0,
         humans_populate_t: 0.0,
-        radio: radio::Radio::load(&args_root_for_keys),
+        radio: gameplay::radio::Radio::load(&args_root_for_keys),
         profile: Default::default(),
         profile_prev: Default::default(),
         first_populate: true,

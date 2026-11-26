@@ -84,10 +84,10 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn own_stations(&self) -> Vec<(String, String)> {
-        crate::radio::own_stations()
+        crate::gameplay::radio::own_stations()
     }
 
     fn save_stations(&self, list: &[(String, String)]) -> std::io::Result<()> {
-        crate::radio::save_stations(list)
+        crate::gameplay::radio::save_stations(list)
     }
 }
