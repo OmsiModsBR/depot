@@ -696,13 +696,22 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         ambient_albedo = ambient_albedo * detail_factor;
     }
     // --- the material in physical terms
+    // The share of the sphere map the surface shows, as the vanilla picture lays it: with a
+    // [matl_envmap_mask] or a [matl_transmap] the mask's alpha (the factor does not count),
+    // else the [matl_envmap] factor over the whole surface. `env_where` is where it
+    // reflects at all (the mask alone), which decides how smooth it is.
     var refl = 0.0;
+    var env_where = 0.0;
     if (reflective_env) {
-        // (with a mask of its own or a [matl_transmap] the share is the mask's alone, as
-        // Omsi.exe's stage takes it - the factor counts only where there is none)
-        let by_mask = material.params.z > 0.5 || (u32(material.params2.w + 0.5) & 1u) != 0u;
-        refl = clamp(select(min(material.params2.y, 1.0), 1.0, by_mask) * reflection_mask(duv, diffuse_a), 0.0, 1.0);
+        let by_mask = material.params.z > 0.5 || has_env_mask() || has_transmap_declared();
+        // (without a mask or a transmap the diffuse alpha is no mask: a body whose texture
+        // carries an alpha channel for something else reflects all over, as in Vanilla)
+        env_where = clamp(reflection_mask(duv, select(1.0, diffuse_a, by_mask)), 0.0, 1.0);
+        refl = clamp(select(min(material.params2.y, 1.0), 1.0, by_mask) * env_where, 0.0, 1.0);
     }
+    // what of the paint's reflection is left where the share is below what a Fresnel
+    // reflectance of zero at normal incidence still averages (1 / 21)
+    var coat_share = 1.0;
     var metal = 0.0;
     var f0 = vec3<f32>(0.04);
     var rough = 0.8;
@@ -729,42 +738,27 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         let share = clamp(alpha * min(material.params2.y, 1.0), 0.0, 1.0);
         f0 = vec3<f32>(clamp((share - 1.0 / 21.0) * 21.0 / 20.0, 0.04, 0.9));
     } else if (reflective_env) {
-        // Paint reflects its few per cent through a smooth clear coat; much more than a few
-        // per cent is polished metal - but only where the model says so with a mask of its
-        // own ([matl_envmap_mask]). Nearly every car body carries `[matl_envmap] … 1` with
-        // no mask, which OMSI takes as "reflect the sphere map fully" and not as chrome:
-        // read as metalness it made a Golf's bonnet a mirror, in which the envmap photo's
-        // trees stood as contour lines across the paint at close range.
-        //
-        // The paint itself is a clear coat: a lacquer of refractive index 1.5 (4 % at normal
-        // incidence, Fresnel's 100 % at grazing) polished smooth, which mirrors the street
-        // as sharply as the windows do. Any [matl_envmap] at all says the surface is
-        // polished: OMSI lays even a factor of 0.1 over it as a sharp picture, only a faint
-        // one. Many bus bodies carry 0.1 (the Caio Millennium V's paint); taken as a blur
-        // that only a factor of 0.5 sharpened, their paint (roughness 0.72) mirrored a flat
-        // sheen while only the strongly envmapped parts showed a reflection, and the bump
-        // map, which bends only the reflection, showed nowhere. So the coat is smooth from a
-        // factor of 0.1 up; below it (0.02 .. 0.05, the faintest trim) a satin sheen. The
-        // mask (the texture's alpha) says where. (Roughness 0.22 for every body, against
-        // the photo's contour lines on a car's bonnet, left the paint matte beside its
-        // sharp windows.)
-        let masked = (u32(material.params2.w + 0.5) & 1u) != 0u;
+        // Paint is a clear coat: polished smooth, it mirrors the street as sharply as the
+        // windows do, and a Fresnel term makes it rise towards grazing. How much it mirrors
+        // is the share above, as the vanilla picture lays the sphere map over the paint by
+        // it at every angle: OMSI has no Fresnel term, so the share is taken as the
+        // reflectance averaged over the angles the surface is seen at (Schlick's mean,
+        // f0 + (1 - f0) / 21). A factor of 1 without a mask is a mirror there, and here; a
+        // factor of 0.02 a faint picture, still sharp. Below a mean of 1 / 21 (f0 of zero)
+        // the whole reflection is scaled down to the share. (A fixed 4 % coat for every
+        // body without a mask made a factor of 1 as faint as one of 0.1, and a roughness
+        // taken from the factor blurred the weakest envmaps into nothing.)
+        // Any envmap says the surface is polished where its mask says it reflects; where the
+        // mask says nothing does - a tyre or a seal on the body's texture - it is the rough
+        // rubber or plastic of an unpolished surface.
+        // Much more than a few per cent is polished metal, but only where the model says so
+        // with a mask of its own ([matl_envmap_mask]).
+        let masked = has_env_mask();
         let metal_ok = (u32(material.params2.w + 0.5) & 4u) != 0u;
         metal = select(0.0, smoothstep(0.3, 0.85, refl), masked || metal_ok);
-        // (where the mask says nothing reflects - a tyre or a seal on the body's texture -
-        // it is no coat but the rough rubber or plastic of an unpolished surface)
-        let coat_rough = mix(0.8, 0.05, smoothstep(0.0, 0.1, refl));
-        // Where the model says how much it mirrors - a [matl_envmap_mask], or the texture's
-        // alpha under a [matl_transmap] (most mod bodies) - Omsi.exe lays the sphere map
-        // over the paint by that share at every angle (shader.wgsl's environment stage):
-        // OMSI has no Fresnel term, so the share is the reflectance averaged over the angles
-        // the surface is seen at. A Fresnel reflectance with that average (Schlick's, whose
-        // hemispherical mean is f0 + (1 - f0) / 21) mirrors as much as the vanilla picture
-        // and rises towards grazing as a real coat does. (A plain 4 % coat left those
-        // bodies far fainter than in the vanilla picture.) A body with neither keeps the
-        // lacquer's 4 %: there Omsi.exe's lerp by the factor alone made every Golf a mirror.
-        let authored = masked || material.params.z > 0.5;
-        let coat = select(0.04, clamp((refl - 1.0 / 21.0) * 21.0 / 20.0, 0.04, 0.95), authored);
+        let coat_rough = mix(0.8, 0.05, smoothstep(0.0, 0.1, env_where));
+        let coat = clamp((refl - 1.0 / 21.0) * 21.0 / 20.0, 0.0, 0.95);
+        coat_share = mix(clamp(refl * 21.0, 0.0, 1.0), 1.0, metal);
         f0 = mix(vec3<f32>(coat), mix(albedo, vec3<f32>(1.0), 0.4) * refl, metal);
         rough = mix(coat_rough, 0.14, metal);
     } else if (!thin && material.specular.w > 0.0 && dot(material.specular.rgb, vec3<f32>(1.0)) > 0.05) {
@@ -803,6 +797,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         if (material.pbr.w > 0.5) {
             metal = orm.b;
             f0 = mix(vec3<f32>(0.04), albedo, metal);
+            // (the metalness map's own reflectance, not the envmap's share)
+            coat_share = 1.0;
         }
     }
     // rain: roads with [moisture] turn dark and smooth, everything outside a little glossier
@@ -1062,7 +1058,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // the Fresnel term took off its ambient above - at a grazing angle that term is near 1,
     // and the far road and ground went dark with no reflection in its place, #374)
     let reflects = reflective_env || glass || pbr_reflects || is_water || wet_road > 0.0;
-    var refl_f = env_brdf(f0, rough, nv) * spec_occ * select(1.0, wet_road, !(reflective_env || glass || pbr_reflects || is_water)) * wet_share;
+    var refl_f = env_brdf(f0, rough, nv) * spec_occ * select(1.0, wet_road, !(reflective_env || glass || pbr_reflects || is_water)) * wet_share * coat_share;
     if (!reflects) {
         ambient = e_amb * ambient_albedo / PI;
     }
@@ -1181,7 +1177,9 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             case 14: { dc = (ambient + direct) * pre; }
             case 15: { dc = lamps * pre; }
             case 16: { dc = emit; }
-            case 17: { dc = vec3<f32>(rough, f0.g * 10.0, metal); }
+            // (f0 as it is: a factor of 1 without a mask takes it near 1, and ten times that
+            // overflowed into the other channels in the tone mapping)
+            case 17: { dc = vec3<f32>(rough, f0.g, metal); }
             default: { dc = vec3<f32>(alpha, f32(glass), f32(has_env)); }
         }
         return vec4<f32>(dc, 1.0);
