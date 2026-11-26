@@ -2,8 +2,10 @@
 //! the vehicle and its coupled parts stand where they are drawn, the poles follow the wire
 //! and their variables are written for the meshes and the scripts.
 //!
-//! The meshes of the pole-carrying part use them the next frame (a coupled part animates
-//! inside its own placing), and so do the scripts (they ran before the bodies moved).
+//! They step after the bodies and the coupled parts are placed and before the scripts run
+//! and the meshes animate, so both use them the same frame: drawn a frame late, a pole's
+//! shoe stood off the wire by as far as the bus turned under it in that frame (a hand's
+//! breadth at a switch taken at speed).
 
 use std::sync::Arc;
 

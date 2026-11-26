@@ -33,3 +33,5 @@ test-support = []
 [dev-dependencies]
 omsi-sim = { path = ".", features = ["test-support"] }
 omsi-audio = { path = "../omsi-audio" }
+omsi-trolley = { path = "../omsi-trolley", features = ["test-support"] }
+parking_lot = { workspace = true }

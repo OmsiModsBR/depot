@@ -667,12 +667,16 @@ impl VehicleInstance {
         // (signed, as OMSI adds it: reversing takes it back)
         self.driven_km += (self.motion.velocity_kmh() as f64 / 3600.0) * dt as f64;
         self.update_engine_vars(dt);
+        // the coupled parts where they stand, and the poles on the wire from there, before
+        // the scripts and the animations read them (after them, the poles were drawn a frame
+        // late: off the wire by the way the bus turned in that frame)
+        self.place_trailers(dt);
+        self.step_trolley(dt);
         let p = self.ty.program.clone();
         self.vm.run_frame(&p, &mut self.state, &mut self.host);
         self.show_radio_text();
         self.clear_pax_requests();
-        self.update_visuals(dt);
-        self.step_trolley(dt);
+        self.show_placed(dt);
     }
 
     /// The passengers' door requests are pulses: OMSI clears all eight of each kind

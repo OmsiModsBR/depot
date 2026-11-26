@@ -308,11 +308,22 @@ impl VehicleInstance {
 }
 
 impl TrailerPart {
-    /// The part this frame: where it stands - its body's pose, or hung on the part in front
-    /// (`lead`: position, rotation and heading of the part in front; the vehicle itself for
-    /// the first part) -, its joint's angles, and its animations from the leading vehicle's
-    /// variables.
+    /// The part this frame: where it stands (see `place`) and its animations (see
+    /// `animate`).
     pub(crate) fn update(
+        &mut self,
+        main: &mut VehicleInstance,
+        dt: f32,
+        lead: Option<(DVec3, Mat4, f64)>,
+    ) {
+        self.place(main, dt, lead);
+        self.animate(main, dt);
+    }
+
+    /// Where the part stands this frame - its body's pose, or hung on the part in front
+    /// (`lead`: position, rotation and heading of the part in front; the vehicle itself for
+    /// the first part) -, with its joint's angles and its wheels' variables.
+    pub(crate) fn place(
         &mut self,
         main: &mut VehicleInstance,
         dt: f32,
@@ -357,6 +368,10 @@ impl TrailerPart {
             let rot = (self.odometer / self.wheel_radius).rem_euclid(std::f32::consts::TAU);
             main.show_rolling_wheels(self.first_axle, self.axle_count, rot, rpm);
         }
+    }
+
+    /// The part's animations from the leading vehicle's variables.
+    pub(crate) fn animate(&mut self, main: &VehicleInstance, dt: f32) {
         for (i, a) in self.animators.iter_mut().enumerate() {
             self.mesh_transforms[i] = a.update(dt, &main.state.vars);
         }
