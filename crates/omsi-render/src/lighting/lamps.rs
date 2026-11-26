@@ -5,33 +5,33 @@ use super::model::{LightMode, PointLight, LAMP_E};
 use super::smoothstep;
 use glam::{DVec3, Mat4, Vec3};
 
-pub(crate) const LIGHT_CELL: f32 = 25.0;
+pub const LIGHT_CELL: f32 = 25.0;
 
 /// Enhanced: how many street lamps cast shadows (their maps are tiles of a quarter of the
 /// shadow size under the far map), and how far from the camera a lamp's reach may end.
-pub(crate) const LAMP_SHADOWS: usize = 4;
+pub const LAMP_SHADOWS: usize = 4;
 
-pub(crate) const LAMP_SHADOW_REACH: f32 = 45.0;
+pub const LAMP_SHADOW_REACH: f32 = 45.0;
 
 /// The far map's height over its width: the lamps' tiles take the quarter under it.
-pub(crate) const FAR_MAP_ASPECT: f32 = 1.25;
+pub const FAR_MAP_ASPECT: f32 = 1.25;
 
 /// A lamp's shadow map looks straight down from its head over this field of view (a
 /// street lamp's light leaves it downwards, see `PointLight::housed`).
-pub(crate) const LAMP_SHADOW_FOV: f32 = 150.0;
+pub const LAMP_SHADOW_FOV: f32 = 150.0;
 
 /// A street lamp that casts shadows this frame.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct LampShadow {
+pub struct LampShadow {
     /// Its index in the light buffer, where it is (render-origin relative) and its reach.
-    pub(crate) index: u32,
-    pub(crate) position: Vec3,
-    pub(crate) range: f32,
+    pub index: u32,
+    pub position: Vec3,
+    pub range: f32,
 }
 
 impl LampShadow {
     /// The shadow map's view and projection: straight down, depth 0..1 over its reach.
-    pub(crate) fn view_proj(&self) -> Mat4 {
+    pub fn view_proj(&self) -> Mat4 {
         let proj =
             Mat4::perspective_rh(LAMP_SHADOW_FOV.to_radians(), 1.0, 0.1, self.range.max(1.0));
         let view = Mat4::look_to_rh(self.position, -Vec3::Z, Vec3::Y);
@@ -39,10 +39,10 @@ impl LampShadow {
     }
 }
 
-pub(crate) const LIGHT_GRID_SIDE: usize = 64;
+pub const LIGHT_GRID_SIDE: usize = 64;
 
 /// (32: a depot or a bus interior with many lamps lost the farthest past 16 in a cell)
-pub(crate) const LIGHT_CELL_CAP: usize = 32;
+pub const LIGHT_CELL_CAP: usize = 32;
 
 /// How much the lamps round the camera light the night sky over it, relative to a city's
 /// (Spandau's middle is 1): a sky's glow is the lamps' upward and reflected light scattered
@@ -50,9 +50,9 @@ pub(crate) const LIGHT_CELL_CAP: usize = 32;
 /// d^-2.5 (Walker's law, "The effects of urban lighting on the brightness of the night
 /// sky", 1977; the near field evened out over the first few hundred metres). A village's
 /// handful of lamps leaves the stars; a city's thousands turn the sky orange-grey.
-pub(crate) const SKY_GLOW_REF: f32 = 830.0;
+pub const SKY_GLOW_REF: f32 = 830.0;
 
-pub(crate) fn lamp_sky_glow(lights: &[PointLight], ro: DVec3, cam_rel: Vec3) -> f32 {
+pub fn lamp_sky_glow(lights: &[PointLight], ro: DVec3, cam_rel: Vec3) -> f32 {
     let mut sum = 0.0f32;
     for l in lights {
         if !l.housed || l.intensity <= 0.0 {
@@ -79,7 +79,7 @@ pub(crate) fn lamp_sky_glow(lights: &[PointLight], ro: DVec3, cam_rel: Vec3) -> 
 /// of lit streets, and the eye's adaptation to that dark lifted every lamp's light to
 /// white (the modded maps' lamps, spaced and placed differently from the stock ones, most).
 /// `(f, r, u)`: the camera's forward, right and up.
-pub(crate) fn view_lamp_light(
+pub fn view_lamp_light(
     lights: &[PointLight],
     ro: DVec3,
     cam_rel: Vec3,
@@ -177,7 +177,7 @@ pub(crate) fn view_lamp_light(
 /// off the line of sight squared (degrees), summed over the sources (CIE 146). Metered on
 /// the ground between the lamps alone, a village full of street lamps in view read as a
 /// moonless night, and the eye's adaptation to that dark lifted every lamp's light to white.
-pub(crate) fn glare_veil(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3) -> f32 {
+pub fn glare_veil(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3) -> f32 {
     let f = forward.normalize_or(Vec3::Y);
     let mut veil = 0.0f32; // cd/m²
     for l in lights {
@@ -223,7 +223,7 @@ pub(crate) fn glare_veil(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forwar
 }
 
 /// A headlamp's intensity towards `t` (unit, from the lamp): lamp_air.wgsl `headlamp`.
-pub(crate) fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
+pub fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
     let fwd = (dir.truncate() + glam::Vec2::new(1e-6, 0.0)).normalize();
     let ahead = t.truncate().dot(fwd);
     if ahead <= 0.0 {

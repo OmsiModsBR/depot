@@ -55,8 +55,7 @@ pub fn note_adapter(adapter: &wgpu::Adapter) {
 }
 
 /// The device runs on OpenGL (set in `Renderer::new`).
-pub(crate) static GL_BACKEND: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+pub static GL_BACKEND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether the device draws on OpenGL (known once a renderer is made).
 pub fn gl_backend() -> bool {
@@ -73,7 +72,7 @@ pub fn gl_backend() -> bool {
 /// leaves out the enhanced path's three textures, and the enhanced path is not made
 /// (vanilla and vanilla+ draw as everywhere). OMSI_GL_TEXTURE_UNITS=1 takes this layout on
 /// any device (with OMSI_GPU_ARRAYS, to try it without such a chip).
-pub(crate) fn sixteen_texture_units() -> bool {
+pub fn sixteen_texture_units() -> bool {
     array_path() != ArrayPath::Storage && (gl_backend() || crate::gpu::debug().gl_texture_units)
 }
 
@@ -103,12 +102,12 @@ pub fn poll_gpu(device: &wgpu::Device) -> Result<(), GpuWaitError> {
 }
 
 /// The longest a single wait for the GPU holds the GL context (see [`wait_gpu`]).
-pub(crate) const GL_WAIT_SLICE: std::time::Duration = std::time::Duration::from_millis(20);
+pub const GL_WAIT_SLICE: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// On OpenGL, the GPU work of worker threads (textures and meshes of a bus made while the
 /// world loads) goes one thread at a time: a dozen of them queueing for the GL context left
 /// the last one waiting past wgpu's one second (#843). Elsewhere the device takes them all.
-pub(crate) fn gl_worker_turn() -> Option<std::sync::MutexGuard<'static, ()>> {
+pub fn gl_worker_turn() -> Option<std::sync::MutexGuard<'static, ()>> {
     static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
     gl_backend().then(|| TURN.lock().unwrap_or_else(|e| e.into_inner()))
 }
@@ -116,7 +115,7 @@ pub(crate) fn gl_worker_turn() -> Option<std::sync::MutexGuard<'static, ()>> {
 /// The card's own memory in MB where the system tells it: Windows, through DXGI, for
 /// whichever backend draws; Linux, through the DRM driver's sysfs (amdgpu; not
 /// NVIDIA's own driver, whose memory [`vulkan_vram_mb`] reads from Vulkan instead).
-pub(crate) fn dedicated_vram_mb(info: &wgpu::AdapterInfo) -> Option<u64> {
+pub fn dedicated_vram_mb(info: &wgpu::AdapterInfo) -> Option<u64> {
     // SAFETY: DXGI is called with no pointers of ours; the factory and adapters are COM
     // objects the `windows` crate releases when dropped, and only their descriptions are read
     #[cfg(windows)]
@@ -170,7 +169,7 @@ pub(crate) fn dedicated_vram_mb(info: &wgpu::AdapterInfo) -> Option<u64> {
 
 /// The largest device-local memory heap of a Vulkan adapter (MB).
 #[cfg(target_os = "linux")]
-pub(crate) fn vulkan_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
+pub fn vulkan_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
     // SAFETY: the adapter outlives the borrow, and only its memory properties are read
     let hal = unsafe { adapter.as_hal::<wgpu::hal::api::Vulkan>() }?;
     // SAFETY: the physical device belongs to this instance
@@ -187,6 +186,6 @@ pub(crate) fn vulkan_vram_mb(adapter: &wgpu::Adapter) -> Option<u64> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn vulkan_vram_mb(_adapter: &wgpu::Adapter) -> Option<u64> {
+pub fn vulkan_vram_mb(_adapter: &wgpu::Adapter) -> Option<u64> {
     None
 }

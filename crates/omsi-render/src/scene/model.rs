@@ -28,8 +28,8 @@ pub enum RenderPhase {
 }
 
 impl RenderPhase {
-    pub(crate) const COUNT: usize = 9;
-    pub(crate) const DRAW_ORDER: [Self; Self::COUNT] = [
+    pub const COUNT: usize = 9;
+    pub const DRAW_ORDER: [Self; Self::COUNT] = [
         Self::PreSurface,
         Self::Terrain,
         Self::Surface,
@@ -69,10 +69,10 @@ pub struct Instance {
     /// how many; 0 = none, `interior` stands in.
     pub interior_lamps: u32,
     /// First entry of this instance in the per-draw storage buffers (set by `prepare`).
-    pub(crate) base: u32,
+    pub base: u32,
     /// Transformed local bounds, refreshed with the GPU instance data. The floating
     /// render origin is applied per view, so changing it cannot leave stale spheres.
-    pub(crate) bounds: InstanceBounds,
+    pub bounds: InstanceBounds,
     /// Surface geometry classification (roads, markings, crossings), used for culling and
     /// weather/shading. `surface_bias` independently selects the vertex shader's depth pull.
     pub surface: bool,
@@ -145,7 +145,7 @@ pub struct Scene {
     pub meshes: Vec<GpuMesh>,
     pub textures: Vec<GpuTexture>,
     /// Texture slot read by procedural rain films.
-    pub(crate) glass_slot: Option<TextureId>,
+    pub glass_slot: Option<TextureId>,
     pub materials: Vec<Material>,
     pub instances: Vec<Instance>,
     /// World position everything is expressed relative to on the GPU (updated per frame).
@@ -155,7 +155,7 @@ pub struct Scene {
     /// The vehicles' `[interiorlight]` lamps, in slots each vehicle keeps
     /// (`Renderer::alloc_interior_lights`): they light only the meshes that name them.
     pub interior_lights: Vec<PointLight>,
-    pub(crate) interior_free: Vec<(u32, u32)>,
+    pub interior_free: Vec<(u32, u32)>,
     pub coronas: Vec<Corona>,
     /// Smoke particles for the next frame (set by the app every frame).
     pub smoke: Vec<SmokeParticle>,
@@ -163,45 +163,45 @@ pub struct Scene {
     /// vehicle has none or does not publish it). Only a second renderer reads it (the
     /// Direct3D 9 one clears the raindrops on glass with it).
     pub glass_wiper: Option<f32>,
-    pub(crate) smoke_buf: Option<wgpu::Buffer>,
-    pub(crate) smoke_count: u32,
+    pub smoke_buf: Option<wgpu::Buffer>,
+    pub smoke_count: u32,
     /// This frame's smoke as the sprite list the second renderer draws (kept only while it
     /// mirrors the frame: `Scene::frame_smoke`): OMSI's own particles, farthest first.
-    pub(crate) last_smoke: Vec<[f32; 20]>,
+    pub last_smoke: Vec<[f32; 20]>,
     /// Runs of this frame's coronas by picture: (texture, first, count).
     /// (and whether the run belongs to the vehicle the camera is in, drawn after it)
-    pub(crate) corona_runs: Vec<(u16, u32, u32, bool)>,
+    pub corona_runs: Vec<(u16, u32, u32, bool)>,
     /// This frame's coronas as the sprite list the runs index (kept only while a second
     /// renderer mirrors the frame: `Scene::frame_coronas`).
-    pub(crate) last_coronas: Vec<[f32; 20]>,
-    pub(crate) model_buf: Option<GpuArray>,
-    pub(crate) params_buf: Option<GpuArray>,
-    pub(crate) light_buf: Option<GpuArray>,
-    pub(crate) grid_buf: Option<GpuArray>,
-    pub(crate) corona_buf: Option<wgpu::Buffer>,
-    pub(crate) corona_count: u32,
+    pub last_coronas: Vec<[f32; 20]>,
+    pub model_buf: Option<GpuArray>,
+    pub params_buf: Option<GpuArray>,
+    pub light_buf: Option<GpuArray>,
+    pub grid_buf: Option<GpuArray>,
+    pub corona_buf: Option<wgpu::Buffer>,
+    pub corona_count: u32,
     /// The frame's draw list (see `Batch`), shared by the shadow, prepass and main passes.
-    pub(crate) draw_buf: Option<GpuArray>,
-    pub(crate) camera_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) shadow_bind_group: Option<wgpu::BindGroup>,
-    pub(crate) sky_bind_group: Option<wgpu::BindGroup>,
+    pub draw_buf: Option<GpuArray>,
+    pub camera_bind_group: Option<wgpu::BindGroup>,
+    pub shadow_bind_group: Option<wgpu::BindGroup>,
+    pub sky_bind_group: Option<wgpu::BindGroup>,
     /// The sky's day, twilight and night pictures, as set by `Renderer::set_sky_textures`.
-    pub(crate) sky_textures: Option<[TextureId; 3]>,
+    pub sky_textures: Option<[TextureId; 3]>,
     /// The picture of the weather's cloud type, as set by `Renderer::set_sky_cloud_picture`.
-    pub(crate) sky_cloud_picture: Option<TextureId>,
+    pub sky_cloud_picture: Option<TextureId>,
     /// The tiling cloud texture the sky's bind group was made with (kept to make it again).
-    pub(crate) sky_clouds: Option<TextureId>,
+    pub sky_clouds: Option<TextureId>,
     /// The sun's and the moon's pictures (`Texture\sonne.bmp`, `Texture\mond.bmp`), as set
     /// by `Renderer::set_sky_bodies`; the classic sky draws them.
-    pub(crate) sky_sun: Option<TextureId>,
-    pub(crate) sky_moon: Option<TextureId>,
+    pub sky_sun: Option<TextureId>,
+    pub sky_moon: Option<TextureId>,
     /// The star map (`omsi_content::StarMap`) and its cells across a face, as set by
     /// `Renderer::set_star_map`; the sky shaders draw the stars from it.
-    pub(crate) sky_stars: Option<TextureId>,
-    pub(crate) star_cells: u32,
+    pub sky_stars: Option<TextureId>,
+    pub star_cells: u32,
     /// The sun's glare's pictures, corona pictures (the glow's and the star's), as set by
     /// `Renderer::set_sun_glare`; `None`: no glare.
-    pub(crate) sun_glare: Option<[u16; 2]>,
+    pub sun_glare: Option<[u16; 2]>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the
@@ -212,52 +212,52 @@ pub struct Scene {
     pub transposed: std::collections::HashSet<TextureId>,
     /// Per overlay: the texture its bind group was made for, its rect buffer and the group
     /// (kept between frames; only the rect is rewritten).
-    pub(crate) overlay_res: Vec<(TextureId, wgpu::Buffer, wgpu::BindGroup, [f32; 8])>,
+    pub overlay_res: Vec<(TextureId, wgpu::Buffer, wgpu::BindGroup, [f32; 8])>,
     /// Structural change (render origin moved, buffers too small): everything is rebuilt.
-    pub(crate) dirty: bool,
+    pub dirty: bool,
     /// How many instances (and per-draw entries) the buffers hold; instances added since
     /// are appended to the buffers instead of rebuilding them, as long as they fit.
-    pub(crate) uploaded_instances: usize,
-    pub(crate) uploaded_entries: u32,
+    pub uploaded_instances: usize,
+    pub uploaded_entries: u32,
     /// Instances whose transform or parameters changed since the last `prepare`: only
     /// their entries are rewritten. Rebuilding the whole per-draw buffer for 17 000 objects
     /// because one bus moved was the biggest single CPU cost of a frame.
-    pub(crate) changed: Vec<usize>,
-    pub(crate) mesh_pages: Vec<MeshPage>,
-    pub(crate) changed_mark: Vec<bool>,
-    pub(crate) origin_moved: bool,
-    pub(crate) cache_bounds: bool,
-    pub(crate) bounds_meshes: Vec<bool>,
+    pub changed: Vec<usize>,
+    pub mesh_pages: Vec<MeshPage>,
+    pub changed_mark: Vec<bool>,
+    pub origin_moved: bool,
+    pub cache_bounds: bool,
+    pub bounds_meshes: Vec<bool>,
     /// The meshes ever reshaped (skinned), and the instances drawing one of them, so that a
     /// new pose rescans those instead of the whole scene; stale when an instance's mesh changes.
-    pub(crate) bounds_known: Vec<bool>,
-    pub(crate) bounds_users: Vec<usize>,
-    pub(crate) bounds_users_stale: bool,
+    pub bounds_known: Vec<bool>,
+    pub bounds_users: Vec<usize>,
+    pub bounds_users_stale: bool,
     /// A mesh slot was freed or taken by another mesh: its instances' bounds are redone once
     /// by a scan of the whole scene, without counting the slot as reshaped.
-    pub(crate) bounds_rescan: bool,
-    pub(crate) block_bounds: Vec<(DVec3, DVec3)>,
-    pub(crate) block_dirty: Vec<bool>,
-    pub(crate) block_cursor: usize,
-    pub(crate) bounds_dirty: bool,
+    pub bounds_rescan: bool,
+    pub block_bounds: Vec<(DVec3, DVec3)>,
+    pub block_dirty: Vec<bool>,
+    pub block_cursor: usize,
+    pub bounds_dirty: bool,
     /// What the per-draw buffers hold, kept on the CPU: changed entries are written here
     /// and uploaded as a few merged ranges. Every `write_buffer` makes a new staging buffer
     /// on the GPU, and one per changed vehicle or person was a hundred of them a frame.
-    pub(crate) cpu_models: Vec<[[f32; 4]; 4]>,
-    pub(crate) cpu_params: Vec<[f32; 4]>,
+    pub cpu_models: Vec<[[f32; 4]; 4]>,
+    pub cpu_params: Vec<[f32; 4]>,
     /// The light grid and lights as last uploaded, so that unchanged ones are not sent again.
-    pub(crate) last_grid: Vec<u32>,
+    pub last_grid: Vec<u32>,
     /// The street lamps that had a shadow map last frame (their places in centimetres):
     /// they keep it against a lamp only a little stronger (`prepare_lights`).
-    pub(crate) lamp_shadow_last: Vec<[i64; 3]>,
-    pub(crate) last_lights: Vec<u8>,
+    pub lamp_shadow_last: Vec<[i64; 3]>,
+    pub last_lights: Vec<u8>,
     /// Material bind groups and uniform buffers made since the last `prepare`, by what they
     /// hold: materials made in one go with the same textures and values share them (a C2's
     /// 965 materials need about a tenth as many). Only for a frame, so that nothing keeps a
     /// freed or replaced texture alive.
-    pub(crate) bind_groups: HashMap<BindKey, (wgpu::BindGroup, wgpu::Buffer)>,
+    pub bind_groups: HashMap<BindKey, (wgpu::BindGroup, wgpu::Buffer)>,
     /// The number of each material look seen so far, by its key's hash (see `Material::look`).
-    pub(crate) looks: hashbrown::HashMap<u64, u32>,
+    pub looks: hashbrown::HashMap<u64, u32>,
     /// The PBR maps of a diffuse texture (register them before making its materials).
     pub pbr_maps: HashMap<TextureId, PbrMaps>,
     /// Textures that are a season's snow pictures (`WinterSnow` folders): a material drawn
@@ -269,14 +269,14 @@ pub struct Scene {
 impl Scene {
     /// The look number of a material bind group made of `key` (numbers start at 1; 0 is the
     /// shared look of the opaque depth-only draws).
-    pub(crate) fn look(&mut self, key: &BindKey) -> u32 {
+    pub fn look(&mut self, key: &BindKey) -> u32 {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         key.hash(&mut h);
         self.intern_look(h.finish())
     }
 
-    pub(crate) fn intern_look(&mut self, hash: u64) -> u32 {
+    pub fn intern_look(&mut self, hash: u64) -> u32 {
         let next = self.looks.len() as u32 + 1;
         *self.looks.entry(hash).or_insert(next)
     }

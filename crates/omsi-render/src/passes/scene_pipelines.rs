@@ -10,7 +10,7 @@ use crate::scene::{Layouts, Vertex};
 
 /// What the scene's pipelines are made from: the scene shader (also the one the shadow,
 /// depth and puddle pipelines draw with), its layout, and the depth bias of surfaces.
-pub(crate) struct SceneBuilder<'a> {
+pub struct SceneBuilder<'a> {
     device: &'a wgpu::Device,
     shader: &'a wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
@@ -19,7 +19,7 @@ pub(crate) struct SceneBuilder<'a> {
 }
 
 impl<'a> SceneBuilder<'a> {
-    pub(crate) fn new(
+    pub fn new(
         device: &'a wgpu::Device,
         shader: &'a wgpu::ShaderModule,
         layouts: &Layouts,
@@ -39,7 +39,7 @@ impl<'a> SceneBuilder<'a> {
     }
 
     /// The vertex layout the scene's meshes use (the depth prepass draws with it too).
-    pub(crate) fn vertex_layout(&self) -> &wgpu::VertexBufferLayout<'static> {
+    pub fn vertex_layout(&self) -> &wgpu::VertexBufferLayout<'static> {
         &self.vertex_layout
     }
 
@@ -124,7 +124,7 @@ impl<'a> SceneBuilder<'a> {
     }
 
     /// One pipeline per `pipe_code`: the kind decides blending and the depth write.
-    pub(crate) fn pipelines(
+    pub fn pipelines(
         &self,
         format: wgpu::TextureFormat,
         fs: &str,

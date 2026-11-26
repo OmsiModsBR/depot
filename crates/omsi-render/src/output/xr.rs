@@ -11,7 +11,7 @@ impl Presenter {
     /// Eye-specific positions make the menu fuse into one virtual panel (`sampler`: the
     /// overlays' sampler).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_xr_ui(
+    pub fn render_xr_ui(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

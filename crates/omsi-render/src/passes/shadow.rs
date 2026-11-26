@@ -24,20 +24,20 @@ pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
 /// The close cascade's map is drawn no bigger than this (texels a side), whatever the shadow
 /// setting: 3 cm texels. At the 4096 setting it had been 1.6 cm, and drawing it was a third
 /// of the shadow pass's 4.6 ms.
-pub(crate) const SHADOW_CLOSE_MAX: u32 = 2048;
+pub const SHADOW_CLOSE_MAX: u32 = 2048;
 
 /// The first cascade of the street lamps' maps: the sun's are 0 (near), 1 (far) and 2 (close).
-pub(crate) const LAMP_CASCADE: usize = 3;
+pub const LAMP_CASCADE: usize = 3;
 
 /// The shadow pipelines' index: two per cascade, opaque then alpha-tested (`PIPE_OPAQUE`,
 /// `PIPE_ALPHA_TEST`), the cascades in order, the street lamps' tiles after the sun's.
-pub(crate) const fn shadow_pipe(cascade: usize, pipe: u8) -> usize {
+pub const fn shadow_pipe(cascade: usize, pipe: u8) -> usize {
     cascade * 2 + pipe as usize
 }
 
 /// The sun's shadow maps (near and far), their sampler, and the pipelines drawn into them:
 /// the clearing one and one per kind and cascade.
-pub(crate) fn shadow_pipelines(
+pub fn shadow_pipelines(
     device: &wgpu::Device,
     shadow_size: u32,
     shader: &wgpu::ShaderModule,
@@ -214,7 +214,7 @@ impl ShadowResources {
     /// The sun's shadow maps (the near and far cascades, the close one beside the near) and
     /// the street lamps' maps under the far one.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_shadow_maps(
+    pub fn encode_shadow_maps(
         &self,
         shadow_size: u32,
         scene: &Scene,
@@ -325,29 +325,29 @@ impl ShadowResources {
 }
 
 /// The sun's shadow maps, their pipelines, and the cascades as last drawn.
-pub(crate) struct ShadowResources {
-    pub(crate) shadow_view: wgpu::TextureView,
-    pub(crate) shadow_view_far: wgpu::TextureView,
-    pub(crate) shadow_sampler: wgpu::Sampler,
-    pub(crate) shadow_layout: wgpu::BindGroupLayout,
+pub struct ShadowResources {
+    pub shadow_view: wgpu::TextureView,
+    pub shadow_view_far: wgpu::TextureView,
+    pub shadow_sampler: wgpu::Sampler,
+    pub shadow_layout: wgpu::BindGroupLayout,
     /// [near opaque, near alpha-tested, far opaque, far alpha-tested, close opaque, close
     /// alpha-tested], then the street lamps' (6 + 2 k + kind; not with `basic_pipelines`)
-    pub(crate) shadow_pipelines: Vec<wgpu::RenderPipeline>,
+    pub shadow_pipelines: Vec<wgpu::RenderPipeline>,
     /// The far shadow cascade as last drawn: its light matrix, frames since, the render
     /// origin and the sun it was drawn for.
-    pub(crate) shadow_far_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
+    pub shadow_far_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
     /// The same for the near cascade, drawn every other frame (see `render_inner`).
-    pub(crate) shadow_near_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
+    pub shadow_near_cache: std::cell::Cell<(Mat4, u32, DVec3, Vec3)>,
     /// Shadow atlas matrices from the first OpenXR eye, reused by the second eye.
-    pub(crate) xr_shadow_cache: std::cell::Cell<Option<(DVec3, Vec3, Mat4, Mat4, Mat4)>>,
+    pub xr_shadow_cache: std::cell::Cell<Option<(DVec3, Vec3, Mat4, Mat4, Mat4)>>,
     /// Depth-only pipeline that fills its viewport with the far depth: clears the close
     /// cascade's part of the atlas when the near part is kept from the frame before.
-    pub(crate) shadow_clear_pipeline: wgpu::RenderPipeline,
+    pub shadow_clear_pipeline: wgpu::RenderPipeline,
 }
 
 impl ShadowResources {
     /// The shadow maps, their layout, sampler and pipelines.
-    pub(crate) fn new(
+    pub fn new(
         device: &wgpu::Device,
         shadow_size: u32,
         shader: &wgpu::ShaderModule,
@@ -388,17 +388,17 @@ impl ShadowResources {
 
 /// The sun's shadows of one picture (see `ShadowResources::schedule`).
 #[derive(Clone, Copy)]
-pub(crate) struct ShadowSchedule {
+pub struct ShadowSchedule {
     /// The picture has sun shadows at all, and draws its maps (not taken from the first eye).
-    pub(crate) shadows: bool,
-    pub(crate) draw_shadows: bool,
+    pub shadows: bool,
+    pub draw_shadows: bool,
     /// The near and far cascades are drawn anew this frame.
-    pub(crate) redraw_near: bool,
-    pub(crate) redraw_far: bool,
+    pub redraw_near: bool,
+    pub redraw_far: bool,
     /// The near, far and close cascades' light matrices.
-    pub(crate) light_view_proj: Mat4,
-    pub(crate) light_view_proj_far: Mat4,
-    pub(crate) light_view_proj_close: Mat4,
+    pub light_view_proj: Mat4,
+    pub light_view_proj_far: Mat4,
+    pub light_view_proj_close: Mat4,
 }
 
 impl ShadowResources {
@@ -406,7 +406,7 @@ impl ShadowResources {
     /// other frame, the far one every fourth or when the camera has left it, the close one
     /// every frame; a headset's second eye takes the first eye's.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn schedule(
+    pub fn schedule(
         &self,
         shadow_size: u32,
         sun_shadows: bool,

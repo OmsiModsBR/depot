@@ -14,7 +14,7 @@ const SESSION_SECONDS: f32 = 3.0;
 
 /// One test hook, by the value that turns it on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Hook {
+pub enum Hook {
     /// `open`: opening the adapter is refused.
     Open,
     /// `open-panic`: wgpu goes down while the adapter is opened.
@@ -58,17 +58,17 @@ fn asked() -> Option<&'static str> {
 }
 
 /// Whether `hook` is the one asked for.
-pub(crate) fn is(hook: Hook) -> bool {
+pub fn is(hook: Hook) -> bool {
     asked() == Some(hook.value())
 }
 
 /// Whether `hook` is asked for and the renderer made at `started` has run for a few seconds
 /// (the hooks that fire in a session, not while it starts).
-pub(crate) fn due(hook: Hook, started: Instant) -> bool {
+pub fn due(hook: Hook, started: Instant) -> bool {
     is_due(asked(), hook, started.elapsed().as_secs_f32())
 }
 
 /// `due` for a given request and the seconds the renderer has run.
-pub(crate) fn is_due(asked: Option<&str>, hook: Hook, seconds: f32) -> bool {
+pub fn is_due(asked: Option<&str>, hook: Hook, seconds: f32) -> bool {
     asked == Some(hook.value()) && seconds > SESSION_SECONDS
 }

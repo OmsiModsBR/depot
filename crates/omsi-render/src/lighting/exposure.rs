@@ -5,30 +5,30 @@ use super::smoothstep;
 use std::sync::Arc;
 
 /// The metering (see `meter_tuning`).
-pub(crate) const METER_GAIN: f32 = 0.4;
+pub const METER_GAIN: f32 = 0.4;
 
-pub(crate) const METER_TARGET: f32 = -2.84;
+pub const METER_TARGET: f32 = -2.84;
 
 // (how far the eye adapts to what it looks at beyond what the light model knows: the sun
 // in view, a dark cab or an underpass by day - two stops and a half and more for the
 // eye; at the metering's gain a snow field still comes out darkened by well under a stop)
-pub(crate) const METER_DARKEN: f32 = 2.0;
+pub const METER_DARKEN: f32 = 2.0;
 
-pub(crate) const METER_BRIGHTEN: f32 = 1.6;
+pub const METER_BRIGHTEN: f32 = 1.6;
 
 /// The tone curve's contrast about mid grey by day and at night (see `tone_contrast`).
-pub(crate) const TONE_CONTRAST_DAY: f32 = 1.22;
+pub const TONE_CONTRAST_DAY: f32 = 1.22;
 
-pub(crate) const TONE_CONTRAST_NIGHT: f32 = 0.94;
+pub const TONE_CONTRAST_NIGHT: f32 = 0.94;
 
 /// How far night vision takes the colour out of a dark scene (post.wgsl `night_vision`).
-pub(crate) const NIGHT_VISION: f32 = 0.3;
+pub const NIGHT_VISION: f32 = 0.3;
 
 /// The metering: the share of the metered difference that is corrected, its target (log2 of
 /// the picture's mean luminance), how far it may darken and brighten (EV), the exposure
 /// bias (EV) and the night vision strength. `OMSI_METER=gain,target,dark,bright,bias,night`
 /// overrides them for tuning.
-pub(crate) fn meter_tuning() -> [f32; 6] {
+pub fn meter_tuning() -> [f32; 6] {
     static METER: std::sync::OnceLock<[f32; 6]> = std::sync::OnceLock::new();
     *METER.get_or_init(|| {
         let mut m = [
@@ -55,7 +55,7 @@ pub(crate) fn meter_tuning() -> [f32; 6] {
 /// the eye's own adaptation to the dark between the street lamps lifts it out of black
 /// (a street a few hundred times darker than the pool under a lamp is still seen). `OMSI_TONE_CONTRAST=day,night`
 /// overrides it.
-pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
+pub fn tone_contrast(log_pre: f32) -> f32 {
     static OVERRIDE: std::sync::OnceLock<Option<(f32, f32)>> = std::sync::OnceLock::new();
     let (day, night) = OVERRIDE
         .get_or_init(|| {
@@ -72,26 +72,26 @@ pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
 /// `OMSI_DEBUG_EXPOSURE=1`: the enhanced path's exposure as it adapts - the light model's
 /// pre-exposure, the metered picture and the correction the tone mapping applies, logged
 /// about four times a second (the metered value lives on the GPU and is read back).
-pub(crate) struct ExposureLog {
-    pub(crate) buf: wgpu::Buffer,
-    pub(crate) ready: Arc<std::sync::atomic::AtomicBool>,
-    pub(crate) waiting: bool,
-    pub(crate) frame: u64,
-    pub(crate) started: std::time::Instant,
+pub struct ExposureLog {
+    pub buf: wgpu::Buffer,
+    pub ready: Arc<std::sync::atomic::AtomicBool>,
+    pub waiting: bool,
+    pub frame: u64,
+    pub started: std::time::Instant,
     /// the pre-exposure (log2) and the metering settings of the frame being read back
-    pub(crate) pending: (f32, [f32; 6]),
+    pub pending: (f32, [f32; 6]),
     /// The tone mapping's metering correction last read back (EV). Self-lit surfaces (a
     /// display's text, a script texture) are drawn this much brighter or darker in advance,
     /// so that they come out at their own brightness whatever the metering does to the
     /// rest of the picture: a destination display was darkened with a sunlit street and
     /// hardly readable by day.
-    pub(crate) ev: f32,
+    pub ev: f32,
     /// `OMSI_DEBUG_EXPOSURE`: log what is read.
-    pub(crate) log: bool,
+    pub log: bool,
 }
 
 impl ExposureLog {
-    pub(crate) fn new(device: &wgpu::Device) -> Option<ExposureLog> {
+    pub fn new(device: &wgpu::Device) -> Option<ExposureLog> {
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("exposure readback"),
             size: 256,
@@ -110,7 +110,7 @@ impl ExposureLog {
         })
     }
 
-    pub(crate) fn sample(
+    pub fn sample(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         adapted: &wgpu::TextureView,
@@ -169,7 +169,7 @@ impl ExposureLog {
     }
 }
 
-pub(crate) fn half_to_f32(b: u16) -> f32 {
+pub fn half_to_f32(b: u16) -> f32 {
     let sign = if b & 0x8000 != 0 { -1.0 } else { 1.0 };
     let e = ((b >> 10) & 0x1f) as i32;
     let m = (b & 0x3ff) as f32;

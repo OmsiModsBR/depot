@@ -13,7 +13,7 @@ use anyhow::{anyhow, Context, Result};
 
 impl Renderer {
     /// Open the device on `adapter` and build the renderer on it (see `Renderer::new_on`).
-    pub(crate) async fn open_on(
+    pub async fn open_on(
         adapter: wgpu::Adapter,
         surface: Option<&wgpu::Surface<'_>>,
         format: Option<wgpu::TextureFormat>,

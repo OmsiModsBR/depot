@@ -24,7 +24,7 @@ const AXES_REGISTER: u32 = 100;
 const GLOW_SIDE: u32 = 64;
 
 /// Shaders, the unit quad and the standard glow, made at the first scene frame.
-pub(super) struct CoronaPipeline {
+pub struct CoronaPipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
@@ -35,7 +35,7 @@ pub(super) struct CoronaPipeline {
 }
 
 #[derive(Default)]
-pub(super) struct CoronaStore {
+pub struct CoronaStore {
     pipeline: Option<CoronaPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
@@ -110,7 +110,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<CoronaPipeline> {
 
 /// The declaration of a sprite pass: stream 0 the quad's corners, stream 1 one record per
 /// sprite (five vectors, `TEXCOORD1` to `TEXCOORD5`).
-pub(super) fn sprite_elements() -> Vec<D3DVERTEXELEMENT9> {
+pub fn sprite_elements() -> Vec<D3DVERTEXELEMENT9> {
     let element = |stream: u16, offset: u16, ty: D3DDECLTYPE, index: u8| D3DVERTEXELEMENT9 {
         Stream: stream,
         Offset: offset,
@@ -136,7 +136,7 @@ pub(super) fn sprite_elements() -> Vec<D3DVERTEXELEMENT9> {
 }
 
 /// The unit quad every sprite is an instance of, and its indices.
-pub(super) fn unit_quad(
+pub fn unit_quad(
     device: &IDirect3DDevice9Ex,
 ) -> Result<(IDirect3DVertexBuffer9, IDirect3DIndexBuffer9)> {
     // SAFETY: out-parameters are live locals; the locked ranges are exactly the sizes the
@@ -185,7 +185,7 @@ pub(super) fn unit_quad(
 
 /// Puts `sprites` up in the dynamic buffer in `slot` (made, or made larger, when the list does
 /// not fit it), written whole each frame.
-pub(super) fn write_sprites(
+pub fn write_sprites(
     device: &IDirect3DDevice9Ex,
     slot: &mut Option<(IDirect3DVertexBuffer9, usize)>,
     sprites: &[[f32; CORONA_FLOATS]],
@@ -261,7 +261,7 @@ impl D3d9Device {
 
     /// Builds the corona pass if it is not there. A pass that cannot be made is remembered
     /// and the scene is drawn without coronas.
-    pub(super) fn ensure_coronas(&mut self) {
+    pub fn ensure_coronas(&mut self) {
         if self.scene.coronas.pipeline.is_some() || self.scene.coronas.unsupported {
             return;
         }
@@ -276,7 +276,7 @@ impl D3d9Device {
     }
 
     /// Puts the frame's sprite records up, once for the frame's two corona draws.
-    pub(super) fn upload_coronas(&mut self, frame: &SceneFrame) -> Result<()> {
+    pub fn upload_coronas(&mut self, frame: &SceneFrame) -> Result<()> {
         let sprites = frame.coronas.sprites;
         if sprites.is_empty() || self.scene.coronas.pipeline.is_none() {
             return Ok(());
@@ -295,7 +295,7 @@ impl D3d9Device {
     /// tested against the depth but not writing it. Leaves the corona pass's states set; the caller binds the
     /// scene's again. The scene's own constants (the view, the camera, the pixel offset) are
     /// those the sprites use.
-    pub(super) fn draw_coronas(&self, frame: &SceneFrame, late: bool) -> Result<()> {
+    pub fn draw_coronas(&self, frame: &SceneFrame, late: bool) -> Result<()> {
         let store = &self.scene.coronas;
         let (Some(p), Some((vb, _))) = (&store.pipeline, &store.buffer) else {
             return Ok(());

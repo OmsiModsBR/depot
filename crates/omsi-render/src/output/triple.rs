@@ -7,7 +7,7 @@ use crate::passes::PostPass;
 use crate::scene::{CullHistory, ScreenView, TextureId};
 
 /// Swap in a panel's own culling history (and the last one's back out).
-pub(crate) fn swap_triple_culling(culling: &mut CullHistory, panel: usize) {
+pub fn swap_triple_culling(culling: &mut CullHistory, panel: usize) {
     // Visibility and LOD hysteresis belong to one projection. A side panel
     // must not replace the previous centre view's history each frame.
     let history = &mut culling.triple_culling[panel];
@@ -20,7 +20,7 @@ impl Presenter {
     /// The panels' targets and their composite bind groups, made anew when the window's
     /// size changes (all three panels are `pw` by `height`).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn ensure_triple_targets(
+    pub fn ensure_triple_targets(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -87,7 +87,7 @@ impl Presenter {
     /// The panels copied to their places in `target`, and the HUD drawn once over the whole
     /// window.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn composite_triple(
+    pub fn composite_triple(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

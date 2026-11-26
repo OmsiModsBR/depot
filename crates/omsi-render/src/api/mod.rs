@@ -2,12 +2,12 @@
 //! by subject (`renderer`, `scene`, `assets`, `lights`), and `types` re-exports the public
 //! types of the domains. Nothing in the crate imports from `api`.
 
-mod assets;
-mod lights;
-mod mirror;
-mod renderer;
-mod scene;
-mod surface;
-mod types;
+pub mod assets;
+pub mod lights;
+pub mod mirror;
+pub mod renderer;
+pub mod scene;
+pub mod surface;
+pub mod types;
 
 pub use types::*;

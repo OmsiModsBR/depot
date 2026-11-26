@@ -11,21 +11,21 @@ use std::sync::Arc;
 /// drivers do) takes the whole device with it, and every frame after that came out black
 /// (see `Renderer::new_on`). Once set, it stays for the rest of the run. OMSI_BASIC_PIPELINES=1
 /// asks for it.
-pub(crate) static BASIC_PIPELINES: std::sync::atomic::AtomicBool =
+pub static BASIC_PIPELINES: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
-pub(crate) fn basic_pipelines() -> bool {
+pub fn basic_pipelines() -> bool {
     BASIC_PIPELINES.load(std::sync::atomic::Ordering::Relaxed)
         || crate::gpu::debug().basic_pipelines
 }
 
 /// The file that remembers, per graphics adapter, the reduced renderer that worked there
 /// (`~/.depot/gpu-fallback.cfg`, lines `adapter|msaa|basic`).
-pub(crate) fn fallback_path() -> Option<std::path::PathBuf> {
+pub fn fallback_path() -> Option<std::path::PathBuf> {
     Some(omsi_cfg::paths::data_dir()?.join("gpu-fallback.cfg"))
 }
 
-pub(crate) fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool)> {
+pub fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool)> {
     text.lines()
         .filter_map(|l| {
             let mut f = l.rsplitn(3, '|');
@@ -37,7 +37,7 @@ pub(crate) fn parse_fallbacks(text: &str) -> Vec<(String, u32, bool)> {
 }
 
 /// The reduced renderer (MSAA, basic pipelines) that worked on adapter `name` before.
-pub(crate) fn fallback_load(name: &str) -> Option<(u32, bool)> {
+pub fn fallback_load(name: &str) -> Option<(u32, bool)> {
     let text = std::fs::read_to_string(fallback_path()?).ok()?;
     parse_fallbacks(&text)
         .into_iter()
@@ -46,7 +46,7 @@ pub(crate) fn fallback_load(name: &str) -> Option<(u32, bool)> {
 }
 
 /// Remember (`Some`) or forget (`None`) the reduced renderer for adapter `name`.
-pub(crate) fn fallback_store(name: &str, what: Option<(u32, bool)>) {
+pub fn fallback_store(name: &str, what: Option<(u32, bool)>) {
     let Some(path) = fallback_path() else { return };
     let mut all = std::fs::read_to_string(&path)
         .map(|t| parse_fallbacks(&t))
@@ -65,32 +65,16 @@ pub(crate) fn fallback_store(name: &str, what: Option<(u32, bool)>) {
     let _ = std::fs::write(path, text);
 }
 
-#[cfg(test)]
-pub(crate) mod fallback_tests {
-    #[test]
-    fn a_remembered_fallback_is_read_back() {
-        let e =
-            super::parse_fallbacks("Adreno (TM) 830 (Gl)|1|1\nNVIDIA | odd (Vulkan)|4|0\nbroken\n");
-        assert_eq!(
-            e,
-            vec![
-                ("Adreno (TM) 830 (Gl)".to_string(), 1, true),
-                ("NVIDIA | odd (Vulkan)".to_string(), 4, false)
-            ]
-        );
-    }
-}
-
-pub(crate) struct DevicePoller {
-    pub(crate) stop: Arc<std::sync::atomic::AtomicBool>,
-    pub(crate) thread: Option<std::thread::JoinHandle<()>>,
+pub struct DevicePoller {
+    pub stop: Arc<std::sync::atomic::AtomicBool>,
+    pub thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl DevicePoller {
     /// The poller of `device`, which stops once the device is lost (`lost`): on Vulkan the
     /// poll of a lost device is a panic in wgpu, and this thread was the first to see the
     /// loss - its panic went to the log as the end of the game (see `lost`).
-    pub(crate) fn start(device: &wgpu::Device, lost: LostFlag) -> Option<Self> {
+    pub fn start(device: &wgpu::Device, lost: LostFlag) -> Option<Self> {
         // Not on OpenGL: there every poll takes the one GL context, and whenever the thread
         // drawing held it for more than a second (a big shader linked while the world
         // loads, a slow chip's frame) this thread gave up with wgpu-hal's panic "Could not
@@ -120,7 +104,7 @@ impl DevicePoller {
 
 /// The poller's loop: `poll()` every `pause` until `stop` is set, the device is lost
 /// (`lost`) or `poll` says to stop (it found the device lost). How many polls were made.
-pub(crate) fn poll_until(
+pub fn poll_until(
     stop: &std::sync::atomic::AtomicBool,
     lost: &LostFlag,
     pause: std::time::Duration,
@@ -143,85 +127,5 @@ impl Drop for DevicePoller {
         if let Some(t) = self.thread.take() {
             let _ = t.join();
         }
-    }
-}
-
-#[cfg(test)]
-mod poller_tests {
-    use super::*;
-    use crate::gpu::lost::mark_lost;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    const NO_PAUSE: std::time::Duration = std::time::Duration::ZERO;
-
-    #[test]
-    fn a_stopped_poller_polls_no_more() {
-        let stop = AtomicBool::new(true);
-        let n = poll_until(&stop, &LostFlag::default(), NO_PAUSE, || true);
-        assert_eq!(n, 0);
-    }
-
-    #[test]
-    fn a_lost_device_is_not_polled() {
-        let lost = LostFlag::default();
-        mark_lost(&lost, "before");
-        let n = poll_until(&AtomicBool::new(false), &lost, NO_PAUSE, || {
-            unreachable!("a lost device was polled")
-        });
-        assert_eq!(n, 0);
-    }
-
-    #[test]
-    fn the_poller_stops_at_the_poll_that_finds_the_device_lost() {
-        let lost = LostFlag::default();
-        let mut k = 0;
-        let n = poll_until(&AtomicBool::new(false), &lost, NO_PAUSE, || {
-            k += 1;
-            k < 3
-        });
-        assert_eq!(n, 3);
-    }
-
-    #[test]
-    fn the_poller_stops_once_the_loss_handler_marked_the_device() {
-        let lost = LostFlag::default();
-        let mut k = 0;
-        let n = poll_until(&AtomicBool::new(false), &lost, NO_PAUSE, || {
-            k += 1;
-            if k == 2 {
-                mark_lost(&lost, "the handler, between two polls");
-            }
-            true
-        });
-        assert_eq!(n, 2);
-    }
-
-    #[test]
-    fn the_poller_stops_when_asked() {
-        let stop = AtomicBool::new(false);
-        let n = poll_until(&stop, &LostFlag::default(), NO_PAUSE, || {
-            stop.store(true, Ordering::Relaxed);
-            true
-        });
-        assert_eq!(n, 1);
-    }
-
-    #[test]
-    fn the_poller_thread_runs_and_stops_on_a_real_device() {
-        let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        descriptor.backends = wgpu::Backends::NOOP;
-        descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
-        let instance = wgpu::Instance::new(descriptor);
-        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
-        let (device, _queue) =
-            pollster::block_on(adapter.request_device(&Default::default())).unwrap();
-        let lost = LostFlag::default();
-        let poller = DevicePoller::start(&device, lost.clone()).expect("a poller off OpenGL");
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        // the device lost: the thread ends by itself, before it is asked to
-        mark_lost(&lost, "test");
-        let mut poller = poller;
-        let t = poller.thread.take().unwrap();
-        t.join().expect("the poller thread ended without a panic");
     }
 }

@@ -9,23 +9,23 @@ use std::sync::Arc;
 /// partition the frame: each counts from the end of the one the GPU finished before it, so
 /// untimed passes are in the next timed one's figure and the figures add up to
 /// "(all passes)".
-pub(crate) struct GpuTimers {
-    pub(crate) set: wgpu::QuerySet,
-    pub(crate) resolve: wgpu::Buffer,
-    pub(crate) read: wgpu::Buffer,
+pub struct GpuTimers {
+    pub set: wgpu::QuerySet,
+    pub resolve: wgpu::Buffer,
+    pub read: wgpu::Buffer,
     /// The passes of the frame being read back, in query order.
-    pub(crate) pending: Vec<&'static str>,
+    pub pending: Vec<&'static str>,
     /// The frame's passes are timed, their stamps not yet resolved (see `collect_gpu_timers`).
-    pub(crate) unresolved: bool,
-    pub(crate) waiting: bool,
-    pub(crate) ready: Arc<std::sync::atomic::AtomicBool>,
+    pub unresolved: bool,
+    pub waiting: bool,
+    pub ready: Arc<std::sync::atomic::AtomicBool>,
     /// pass → (seconds, frames)
-    pub(crate) totals: std::collections::BTreeMap<&'static str, (f64, u32)>,
+    pub totals: std::collections::BTreeMap<&'static str, (f64, u32)>,
 }
 
 impl GpuTimers {
     /// Take in the pass times of the last timed frame once its readback has arrived.
-    pub(crate) fn collect(&mut self, period: f64) {
+    pub fn collect(&mut self, period: f64) {
         let t = self;
         if !t.waiting || !t.ready.swap(false, std::sync::atomic::Ordering::Relaxed) {
             return;
@@ -78,7 +78,7 @@ impl GpuTimers {
 }
 
 impl GpuTimers {
-    pub(crate) fn new(device: &wgpu::Device) -> Option<GpuTimers> {
+    pub fn new(device: &wgpu::Device) -> Option<GpuTimers> {
         if !crate::gpu::debug().gpu_timers
             || !device.features().contains(wgpu::Features::TIMESTAMP_QUERY)
         {
@@ -118,7 +118,7 @@ impl GpuTimers {
 
 impl Diagnostics {
     /// Take in the pass times of the last timed frame once its readback has arrived.
-    pub(crate) fn collect_gpu_timers(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn collect_gpu_timers(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         // (DirectX 12 asks the driver, and a removed device's answer is a panic in wgpu-hal:
         // no times then - the frame sees the device lost)
         let Some(period) = catch(|| queue.get_timestamp_period() as f64) else {
@@ -149,19 +149,19 @@ impl Diagnostics {
 }
 
 /// What the renderer measures and logs about itself.
-pub(crate) struct Diagnostics {
+pub struct Diagnostics {
     /// OMSI_DEBUG_EXPOSURE: the adapted metering read back now and then, and logged.
-    pub(crate) exposure_log: Option<ExposureLog>,
+    pub exposure_log: Option<ExposureLog>,
     /// GPU time per pass (OMSI_GPU_TIMERS, when the device has timestamp queries): the
     /// mirrors and the window's picture apart, each timed on its own.
-    pub(crate) gpu_timers: [Option<GpuTimers>; 2],
-    pub(crate) profiling: bool,
-    pub(crate) draw_audit_at: std::time::Instant,
+    pub gpu_timers: [Option<GpuTimers>; 2],
+    pub profiling: bool,
+    pub draw_audit_at: std::time::Instant,
 }
 
 impl Diagnostics {
     /// The GPU timers and the exposure log, when asked for.
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device) -> Self {
         let gpu_timers = [GpuTimers::new(device), GpuTimers::new(device)];
         Self {
             exposure_log: ExposureLog::new(device),

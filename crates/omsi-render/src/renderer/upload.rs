@@ -9,7 +9,7 @@ use glam::{DVec3, Mat4, Vec3};
 
 impl Renderer {
     /// Upload instance transforms (call after building or changing the scene).
-    pub(crate) fn upload_instances(&self, scene: &mut Scene) {
+    pub fn upload_instances(&self, scene: &mut Scene) {
         prepare_bounds(scene);
         scene.bind_groups.clear();
         if std::mem::take(&mut scene.origin_moved) && !scene.dirty {
@@ -185,7 +185,7 @@ impl Renderer {
 
     /// The per-draw entries of one instance: one model matrix and two parameter vectors
     /// per material slot.
-    pub(crate) fn instance_entries(
+    pub fn instance_entries(
         i: &Instance,
         ro: DVec3,
         mats: &mut Vec<[[f32; 4]; 4]>,

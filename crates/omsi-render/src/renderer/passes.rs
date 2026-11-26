@@ -12,7 +12,7 @@ use crate::renderer::Renderer;
 use crate::scene::{Scene, TextureId};
 
 impl Renderer {
-    pub(crate) fn main_pass(&self, set: PipeSet) -> &PassPipelines {
+    pub fn main_pass(&self, set: PipeSet) -> &PassPipelines {
         match set {
             PipeSet::Own => self.own_pipelines(),
             PipeSet::Reflections => self.reflection_pass.as_ref().unwrap(),
@@ -31,7 +31,7 @@ impl Renderer {
     /// The main pass: the scene over the sky, with its depth from the prepass where it can
     /// share it, split over several encoders when the bundles allow (the parts are returned).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_main_pass(
+    pub fn encode_main_pass(
         &mut self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
@@ -99,7 +99,7 @@ impl Renderer {
     /// The rain films on the glass: a copy of the clean picture behind them, then the panes'
     /// drops drawn over it.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_glass(
+    pub fn encode_glass(
         &mut self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
@@ -128,7 +128,7 @@ impl Renderer {
     /// The mode's post passes: glow, metering, adaptation, tone curve and FXAA (the plain
     /// path has none).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_enhanced_post(
+    pub fn encode_enhanced_post(
         &mut self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
@@ -179,7 +179,7 @@ impl Renderer {
     }
 
     /// The scene's slot for the picture behind the glass (black until a frame is drawn).
-    pub(crate) fn glass_slot(&self, scene: &mut Scene) -> TextureId {
+    pub fn glass_slot(&self, scene: &mut Scene) -> TextureId {
         if let Some(id) = scene.glass_slot {
             return id;
         }
@@ -194,7 +194,7 @@ impl Renderer {
     }
 
     /// Refraction reads a copy made before drawing films, avoiding rain/wiper feedback.
-    pub(crate) fn prepare_glass_behind(
+    pub fn prepare_glass_behind(
         &mut self,
         scene: &mut Scene,
         width: u32,

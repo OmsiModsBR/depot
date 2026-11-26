@@ -8,15 +8,15 @@ use crate::{BackendError, Caps, Result};
 /// before [`RenderBackend::recover`] is rejected instead of naming a new resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureHandle {
-    pub(crate) index: u32,
-    pub(crate) generation: u32,
+    pub index: u32,
+    pub generation: u32,
 }
 
 /// A mesh of a backend; see [`TextureHandle`] for the generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MeshHandle {
-    pub(crate) index: u32,
-    pub(crate) generation: u32,
+    pub index: u32,
+    pub generation: u32,
 }
 
 /// Checks a handle's parts against a backend's current generation and resource count.

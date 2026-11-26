@@ -1,8 +1,9 @@
 //! The renderer's tests that draw nothing: shaders, pipeline tables, draw lists, helpers.
 
-use super::*;
-use crate::lighting::ShadingPath;
-use crate::modes::enhanced::{fog_lamps_shader_source, FogLampUniform};
+use omsi_render::testing::internals::enhanced::{fog_lamps_shader_source, FogLampUniform};
+use omsi_render::testing::internals::ShadingPath;
+use omsi_render::testing::internals::*;
+use omsi_render::*;
 
 #[test]
 fn noop_backend_initializes_renderer() {
@@ -324,49 +325,55 @@ fn shaders_validate_and_match_the_uniforms() {
     let modules = [
         (
             "scene",
-            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+            omsi_render::testing::internals::scene_shader_for(ShadingPath::Hdr, false),
         ),
         (
             "scene opaque",
-            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+            omsi_render::testing::internals::scene_shader_for(ShadingPath::Hdr, false),
         ),
         (
             "scene terrain paint",
-            crate::renderer::scene_shader_for(ShadingPath::Hdr, false),
+            omsi_render::testing::internals::scene_shader_for(ShadingPath::Hdr, false),
         ),
         (
             "sky",
-            sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
+            sky_shader_source(omsi_render::testing::internals::sky_own_text(
+                ShadingPath::Hdr,
+            )),
         ),
         ("sky plain", sky_shader_source("")),
         (
             "corona",
-            corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr)),
+            corona_shader_source(&omsi_render::testing::internals::corona_own_text(
+                ShadingPath::Hdr,
+            )),
         ),
         ("corona plain", corona_shader_source("")),
         ("fog lamps", fog_lamps_shader_source()),
         (
             "snow",
-            snow_shader_source(crate::renderer::snow_own_text(ShadingPath::Hdr)),
+            snow_shader_source(omsi_render::testing::internals::snow_own_text(
+                ShadingPath::Hdr,
+            )),
         ),
         ("snow plain", snow_shader_source("")),
         ("post", post_shader_source()),
         (
             "ssao",
-            with_fullscreen(include_str!("shaders/post/ssao.wgsl")),
+            with_fullscreen(include_str!("../src/shaders/post/ssao.wgsl")),
         ),
         ("puddles", puddles::shader_source()),
         (
             "upscale",
-            with_fullscreen(include_str!("shaders/output/upscale.wgsl")),
+            with_fullscreen(include_str!("../src/shaders/output/upscale.wgsl")),
         ),
         (
             "mip",
-            with_fullscreen(include_str!("shaders/assets/mip.wgsl")),
+            with_fullscreen(include_str!("../src/shaders/assets/mip.wgsl")),
         ),
         (
             "xr_ui",
-            include_str!("shaders/output/xr_ui.wgsl").to_string(),
+            include_str!("../src/shaders/output/xr_ui.wgsl").to_string(),
         ),
     ];
     let sizes: &[(&str, usize)] = &[
@@ -482,7 +489,7 @@ fn camera_wgsl_matches_camera_uniform() {
         moon,
         stars,
     );
-    let src = include_str!("shaders/common/camera.wgsl");
+    let src = include_str!("../src/shaders/common/camera.wgsl");
     let module =
         naga::front::wgsl::parse_str(src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(src)));
     let (_, camera) = module
@@ -520,7 +527,7 @@ fn camera_wgsl_matches_camera_uniform() {
 fn the_scene_shader_translates_to_glsl() {
     use wgpu::naga;
     use wgpu::naga::back::glsl;
-    let src = crate::renderer::scene_shader_for(ShadingPath::Hdr, true);
+    let src = omsi_render::testing::internals::scene_shader_for(ShadingPath::Hdr, true);
     let module =
         naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     let info = naga::valid::Validator::new(
@@ -579,7 +586,9 @@ fn the_scene_shader_translates_to_glsl() {
 fn the_corona_shader_translates_to_glsl() {
     use wgpu::naga;
     use wgpu::naga::back::glsl;
-    let src = corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr));
+    let src = corona_shader_source(&omsi_render::testing::internals::corona_own_text(
+        ShadingPath::Hdr,
+    ));
     let module =
         naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&src)));
     let info = naga::valid::Validator::new(
@@ -669,7 +678,10 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
         ),
     ] {
         let src = arrays_as_textures(
-            &scene_shader_text(true, &crate::renderer::scene_own_text(ShadingPath::Hdr)),
+            &scene_shader_text(
+                true,
+                &omsi_render::testing::internals::scene_own_text(ShadingPath::Hdr),
+            ),
             path,
         );
         assert!(
@@ -802,13 +814,20 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
     };
     for path in [ArrayPath::VertexTextures, ArrayPath::NoStorage] {
         let scene = arrays_as_textures(
-            &scene_shader_text(true, &crate::renderer::scene_own_text(ShadingPath::Hdr)),
+            &scene_shader_text(
+                true,
+                &omsi_render::testing::internals::scene_own_text(ShadingPath::Hdr),
+            ),
             path,
         );
         for src in [
             scene,
-            sky_shader_source(crate::renderer::sky_own_text(ShadingPath::Hdr)),
-            corona_shader_source(&crate::renderer::corona_own_text(ShadingPath::Hdr)),
+            sky_shader_source(omsi_render::testing::internals::sky_own_text(
+                ShadingPath::Hdr,
+            )),
+            corona_shader_source(&omsi_render::testing::internals::corona_own_text(
+                ShadingPath::Hdr,
+            )),
         ] {
             for name in left_out(&src) {
                 assert!(
@@ -1045,28 +1064,28 @@ fn a_renderer_with_a_mirror_is_still_send() {
 fn without_a_mirror_nothing_is_kept() {
     let _serial = MIRROR_TESTS.lock().unwrap_or_else(|e| e.into_inner());
     let mut renderer = noop_renderer();
-    let prepared = crate::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
+    let prepared = omsi_render::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
     assert!(prepared.1.is_none(), "no mirror: no CPU copy");
     assert!(!renderer.mirroring());
 
     renderer.set_asset_mirror(Some(Box::new(|_| {})));
-    assert!(crate::assets::keep_cpu_copies());
+    assert!(omsi_render::testing::internals::keep_cpu_copies());
     // a second renderer turning its own (absent) mirror off changes nothing for the first
     let mut other = noop_renderer();
     other.set_asset_mirror(None);
-    assert!(crate::assets::keep_cpu_copies());
-    let kept = crate::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
+    assert!(omsi_render::testing::internals::keep_cpu_copies());
+    let kept = omsi_render::prepare_mesh(&renderer.device, &renderer.queue, &triangle());
     assert!(
         kept.1.is_some(),
         "a mirror: the CPU copy waits for the mirror"
     );
 
     renderer.set_asset_mirror(None);
-    assert!(!crate::assets::keep_cpu_copies());
+    assert!(!omsi_render::testing::internals::keep_cpu_copies());
     renderer.set_asset_mirror(Some(Box::new(|_| {})));
     drop(renderer);
     assert!(
-        !crate::assets::keep_cpu_copies(),
+        !omsi_render::testing::internals::keep_cpu_copies(),
         "a dropped renderer stops its mirror"
     );
 }

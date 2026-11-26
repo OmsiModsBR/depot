@@ -41,7 +41,7 @@ pub struct PlanBatch {
 }
 
 impl PlanBatch {
-    pub(crate) fn from_batch(b: &Batch) -> Self {
+    pub fn from_batch(b: &Batch) -> Self {
         let kind = match b.pipe / 4 {
             PIPE_OPAQUE => PlanKind::Opaque,
             PIPE_ALPHA_TEST => PlanKind::AlphaTest,

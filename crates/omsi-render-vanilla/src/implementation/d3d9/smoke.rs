@@ -24,12 +24,12 @@ const AXES_REGISTER: u32 = 100;
 /// The pixel shader's register of the light on the particles (the scene's lie below 32).
 const LIGHT_REGISTER: u32 = 200;
 /// The most the light on a particle adds up to.
-const LIGHT_MAX: f32 = 1.2;
+pub const LIGHT_MAX: f32 = 1.2;
 /// The share of the sun's light a particle takes besides the ambient.
 const SUN_SHARE: f32 = 0.6;
 
 /// Shaders and the unit quad, made at the first scene frame.
-pub(super) struct SmokePipeline {
+pub struct SmokePipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
@@ -38,7 +38,7 @@ pub(super) struct SmokePipeline {
 }
 
 #[derive(Default)]
-pub(super) struct SmokeStore {
+pub struct SmokeStore {
     pipeline: Option<SmokePipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
@@ -78,7 +78,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<SmokePipeline> {
 }
 
 /// The light on a particle: the ambient plus a share of the sun's, at most [`LIGHT_MAX`].
-fn particle_light(ambient: [f32; 4], sun: [f32; 4]) -> [f32; 4] {
+pub fn particle_light(ambient: [f32; 4], sun: [f32; 4]) -> [f32; 4] {
     let l = |k: usize| (ambient[k] + sun[k] * SUN_SHARE).min(LIGHT_MAX);
     [l(0), l(1), l(2), 0.0]
 }
@@ -101,7 +101,7 @@ impl D3d9Device {
 
     /// Builds the smoke pass if it is not there. A pass that cannot be made is remembered and
     /// the scene is drawn without smoke.
-    pub(super) fn ensure_smoke(&mut self) {
+    pub fn ensure_smoke(&mut self) {
         if self.scene.smoke.pipeline.is_some() || self.scene.smoke.unsupported {
             return;
         }
@@ -117,7 +117,7 @@ impl D3d9Device {
 
     /// Puts the frame's particle records up. Whether the pass has anything to draw is
     /// [`D3d9Device::smoke_ready`].
-    pub(super) fn upload_smoke(&mut self, frame: &SceneFrame) -> Result<()> {
+    pub fn upload_smoke(&mut self, frame: &SceneFrame) -> Result<()> {
         let sprites = frame.smoke.sprites;
         let store = &mut self.scene.smoke;
         if sprites.is_empty() || store.pipeline.is_none() || store.picture.is_none() {
@@ -127,7 +127,7 @@ impl D3d9Device {
     }
 
     /// The pass can draw the frame's smoke: there are particles, a picture and the pass.
-    pub(super) fn smoke_ready(&self, frame: &SceneFrame) -> bool {
+    pub fn smoke_ready(&self, frame: &SceneFrame) -> bool {
         let store = &self.scene.smoke;
         !frame.smoke.sprites.is_empty()
             && store.pipeline.is_some()
@@ -139,7 +139,7 @@ impl D3d9Device {
     /// but not writing it. Leaves the smoke pass's states set; the caller binds the scene's
     /// again. The scene's own constants (the view, the camera, the pixel offset) are those the
     /// particles use.
-    pub(super) fn draw_smoke(&self, frame: &SceneFrame) -> Result<()> {
+    pub fn draw_smoke(&self, frame: &SceneFrame) -> Result<()> {
         let store = &self.scene.smoke;
         let (Some(p), Some(picture), Some((vb, _))) =
             (&store.pipeline, &store.picture, &store.buffer)
@@ -206,22 +206,5 @@ impl D3d9Device {
                 .map_err(map_err)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_light_on_a_particle_is_ambient_and_a_share_of_the_sun_capped() {
-        let l = particle_light([0.2, 0.3, 0.4, 1.0], [1.0, 0.5, 0.0, 1.0]);
-        assert!(
-            (l[0] - 0.8).abs() < 1e-6 && (l[1] - 0.6).abs() < 1e-6 && (l[2] - 0.4).abs() < 1e-6
-        );
-        // never brighter than 1.2, however bright the day
-        assert_eq!(particle_light([1.0; 4], [1.0; 4])[..3], [LIGHT_MAX; 3]);
-        // at night only the ambient
-        assert_eq!(particle_light([0.1; 4], [0.0; 4])[..3], [0.1; 3]);
     }
 }

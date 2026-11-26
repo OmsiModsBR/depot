@@ -1,7 +1,9 @@
 //! Device tests. They need a Direct3D 9Ex driver with Shader Model 3.0; machines without one
 //! (CI runners may have none) skip them, which proves nothing about the device path.
 
-use super::*;
+use omsi_render_vanilla::testing::d3d9::*;
+use omsi_render_vanilla::*;
+use windows::Win32::Graphics::Direct3D9::*;
 
 const W: u32 = 8;
 const H: u32 = 4;
@@ -9,7 +11,7 @@ const IDENTITY: [f32; 16] = [
     1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.,
 ];
 
-pub(super) fn device() -> Option<D3d9Device> {
+pub fn device() -> Option<D3d9Device> {
     match D3d9Device::open() {
         Ok(dev) => {
             // Printed so a test log shows which adapter (the default one) was exercised.

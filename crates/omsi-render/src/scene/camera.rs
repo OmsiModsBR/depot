@@ -7,65 +7,65 @@ use crate::gpu::{
 use glam::{DVec3, Mat4, Vec3};
 
 #[derive(Default)]
-pub(crate) struct ViewCulling {
-    pub(crate) drawn: Vec<u64>,
-    pub(crate) sizes: hashbrown::HashMap<[u64; 4], f32>,
-    pub(crate) scratch: hashbrown::HashMap<[u64; 4], f32>,
+pub struct ViewCulling {
+    pub drawn: Vec<u64>,
+    pub sizes: hashbrown::HashMap<[u64; 4], f32>,
+    pub scratch: hashbrown::HashMap<[u64; 4], f32>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct CameraUniform {
-    pub(crate) view_proj: [[f32; 4]; 4],
-    pub(crate) cam_pos: [f32; 4],
+pub struct CameraUniform {
+    pub view_proj: [[f32; 4]; 4],
+    pub cam_pos: [f32; 4],
     /// World-space render origin modulo 1000 m (the procedural patterns' period), added back
     /// for procedural patterns that must not jump when the floating origin moves to the next
     /// 100 m cell.
-    pub(crate) world_origin: [f32; 4],
-    pub(crate) sun_dir: [f32; 4],
-    pub(crate) ambient: [f32; 4],
-    pub(crate) fog: [f32; 4],
-    pub(crate) sun_color: [f32; 4],
-    pub(crate) sky_color: [f32; 4],
-    pub(crate) light_grid: [f32; 4],
-    pub(crate) sky: [f32; 4],
-    pub(crate) cam_right: [f32; 4],
-    pub(crate) cam_up: [f32; 4],
-    pub(crate) clouds: [f32; 4],
-    pub(crate) light_view_proj: [[f32; 4]; 4],
-    pub(crate) light_view_proj_far: [[f32; 4]; 4],
-    pub(crate) shadow: [f32; 4],
+    pub world_origin: [f32; 4],
+    pub sun_dir: [f32; 4],
+    pub ambient: [f32; 4],
+    pub fog: [f32; 4],
+    pub sun_color: [f32; 4],
+    pub sky_color: [f32; 4],
+    pub light_grid: [f32; 4],
+    pub sky: [f32; 4],
+    pub cam_right: [f32; 4],
+    pub cam_up: [f32; 4],
+    pub clouds: [f32; 4],
+    pub light_view_proj: [[f32; 4]; 4],
+    pub light_view_proj_far: [[f32; 4]; 4],
+    pub shadow: [f32; 4],
     /// x enhanced graphics (0/1), y seconds since start, z sun ndc x, w sun ndc y
-    pub(crate) post: [f32; 4],
+    pub post: [f32; 4],
     /// The player's vehicle as a box the weather does not reach into: origin (render-origin
     /// relative) and sin(heading); cos(heading) and the half extents; the box centre offset
     /// and whether there is one.
-    pub(crate) inside_a: [f32; 4],
-    pub(crate) inside_b: [f32; 4],
-    pub(crate) inside_c: [f32; 4],
+    pub inside_a: [f32; 4],
+    pub inside_b: [f32; 4],
+    pub inside_c: [f32; 4],
     /// x procedural detail texturing (0/1), y enhanced graphics (0/1), z -1 when the rain
     /// films have the clean current picture to look through, w the close shadow cascade's
     /// half range
-    pub(crate) flags: [f32; 4],
+    pub flags: [f32; 4],
     /// The close shadow cascade (right half of the near map).
-    pub(crate) light_view_proj_close: [[f32; 4]; 4],
+    pub light_view_proj_close: [[f32; 4]; 4],
     /// The player's vehicle's velocity (m/s, world) and 1: the airstream the rain on its
     /// glass meets (see `Lighting::glass_wind`).
-    pub(crate) wind: [f32; 4],
+    pub wind: [f32; 4],
     /// Enhanced: the street lamps' shadow maps (`LAMP_SHADOWS` tiles under the far map),
     /// and the light indices they belong to (-1: none).
-    pub(crate) lamp_view_proj: [[[f32; 4]; 4]; 4],
-    pub(crate) lamp_shadow: [f32; 4],
+    pub lamp_view_proj: [[[f32; 4]; 4]; 4],
+    pub lamp_shadow: [f32; 4],
     /// Windy trees: xy the weather's wind (m/s, world; 0 with the setting off), zw how far
     /// the air has carried the gusts since the start (m, modulo the shaders' PATTERN_PERIOD).
-    pub(crate) tree_wind: [f32; 4],
+    pub tree_wind: [f32; 4],
     /// The classic sky's sun and moon pictures (`sky.wgsl`): xyz towards the moon (world),
     /// w 1 to draw them.
-    pub(crate) moon: [f32; 4],
+    pub moon: [f32; 4],
     /// The starry sky (`sky/stars.wgsl`): the rows of the rotation from a world direction
     /// into the stars' frame, w of the first how bright the stars are (0 none), w of the
     /// second the star map's cells across a face (0: no map), w of the third 0.
-    pub(crate) stars: [[f32; 4]; 3],
+    pub stars: [[f32; 4]; 3],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -139,14 +139,11 @@ impl Camera {
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
 /// table and the sky cube.
-pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
+pub const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
 
 /// The camera group's entries on a device whose arrays take `path`, without the enhanced
 /// path's textures where it has `sixteen` texture units (see `sixteen_texture_units`).
-pub(crate) fn camera_layout_entries(
-    path: ArrayPath,
-    sixteen: bool,
-) -> Vec<wgpu::BindGroupLayoutEntry> {
+pub fn camera_layout_entries(path: ArrayPath, sixteen: bool) -> Vec<wgpu::BindGroupLayoutEntry> {
     let mut camera_entries = vec![
         uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
         array_layout_entry_on(path, 1, wgpu::ShaderStages::VERTEX, true),

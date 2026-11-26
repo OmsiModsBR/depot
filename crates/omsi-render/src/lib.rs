@@ -29,29 +29,5 @@ pub use api::{
     SHADOW_RANGE_FAR, SHADOW_SIZE, SUN_GLARE_BRIGHTNESS, SUN_GLARE_DISTANCE, SUN_GLARE_SIZE,
 };
 
-// The crate-wide names the tests (`tests.rs`, `tests_units.rs`) see through `use super::*`.
-// The domains import by name (ARCHITECTURE.md); these globs go when the tests move to their
-// domains.
-#[cfg(test)]
-use {
-    assets::*,
-    effects::*,
-    glam::{DVec3, Mat4, Vec3},
-    gpu::*,
-    lighting::*,
-    omsi_geometry::MeshData,
-    output::*,
-    passes::*,
-    renderer::*,
-    scene::*,
-    shaders::*,
-    sky::*,
-};
-
 #[cfg(feature = "test-support")]
 pub mod testing;
-
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod tests_units;

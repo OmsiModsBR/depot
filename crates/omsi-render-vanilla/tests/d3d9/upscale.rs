@@ -1,12 +1,13 @@
 //! Device tests of the render scale, skipped like the others without a usable device. They draw
 //! off-screen: the scale works on whatever frame the device begins.
 
-use super::tests::device;
-use super::*;
-use crate::render_scale::Upscale;
-use crate::scene::{
+use crate::device::device;
+use omsi_render_vanilla::render_scale::Upscale;
+use omsi_render_vanilla::scene::{
     DrawKind, SceneBatch, SceneFrame, SceneMaterial, SceneTexture, TexFormat, MATERIAL_VECTORS,
 };
+use omsi_render_vanilla::testing::d3d9::*;
+use omsi_render_vanilla::*;
 
 const IDENTITY: [[f32; 4]; 4] = [
     [1., 0., 0., 0.],
@@ -77,7 +78,7 @@ fn draw(dev: &mut D3d9Device, w: u32, h: u32, clear: f32) -> Vec<u8> {
     let materials = [uniform()];
     let frame = SceneFrame {
         view_proj: IDENTITY,
-        light: crate::scene::SceneLight {
+        light: omsi_render_vanilla::scene::SceneLight {
             cam_pos: [0.0, 0.0, -1.0, 0.0],
             ambient: [1.0, 1.0, 1.0, 0.0],
             sky_color: [0.0, 0.0, 0.0, 1.0],
@@ -251,7 +252,7 @@ fn the_interface_is_drawn_at_the_pictures_size_over_the_scaled_scene() {
     let materials = [uniform()];
     let frame = SceneFrame {
         view_proj: IDENTITY,
-        light: crate::scene::SceneLight {
+        light: omsi_render_vanilla::scene::SceneLight {
             cam_pos: [0.0, 0.0, -1.0, 0.0],
             ambient: [1.0, 1.0, 1.0, 0.0],
             sky_color: [0.0, 0.0, 0.0, 1.0],
@@ -278,7 +279,7 @@ fn the_interface_is_drawn_at_the_pictures_size_over_the_scaled_scene() {
         })
     })
     .unwrap();
-    dev.draw_overlays(&[crate::ui::UiOverlay {
+    dev.draw_overlays(&[omsi_render_vanilla::ui::UiOverlay {
         texture: 5,
         rect: [3.0, 0.0, 4.0, 8.0],
         premultiplied: false,

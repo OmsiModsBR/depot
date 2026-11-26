@@ -101,7 +101,7 @@ impl Renderer {
     /// The draw lists of a picture: the shadow casters of each cascade, what is in view, and
     /// the depth prepass's and the main pass's batches, all over one draw list uploaded at the
     /// end.
-    pub(crate) fn draw_lists(
+    pub fn draw_lists(
         &mut self,
         scene: &mut Scene,
         f: &FrameContext,
@@ -847,7 +847,7 @@ impl Renderer {
     /// What the picture shows: the instances in the view's frustum, before the fog and big
     /// enough on the screen (with the main view's history, so that an object at a limit does
     /// not pop), with their distance and whether the camera is inside them.
-    pub(crate) fn visibility(
+    pub fn visibility(
         &self,
         scene: &Scene,
         f: &FrameContext,

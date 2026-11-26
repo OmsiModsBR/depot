@@ -8,7 +8,7 @@ use crate::passes::{FrameFeatures, PostPass, PostUniform};
 use crate::sky::atmosphere;
 
 /// Enhanced's post passes: glow, metering, adaptation, tone curve and FXAA.
-pub(crate) fn encode_post(parts: PostParts<'_>) {
+pub fn encode_post(parts: PostParts<'_>) {
     let PostParts {
         queue,
         post,

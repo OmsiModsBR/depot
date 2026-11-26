@@ -1,11 +1,11 @@
 //! Enhanced: its own lighting in high range, with the lamps' glow on the night sky, metering
 //! and tone mapping. Mirrors are shaded plainly unless asked otherwise.
 
-mod fog_lamps;
-mod lights;
-mod pipelines;
-mod post;
-mod scene_shader;
+pub mod fog_lamps;
+pub mod lights;
+pub mod pipelines;
+pub mod post;
+pub mod scene_shader;
 
 use crate::effects::puddles::PuddleLook;
 use crate::interface::{
@@ -19,23 +19,23 @@ use crate::sky::{atmosphere, SkyResources};
 use crate::targets::GroupParts;
 use glam::Vec3;
 
-pub(crate) use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
-#[cfg(test)]
-pub(crate) use fog_lamps::{fog_lamps_shader_source, FogLampUniform};
-pub(crate) use scene_shader::{corona_text, scene_text, sky_text, snow_text};
+pub use fog_lamps::{fog_lamps_pipelines, FogLampsPass};
+#[cfg(feature = "test-support")]
+pub use fog_lamps::{fog_lamps_shader_source, FogLampUniform};
+pub use scene_shader::{corona_text, scene_text, sky_text, snow_text};
 
-pub(crate) struct Enhanced;
+pub struct Enhanced;
 
 /// What only the enhanced mode draws with: its main-pass pipelines in high range, the sky of
 /// its mirrors, and the lamps' light in the fog.
-pub(crate) struct EnhancedResources {
+pub struct EnhancedResources {
     pass: PassPipelines,
     sky_mirror: wgpu::RenderPipeline,
     fog_lamps: FogLampsPass,
 }
 
 impl EnhancedResources {
-    pub(crate) fn new(
+    pub fn new(
         pass: PassPipelines,
         sky_mirror: wgpu::RenderPipeline,
         fog_lamps: FogLampsPass,
@@ -48,7 +48,7 @@ impl EnhancedResources {
     }
 
     /// Everything the mode draws with, built from the core's pass builders.
-    pub(crate) fn build(
+    pub fn build(
         builders: &PathBuilders<'_>,
         device: &wgpu::Device,
         camera_layout: &wgpu::BindGroupLayout,
@@ -69,7 +69,7 @@ impl ModeResources for EnhancedResources {
         Some(&self.pass)
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "test-support")]
     fn own_pipelines_mut(&mut self) -> Option<&mut PassPipelines> {
         Some(&mut self.pass)
     }

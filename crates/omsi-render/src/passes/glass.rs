@@ -8,7 +8,7 @@ use crate::targets::TargetCache;
 /// The rain films on the glass: a copy of the clean picture behind them, then the panes'
 /// drops drawn over it. `rain_pipelines`: the main pass's for this picture.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn encode_glass(
+pub fn encode_glass(
     targets: &TargetCache,
     rain_pipelines: &[wgpu::RenderPipeline],
     scene: &Scene,

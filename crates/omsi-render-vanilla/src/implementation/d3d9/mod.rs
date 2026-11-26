@@ -9,15 +9,15 @@
 //! (`D3d9Device::set_scene_mesh`, `set_scene_texture`, `draw_scene`, see [`crate::scene`]).
 //! Shader Model 3.0 is the floor.
 
-mod coronas;
-mod glass_rain;
-mod scene;
+pub mod coronas;
+pub mod glass_rain;
+pub mod scene;
 pub mod shader;
-mod sky;
-mod smoke;
-mod ui;
-mod upscale;
-mod wet_road;
+pub mod sky;
+pub mod smoke;
+pub mod ui;
+pub mod upscale;
+pub mod wet_road;
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D9::*;
@@ -59,29 +59,29 @@ fn some<T>(v: Option<T>, what: &str) -> Result<T> {
 
 /// Where frames go.
 #[derive(Debug, Clone, Copy)]
-enum Target {
+pub enum Target {
     /// Off-screen render targets sized per frame; `end_frame` reads them back.
     Offscreen,
     /// The window's back buffer; `end_frame` presents it.
     Window(HWND),
 }
 
-struct Mesh {
+pub struct Mesh {
     vb: IDirect3DVertexBuffer9,
     ib: IDirect3DIndexBuffer9,
     vertices: u32,
     triangles: u32,
 }
 
-struct Offscreen {
+pub struct Offscreen {
     width: u32,
     height: u32,
     color: IDirect3DSurface9,
-    depth: IDirect3DSurface9,
+    pub depth: IDirect3DSurface9,
 }
 
 /// Pipeline objects that do not depend on content.
-struct Pipeline {
+pub struct Pipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
@@ -92,42 +92,42 @@ struct Pipeline {
 /// An open Direct3D 9Ex device on the default adapter.
 pub struct D3d9Device {
     // Held for the device's lifetime; COM reference counting keeps the drop order safe.
-    _d3d: IDirect3D9Ex,
-    device: IDirect3DDevice9Ex,
-    caps: Caps,
-    target: Target,
-    window_size: (u32, u32),
-    pipeline: Pipeline,
-    textures: Vec<IDirect3DTexture9>,
-    meshes: Vec<Mesh>,
+    pub _d3d: IDirect3D9Ex,
+    pub device: IDirect3DDevice9Ex,
+    pub caps: Caps,
+    pub target: Target,
+    pub window_size: (u32, u32),
+    pub pipeline: Pipeline,
+    pub textures: Vec<IDirect3DTexture9>,
+    pub meshes: Vec<Mesh>,
     /// Bumped by `recover`, so handles from before it are rejected.
-    generation: u32,
-    offscreen: Option<Offscreen>,
-    frame: Option<FrameDesc>,
+    pub generation: u32,
+    pub offscreen: Option<Offscreen>,
+    pub frame: Option<FrameDesc>,
     /// The game's scene ([`crate::scene`]), under the game's ids.
-    scene: scene::SceneStore,
+    pub scene: scene::SceneStore,
     /// What the scene layer may use beyond the floor.
-    scene_caps: scene::SceneCaps,
+    pub scene_caps: scene::SceneCaps,
     /// The player's ceiling on a scene texture's size (texels a side, 0 = none): see
     /// [`D3d9Device::set_texture_limit`].
-    texture_limit: u32,
+    pub texture_limit: u32,
     /// The game's interface ([`crate::ui`]), under each owner's ids.
-    ui: ui::UiStore,
+    pub ui: ui::UiStore,
     /// Presents wait for the display's refresh.
-    vsync: bool,
+    pub vsync: bool,
     /// The multisampling the player asked for (1 = off) and what the card gave of it.
-    msaa: (u32, u32),
+    pub msaa: (u32, u32),
     /// The anisotropic filtering the player asked for (1 = off); the card's own limit.
-    anisotropy: u32,
-    max_anisotropy: u32,
+    pub anisotropy: u32,
+    pub max_anisotropy: u32,
     /// How the adapter's driver switches alpha-to-coverage on.
-    a2c: scene::A2c,
+    pub a2c: scene::A2c,
     /// The depth format of the back buffer and of every off-screen depth surface:
     /// `D3DFMT_D24S8`, or `D3DFMT_D24X8` when the adapter has no stencil depth for the current
     /// picture format and multisampling. Same 24 depth bits either way.
-    depth_format: D3DFORMAT,
+    pub depth_format: D3DFORMAT,
     /// The render scale option's targets and passes ([`upscale`]).
-    scale: upscale::ScaleStore,
+    pub scale: upscale::ScaleStore,
 }
 
 /// The format of the desktop the window's back buffer follows.
@@ -1009,12 +1009,3 @@ impl RenderBackend for D3d9Device {
         self.set_vsync(vsync).and(restored).and(quality)
     }
 }
-
-#[cfg(test)]
-mod scene_tests;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod ui_tests;
-#[cfg(test)]
-mod upscale_tests;

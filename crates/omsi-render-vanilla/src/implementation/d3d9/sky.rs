@@ -25,11 +25,11 @@ use crate::{BackendError, Result};
 /// by and drawn from (the scene's own, below 32, are left alone).
 const SKY_REGISTER: u32 = 200;
 /// The dome's latitude rings and the segments of each, as the default renderer's.
-const RINGS: u32 = 12;
-const SEGMENTS: u32 = 32;
+pub const RINGS: u32 = 12;
+pub const SEGMENTS: u32 = 32;
 
 /// Shaders and the dome, made at the first scene frame.
-pub(super) struct SkyPipeline {
+pub struct SkyPipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     ps: IDirect3DPixelShader9,
@@ -40,7 +40,7 @@ pub(super) struct SkyPipeline {
 }
 
 #[derive(Default)]
-pub(super) struct SkyStore {
+pub struct SkyStore {
     pipeline: Option<SkyPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
@@ -48,7 +48,7 @@ pub(super) struct SkyStore {
 
 /// The dome: latitude rings from a little below the horizon to the zenith, and the triangles
 /// between them.
-pub(crate) fn dome() -> (Vec<f32>, Vec<u16>) {
+pub fn dome() -> (Vec<f32>, Vec<u16>) {
     let mut vertices = Vec::with_capacity(((RINGS + 1) * (SEGMENTS + 1) * 3) as usize);
     for r in 0..=RINGS {
         let elev = -0.15 + (std::f32::consts::FRAC_PI_2 + 0.15) * r as f32 / RINGS as f32;
@@ -152,7 +152,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<SkyPipeline> {
 impl D3d9Device {
     /// Builds the sky pass if it is not there. A pass that cannot be made is remembered and
     /// the scene is drawn over the clear colour.
-    pub(super) fn ensure_sky(&mut self) {
+    pub fn ensure_sky(&mut self) {
         if self.scene.sky.pipeline.is_some() || self.scene.sky.unsupported {
             return;
         }
@@ -172,7 +172,7 @@ impl D3d9Device {
     /// its own setup (filters, depth test, blending, shaders and their constants) to that
     /// setup, which runs after this; the alpha-to-coverage switch is turned off here, as the
     /// first batch sets it for itself.
-    pub(super) fn draw_sky(
+    pub fn draw_sky(
         &self,
         frame: &SceneFrame,
         pixel_offset: [f32; 4],
@@ -326,26 +326,5 @@ impl D3d9Device {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_dome_is_closed_over_the_zenith_and_below_the_horizon() {
-        let (v, i) = dome();
-        assert_eq!(v.len(), ((RINGS + 1) * (SEGMENTS + 1) * 3) as usize);
-        assert_eq!(i.len(), (RINGS * SEGMENTS * 6) as usize);
-        assert!(i.iter().all(|&k| usize::from(k) < v.len() / 3));
-        // unit directions from a little below the horizon (z < 0) to the zenith
-        let z: Vec<f32> = v.chunks(3).map(|p| p[2]).collect();
-        assert!(z.iter().cloned().fold(f32::MAX, f32::min) < 0.0);
-        assert!((z.iter().cloned().fold(f32::MIN, f32::max) - 1.0).abs() < 1e-6);
-        for p in v.chunks(3) {
-            let len = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
-            assert!((len - 1.0).abs() < 1e-5);
-        }
     }
 }

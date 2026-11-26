@@ -7,6 +7,10 @@ description = "The Direct3D 9Ex renderer of the \"DirectX9 (D3D9Ex)\" render opt
 
 # The game (Windows only) links it for the "DirectX9 (D3D9Ex)" render option, off by
 # default; see README.md for the scope.
+[features]
+# The crate's internals, for the tests under tests/ (see `testing`).
+test-support = []
+
 [dependencies]
 thiserror.workspace = true
 log.workspace = true
@@ -23,3 +27,6 @@ windows = { workspace = true, features = [
 
 [target.'cfg(windows)'.dev-dependencies]
 winit.workspace = true
+
+[dev-dependencies]
+omsi-render-vanilla = { path = ".", features = ["test-support"] }

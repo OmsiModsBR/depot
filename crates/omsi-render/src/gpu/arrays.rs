@@ -11,7 +11,7 @@ use super::target_2d;
 /// 4.3, GLES 3.0): for them the arrays are textures the vertex shader reads texel by texel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub(crate) enum ArrayPath {
+pub enum ArrayPath {
     /// Storage buffers everywhere (every Metal, Vulkan and DirectX 12 device).
     Storage,
     /// The vertex shader's arrays are textures; the lights stay storage buffers.
@@ -22,9 +22,9 @@ pub(crate) enum ArrayPath {
     NoStorage,
 }
 
-pub(crate) static ARRAY_PATH: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub static ARRAY_PATH: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-pub(crate) fn array_path() -> ArrayPath {
+pub fn array_path() -> ArrayPath {
     match ARRAY_PATH.load(std::sync::atomic::Ordering::Relaxed) {
         1 => ArrayPath::VertexTextures,
         2 => ArrayPath::NoStorage,
@@ -33,12 +33,12 @@ pub(crate) fn array_path() -> ArrayPath {
 }
 
 /// Texels per row of an array kept as a texture (within every device's 2048).
-pub(crate) const ARRAY_TEX_WIDTH: u32 = 2048;
+pub const ARRAY_TEX_WIDTH: u32 = 2048;
 
 /// A read-only array of the scene shader: a storage buffer, or where the device cannot
 /// read one (see `ArrayPath`) a texture of one value per texel - four floats
 /// (`Rgba32Float`, 16 bytes) or one `u32` (`R32Uint`) - in rows of `ARRAY_TEX_WIDTH`.
-pub(crate) enum GpuArray {
+pub enum GpuArray {
     Buffer(wgpu::Buffer),
     Texture {
         texture: wgpu::Texture,
@@ -52,7 +52,7 @@ pub(crate) enum GpuArray {
 impl GpuArray {
     /// An array of `size` bytes of `texel`-byte values (16 or 4), a texture where the
     /// vertex shader reads it on a device without vertex storage (`vertex`), or without any.
-    pub(crate) fn new(
+    pub fn new(
         device: &wgpu::Device,
         label: &str,
         size: u64,
@@ -102,7 +102,7 @@ impl GpuArray {
     }
 
     /// Its room in bytes.
-    pub(crate) fn size(&self) -> u64 {
+    pub fn size(&self) -> u64 {
         match self {
             GpuArray::Buffer(b) => b.size(),
             GpuArray::Texture { texture, texel, .. } => {
@@ -113,7 +113,7 @@ impl GpuArray {
     }
 
     /// Bytes it takes on the GPU (for the memory summary).
-    pub(crate) fn gpu_bytes(&self) -> u64 {
+    pub fn gpu_bytes(&self) -> u64 {
         match self {
             GpuArray::Unused => 0,
             a => a.size(),
@@ -121,7 +121,7 @@ impl GpuArray {
     }
 
     /// Write `data` at byte `offset` (both whole values); what runs past its end is dropped.
-    pub(crate) fn write(&self, queue: &wgpu::Queue, offset: u64, data: &[u8]) {
+    pub fn write(&self, queue: &wgpu::Queue, offset: u64, data: &[u8]) {
         match self {
             GpuArray::Buffer(b) => queue.write_buffer(b, offset, data),
             GpuArray::Texture { texture, texel, .. } => {
@@ -158,7 +158,7 @@ impl GpuArray {
         }
     }
 
-    pub(crate) fn binding(&self) -> wgpu::BindingResource<'_> {
+    pub fn binding(&self) -> wgpu::BindingResource<'_> {
         match self {
             GpuArray::Buffer(b) => b.as_entire_binding(),
             GpuArray::Texture { view, .. } => wgpu::BindingResource::TextureView(view),
@@ -170,7 +170,7 @@ impl GpuArray {
 /// The rectangles (x, y, width, rows) of an array texture `ARRAY_TEX_WIDTH` wide and
 /// `total` texels big that `n` values from value `at` on fill, in order: the rest of a row,
 /// whole rows, the start of the last row. What runs past the end is left out.
-pub(crate) fn array_tex_spans(mut at: u64, n: u64, total: u64) -> Vec<(u32, u32, u32, u32)> {
+pub fn array_tex_spans(mut at: u64, n: u64, total: u64) -> Vec<(u32, u32, u32, u32)> {
     let w = ARRAY_TEX_WIDTH as u64;
     let mut left = n.min(total.saturating_sub(at));
     let mut out = Vec::new();
@@ -190,7 +190,7 @@ pub(crate) fn array_tex_spans(mut at: u64, n: u64, total: u64) -> Vec<(u32, u32,
 
 /// The bind group layout entry of a scene array read in `stage` (see `GpuArray`):
 /// `float4` for vec4 values, else u32.
-pub(crate) fn array_layout_entry(
+pub fn array_layout_entry(
     binding: u32,
     stage: wgpu::ShaderStages,
     float4: bool,
@@ -199,7 +199,7 @@ pub(crate) fn array_layout_entry(
 }
 
 /// The same on a device whose arrays take `path`.
-pub(crate) fn array_layout_entry_on(
+pub fn array_layout_entry_on(
     path: ArrayPath,
     binding: u32,
     stage: wgpu::ShaderStages,
@@ -235,7 +235,7 @@ pub(crate) fn array_layout_entry_on(
 }
 
 /// A fragment shader's filterable 2D texture at `binding`.
-pub(crate) fn float_tex(binding: u32) -> wgpu::BindGroupLayoutEntry {
+pub fn float_tex(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,

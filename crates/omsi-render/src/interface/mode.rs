@@ -51,7 +51,7 @@ pub enum PipeSet {
 
 /// How far a picture sees through the fog, for the draws that are left out beyond it.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct FogCull {
+pub struct FogCull {
     /// Nothing farther than this (m) is drawn, where the mode's fog is the plain one.
     pub far: f32,
     /// The mode's fog is its own: the ground and the big things are drawn whatever their
@@ -75,7 +75,7 @@ impl FogCull {
 }
 
 /// What the mode may change when the window's picture leads the frame.
-pub(crate) struct LeadViewParts<'a> {
+pub struct LeadViewParts<'a> {
     pub scene: &'a Scene,
     pub lighting: &'a Lighting,
     pub camera: &'a Camera,
@@ -89,7 +89,7 @@ pub(crate) struct LeadViewParts<'a> {
 }
 
 /// What the lamps' light in the fog is drawn from and into (`RenderMode::encode_fog_lamps`).
-pub(crate) struct FogLampsParts<'a> {
+pub struct FogLampsParts<'a> {
     pub queue: &'a wgpu::Queue,
     /// The fog's half-size target and its two bind groups.
     pub fog: Option<(&'a wgpu::TextureView, &'a [wgpu::BindGroup; 2])>,
@@ -108,7 +108,7 @@ pub(crate) struct FogLampsParts<'a> {
 
 /// What the mode's post passes work with (`ModeResources::encode_post`): the core's post
 /// pipelines, the targets, the eye's adaptation and the sky it follows, and the picture.
-pub(crate) struct PostParts<'a> {
+pub struct PostParts<'a> {
     pub queue: &'a wgpu::Queue,
     pub post: &'a PostPipelines,
     pub targets: &'a TargetCache,
@@ -138,7 +138,7 @@ pub(crate) struct PostParts<'a> {
 }
 
 /// A render mode: the steps of a frame that differ between the shading paths.
-pub(crate) trait RenderMode: Sync {
+pub trait RenderMode: Sync {
     /// How a picture of `view` is shaded.
     fn shading(&self, view: &ModeView) -> ModeShading;
 
@@ -175,14 +175,14 @@ pub(crate) trait RenderMode: Sync {
 /// What a mode draws with that only it needs, kept by the renderer for as long as the mode is
 /// built (none where the mode is left out). The steps of [`RenderMode`] are decisions;
 /// these are the mode's own pipelines and passes.
-pub(crate) trait ModeResources: Send + Sync {
+pub trait ModeResources: Send + Sync {
     /// The pipelines of the main pass in the mode's own shading .
     fn own_pipelines(&self) -> Option<&PassPipelines> {
         None
     }
 
     /// The same, to swap a pipeline in a test.
-    #[cfg(test)]
+    #[cfg(feature = "test-support")]
     fn own_pipelines_mut(&mut self) -> Option<&mut PassPipelines> {
         None
     }

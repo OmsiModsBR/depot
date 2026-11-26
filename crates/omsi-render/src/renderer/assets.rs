@@ -17,7 +17,7 @@ use crate::scene::Scene;
 /// produced `new`, before anything refers to `new`.
 impl Renderer {
     /// The shared placeholders of freed slots.
-    pub(crate) fn freed(&self, scene: &mut Scene) -> &Freed {
+    pub fn freed(&self, scene: &mut Scene) -> &Freed {
         if self.assets.freed.get().is_none() {
             // a plain material, built as any other and taken out of the scene again (without
             // using up an addressing request meant for the next real material)
@@ -51,7 +51,7 @@ impl Renderer {
 
 impl Renderer {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn add_material_inner(
+    pub fn add_material_inner(
         &self,
         scene: &mut Scene,
         texture: Option<TextureId>,
@@ -301,7 +301,7 @@ impl Renderer {
 
     /// The bind group of a material: its textures (or the plain white/black ones), its
     /// sampler and its uniform buffer.
-    pub(crate) fn material_bind_group(
+    pub fn material_bind_group(
         &self,
         textures: &[GpuTexture],
         maps: MaterialMaps,
@@ -395,7 +395,7 @@ impl Renderer {
     /// queue, mesh by mesh (the writes land before the frame's commands run): one staging
     /// buffer for the whole frame outgrew the device's buffer limit on big maps, its
     /// creation failed validation and mapping it panicked (Windows, Vulkan).
-    pub(crate) fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
+    pub fn flush_pending_meshes(&self, scene: &Scene, _encoder: &mut wgpu::CommandEncoder) {
         let pending = std::mem::take(&mut *self.assets.pending_meshes.borrow_mut());
         for (id, b) in &pending {
             let Some(m) = scene.meshes.get(*id) else {
@@ -412,7 +412,7 @@ impl Renderer {
 }
 
 impl Renderer {
-    pub(crate) fn upload_texture_data(&self, data: &omsi_texture::TextureData) -> GpuTexture {
+    pub fn upload_texture_data(&self, data: &omsi_texture::TextureData) -> GpuTexture {
         if let Some(small) = fit_texture(data, self.device.limits().max_texture_dimension_2d) {
             return self.upload_texture_data(&small);
         }
@@ -453,11 +453,11 @@ impl Renderer {
 
     /// Upload a texture and build its mip chain on the GPU: level 0 is written, every
     /// further level is the one above drawn at half size.
-    pub(crate) fn upload_texture_gpu_mips(&self, img: &omsi_texture::Image) -> GpuTexture {
+    pub fn upload_texture_gpu_mips(&self, img: &omsi_texture::Image) -> GpuTexture {
         self.upload_rgba_gpu_mips(img.width, img.height, &img.rgba)
     }
 
-    pub(crate) fn upload_rgba_gpu_mips(&self, width: u32, height: u32, rgba: &[u8]) -> GpuTexture {
+    pub fn upload_rgba_gpu_mips(&self, width: u32, height: u32, rgba: &[u8]) -> GpuTexture {
         let img = RgbaRef {
             width,
             height,
@@ -516,7 +516,7 @@ impl Renderer {
     /// Build all lower levels of `texture` by rendering each level from the last. The
     /// texture has already received its level-zero pixels and was created with render-attach
     /// usage by [`upload_rgba_gpu_mips`].
-    pub(crate) fn generate_mip_chain(&self, texture: &wgpu::Texture, mip_count: u32) {
+    pub fn generate_mip_chain(&self, texture: &wgpu::Texture, mip_count: u32) {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {

@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 
 /// The diagnostic and device switches (see the module).
 #[derive(Debug, Default)]
-pub(crate) struct DebugOptions {
+pub struct DebugOptions {
     pub basic_pipelines: bool,
     pub debug_cones: bool,
     pub debug_draws: bool,
@@ -116,7 +116,7 @@ impl DebugOptions {
 
 /// The switches of this run: read from the environment the first time anything asks (the
 /// renderer's opening does, before it builds anything).
-pub(crate) fn debug() -> &'static DebugOptions {
+pub fn debug() -> &'static DebugOptions {
     static OPTIONS: OnceLock<DebugOptions> = OnceLock::new();
     OPTIONS.get_or_init(DebugOptions::from_env)
 }

@@ -6,15 +6,15 @@ use crate::assets::material_layout_entries;
 use crate::gpu::{array_path, sampler_entry, sixteen_texture_units, texture_entry};
 
 /// The bind group layouts the scene's shaders share.
-pub(crate) struct Layouts {
-    pub(crate) camera_layout: wgpu::BindGroupLayout,
-    pub(crate) material_layout: wgpu::BindGroupLayout,
-    pub(crate) sky_layout: wgpu::BindGroupLayout,
+pub struct Layouts {
+    pub camera_layout: wgpu::BindGroupLayout,
+    pub material_layout: wgpu::BindGroupLayout,
+    pub sky_layout: wgpu::BindGroupLayout,
 }
 
 impl Layouts {
     /// The camera's, the materials' and the sky's bind group layouts.
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device) -> Self {
         let camera_entries = camera_layout_entries(array_path(), sixteen_texture_units());
         let camera_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("camera"),

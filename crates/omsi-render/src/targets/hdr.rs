@@ -9,39 +9,39 @@ use crate::gpu::{target_2d, MASK_FORMAT};
 /// High-range colour targets of the enhanced path for one size: the multisampled one the
 /// scene is drawn into, the single-sampled one it resolves into, the glow's levels, the
 /// tone-mapped picture FXAA reads, and the bind groups of the passes between them.
-pub(crate) struct HdrTargets {
-    pub(crate) msaa_view: Option<wgpu::TextureView>,
-    pub(crate) view: wgpu::TextureView,
+pub struct HdrTargets {
+    pub msaa_view: Option<wgpu::TextureView>,
+    pub view: wgpu::TextureView,
     /// The screen mask (`MASK_FORMAT`), multisampled and resolved like the picture.
-    pub(crate) mask_msaa: Option<wgpu::TextureView>,
-    pub(crate) mask: wgpu::TextureView,
+    pub mask_msaa: Option<wgpu::TextureView>,
+    pub mask: wgpu::TextureView,
     /// Glow levels at 1/2, 1/4, ... of the size, and the upsampled sums per level.
-    pub(crate) down: Vec<wgpu::TextureView>,
-    pub(crate) up: Vec<wgpu::TextureView>,
-    pub(crate) ldr: wgpu::TextureView,
+    pub down: Vec<wgpu::TextureView>,
+    pub up: Vec<wgpu::TextureView>,
+    pub ldr: wgpu::TextureView,
     /// down[i] reads the picture (i = 0) or down[i - 1]; up[i] reads up[i + 1] (or the
     /// last down level) and down[i].
-    pub(crate) down_bg: Vec<wgpu::BindGroup>,
-    pub(crate) up_bg: Vec<wgpu::BindGroup>,
-    pub(crate) meter_bg: wgpu::BindGroup,
+    pub down_bg: Vec<wgpu::BindGroup>,
+    pub up_bg: Vec<wgpu::BindGroup>,
+    pub meter_bg: wgpu::BindGroup,
     /// Tone mapping with the adapted exposure in `adapt[k]`.
-    pub(crate) tonemap_bg: [wgpu::BindGroup; 2],
-    pub(crate) fxaa_bg: wgpu::BindGroup,
+    pub tonemap_bg: [wgpu::BindGroup; 2],
+    pub fxaa_bg: wgpu::BindGroup,
     /// Classic shading is presented directly, without the Enhanced tone curve.
-    pub(crate) classic_bg: wgpu::BindGroup,
+    pub classic_bg: wgpu::BindGroup,
     /// Allocated only when wet roads need scene reflections in the main view.
-    pub(crate) puddles: Option<PuddleTargets>,
+    pub puddles: Option<PuddleTargets>,
 }
 
 /// Glow levels of the enhanced post path.
-pub(crate) const GLOW_LEVELS: usize = 6;
+pub const GLOW_LEVELS: usize = 6;
 
 impl TargetCache {
     /// The HDR colour targets of the enhanced path for this size, with the glow's levels,
     /// the tone-mapped picture FXAA reads and the post passes' bind groups.
     /// `picture_group`: the presenter's bind group for a picture (`Presenter::picture_group`).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn hdr_targets(
+    pub fn hdr_targets(
         &mut self,
         device: &wgpu::Device,
         samples: u32,

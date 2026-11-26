@@ -6,7 +6,7 @@ use crate::targets::GroupParts;
 
 impl Renderer {
     /// The smaller colour target of the render scale for this size, with its bind group.
-    pub(crate) fn scale_target(&mut self, w: u32, h: u32) -> (wgpu::TextureView, wgpu::BindGroup) {
+    pub fn scale_target(&mut self, w: u32, h: u32) -> (wgpu::TextureView, wgpu::BindGroup) {
         let (presenter, device, sampler) = (&self.presenter, &self.device, &self.post.post_sampler);
         self.targets.scale_target(
             &self.device,
@@ -18,7 +18,7 @@ impl Renderer {
     }
 
     /// The HDR colour targets of the enhanced path for this size.
-    pub(crate) fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
+    pub fn hdr_targets(&mut self, w: u32, h: u32) -> bool {
         let (presenter, device, sampler) = (&self.presenter, &self.device, &self.post.post_sampler);
         self.targets.hdr_targets(
             &self.device,
@@ -37,7 +37,7 @@ impl Renderer {
     }
 
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
-    pub(crate) fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
+    pub fn ensure_ao(&mut self, w: u32, h: u32) -> bool {
         self.targets.ensure_ao(
             &self.device,
             GroupParts {

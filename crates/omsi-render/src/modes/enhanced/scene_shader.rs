@@ -3,7 +3,7 @@
 use crate::gpu::basic_pipelines;
 
 /// The WGSL of the Enhanced shading (`fs_enhanced` and its helpers), for the scene module.
-pub(crate) fn scene_text() -> String {
+pub fn scene_text() -> String {
     let src = include_str!("shaders/enhanced.wgsl").to_string();
     if basic_pipelines() {
         lean_scene(src)
@@ -18,7 +18,7 @@ pub(crate) fn scene_text() -> String {
 /// the moon and a debug view. Adreno 740/830 (Galaxy S23-S25) failed the scene pipelines
 /// with these inlined into the enhanced fragment shader, and every frame stopped on an
 /// invalid 'omsi' pipeline (#1633, #1663, #1708).
-pub(crate) fn lean_scene(src: String) -> String {
+pub fn lean_scene(src: String) -> String {
     let out = src
         .replace("irr = irr * lamp_shadow_at(li, p, n, thin);", "")
         .replace("ms = sun_shadow_soft(in.world, n, thin);", "ms = 1.0;")
@@ -33,13 +33,13 @@ pub(crate) fn lean_scene(src: String) -> String {
 
 /// The WGSL of the Enhanced sky (`fs_enhanced`, `fs_enhanced_mirror` and the night sky), for the
 /// sky module.
-pub(crate) fn sky_text() -> &'static str {
+pub fn sky_text() -> &'static str {
     include_str!("shaders/sky.wgsl")
 }
 
 /// The WGSL of the Enhanced coronas and smoke (`fs_enhanced`, `fs_smoke_enhanced`), for the
 /// corona module.
-pub(crate) fn corona_text() -> String {
+pub fn corona_text() -> String {
     let src = include_str!("shaders/corona.wgsl").to_string();
     // (the basic set lights rain by the sky alone: the loop over the lamps is one more
     // thing a phone's compiler can fail on, see `lean_scene`)
@@ -54,6 +54,6 @@ pub(crate) fn corona_text() -> String {
 }
 
 /// The WGSL of Enhanced's snowfall (`fs_snow_enhanced`), for the snow module.
-pub(crate) fn snow_text() -> &'static str {
+pub fn snow_text() -> &'static str {
     include_str!("shaders/snow.wgsl")
 }

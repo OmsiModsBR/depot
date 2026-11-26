@@ -6,7 +6,7 @@ use crate::scene::Layouts;
 use crate::shaders::snow_shader_source;
 
 /// The snowfall's bind group: its parameters, read by the vertex stage.
-pub(crate) fn snow_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+pub fn snow_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("snow"),
         entries: &[uniform_entry(0, wgpu::ShaderStages::VERTEX)],
@@ -14,7 +14,7 @@ pub(crate) fn snow_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
 }
 
 /// What the snowfall's pipelines are made from.
-pub(crate) struct SnowBuilder<'a> {
+pub struct SnowBuilder<'a> {
     device: &'a wgpu::Device,
     module: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
@@ -23,7 +23,7 @@ pub(crate) struct SnowBuilder<'a> {
 
 impl<'a> SnowBuilder<'a> {
     /// `mode`: the mode's own fragment shaders, added to the module.
-    pub(crate) fn new(
+    pub fn new(
         device: &'a wgpu::Device,
         layouts: &Layouts,
         snow_layout: &wgpu::BindGroupLayout,
@@ -47,7 +47,7 @@ impl<'a> SnowBuilder<'a> {
         }
     }
 
-    pub(crate) fn pipeline(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
+    pub fn pipeline(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
         log::info!("renderer: compiling the snowfall shader ({fs})");
         let premultiplied = wgpu::BlendState {
             color: wgpu::BlendComponent {

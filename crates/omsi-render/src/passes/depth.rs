@@ -11,17 +11,17 @@ use glam::Mat4;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct SsaoUniform {
-    pub(crate) inv_proj: [[f32; 4]; 4],
-    pub(crate) params: [f32; 4],
+pub struct SsaoUniform {
+    pub inv_proj: [[f32; 4]; 4],
+    pub params: [f32; 4],
     /// xy: the projection's off-centre shift (0 for the window's own symmetric frustum;
     /// a headset eye or a triple screen's side panel has one)
-    pub(crate) shift: [f32; 4],
+    pub shift: [f32; 4],
 }
 
 /// The depth prepass's pipelines (`pipe_code` kinds 0-2, culled or not), single-sampled
 /// and, with multisampling, multisampled.
-pub(crate) fn prepass_pipelines(
+pub fn prepass_pipelines(
     device: &wgpu::Device,
     camera_layout: &wgpu::BindGroupLayout,
     material_layout: &wgpu::BindGroupLayout,
@@ -105,7 +105,7 @@ pub(crate) fn prepass_pipelines(
 
 /// The ambient occlusion: its bind group layout, uniform buffer and sampler, and the AO and
 /// blur pipelines (none on OpenGL).
-pub(crate) fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
+pub fn ao_pipelines(device: &wgpu::Device, gl: bool) -> SsaoPass {
     // ambient occlusion: a depth prepass with the camera projection, then the AO and a blur
     log::info!("renderer: compiling the SSAO shaders");
     let ssao_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -179,7 +179,7 @@ impl SsaoPass {
     /// The depth prepass and the ambient occlusion (single-sampled, with the camera's
     /// projection), into the targets' AO textures.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_prepass_and_ao(
+    pub fn encode_prepass_and_ao(
         &self,
         queue: &wgpu::Queue,
         prepass: &PrepassPipelines,
@@ -252,24 +252,24 @@ impl SsaoPass {
 }
 
 /// The depth prepass's pipelines.
-pub(crate) struct PrepassPipelines {
+pub struct PrepassPipelines {
     /// Depth prepass pipelines (plain, alpha-tested; each two-sided and culled),
     /// single-sampled, camera projection.
     /// Plain opaque, alpha-tested, and the opaque portions of blended transmap materials;
     /// each has a two-sided and a culled variant.
-    pub(crate) prepass_pipelines: [wgpu::RenderPipeline; 6],
+    pub prepass_pipelines: [wgpu::RenderPipeline; 6],
     /// The same, multisampled: the enhanced main pass's own depth laid first (see
     /// `render_inner`), so that its costly shading runs once per visible surface.
-    pub(crate) prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
+    pub prepass_msaa_pipelines: Option<[wgpu::RenderPipeline; 6]>,
 }
 
 /// Ambient occlusion: its sampler, bind group layout, parameters and pipelines.
-pub(crate) struct SsaoPass {
-    pub(crate) ao_sampler: wgpu::Sampler,
-    pub(crate) ao_layout: wgpu::BindGroupLayout,
-    pub(crate) ao_buf: wgpu::Buffer,
+pub struct SsaoPass {
+    pub ao_sampler: wgpu::Sampler,
+    pub ao_layout: wgpu::BindGroupLayout,
+    pub ao_buf: wgpu::Buffer,
     /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
     /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
-    pub(crate) ssao_pipeline: Option<wgpu::RenderPipeline>,
-    pub(crate) blur_pipeline: Option<wgpu::RenderPipeline>,
+    pub ssao_pipeline: Option<wgpu::RenderPipeline>,
+    pub blur_pipeline: Option<wgpu::RenderPipeline>,
 }

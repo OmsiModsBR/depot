@@ -22,22 +22,22 @@ const STRENGTH: f32 = 0.85;
 const LEAST_LIGHT: f32 = 0.12;
 
 /// The pass's pixel shader and the drops' picture, made at the first scene frame.
-pub(super) struct GlassPipeline {
+pub struct GlassPipeline {
     ps: IDirect3DPixelShader9,
     drops: IDirect3DTexture9,
 }
 
 #[derive(Default)]
-pub(super) struct GlassStore {
+pub struct GlassStore {
     pipeline: Option<GlassPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
     /// How far the drops have formed on the vehicle the camera is in (the player's), wiped
     /// by the player's wiper; kept from picture to picture.
-    pub(super) state: GlassRain,
+    pub state: GlassRain,
     /// The same without any wiper: the panes of every other vehicle (the picture carries
     /// one wiper only, the player's).
-    pub(super) others: GlassRain,
+    pub others: GlassRain,
 }
 
 fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<GlassPipeline> {
@@ -65,7 +65,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<GlassPipeline> {
 impl D3d9Device {
     /// Builds the pass if it is not there. A pass that cannot be made is remembered and the
     /// scene is drawn without drops.
-    pub(super) fn ensure_glass_rain(&mut self) {
+    pub fn ensure_glass_rain(&mut self) {
         let glass = &mut self.scene.glass;
         if glass.pipeline.is_some() || glass.unsupported {
             return;
@@ -82,7 +82,7 @@ impl D3d9Device {
 
     /// Moves the drops on by the picture's rain and wiper (the window's pictures only: a
     /// mirror's carries no time).
-    pub(super) fn step_glass_rain(&mut self, frame: &SceneFrame) {
+    pub fn step_glass_rain(&mut self, frame: &SceneFrame) {
         self.scene.glass.state.step(&frame.rain);
         self.scene.glass.others.step(&crate::SceneRain {
             wiper: None,
@@ -108,7 +108,7 @@ impl D3d9Device {
     /// the vehicle the camera is in, whose panes follow the player's wiper), which the
     /// scene has just drawn. Leaves the pass's states set: the caller binds the scene's
     /// again. Returns whether anything was drawn.
-    pub(super) fn draw_glass_rain<'m>(
+    pub fn draw_glass_rain<'m>(
         &self,
         frame: &SceneFrame,
         batches: &[SceneBatch],

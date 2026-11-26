@@ -12,7 +12,7 @@ impl TargetCache {
     /// only past a dozen entries, could hold gigabytes meanwhile), and past a handful of
     /// sizes the least recently used (the window, the scaled picture and the mirrors are
     /// asked for every frame they are drawn).
-    pub(crate) fn evict(&mut self) {
+    pub fn evict(&mut self) {
         const STALE: std::time::Duration = std::time::Duration::from_millis(250);
         const KEEP: usize = 10;
         let now = std::time::Instant::now();
@@ -32,7 +32,7 @@ impl TargetCache {
     }
 
     /// The multisampled colour and depth attachments for a target of this size.
-    pub(crate) fn msaa_targets(
+    pub fn msaa_targets(
         &mut self,
         device: &wgpu::Device,
         samples: u32,
@@ -75,7 +75,7 @@ impl TargetCache {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn ensure_depth(&mut self, device: &wgpu::Device, w: u32, h: u32) {
+    pub fn ensure_depth(&mut self, device: &wgpu::Device, w: u32, h: u32) {
         if let Some((_, _, dw, dh)) = &self.depth {
             if *dw == w && *dh == h {
                 return;
@@ -101,7 +101,7 @@ impl TargetCache {
 impl TargetCache {
     /// The smaller colour target of the render scale for this size, with its bind group.
     /// `picture_group`: the presenter's bind group for a picture (`Presenter::picture_group`).
-    pub(crate) fn scale_target(
+    pub fn scale_target(
         &mut self,
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
@@ -137,25 +137,25 @@ impl TargetCache {
 }
 
 /// The render targets per size, and when each size was last asked for.
-pub(crate) struct TargetCache {
-    pub(crate) depth: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
+pub struct TargetCache {
+    pub depth: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
     /// Multisampled colour and depth targets per size (the window, each mirror).
-    pub(crate) msaa_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::TextureView)>,
+    pub msaa_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::TextureView)>,
     /// Screen-space ambient occlusion: depth prepass and AO textures of the window's size.
-    pub(crate) ao: Option<AoTargets>,
+    pub ao: Option<AoTargets>,
     /// Enhanced path: the HDR targets per size, the post pipelines and their resources.
-    pub(crate) hdr_targets: HashMap<(u32, u32), HdrTargets>,
+    pub hdr_targets: HashMap<(u32, u32), HdrTargets>,
     /// Full-resolution current scene before rain films, in its original colour format.
-    pub(crate) glass_picture: Option<wgpu::TextureView>,
+    pub glass_picture: Option<wgpu::TextureView>,
     /// The smaller colour targets of the render scale per size, with their bind groups.
-    pub(crate) scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
+    pub scale_targets: HashMap<(u32, u32), (wgpu::TextureView, wgpu::BindGroup)>,
     /// When each size of the size-keyed targets (scale, MSAA, HDR) was last asked for.
-    pub(crate) target_use: HashMap<(u32, u32), std::time::Instant>,
+    pub target_use: HashMap<(u32, u32), std::time::Instant>,
 }
 
 impl TargetCache {
     /// No targets yet: they are made at the first size asked for.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             glass_picture: None,
             target_use: HashMap::new(),

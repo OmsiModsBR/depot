@@ -28,7 +28,7 @@ const PS_RCAS: u32 = 222;
 const VS_HALF_PIXEL: u32 = 250;
 
 /// The shaders and the full-screen strip of the passes.
-pub(super) struct UpscalePipeline {
+pub struct UpscalePipeline {
     decl: IDirect3DVertexDeclaration9,
     vs: IDirect3DVertexShader9,
     bilinear: IDirect3DPixelShader9,
@@ -39,8 +39,8 @@ pub(super) struct UpscalePipeline {
 }
 
 /// The targets of one window size at one scale.
-pub(super) struct Targets {
-    pub(super) native: (u32, u32),
+pub struct Targets {
+    pub native: (u32, u32),
     small: (u32, u32),
     /// What the scene is drawn into, and the depth it is drawn with.
     scene: IDirect3DTexture9,
@@ -51,7 +51,7 @@ pub(super) struct Targets {
 }
 
 #[derive(Default)]
-pub(super) struct ScaleStore {
+pub struct ScaleStore {
     /// The fraction to draw at, `None` for the picture's own size.
     scale: Option<f32>,
     upscale: Upscale,
@@ -60,7 +60,7 @@ pub(super) struct ScaleStore {
     unsupported: bool,
     /// The sharper passes cannot be made on this device; the bilinear one is used.
     fsr_unsupported: bool,
-    pub(super) targets: Option<Targets>,
+    pub targets: Option<Targets>,
 }
 
 fn corner_strip(device: &IDirect3DDevice9Ex) -> Result<IDirect3DVertexBuffer9> {
@@ -185,7 +185,7 @@ fn render_target_texture(
 
 impl ScaleStore {
     /// The up-scaling asked for.
-    pub(super) fn upscale(&self) -> Upscale {
+    pub fn upscale(&self) -> Upscale {
         self.upscale
     }
 }
@@ -211,13 +211,13 @@ impl D3d9Device {
 
     /// Lets go of the targets, which are made for a picture size and a depth format: they are
     /// made again when next needed.
-    pub(super) fn drop_scale_targets(&mut self) {
+    pub fn drop_scale_targets(&mut self) {
         self.scale.targets = None;
     }
 
     /// The size the scene is drawn at for a frame of `native` size: `None` when it is drawn
     /// at that size (no scale, a scale that rounds to it, or passes this device cannot make).
-    pub(super) fn scene_size_for(&self, native: (u32, u32)) -> Option<(u32, u32)> {
+    pub fn scene_size_for(&self, native: (u32, u32)) -> Option<(u32, u32)> {
         let scale = self.scale.scale.filter(|_| !self.scale.unsupported)?;
         let small = scaled_size(native.0, native.1, scale);
         // (the sharper pass keeps a picture-sized target too: both sizes must be textures)
@@ -264,7 +264,7 @@ impl D3d9Device {
     }
 
     /// Whether the sharper passes are in use (asked for, and made).
-    pub(super) fn fsr_in_use(&self) -> bool {
+    pub fn fsr_in_use(&self) -> bool {
         self.scale.upscale == Upscale::Fsr1
             && !self.scale.fsr_unsupported
             && self
@@ -332,7 +332,7 @@ impl D3d9Device {
     /// bound (the frame's picture): the scaled counterpart of the inner scene draw of
     /// [`D3d9Device::draw_scene`], which then does what it does after a scene. What was bound
     /// is bound again whatever happened.
-    pub(super) fn draw_scene_scaled<'m>(
+    pub fn draw_scene_scaled<'m>(
         &mut self,
         frame: &SceneFrame,
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,

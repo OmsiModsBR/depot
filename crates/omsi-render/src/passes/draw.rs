@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 /// A single-sampled full-screen pass: one colour target, no depth, cleared to black unless
 /// told otherwise, and untimed unless given a timer.
-pub(crate) struct PostPass<'a> {
+pub struct PostPass<'a> {
     label: &'a str,
     view: &'a wgpu::TextureView,
     load: wgpu::LoadOp<wgpu::Color>,
@@ -18,7 +18,7 @@ pub(crate) struct PostPass<'a> {
 }
 
 impl<'a> PostPass<'a> {
-    pub(crate) fn new(label: &'a str, view: &'a wgpu::TextureView) -> Self {
+    pub fn new(label: &'a str, view: &'a wgpu::TextureView) -> Self {
         Self {
             label,
             view,
@@ -27,18 +27,18 @@ impl<'a> PostPass<'a> {
         }
     }
 
-    pub(crate) fn load(mut self, load: wgpu::LoadOp<wgpu::Color>) -> Self {
+    pub fn load(mut self, load: wgpu::LoadOp<wgpu::Color>) -> Self {
         self.load = load;
         self
     }
 
-    pub(crate) fn timer(mut self, timer: Option<wgpu::RenderPassTimestampWrites<'a>>) -> Self {
+    pub fn timer(mut self, timer: Option<wgpu::RenderPassTimestampWrites<'a>>) -> Self {
         self.timer = timer;
         self
     }
 
     /// Open the pass, for callers that draw more than the one triangle.
-    pub(crate) fn begin<'e>(self, encoder: &'e mut wgpu::CommandEncoder) -> wgpu::RenderPass<'e> {
+    pub fn begin<'e>(self, encoder: &'e mut wgpu::CommandEncoder) -> wgpu::RenderPass<'e> {
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(self.label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -58,7 +58,7 @@ impl<'a> PostPass<'a> {
     }
 
     /// Draw the full-screen triangle with `pipeline`, the bind groups from slot 0 on.
-    pub(crate) fn draw(
+    pub fn draw(
         self,
         encoder: &mut wgpu::CommandEncoder,
         pipeline: &wgpu::RenderPipeline,
@@ -73,7 +73,7 @@ impl<'a> PostPass<'a> {
     }
 }
 
-pub(crate) fn origin_key(origin: DVec3) -> [u64; 3] {
+pub fn origin_key(origin: DVec3) -> [u64; 3] {
     // DVec3 equality treats -0 and +0 alike. Keep that property in the hash key.
     origin
         .to_array()
@@ -83,9 +83,7 @@ pub(crate) fn origin_key(origin: DVec3) -> [u64; 3] {
 /// For each distinct origin, the object's nearest blended mesh distance, rather than
 /// the single point all its meshes share (a long vehicle's origin can be far from its
 /// window nearest the camera). Full coordinates and the existing float equality apply.
-pub(crate) fn nearest_by_origin(
-    items: impl IntoIterator<Item = (DVec3, f32)>,
-) -> HashMap<[u64; 3], f32> {
+pub fn nearest_by_origin(items: impl IntoIterator<Item = (DVec3, f32)>) -> HashMap<[u64; 3], f32> {
     let mut out: HashMap<[u64; 3], f32> = HashMap::new();
     for (origin, d) in items {
         // NaN origins never compared equal in the old lookup either.
@@ -102,14 +100,14 @@ pub(crate) fn nearest_by_origin(
 /// One draw of a mesh range with a material for one per-draw entry, before batching.
 /// `pipe` picks the pipeline within a pass (and orders the batches).
 #[derive(Clone, Copy)]
-pub(crate) struct DrawItem {
-    pub(crate) pipe: u8,
-    pub(crate) mesh: u32,
-    pub(crate) range: u32,
-    pub(crate) material: u32,
+pub struct DrawItem {
+    pub pipe: u8,
+    pub mesh: u32,
+    pub range: u32,
+    pub material: u32,
     /// The material's look: draws of materials that look alike are batched together.
-    pub(crate) look: u32,
-    pub(crate) entry: u32,
+    pub look: u32,
+    pub entry: u32,
 }
 
 /// Draws of the same mesh range with materials that look alike and the same pipeline, made as one
@@ -119,19 +117,19 @@ pub(crate) struct DrawItem {
 /// cost of a frame - wgpu validates and records every one - and trees, lamps, fences,
 /// people and the AI cars' shared meshes collapse into a few hundred batches.
 #[derive(Clone)]
-pub(crate) struct Batch {
-    pub(crate) pipe: u8,
-    pub(crate) mesh: u32,
-    pub(crate) first: u32,
-    pub(crate) count: u32,
-    pub(crate) material: u32,
-    pub(crate) instances: std::ops::Range<u32>,
+pub struct Batch {
+    pub pipe: u8,
+    pub mesh: u32,
+    pub first: u32,
+    pub count: u32,
+    pub material: u32,
+    pub instances: std::ops::Range<u32>,
 }
 
 /// Turn draw items into batches, appending their entries to `list`. `sort`: the order does
 /// not matter (depth-tested opaque and alpha-tested draws), so draws alike are gathered;
 /// otherwise only neighbours are merged (the blended pass keeps its far-to-near order).
-pub(crate) fn batch_items(
+pub fn batch_items(
     scene: &Scene,
     items: &mut [DrawItem],
     sort: bool,
@@ -218,7 +216,7 @@ pub(crate) fn batch_items(
 /// The material and look a depth-only draw (shadow map, depth prepass) is batched with: an
 /// opaque surface writes its depth whatever its texture, so all of them share the first
 /// material and batch across materials; an alpha-tested one needs its own texture for the cut-out.
-pub(crate) fn depth_only_material(kind: u8, material: MaterialId, look: u32) -> (u32, u32) {
+pub fn depth_only_material(kind: u8, material: MaterialId, look: u32) -> (u32, u32) {
     if kind == 0 {
         (0, 0)
     } else {
@@ -228,7 +226,7 @@ pub(crate) fn depth_only_material(kind: u8, material: MaterialId, look: u32) -> 
 
 /// Record batches into a pass or a bundle, setting pipeline, buffers and material only
 /// when they change.
-pub(crate) fn encode_batches<'a, E: wgpu::util::RenderEncoder<'a>>(
+pub fn encode_batches<'a, E: wgpu::util::RenderEncoder<'a>>(
     pass: &mut E,
     scene: &'a Scene,
     batches: &[Batch],
@@ -239,7 +237,7 @@ pub(crate) fn encode_batches<'a, E: wgpu::util::RenderEncoder<'a>>(
 
 /// Record the batches accepted by `include`, setting pipeline, buffers and material only
 /// when they change.
-pub(crate) fn encode_batches_filtered<'a, E: wgpu::util::RenderEncoder<'a>>(
+pub fn encode_batches_filtered<'a, E: wgpu::util::RenderEncoder<'a>>(
     pass: &mut E,
     scene: &'a Scene,
     batches: &[Batch],
@@ -285,21 +283,21 @@ pub(crate) fn encode_batches_filtered<'a, E: wgpu::util::RenderEncoder<'a>>(
 
 /// Main pass pipeline kinds (`pipe_code`): opaque, alpha-tested, blended, blended
 /// without depth write, depth-only surface coverage, and painted terrain without depth write.
-pub(crate) const PIPE_OPAQUE: u8 = 0;
+pub const PIPE_OPAQUE: u8 = 0;
 
-pub(crate) const PIPE_ALPHA_TEST: u8 = 1;
+pub const PIPE_ALPHA_TEST: u8 = 1;
 
-pub(crate) const PIPE_BLEND: u8 = 2;
+pub const PIPE_BLEND: u8 = 2;
 
-pub(crate) const PIPE_BLEND_NO_WRITE: u8 = 3;
+pub const PIPE_BLEND_NO_WRITE: u8 = 3;
 
-pub(crate) const PIPE_SURFACE_DEPTH: u8 = 4;
+pub const PIPE_SURFACE_DEPTH: u8 = 4;
 
-pub(crate) const PIPE_TERRAIN_PAINT: u8 = 5;
+pub const PIPE_TERRAIN_PAINT: u8 = 5;
 
-pub(crate) const PIPE_KINDS: u8 = 6;
+pub const PIPE_KINDS: u8 = 6;
 
-pub(crate) fn effective_render_phase(instance: &Instance) -> RenderPhase {
+pub fn effective_render_phase(instance: &Instance) -> RenderPhase {
     if instance.presurface {
         RenderPhase::PreSurface
     } else {
@@ -307,7 +305,7 @@ pub(crate) fn effective_render_phase(instance: &Instance) -> RenderPhase {
     }
 }
 
-pub(crate) fn world_surface_phase(phase: RenderPhase) -> bool {
+pub fn world_surface_phase(phase: RenderPhase) -> bool {
     matches!(
         phase,
         RenderPhase::PreSurface
@@ -319,7 +317,7 @@ pub(crate) fn world_surface_phase(phase: RenderPhase) -> bool {
 
 /// Only diffuse-alpha ground coverage is committed after the surface phases. Painted
 /// terrain masks, ordinary glass, and explicit no-Z-check materials keep their semantics.
-pub(crate) fn surface_depth_coverage(
+pub fn surface_depth_coverage(
     phase: RenderPhase,
     alpha: AlphaMode,
     transmap: bool,
@@ -334,7 +332,7 @@ pub(crate) fn surface_depth_coverage(
 /// Presurfaces also contribute fully transparent blended texels, which seal the ground.
 /// Materials explicitly marked no-Z-write/no-Z-check remain excluded, just as they are from
 /// the ordinary prepass.
-pub(crate) fn depth_prepass_kind(kind: u8, material: &Material, presurface: bool) -> Option<u8> {
+pub fn depth_prepass_kind(kind: u8, material: &Material, presurface: bool) -> Option<u8> {
     if material.no_z_check {
         return None;
     }
@@ -351,14 +349,14 @@ pub(crate) fn depth_prepass_kind(kind: u8, material: &Material, presurface: bool
     }
 }
 
-pub(crate) fn instance_depth_bias(instance: &Instance, material: &Material) -> bool {
+pub fn instance_depth_bias(instance: &Instance, material: &Material) -> bool {
     // Surfaces already receive a planar view-space pull in vs_main. Adding a
     // slope-scaled raster bias lets roads cover raised floors at grazing angles.
     // Keep raster bias for explicit material overrides only.
     material.z_bias > 0 || (material.no_z_check && !instance.surface)
 }
 
-pub(crate) fn surface_instance_code(
+pub fn surface_instance_code(
     blob: bool,
     ground_layer: bool,
     decal: bool,
@@ -387,11 +385,7 @@ pub(crate) fn surface_instance_code(
 }
 
 /// OMSI's spline blend sort is horizontal in the x/z ground plane; Rust's vertical axis is z.
-pub(crate) fn horizontal_sort_distance(
-    origin: DVec3,
-    render_origin: DVec3,
-    camera_relative: Vec3,
-) -> f32 {
+pub fn horizontal_sort_distance(origin: DVec3, render_origin: DVec3, camera_relative: Vec3) -> f32 {
     let p = (origin - render_origin).as_vec3() - camera_relative;
     glam::Vec2::new(p.x, p.y).length()
 }
@@ -399,13 +393,13 @@ pub(crate) fn horizontal_sort_distance(
 /// A main-pass draw's pipeline: the kind, whether back faces are culled, and whether the
 /// raster depth bias applies (`[matl_Zbias]` and no-depth-check decals). The opaque
 /// and alpha-tested draws are batched in this order (kinds 0 and 1 first).
-pub(crate) fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
+pub fn pipe_code(kind: u8, cull: bool, surface: bool) -> u8 {
     debug_assert!(kind < PIPE_KINDS);
     kind * 4 + (cull as u8) * 2 + surface as u8
 }
 
 /// The pipeline of a main-pass batch (`DrawItem::pipe`).
-pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &wgpu::RenderPipeline {
+pub fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &wgpu::RenderPipeline {
     &pp.pipelines[pipe as usize]
 }
 
@@ -417,7 +411,7 @@ pub(crate) fn main_pipeline(pp: &PassPipelines, pipe: u8) -> &wgpu::RenderPipeli
 /// other side by default, and models rely on it: the SD202's front flap click spot is an
 /// inside-out shell over the right headlight, invisible from outside, and windows are
 /// modelled twice, once per side, with different glass.
-pub(crate) fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
+pub fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
     wgpu::PrimitiveState {
         topology: wgpu::PrimitiveTopology::TriangleList,
         cull_mode: cull.then_some(wgpu::Face::Back),
@@ -429,13 +423,13 @@ pub(crate) fn one_sided_primitive(cull: bool) -> wgpu::PrimitiveState {
 /// Are the back faces of this instance culled? Content meshes only, and not when the
 /// instance is mirrored (a negative determinant turns the winding round).
 /// `OMSI_NO_CULL=1` draws every mesh from both sides, for comparison.
-pub(crate) fn culls_back_faces(scene: &Scene, inst: &Instance) -> bool {
+pub fn culls_back_faces(scene: &Scene, inst: &Instance) -> bool {
     scene.meshes[inst.mesh].one_sided
         && !crate::gpu::debug().no_cull
         && glam::Mat3::from_mat4(inst.transform).determinant() > 0.0
 }
 
-pub(crate) fn in_scope<'s, R>(
+pub fn in_scope<'s, R>(
     pool: Option<&rayon::ThreadPool>,
     op: impl FnOnce(&rayon::Scope<'s>) -> R,
 ) -> R {
@@ -445,7 +439,7 @@ pub(crate) fn in_scope<'s, R>(
     }
 }
 
-pub(crate) fn run_parts<T: Send>(
+pub fn run_parts<T: Send>(
     pool: Option<&rayon::ThreadPool>,
     parts: usize,
     f: impl Fn(usize) -> T + Sync,
@@ -475,7 +469,7 @@ pub(crate) fn run_parts<T: Send>(
 /// every draw is the costliest CPU step of a frame; a bundle is checked when it is made,
 /// and the pass that runs it only replays it. The bundles keep the batches' order (the
 /// blended ones are far to near).
-pub(crate) fn record_bundles(
+pub fn record_bundles(
     device: &wgpu::Device,
     pool: Option<&rayon::ThreadPool>,
     scene: &Scene,

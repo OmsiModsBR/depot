@@ -16,54 +16,54 @@ use glam::{DVec3, Mat4, Vec3};
 /// One picture on its way through the stages of `Renderer::render_inner`: where it goes and
 /// what its start decided (its size and targets, what it draws, the shadows' schedule, the
 /// camera uniform).
-pub(crate) struct FrameContext<'a> {
-    pub(crate) target: &'a wgpu::TextureView,
-    pub(crate) camera: &'a Camera,
-    pub(crate) lighting: &'a Lighting,
+pub struct FrameContext<'a> {
+    pub target: &'a wgpu::TextureView,
+    pub camera: &'a Camera,
+    pub lighting: &'a Lighting,
     /// The scaled (or FXAA's) picture the scene is drawn into before it reaches `target`.
-    pub(crate) scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    pub scene_target: Option<(wgpu::TextureView, wgpu::BindGroup)>,
     /// The HUD and overlays (the window's pictures), and the street lamps' shadow maps.
-    pub(crate) overlays: Vec<(TextureId, [f32; 4])>,
-    pub(crate) lamp_shadows: Vec<LampShadow>,
+    pub overlays: Vec<(TextureId, [f32; 4])>,
+    pub lamp_shadows: Vec<LampShadow>,
     /// The camera uniform as written for this picture.
-    pub(crate) cu: CameraUniform,
+    pub cu: CameraUniform,
     /// What `Output::flags` says: the window's picture, the texture left out, the projection.
-    pub(crate) with_overlays: bool,
+    pub with_overlays: bool,
     /// The window's own picture (`Output::Window`), the only one the overlay hook is called for.
-    pub(crate) window_picture: bool,
-    pub(crate) exclude_texture: Option<TextureId>,
-    pub(crate) projection: Option<Mat4>,
+    pub window_picture: bool,
+    pub exclude_texture: Option<TextureId>,
+    pub projection: Option<Mat4>,
     /// The render origin; the window's width (`full_w`) and the picture's size (smaller with
     /// the render scale); whether it goes through a scaled target, and its aspect.
-    pub(crate) ro: DVec3,
-    pub(crate) full_w: u32,
-    pub(crate) full_h: u32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) features: FrameFeatures,
+    pub ro: DVec3,
+    pub full_w: u32,
+    pub full_h: u32,
+    pub width: u32,
+    pub height: u32,
+    pub features: FrameFeatures,
     /// The pipelines of the main pass this picture is drawn with (the mode's choice).
-    pub(crate) pipe_set: PipeSet,
-    pub(crate) aspect: f32,
+    pub pipe_set: PipeSet,
+    pub aspect: f32,
     /// The camera relative to the render origin.
-    pub(crate) cam_rel: Vec3,
+    pub cam_rel: Vec3,
     /// Seconds since the leading view's last frame.
-    pub(crate) dt: f32,
+    pub dt: f32,
     /// The shadows' schedule (`ShadowResources::schedule`).
-    pub(crate) shadows: bool,
-    pub(crate) draw_shadows: bool,
-    pub(crate) redraw_near: bool,
-    pub(crate) redraw_far: bool,
-    pub(crate) light_view_proj: Mat4,
-    pub(crate) light_view_proj_far: Mat4,
-    pub(crate) light_view_proj_close: Mat4,
+    pub shadows: bool,
+    pub draw_shadows: bool,
+    pub redraw_near: bool,
+    pub redraw_far: bool,
+    pub light_view_proj: Mat4,
+    pub light_view_proj_far: Mat4,
+    pub light_view_proj_close: Mat4,
     /// The view-projection matrix, and the reflection probe is redrawn this frame.
-    pub(crate) vp_mat: Mat4,
-    pub(crate) probe_redraw: bool,
+    pub vp_mat: Mat4,
+    pub probe_redraw: bool,
 }
 
 impl FrameContext<'_> {
     /// Where the scene is drawn: the scaled picture, else the target itself.
-    pub(crate) fn scene_view(&self) -> &wgpu::TextureView {
+    pub fn scene_view(&self) -> &wgpu::TextureView {
         self.scene_target
             .as_ref()
             .map(|t| &t.0)
@@ -72,9 +72,9 @@ impl FrameContext<'_> {
 }
 
 /// A picture's GPU timers and, with OMSI_PROFILE, the time of its stages.
-pub(crate) struct FrameClock {
-    pub(crate) tset: Option<wgpu::QuerySet>,
-    pub(crate) timed: Vec<&'static str>,
+pub struct FrameClock {
+    pub tset: Option<wgpu::QuerySet>,
+    pub timed: Vec<&'static str>,
     stage_t: std::time::Instant,
     with_overlays: bool,
 }
@@ -82,7 +82,7 @@ pub(crate) struct FrameClock {
 impl FrameClock {
     /// OMSI_PROFILE: the time since the last stage, added to this one's (the mirrors apart
     /// from the window's picture).
-    pub(crate) fn stage(&mut self, r: &Renderer, window: &'static str, mirror: &'static str) {
+    pub fn stage(&mut self, r: &Renderer, window: &'static str, mirror: &'static str) {
         if r.diagnostics.profiling {
             let now = std::time::Instant::now();
             *r.stats
@@ -95,23 +95,23 @@ impl FrameClock {
 }
 
 /// The draw lists of a picture (see `Renderer::draw_lists`).
-pub(crate) struct DrawLists {
-    pub(crate) list: Vec<u32>,
+pub struct DrawLists {
+    pub list: Vec<u32>,
     /// Near, far, close, the street lamps'.
-    pub(crate) shadow_batches: [Vec<Batch>; 4],
-    pub(crate) prepass_batches: Vec<Batch>,
-    pub(crate) main_batches: Vec<Batch>,
-    pub(crate) cab_batches: Vec<Batch>,
-    pub(crate) rain_batches: Vec<Batch>,
-    pub(crate) has_presurface: bool,
+    pub shadow_batches: [Vec<Batch>; 4],
+    pub prepass_batches: Vec<Batch>,
+    pub main_batches: Vec<Batch>,
+    pub cab_batches: Vec<Batch>,
+    pub rain_batches: Vec<Batch>,
+    pub has_presurface: bool,
 }
 
 /// A picture's recorded commands, waiting to be finished and submitted.
-pub(crate) struct FrameEncoders {
-    pub(crate) shadow_encoder: wgpu::CommandEncoder,
-    pub(crate) prepass_encoder: wgpu::CommandEncoder,
-    pub(crate) encoder: wgpu::CommandEncoder,
-    pub(crate) main_parts: Vec<wgpu::CommandEncoder>,
+pub struct FrameEncoders {
+    pub shadow_encoder: wgpu::CommandEncoder,
+    pub prepass_encoder: wgpu::CommandEncoder,
+    pub encoder: wgpu::CommandEncoder,
+    pub main_parts: Vec<wgpu::CommandEncoder>,
 }
 
 /// What the picture's targets and lights are prepared from (see `Renderer::prepare_picture`).
@@ -143,7 +143,7 @@ struct PictureSetup {
 impl Renderer {
     /// One picture into `target` for `output`, stage by stage.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_inner(
+    pub fn render_inner(
         &mut self,
         scene: &mut Scene,
         target: &wgpu::TextureView,
@@ -358,7 +358,7 @@ impl Renderer {
     /// occlusion), the lights, the shadows' schedule and the camera uniform. None when the
     /// device is lost.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn begin_frame<'a>(
+    pub fn begin_frame<'a>(
         &mut self,
         scene: &mut Scene,
         target: &'a wgpu::TextureView,
@@ -551,7 +551,7 @@ impl Renderer {
     }
 
     /// The recorded commands finished (on helper threads when there are many) and submitted.
-    pub(crate) fn submit_frame(
+    pub fn submit_frame(
         &mut self,
         f: &FrameContext,
         mut clock: FrameClock,
