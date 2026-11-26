@@ -1976,7 +1976,7 @@ impl Launcher {
         let map = |file: &str| omsi_launcher_ui::backdrop::Want::Map {
             root: root.clone(),
             file: file.to_string(),
-            folder: crate::screenshot_name::folder_of(file).unwrap_or_default(),
+            folder: crate::core::screenshot_name::folder_of(file).unwrap_or_default(),
         };
         self.backdrop.game_running(self.state.in_game());
         let want = match self.page {

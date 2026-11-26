@@ -1846,7 +1846,7 @@ impl App {
     }
 
     /// OMSI's `screenshot`: the picture into the content folder's `Screenshots`, named by the
-    /// time, the map and the vehicle the player is in (see `screenshot_name`).
+    /// time, the map and the vehicle the player is in (see `core::screenshot_name`).
     pub(crate) fn take_screenshot(&mut self) {
         let dir = crate::core::startup::content_dir()
             .unwrap_or_else(|| self.args.root.clone())
@@ -1856,7 +1856,7 @@ impl App {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let map = crate::screenshot_name::folder_of(&self.args.map).unwrap_or_default();
+        let map = crate::core::screenshot_name::folder_of(&self.args.map).unwrap_or_default();
         // in a vehicle: at the wheel, or aboard the own bus on foot; not on foot outside it
         let aboard = self.player.is_some()
             && (self.on_foot.is_none()
@@ -1865,11 +1865,11 @@ impl App {
             self.args
                 .bus
                 .as_deref()
-                .and_then(crate::screenshot_name::folder_of)
+                .and_then(crate::core::screenshot_name::folder_of)
         } else {
             None
         };
-        let path = dir.join(crate::screenshot_name::build(
+        let path = dir.join(crate::core::screenshot_name::build(
             secs,
             &map,
             vehicle.as_deref(),
@@ -1879,7 +1879,7 @@ impl App {
         if self
             .service_msg
             .as_ref()
-            .is_some_and(|(m, _)| crate::screenshot_name::is_notice(m))
+            .is_some_and(|(m, _)| crate::core::screenshot_name::is_notice(m))
         {
             self.service_msg = None;
         }
