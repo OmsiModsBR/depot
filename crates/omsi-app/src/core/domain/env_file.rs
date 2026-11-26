@@ -9,7 +9,6 @@
 //! whose values are numbers or short words - are taken; anything else is reported in the log
 //! and skipped.
 
-// (only a phone reads the file; the parser is plain code so that it is tested everywhere)
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 /// Whether `env.txt` may set the variable `key`: the register marks it so.
