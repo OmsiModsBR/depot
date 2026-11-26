@@ -333,7 +333,8 @@ pub mod screenshot_name {
     pub use crate::core::implementation::screenshot_name::*;
 }
 pub mod services {
-    pub use crate::services::*;
+    pub use crate::core::domain::services::*;
+    pub use crate::core::implementation::services::*;
 }
 pub mod settings {
     pub use crate::settings::*;

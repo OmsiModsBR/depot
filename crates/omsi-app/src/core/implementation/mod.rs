@@ -16,6 +16,7 @@ pub(crate) mod platform;
 pub(crate) mod plugins_off;
 pub(crate) mod real_time;
 pub(crate) mod screenshot_name;
+pub(crate) mod services;
 pub(crate) mod startup;
 #[cfg(steam)]
 pub(crate) mod steam;
