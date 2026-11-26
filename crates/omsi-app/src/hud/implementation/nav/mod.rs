@@ -39,9 +39,9 @@ pub(crate) mod minimap;
 mod route;
 mod streets;
 
+pub(crate) use super::super::domain::nav::MapRoad;
 use super::super::domain::nav::*;
 pub(crate) use draw::stop_requested;
-pub(crate) use super::super::domain::nav::MapRoad;
 pub(crate) use geometry::{city_roads, simplify};
 
 fn words(lang: &str) -> Words {

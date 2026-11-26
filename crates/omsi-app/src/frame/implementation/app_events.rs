@@ -390,8 +390,7 @@ impl ApplicationHandler for App {
                 if autosave_minutes > 0
                     && !self.paused
                     && self.player.is_some()
-                    && self.clock.run_time - self.autosave_t
-                        >= f64::from(autosave_minutes) * 60.0
+                    && self.clock.run_time - self.autosave_t >= f64::from(autosave_minutes) * 60.0
                 {
                     self.autosave_t = self.clock.run_time;
                     self.save_last_situation();
@@ -531,10 +530,13 @@ impl ApplicationHandler for App {
                                 if self.governor_low >= 2 && fps < 30.0 {
                                     self.governor_low = 0;
                                     // (SSAO first, then the shadows; for this drive only)
-                                    let what = r.lighten().inspect(|_| self.settings.ssao = false).or_else(|| {
-                                        std::mem::replace(&mut self.settings.shadows, false)
-                                            .then_some("shadows off")
-                                    });
+                                    let what = r
+                                        .lighten()
+                                        .inspect(|_| self.settings.ssao = false)
+                                        .or_else(|| {
+                                            std::mem::replace(&mut self.settings.shadows, false)
+                                                .then_some("shadows off")
+                                        });
                                     if let Some(what) = what {
                                         log::warn!("frame rate {fps:.0} fps at the smallest render scale: {what} to keep up");
                                         self.service_msg = Some((
@@ -2623,7 +2625,8 @@ impl ApplicationHandler for App {
                                 &|x, y| puddles::water_at(x, y, w.wet_road_at(x, y, wetness)),
                             );
                             if lights::smoke_active() {
-                                self.spray.sprites(cam.position, self.graphics, &mut scene.smoke);
+                                self.spray
+                                    .sprites(cam.position, self.graphics, &mut scene.smoke);
                             }
                             *self.profile.entry("lights.spray").or_default() +=
                                 __ts.elapsed().as_secs_f64();

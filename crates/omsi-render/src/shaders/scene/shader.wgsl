@@ -162,6 +162,9 @@ fn weather_outside_n(world: vec3<f32>, n: vec3<f32>, terrain: bool, surface: f32
 override ALPHA_TEST: bool = true;
 // Multisampled cutout pipelines can turn filtered alpha directly into sample coverage.
 override ALPHA_TO_COVERAGE: bool = false;
+// Only painted terrain may skip empty brush-mask pixels (set for every scene pipeline; a mode's
+// shader reads it).
+override TERRAIN_PAINT: bool = false;
 @group(0) @binding(5) var t_shadow: texture_depth_2d;
 @group(0) @binding(6) var s_shadow: sampler_comparison;
 @group(0) @binding(7) var t_shadow_far: texture_depth_2d;

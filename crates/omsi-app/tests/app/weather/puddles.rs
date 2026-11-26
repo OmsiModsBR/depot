@@ -313,7 +313,11 @@ fn the_puffs_stay_under_their_cap() {
 fn the_mist_lies_on_the_road_not_in_it() {
     let s = run(&[tyre(20.0)], 3.0, &puddle);
     let mut sprites = Vec::new();
-    s.sprites(DVec3::new(30.0, 0.0, 35.0), omsi_cfg::GraphicsMode::VanillaPlus, &mut sprites);
+    s.sprites(
+        DVec3::new(30.0, 0.0, 35.0),
+        omsi_cfg::GraphicsMode::VanillaPlus,
+        &mut sprites,
+    );
     assert!(!sprites.is_empty());
     for p in &s.puffs {
         assert!(
@@ -361,7 +365,11 @@ fn no_spray_in_the_cab_the_camera_sits_in() {
         );
     }
     let mut cab = Vec::new();
-    s.sprites(DVec3::new(-0.5, 4.5, 35.0), omsi_cfg::GraphicsMode::VanillaPlus, &mut cab);
+    s.sprites(
+        DVec3::new(-0.5, 4.5, 35.0),
+        omsi_cfg::GraphicsMode::VanillaPlus,
+        &mut cab,
+    );
     for p in &cab {
         let outside = s.bodies[0].outside(p.position);
         assert!(
@@ -372,7 +380,11 @@ fn no_spray_in_the_cab_the_camera_sits_in() {
     }
     // the same spray from outside: what trails behind the bus is seen
     let mut street = Vec::new();
-    s.sprites(DVec3::new(6.0, -20.0, 34.5), omsi_cfg::GraphicsMode::VanillaPlus, &mut street);
+    s.sprites(
+        DVec3::new(6.0, -20.0, 34.5),
+        omsi_cfg::GraphicsMode::VanillaPlus,
+        &mut street,
+    );
     assert!(
         street.len() > cab.len() && !cab.is_empty(),
         "{} puffs from the street, {} from the cab",

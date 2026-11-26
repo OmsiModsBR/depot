@@ -7,7 +7,8 @@ use super::super::domain::cli::Args;
 use super::super::interface::output::Settings;
 use super::applog;
 use super::startup::{
-    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLOUDS, FAIR_CLOUDS, MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
+    self, content_dir, fatal_dialog, find_root, is_omsi_root, root_memo, CLOUDS, FAIR_CLOUDS,
+    MIRROR_SIZE, SOUND_AI, SOUND_SCENERY,
 };
 use crate::frame::domain::session::Session;
 use crate::gameplay::duty_start::place_on_duty;

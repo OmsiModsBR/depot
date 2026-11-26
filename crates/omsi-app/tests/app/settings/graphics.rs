@@ -34,8 +34,8 @@ fn every_row_of_the_contract_reads_as_it_says_in_the_game() {
         let s = Settings::from_text(&format!("graphics={saved}\n"));
         assert_eq!(s.graphics, want, "{saved:?}");
         assert_eq!(
-            s.render_options().no_enhanced,
-            want != GraphicsMode::Enhanced,
+            s.render_options().path == omsi_render::ShadingPath::Hdr,
+            want == GraphicsMode::Enhanced,
             "{saved:?}"
         );
     }

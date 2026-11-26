@@ -64,15 +64,10 @@ pub(crate) fn snow_own_text(path: ShadingPath) -> &'static str {
     }
 }
 
-/// The fragment shaders a path adds to the core's scene module: Vanilla+'s, which every build
-/// has (the plain shading is its own), then Enhanced's where it is built.
+/// The fragment shaders a path adds to the core's scene module: the chosen mode's alone.
 pub(crate) fn scene_own_text(path: ShadingPath) -> String {
     match path {
-        ShadingPath::Hdr => [
-            vanilla_plus::scene_text(),
-            &crate::modes::enhanced::scene_text(),
-        ]
-        .join("\n"),
+        ShadingPath::Hdr => crate::modes::enhanced::scene_text(),
         ShadingPath::Linear => vanilla_plus::scene_text().to_string(),
     }
 }
@@ -103,16 +98,14 @@ impl Renderer {
                 wgpu::TextureUsages::RENDER_ATTACHMENT,
             );
         }
-        // the enhanced path: its own lighting in all three
-        let leave_out_enhanced = options.no_enhanced
-            && (cfg!(target_os = "android")
-                || adapter_name.to_ascii_lowercase().contains("opengl")
-                || GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed));
-        // (its textures do not fit OpenGL's units here, see `sixteen_texture_units`)
-        if sixteen_texture_units() && !options.no_enhanced {
+        // the mode to build: Enhanced's textures do not fit OpenGL's units here, see
+        // `sixteen_texture_units`
+        let path = if options.path == ShadingPath::Hdr && sixteen_texture_units() {
             log::warn!("renderer: the enhanced graphics take more textures than OpenGL has units for on {adapter_name}; drawing vanilla+");
-        }
-        let leave_out_enhanced = leave_out_enhanced || sixteen_texture_units();
+            ShadingPath::Linear
+        } else {
+            options.path
+        };
         // One module for both paths: the enhanced fragment shader shares the vertex shader,
         // which the depth prepass relies on to the last bit (see `VsOut::clip`). Where the
         // enhanced mode is left out, the module has the core's shader alone.
@@ -120,15 +113,8 @@ impl Renderer {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("omsi"),
             source: wgpu::ShaderSource::Wgsl(
-                scene_shader_for(
-                    if leave_out_enhanced {
-                        ShadingPath::Linear
-                    } else {
-                        ShadingPath::Hdr
-                    },
-                    GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed),
-                )
-                .into(),
+                scene_shader_for(path, GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed))
+                    .into(),
             ),
         });
         let layouts = Layouts::new(&device);
@@ -153,13 +139,6 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let assets = AssetStore::new(&device, &queue);
-        // (the modes' own shaders of the passes drawn in the main pass: none where the
-        // enhanced mode is left out)
-        let path = if leave_out_enhanced {
-            ShadingPath::Linear
-        } else {
-            ShadingPath::Hdr
-        };
         let builders = PathBuilders {
             scene: scene_builder,
             corona: CoronaBuilder::new(
@@ -177,7 +156,7 @@ impl Renderer {
         let pass = vanilla_plus::plain_pass(&builders, format);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
         // what only the enhanced mode draws with is its own
-        let own_mode: Option<Box<dyn ModeResources>> = (!leave_out_enhanced).then(|| {
+        let own_mode: Option<Box<dyn ModeResources>> = (path == ShadingPath::Hdr).then(|| {
             Box::new(EnhancedResources::build(
                 &builders,
                 &device,
@@ -187,9 +166,8 @@ impl Renderer {
                 gl,
             )) as Box<dyn ModeResources>
         });
-        let reflection_pass = (!leave_out_enhanced
-            && !GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed))
-        .then(|| vanilla_plus::reflection_pass(&builders, hdr_format));
+        let reflection_pass = (path == ShadingPath::Linear && !gl)
+            .then(|| vanilla_plus::reflection_pass(&builders, hdr_format));
         let sky_shader = &builders.sky.module;
         let presenter = Presenter::new(&device, format, msaa);
         let gl = GL_BACKEND.load(std::sync::atomic::Ordering::Relaxed);
@@ -223,7 +201,7 @@ impl Renderer {
         );
         let diagnostics = Diagnostics::new(&device);
         // GLES cannot reliably read the depth buffer (the same limitation as SSAO).
-        let puddles = (!gl && !leave_out_enhanced).then(|| {
+        let puddles = (!gl).then(|| {
             puddles::Pipelines::new(
                 &device,
                 &shader,

@@ -7,9 +7,6 @@
 // it is, the o3d specular power how rough a surface without one is, [matl_bumpmap] bends
 // the normal. Everything is drawn pre-exposed into the high-range target.
 
-// Only painted terrain may skip empty brush-mask pixels.
-override TERRAIN_PAINT: bool = false;
-
 @group(0) @binding(12) var t_probe: texture_cube<f32>;
 
 fn d_ggx(nh: f32, a: f32) -> f32 {
@@ -1220,15 +1217,10 @@ fn fs_puddle_vehicle(input: FsIn) -> @location(0) vec4<f32> {
     if (height < 0.0 || material.emissive.w > 1.5) { discard; }
     var unused = vec2<f32>(0.0);
     let eye = camera.cam_pos.xyz - 2.0 * plane.xyz * (dot(plane.xyz, camera.cam_pos.xyz) - plane.w);
-    if (camera.post.x < 0.5) {
-        var unused_vanilla = 0.0;
-        return shade_vanilla(input, &unused_vanilla, eye);
-    }
     return shade_enhanced(input, &unused, true, eye);
 }
 
 @fragment
 fn fs_puddle_chassis() -> @location(0) vec4<f32> {
-    if (camera.post.x < 0.5) { return vec4<f32>(camera.ambient.rgb * 0.025, 1.0); }
     return vec4<f32>(sh_irradiance(vec3<f32>(0.0, 0.0, -1.0)) * enh.exposure.x * 0.025, 1.0);
 }
