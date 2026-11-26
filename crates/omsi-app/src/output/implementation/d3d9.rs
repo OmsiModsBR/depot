@@ -1,7 +1,7 @@
 //! The "DirectX9 (D3D9Ex)" renderer of the game window. `omsi-render` keeps doing the books
 //! on wgpu's noop device (the scene, culling, level of detail, the alpha order), as the
 //! dedicated server does, and hands its asset events and each window picture's frame plan
-//! to the Direct3D 9Ex device of `omsi-render-d3d9`, which draws them into the window and
+//! to the Direct3D 9Ex device of `omsi-render-vanilla`, which draws them into the window and
 //! presents them.
 //!
 //! A window picture is drawn in three steps into one Direct3D frame: the plan sink draws the
@@ -21,8 +21,8 @@ use anyhow::{anyhow, Result};
 use omsi_render::{
     FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene, TexAddressing,
 };
-use omsi_render_d3d9::d3d9::D3d9Device;
-use omsi_render_d3d9::{
+use omsi_render_vanilla::d3d9::D3d9Device;
+use omsi_render_vanilla::{
     BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneClouds, SceneCoronas,
     SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneRain, SceneSky, SceneSmoke,
     SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
@@ -545,9 +545,9 @@ impl D3d9Output {
         self.lock().device.set_render_scale(
             scale,
             if sharp {
-                omsi_render_d3d9::Upscale::Fsr1
+                omsi_render_vanilla::Upscale::Fsr1
             } else {
-                omsi_render_d3d9::Upscale::Bilinear
+                omsi_render_vanilla::Upscale::Bilinear
             },
         );
     }

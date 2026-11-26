@@ -52,7 +52,7 @@ pub const LOG_CHANNELS: &[(&str, &[&str])] = &[
     ),
     (
         "render",
-        &["omsi_render", "omsi_render_d3d9", "openomsi_game::output"],
+        &["omsi_render", "omsi_render_vanilla", "openomsi_game::output"],
     ),
     ("input", &["omsi_sim::input", "openomsi_game::input"]),
     (

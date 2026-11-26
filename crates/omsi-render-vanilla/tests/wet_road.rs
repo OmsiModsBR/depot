@@ -1,8 +1,8 @@
-//! The wet road's inputs, worked out without a device (`omsi_render_d3d9::wet_road`).
+//! The wet road's inputs, worked out without a device (`omsi_render_vanilla::wet_road`).
 
-use omsi_render_d3d9::scene::MATERIAL_VECTORS;
-use omsi_render_d3d9::wet_road::{sheen, wetness, wets};
-use omsi_render_d3d9::{DrawKind, SceneLight, SceneMaterial};
+use omsi_render_vanilla::scene::MATERIAL_VECTORS;
+use omsi_render_vanilla::wet_road::{sheen, wetness, wets};
+use omsi_render_vanilla::{DrawKind, SceneLight, SceneMaterial};
 
 fn rain(wet: f32, snow: f32) -> SceneLight {
     SceneLight {

@@ -2695,7 +2695,7 @@ dependencies = [
  "omsi-model",
  "omsi-o3d",
  "omsi-render",
- "omsi-render-d3d9",
+ "omsi-render-vanilla",
  "omsi-scenery",
  "omsi-script",
  "omsi-sim",
@@ -2949,7 +2949,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "omsi-render-d3d9"
+name = "omsi-render-vanilla"
 version = "0.1.0"
 dependencies = [
  "log",
