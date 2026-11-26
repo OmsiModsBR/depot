@@ -3,8 +3,10 @@
 pub(crate) mod about;
 pub(crate) mod app;
 pub(crate) mod cli;
+pub(crate) mod env_file;
 pub(crate) mod lan_off;
 pub(crate) mod launcher_link;
 pub(crate) mod plugins_off;
+pub(crate) mod real_time;
 #[cfg(steam)]
 pub(crate) mod steam;

@@ -140,7 +140,7 @@ pub mod editor {
     pub use crate::world::editor::*;
 }
 pub mod env_file {
-    pub use crate::env_file::*;
+    pub use crate::core::domain::env_file::*;
 }
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub mod evdev_buttons {
