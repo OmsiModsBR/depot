@@ -246,7 +246,7 @@ pub(crate) struct App {
     /// Where a gamepad stick turns the wheel to, smoothed (`pad_steer_smooth`).
     pub(crate) pad_steer_target: f32,
     /// The tutorial being run (`--tutorial`), loaded on the first frame.
-    pub(crate) tutorial: Option<crate::tutorial::Tutorial>,
+    pub(crate) tutorial: Option<crate::gameplay::tutorial::Tutorial>,
     /// OMSI's pedestrian ("ego") view: the free camera walking at eye height on whatever
     /// people stand on (`view_set_ego`, F11).
     pub(crate) ego: bool,

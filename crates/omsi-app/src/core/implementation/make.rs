@@ -20,7 +20,7 @@ use crate::core::services::run_export;
 use crate::situation::apply_situation;
 use crate::ui_language;
 use crate::weather::{puddles, rain};
-use crate::{hud, radio, tutorial};
+use crate::{gameplay, hud, radio};
 use anyhow::Result;
 use std::time::Instant;
 
@@ -140,7 +140,7 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
 pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<Option<App>> {
     // OMSI's tutorials: the lesson's own situation
     if let Some(n) = args.tutorial.filter(|n| (1..=4).contains(n)) {
-        args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
+        args.situation = Some(gameplay::tutorial::SITUATIONS[n - 1].to_string());
     }
     apply_situation(&mut args)?;
     // the index of the content's textures (for a model whose texture is not in its folders) is

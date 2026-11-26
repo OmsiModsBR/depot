@@ -8,4 +8,5 @@ pub(crate) mod rail_drive;
 pub(crate) mod schedule;
 pub(crate) mod traffic;
 pub(crate) mod traffic_density;
+pub(crate) mod tutorial;
 pub(crate) mod wire_sounds;

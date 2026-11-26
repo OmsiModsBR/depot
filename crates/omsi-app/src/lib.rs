@@ -35,7 +35,6 @@ mod route_arrows;
 use crate::core::{admin, lan};
 
 mod situation;
-mod tutorial;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).
 #[cfg(feature = "test-support")]

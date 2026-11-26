@@ -812,7 +812,7 @@ impl ApplicationHandler for App {
                 // the tutorial's pages, once the world is there
                 if self.world.is_some() {
                     if let Some(n) = self.args.tutorial.take() {
-                        self.tutorial = crate::tutorial::Tutorial::load(
+                        self.tutorial = crate::gameplay::tutorial::Tutorial::load(
                             &self.args.root,
                             n,
                             &self.settings.language,

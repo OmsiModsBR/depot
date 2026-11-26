@@ -10,6 +10,12 @@ pub(crate) use super::super::implementation::money;
 pub(crate) use super::super::implementation::schedule_paper;
 pub(crate) use super::super::implementation::traffic_link;
 
+/// The tutorial lessons: their pages (`domain/tutorial.rs`) and their loading from the
+/// game's folder (`implementation/tutorial.rs`).
+pub(crate) mod tutorial {
+    pub use crate::gameplay::domain::tutorial::*;
+}
+
 /// The people on foot: their types (`domain/humans.rs`) and their procedures
 /// (`implementation/humans.rs`, with the passengers in `humans/pax.rs`).
 pub(crate) mod humans {
