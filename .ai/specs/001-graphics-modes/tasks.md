@@ -210,8 +210,12 @@ the layer check passes; goldens and frame times unchanged (quickstart Q9, Q10).
   | Enhanced | 49a4f53e (before #861) | ~5 s | 12.0 s | 13.5 s |
   | Enhanced | d4ad08f2 (#861) | ~5 s | 11.9 s | 13.3 s |
   | Vanilla+ | d4ad08f2 (#861) | ~2.5 s | 9.0 s | 10.4 s |
+  | Vanilla+ | 380fbdfb (#861, #867) | ~3 s | 4.2 s | 5.6 s |
+  | Enhanced | 380fbdfb (#861, #867) | ~4.5 s | 5.9 s | 7.3 s |
 
   Vanilla+ opens 4.0 s (28 %) faster and no longer compiles Enhanced's snow and lamps-in-fog shaders; Enhanced is unchanged within noise (0.2 s). About 1 s of the Vanilla+ gain is the first-area cut/textures step (5.5 s against 6.3 s), which varies with the operating system's file cache; the other ~3 s are the shaders. One session per case, so treat the figures as indicative.
+
+  The last two rows add the texture index of #867: the look-ups of a texture a model lacks (`lanternas1.bmp` on Desafio) built it on the loading screen, 5.7 s with a warm file cache and 16.2 s with a cold one; it is now built in the background from the start of the game and the first area loads in 0.6 s instead of 6 s. With #861 and #867 together, Vanilla+ reaches its first frame 8.8 s (61 %) sooner than before #861, and Enhanced 6.0 s (45 %) sooner. Two sessions with build 35a45cfb (#867 alone) showed a 6 to 7 s gap inside `spawn_player` that kept Enhanced's first frame at 13.4 s; it was not there in the three later sessions (`spawn: player set up in 0.02 s`), and its cause is unknown.
 
 ### Frame stages `feat/render-frame-stages`
 
