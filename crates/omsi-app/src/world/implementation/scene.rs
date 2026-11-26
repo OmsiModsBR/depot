@@ -5083,6 +5083,10 @@ impl World {
         let debug = omsi_cfg::flags::DEBUG_SPLINES.is_set();
         type Check = (usize, usize, Vec<(f64, f64, f32)>);
         let debug_physics = omsi_cfg::flags::DEBUG_PHYSICS.is_set();
+        // (where the time of this step goes, for the loading log: the ground and road work, the
+        // ground textures' look-ups of the surface maps, the texture look-ups and the decoding)
+        let started = std::time::Instant::now();
+        let surf_lookup_us = std::sync::atomic::AtomicU64::new(0);
         let results: Vec<(Arc<TileSurface>, Option<Image>, Check, usize)> = prepared
             .par_iter_mut()
             .map(|p| {
@@ -5240,6 +5244,7 @@ impl World {
                             ts.rasterize_kind(mesh, &pose.rot, pose.pos, tx, ty, true);
                             if Some(k) == ground_mesh {
                                 // (its textures' `.surf` maps: cobbled junctions shake the bus too)
+                                let looked = std::time::Instant::now();
                                 let dirs = ot.texture_dirs(&self.root);
                                 let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
                                 let maps: Vec<_> = ot
@@ -5257,6 +5262,10 @@ impl World {
                                         m.1.iter().map(|m| ground_kind(&m.texture, &dirs)).collect()
                                     })
                                     .unwrap_or_default();
+                                surf_lookup_us.fetch_add(
+                                    looked.elapsed().as_micros() as u64,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
                                 ts.add_drive_mesh_surf(
                                     mesh,
                                     &pose.rot,
@@ -5431,6 +5440,7 @@ impl World {
                 (Arc::new(ts), cut, check, wheel_meshes)
             })
             .collect();
+        let raster_secs = started.elapsed().as_secs_f64();
         let (mut holes, mut cells) = (0usize, 0usize);
         let mut where_: Vec<(f64, f64, f32)> = Vec::new();
         let (mut tris, mut wheel_meshes) = (0usize, 0usize);
@@ -5515,12 +5525,15 @@ impl World {
                     }
                 }
             }
+            let looking = std::time::Instant::now();
             let mut wanted: Vec<(String, Vec<PathBuf>)> = prepared
                 .iter()
                 .flat_map(|p| self.wanted_textures(p))
                 .collect();
             wanted.sort();
             wanted.dedup();
+            let look_secs = looking.elapsed().as_secs_f64();
+            let decoding = std::time::Instant::now();
             let decoded: Vec<(PathBuf, Arc<TextureData>)> = wanted
                 .par_iter()
                 .filter_map(|(name, dirs)| {
@@ -5530,10 +5543,21 @@ impl World {
                     Some((path, Arc::new(img)))
                 })
                 .collect();
+            let decode_secs = decoding.elapsed().as_secs_f64();
+            let wanted_count = wanted.len();
             let decoded: Arc<HashMap<PathBuf, Arc<TextureData>>> =
                 Arc::new(decoded.into_iter().collect());
             for p in prepared.iter_mut() {
                 p.images = decoded.clone();
+            }
+            let total = started.elapsed().as_secs_f64();
+            if total >= 1.0 {
+                log::info!(
+                    "tile loading: cut/textures of {} tile(s) took {total:.2} s: ground and roads {raster_secs:.2} (of it {:.2} s of surface-map look-ups, summed over threads), looking up {wanted_count} texture name(s) {look_secs:.2}, decoding {} file(s) {decode_secs:.2}",
+                    prepared.len(),
+                    surf_lookup_us.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1e6,
+                    decoded.len()
+                );
             }
         }
     }
