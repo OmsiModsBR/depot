@@ -1,23 +1,26 @@
 # omsi-render-vanilla
 
-A **separate legacy Direct3D 9 renderer**, built step by step. It is meant to render with
-the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
+The **Vanilla graphics mode**: a separate Direct3D 9Ex renderer that draws with the feature set of
+OMSI 2 itself (not a reduced profile of the wgpu renderer). It is one of the game's three
+graphics modes, next to Vanilla+ and Enhanced, which `omsi-render` draws with wgpu.
 
 ## How the game uses it
 
-Only under the render option "DirectX9 (D3D9Ex)" (`graphics_api = d3d9`, or
-`OMSI_BACKEND=d3d9`), on Windows and without VR; the default renderer and the other
-backends are untouched. In that mode `omsi-render` runs on wgpu's noop device and keeps
-the books (scene, culling, level of detail, alpha order); its asset events and each window
-picture's frame plan come here (`omsi-app/src/output/implementation/d3d9.rs`), and
-this crate draws and presents the window. It **declares no supported hardware**: widening the hardware matrix
-is a product decision.
+When the graphics mode is `vanilla` (the launcher's "Graphics" choice, or `OMSI_GRAPHICS=vanilla`),
+on Windows and without VR. If Direct3D 9Ex cannot open, the game says why, points to Vanilla+ and
+closes; it does not switch on its own. In this mode `omsi-render` runs on wgpu's noop device and
+keeps the books (scene, culling, level of detail, alpha order); its asset events and each window
+picture's frame plan come here (`omsi-app/src/output/implementation/d3d9.rs`), and this crate
+draws and presents the window. `omsi-render` and this crate do not depend on each other: the
+`FramePlan` and the asset events are the only contract between them. The launcher's picture of the
+vehicle is drawn by `omsi-render` as Vanilla+ whatever the mode. This crate **declares no supported
+hardware**: widening the hardware matrix is a product decision.
 
 A window picture is one Direct3D frame: the plan sink draws the scene and the HUD's
 pictures and leaves the frame open, the new interface (the Esc menu, the Alt bar, the
 loading screen, drawn by `omsi-ui`) is mirrored into it, and the game presents it when its
-frame is done. Not drawn in that mode yet: smoke, triple screen, pictures the
-GPU draws into textures (the navigator's maps, mirrors), and what "The scene layer" lists as
+frame is done. Smoke, the sky, the coronas, the glass rain, the wet road, mirrors and the maps are
+drawn (see below). Not drawn in this mode: the triple screen, and what "The scene layer" lists as
 not yet.
 
 ## What is in it
@@ -61,7 +64,7 @@ not yet.
 
 ## The scene layer
 
-The layouts follow the default renderer (`omsi-render`), so both draw from the same values:
+The layouts follow the wgpu renderer (`omsi-render`), so both draw from the same values:
 a vertex is position, normal and uv; each draw has a model matrix and two parameter vectors
 (alpha multiplier, visibility, uv offset; the surface code), sent as instance data; a
 material is its uniform's 11 vectors; the light is the camera uniform's vectors. The game
@@ -74,7 +77,7 @@ diffuse, ambient and emissive colours, unlit materials, transmaps, texture borde
 mirror-once addressing, terrain uv, the alpha kinds (opaque, cut, blended with or without
 depth write, depth-only, painted ground), back-face culling, the road surfaces' pull
 towards the eye and their depth bias, invisible instances, and Direct3D 9's half-pixel
-offset. Depth is reversed as in the default renderer (cleared to 0, nearer is greater).
+offset. Depth is reversed as in the wgpu renderer (cleared to 0, nearer is greater).
 
 The material's maps: the light map (as strong as the instance says; a terrain's detail
 texture), the night map (by night, as strong as the instance says, or always when something
@@ -85,7 +88,7 @@ highlight lit at the vertex from the sun and the light above, and the material's
 addressing (wrap, mirror, clamp, mirror once) in the samplers. A map that is not uploaded
 reads as nothing.
 
-The lamps: the map's lamps and the vehicles' lights from the default renderer's grid of
+The lamps: the map's lamps and the vehicles' lights from the wgpu renderer's grid of
 cells round the camera (`omsi-render`'s `Scene::frame_lights` and `frame_light_grid`), point
 lights and spots, not on a `[nomaplighting]` material, a `[LightMapMapping]` one or a tree's
 leaves; and the vehicles' interior lamps on the meshes their instances name. They are read
@@ -94,7 +97,7 @@ device without dynamic 32-bit float textures draws no lamps and says so in the l
 reflection's light takes the lamps in, per pixel.
 
 The tile light maps: the lamps baked into the map, one picture a tile, put up into the
-default renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`, placed by
+wgpu renderer's atlas of tiles round the camera (`MirrorEvent::LightMapTile`, placed by
 `FramePlan::light_map`). They light the roads, the plates and the `[LightMapMapping]`
 objects at night, as the ground's night map lights the ground; outside the loaded square
 they light nothing.
@@ -123,9 +126,9 @@ and a small pixel shader of its own (the drops' picture is made here; red the dr
 forms, blue how it catches the light). The scene's pixel shader keeps its slots; a device that cannot make the
 pass draws the world without drops. The vehicle the camera is in (`cab`) follows the player's wiper; every other pane, the player's seen from outside included, has the drops of the weather alone (known limit: a frame carries one wiper). A mirror's picture draws the drops where they are and does not move them
 on. Not part of it: refraction, running streaks and condensation on glass (not part of OMSI 2).
-The sky: the background of every picture, the window's and the mirrors' (`SceneFrame::sky`, `shaders/sky.hlsl`, `implementation/d3d9/sky.rs`). A dome (a hemisphere and a little below the horizon, as the default renderer's) centred on the camera, so it never shows parallax and turns with the camera; it is drawn first, before the scene and without depth, so it replaces only what was the flat clear colour. Its colour is the map's three sky pictures (`envir.cfg`'s `[sky_textures]`: day, twilight, night), read along the azimuth relative to the sun (the brighter glow sits toward the sun) and from the zenith (top) to the horizon (bottom), blended in linear light by the weights the sun's altitude gives (the twilight picture counts for 0.8 of its light, the night's for 0.6, as the default renderer), and mixed with the fog's colour near the horizon and, in a thick fog, over the whole sky, so far geometry fades into it without a seam. The game sends the picture ids (`Scene::sky_textures`) and the sun's azimuth and weights (`FramePlan::sky`). Always on in this mode; with no pictures set, or one not put up, the picture keeps its clear colour. No atmosphere and no gradients of its own: the vanilla picture only. Its pixel shader is a pass of its own and takes far fewer than the scene's slots.
+The sky: the background of every picture, the window's and the mirrors' (`SceneFrame::sky`, `shaders/sky.hlsl`, `implementation/d3d9/sky.rs`). A dome (a hemisphere and a little below the horizon, as the wgpu renderer's) centred on the camera, so it never shows parallax and turns with the camera; it is drawn first, before the scene and without depth, so it replaces only what was the flat clear colour. Its colour is the map's three sky pictures (`envir.cfg`'s `[sky_textures]`: day, twilight, night), read along the azimuth relative to the sun (the brighter glow sits toward the sun) and from the zenith (top) to the horizon (bottom), blended in linear light by the weights the sun's altitude gives (the twilight picture counts for 0.8 of its light, the night's for 0.6, as the wgpu renderer), and mixed with the fog's colour near the horizon and, in a thick fog, over the whole sky, so far geometry fades into it without a seam. The game sends the picture ids (`Scene::sky_textures`) and the sun's azimuth and weights (`FramePlan::sky`). Always on in this mode; with no pictures set, or one not put up, the picture keeps its clear colour. No atmosphere and no gradients of its own: the vanilla picture only. Its pixel shader is a pass of its own and takes far fewer than the scene's slots.
 
-Over the sky's pictures the same pass draws two things, both in `shaders/sky.hlsl`. *Stars*: at night only (the night picture's weight above 0.35, in full at 1), above the horizon, small points of their own brightness laid out on the six faces of a cube (about 0.3 degrees a cell, a share of the cells holding one) so they are the same at every frame and every size of picture; they stay where they are in the world and do not turn with the hours (**provisional**: their count, brightness and turning are not observed yet). *Clouds*: the weather's one layer (`SceneSky::clouds`): the cloud type's picture (`Scene::sky_cloud_picture`, white with the clouds in its alpha; an Overcast type's brightness is its cover), laid flat at the weather's base height (`FramePlan::clouds`: cover, the wind's drift in tiles, height; a tile is 2500 m) as seen from the camera, so the clouds ride with it and only the wind moves them; no clouds for clear weather or a type without a picture, fading out above the horizon and none below it, lit by the scene's light (`SceneLight`, as the default renderer's classic sky), the closed deck greyed, covering the stars, and under the fog like the rest of the sky. Nothing procedural, no moon, no lens flare, no bloom.
+Over the sky's pictures the same pass draws two things, both in `shaders/sky.hlsl`. *Stars*: at night only (the night picture's weight above 0.35, in full at 1), above the horizon, small points of their own brightness laid out on the six faces of a cube (about 0.3 degrees a cell, a share of the cells holding one) so they are the same at every frame and every size of picture; they stay where they are in the world and do not turn with the hours (**provisional**: their count, brightness and turning are not observed yet). *Clouds*: the weather's one layer (`SceneSky::clouds`): the cloud type's picture (`Scene::sky_cloud_picture`, white with the clouds in its alpha; an Overcast type's brightness is its cover), laid flat at the weather's base height (`FramePlan::clouds`: cover, the wind's drift in tiles, height; a tile is 2500 m) as seen from the camera, so the clouds ride with it and only the wind moves them; no clouds for clear weather or a type without a picture, fading out above the horizon and none below it, lit by the scene's light (`SceneLight`, as the wgpu renderer's classic sky), the closed deck greyed, covering the stars, and under the fog like the rest of the sky. Nothing procedural, no moon, no lens flare, no bloom.
 
 Fewer night lights (`SceneLamps::cell_cap`, the `fewer_night_lights` setting): `SceneLamps::grid_texels` packs each grid cell's places with its first `cell_cap` map lamps and every vehicle light (a spot, which is how a headlight reaches the renderer, or the older point that lights every surface), which are never cut; the rest of the places are left empty. The lights are listed nearest to the camera first, so the lamps kept are the nearest to the camera among those reaching the cell (not by brightness). The shader's lamp loop stops at the first empty place, so a cell does less work. 0 (the default) is the grid as given, the picture is identical to before, and the shader is untouched. A deliberate, optional deviation from OMSI 2 for weak cards; the saving is not measured yet.
 
@@ -135,7 +138,7 @@ Effort-saving options (all ours, none OMSI 2's, each off or unlimited by default
 
 The coronas: the glow a light shows round its lamp (headlights, tail and brake lights,
 indicators, beacons, street lamps), the cone a light draws in fog and the halo round a light
-in fog. They are camera-facing sprites the default renderer keeps the books of
+in fog. They are camera-facing sprites the wgpu renderer keeps the books of
 (`Scene::frame_coronas`, `Scene::frame_corona_runs`), drawn by a pass of their own with their
 own small shaders (the scene's pixel shader keeps its slots; the corona one takes about 55):
 after the world's batches, and again after the vehicle the camera is in, as the default
@@ -153,7 +156,7 @@ game's smoke picture (`MirrorEvent::SmokeTexture`, `D3d9Device::set_smoke_textur
 picture's alpha is the mask), alpha-blended with `SRCALPHA / INVSRCALPHA`, tested against the
 depth and not writing it, the farthest first as the renderer sorted them
 (`Scene::frame_smoke`, the corona sprite record with the kind 3). A pass of its own with its
-own shaders (`shaders/smoke.hlsl`, a port of the smoke branch of the default renderer's corona
+own shaders (`shaders/smoke.hlsl`, a port of the smoke branch of the wgpu renderer's corona
 shader; the scene's pixel shader keeps its slots, the smoke one takes about a dozen): drawn after
 the world's batches and before its coronas, so the vehicle the camera is in covers it. The
 light on a particle is the ambient plus 0.6 of the sun's, at most 1.2, as in the default
@@ -171,7 +174,7 @@ The wet road: a pass of its own (`d3d9::wet_road`, `shaders/wet_road.hlsl`) over
 batches, so the scene's pixel shader keeps its slots. Under rain (`SceneLight::weather`, x; none under snow) such a
 surface darkens by up to a quarter of its light, takes a Fresnel sheen of the sky, and gathers pools of standing water
 from a fixed pattern on the map (about a fifth of a soaked road) that mirror the sky almost fully at grazing angles, as
-the default renderer's vanilla wet road; the fog takes it away with the distance. The pass blends ONE, INVSRCALPHA
+the wgpu renderer's vanilla wet road; the fog takes it away with the distance. The pass blends ONE, INVSRCALPHA
 on the stored colour. Painted ground layers are not wetted (the ground below them is). With the rain reflections on,
 `SceneFrame::rain_reflection` names the scene texture the game drew the street into from the camera mirrored under
 the road, and that camera's view-projection: the pass projects each spot of a pool with it (sampler 1, clamped) and
@@ -180,9 +183,9 @@ cannot make the pass draws the world dry.
 
 Not yet (later phases): shadows and ambient occlusion, the detail noise, swaying trees,
 the fog's way through the player's vehicle. The cut of the alpha-tested materials (`scene::ALPHA_CUT`, alpha above 128) is the
-default renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
+wgpu renderer's; like `ALPHA_TEST_REF` it is a **provisional** parity item.
 
-Known differences from the default renderer, each for a later PR:
+Known differences from the wgpu renderer, each for a later PR:
 
 * Only the vanilla ("classic") path is ported: the camera uniform's flag for the other
   looks (`sky_color.w`) is not read, so a frame asking for another look is drawn vanilla.
@@ -191,7 +194,7 @@ Known differences from the default renderer, each for a later PR:
   (`set_quality`, the nearest count the card offers). Alpha-tested edges (leaves, fences) are
   smoothed by alpha-to-coverage when multisampling is on: texels below the reference are
   discarded, the alpha ramp round the reference is tightened by its screen derivative (as the
-  default renderer does) and handed to the coverage through the driver's switch (the one the
+  wgpu renderer does) and handed to the coverage through the driver's switch (the one the
   driver reports by a format query: `ATOC` or `A2M1`; a driver with neither keeps the discard
   at the reference). The scene targets of the mirrors are
   not multisampled and keep the discard. The
@@ -215,7 +218,7 @@ The new interface draws as `omsi-ui` draws it: each draw with its layer's camera
 box, viewport, scissor, rounded clip and opacity, premultiplied alpha. Where the device
 converts to sRGB after blending (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`, with sRGB reads and
 writes for the formats used), the pictures are read as sRGB and the blend is in linear
-light, as in the default renderer. Elsewhere it is all done on the stored values, which
+light, as in the wgpu renderer. Elsewhere it is all done on the stored values, which
 differs only where alpha is partial (edges, fades). The HUD's pictures are drawn with the
 same shader as quads in pixels. Pictures, atlas and vertex lists keep their pixels, so a
 device opened again after a loss gets them back.
