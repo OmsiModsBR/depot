@@ -33,7 +33,7 @@ Releases are published manually after review; see [docs/VERSIONING.md](docs/VERS
 
 ### Passengers and people
 
-- **Fixed.** People waiting at a stop whose pavement slopes now stand on the pavement. A stop object's waiting places all lie at the height of the object's origin, and where the pavement rose along the stop the people at the far places stood sunk in it in a level line. Standing waiters now look for their floor up to 1.1 m over their waiting place (it was half a metre), which still keeps them off a shelter's roof. Seated waiters are unchanged. Checked by automated tests only, not yet seen in the game. (#189)
+- **Fixed.** People waiting at a stop whose pavement slopes now stand on the pavement. A stop object's waiting places all lie at the height of the object's origin, and where the pavement rose along the stop the people at the far places stood sunk in it in a level line. Standing waiters now look for their floor up to 1.1 m over their waiting place (it was half a metre), which still keeps them off a shelter's roof. Seated waiters are unchanged. Checked by automated tests only, not yet seen in the game. (#887)
 
 ### Vehicle physics and simulation
 
