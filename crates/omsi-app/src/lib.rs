@@ -28,7 +28,6 @@ mod settings;
 mod showroom;
 
 mod core;
-mod diagnostics;
 mod input;
 mod offscreen;
 mod route_arrows;

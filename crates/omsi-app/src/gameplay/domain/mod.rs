@@ -1,4 +1,5 @@
 //! The game play's types and rules.
+pub(crate) mod diagnostics;
 pub(crate) mod driver;
 pub(crate) mod humans;
 pub(crate) mod line_times;

@@ -10,6 +10,12 @@ pub(crate) use super::super::implementation::money;
 pub(crate) use super::super::implementation::schedule_paper;
 pub(crate) use super::super::implementation::traffic_link;
 
+/// Why the bus does not move, the rebound keys, and the physics in the log.
+pub(crate) mod diagnostics {
+    pub use crate::gameplay::domain::diagnostics::*;
+    pub(crate) use crate::gameplay::implementation::diagnostics::*;
+}
+
 /// The tutorial lessons: their pages (`domain/tutorial.rs`) and their loading from the
 /// game's folder (`implementation/tutorial.rs`).
 pub(crate) mod tutorial {
