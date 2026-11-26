@@ -7,6 +7,7 @@ pub(crate) mod about;
 pub(crate) mod android;
 pub(crate) mod app;
 pub(crate) mod applog;
+pub(crate) mod env_file;
 pub(crate) mod lan_off;
 pub(crate) mod launcher_link;
 pub(crate) mod make;

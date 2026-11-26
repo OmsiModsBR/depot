@@ -16,6 +16,13 @@ pub(crate) mod app {
 pub(crate) use super::super::domain::cli;
 pub(crate) use super::super::implementation::launcher_link;
 
+/// `depot/env.txt` on a phone: the switches it may set.
+#[cfg(target_os = "android")]
+pub(crate) mod env_file {
+    pub(crate) use super::super::super::domain::env_file::*;
+    pub(crate) use super::super::super::implementation::env_file::*;
+}
+
 /// The device's clock and the real-time sync (the game's date and time follow it).
 pub(crate) mod real_time {
     pub(crate) use super::super::super::domain::real_time::*;
