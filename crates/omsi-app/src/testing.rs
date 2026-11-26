@@ -311,7 +311,8 @@ pub mod quit {
     }
 }
 pub mod radio {
-    pub use crate::radio::*;
+    pub use crate::gameplay::domain::radio::*;
+    pub use crate::gameplay::implementation::radio::*;
 }
 pub mod rain {
     pub use crate::weather::rain::*;

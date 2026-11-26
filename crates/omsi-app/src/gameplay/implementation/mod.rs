@@ -9,6 +9,7 @@ pub(crate) mod journey;
 pub(crate) mod money;
 pub(crate) mod on_foot;
 pub(crate) mod player;
+pub(crate) mod radio;
 pub(crate) mod rail_drive;
 pub(crate) mod schedule;
 pub(crate) mod schedule_paper;
