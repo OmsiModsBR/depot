@@ -129,3 +129,56 @@ pub mod modes {
         (cull.far, cull.own)
     }
 }
+
+/// Every name the crate holds inside, for the tests that reach past the public API.
+#[allow(ambiguous_glob_reexports)] // (module names repeat across domains; tests name the nested path)
+pub mod internals {
+    pub use crate::interface::ModeResources;
+    pub use crate::modes::enhanced;
+    pub use crate::{
+        assets::*, effects::*, gpu::*, lighting::*, output::*, passes::*, renderer::*, scene::*,
+        shaders::*, sky::*,
+    };
+    pub use glam::{DVec3, Mat4, Vec3};
+    pub mod api {
+        pub use crate::api::*;
+    }
+    pub mod assets {
+        pub use crate::assets::*;
+    }
+    pub mod effects {
+        pub use crate::effects::*;
+    }
+    pub mod gpu {
+        pub use crate::gpu::*;
+    }
+    pub mod interface {
+        pub use crate::interface::*;
+    }
+    pub mod lighting {
+        pub use crate::lighting::*;
+    }
+    pub mod modes {
+        pub use crate::modes::*;
+    }
+    pub mod output {
+        pub use crate::output::*;
+    }
+    pub mod passes {
+        pub use crate::passes::*;
+    }
+    pub mod renderer {
+        pub use crate::renderer::*;
+    }
+    pub mod scene {
+        pub use crate::scene::*;
+    }
+    pub mod shaders {
+        pub use crate::shaders::*;
+    }
+    pub mod sky {
+        pub use crate::sky::*;
+    }
+
+    pub use omsi_geometry::MeshData;
+}

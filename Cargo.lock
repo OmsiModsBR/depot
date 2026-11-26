@@ -2953,6 +2953,7 @@ name = "omsi-render-vanilla"
 version = "0.1.0"
 dependencies = [
  "log",
+ "omsi-render-vanilla",
  "thiserror 2.0.21",
  "windows 0.62.2",
  "winit",

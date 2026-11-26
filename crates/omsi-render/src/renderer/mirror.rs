@@ -13,10 +13,10 @@ use std::cell::RefCell;
 /// A renderer's asset mirror. Counted in [`crate::assets`] while it is set, so prepared
 /// assets keep their CPU copies; dropping the renderer stops it.
 #[derive(Default)]
-pub(crate) struct MirrorSlot(RefCell<Option<AssetMirror>>);
+pub struct MirrorSlot(RefCell<Option<AssetMirror>>);
 
 impl MirrorSlot {
-    pub(crate) fn set(&self, mirror: Option<AssetMirror>) {
+    pub fn set(&self, mirror: Option<AssetMirror>) {
         let mut slot = self.0.borrow_mut();
         match (slot.is_some(), mirror.is_some()) {
             (false, true) => crate::assets::mirror_started(),
@@ -103,7 +103,7 @@ pub enum MirrorEvent<'a> {
 pub type AssetMirror = Box<dyn FnMut(MirrorEvent<'_>) + Send>;
 
 /// The plan of the picture `f` with the lists `lists`.
-pub(crate) fn plan_of(
+pub fn plan_of(
     f: &super::frame::FrameContext<'_>,
     lists: &super::frame::DrawLists,
     light_map: [f32; 4],
@@ -239,7 +239,7 @@ impl crate::scene::Scene {
 impl super::Renderer {
     /// Where the tile light map atlas lies relative to the render origin `ro` (x, y its
     /// south-west corner, z its side, w 1 when it is set).
-    pub(crate) fn light_map_place(&self, ro: glam::DVec3) -> [f32; 4] {
+    pub fn light_map_place(&self, ro: glam::DVec3) -> [f32; 4] {
         let (lx, ly, side) = self.light_map.lm_place.get();
         [
             (lx - ro.x) as f32,
@@ -250,13 +250,13 @@ impl super::Renderer {
     }
 
     /// Hands `event` to the asset mirror, if there is one.
-    pub(crate) fn mirror(&self, event: MirrorEvent<'_>) {
+    pub fn mirror(&self, event: MirrorEvent<'_>) {
         if let Some(m) = self.asset_mirror.0.borrow_mut().as_mut() {
             m(event);
         }
     }
 
-    pub(crate) fn mirroring(&self) -> bool {
+    pub fn mirroring(&self) -> bool {
         self.asset_mirror.0.borrow().is_some()
     }
 }

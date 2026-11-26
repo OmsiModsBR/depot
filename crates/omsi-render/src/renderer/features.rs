@@ -22,7 +22,7 @@ pub enum ViewKind {
 }
 
 impl ViewKind {
-    pub(crate) fn of(output: Output) -> Self {
+    pub fn of(output: Output) -> Self {
         match output {
             Output::Window => ViewKind::Window,
             Output::TriplePanel { .. } => ViewKind::TriplePanel,
@@ -64,7 +64,7 @@ pub struct FrameSwitches {
 }
 
 impl FrameSwitches {
-    pub(crate) fn from_environment() -> Self {
+    pub fn from_environment() -> Self {
         Self {
             debug_view: crate::lighting::debug_view() != 0.0,
         }
@@ -92,7 +92,7 @@ pub struct FrameInputs {
 }
 
 /// Whether the weather is wet enough for puddles that mirror (snow covers them).
-pub(crate) fn puddle_weather(wetness: f32, snow: f32) -> bool {
+pub fn puddle_weather(wetness: f32, snow: f32) -> bool {
     wetness * (1.0 - snow.clamp(0.0, 1.0)) > 0.05
 }
 
@@ -104,7 +104,7 @@ impl FrameFeatures {
     }
 
     /// `decide` for the render `mode` of the graphics path.
-    pub(crate) fn decide_with(
+    pub fn decide_with(
         mode: &dyn RenderMode,
         options: &RenderOptions,
         i: &FrameInputs,

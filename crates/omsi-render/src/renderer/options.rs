@@ -111,7 +111,7 @@ pub const AUTO_SCALE_PIXELS: f32 = if cfg!(target_os = "macos") || cfg!(target_o
 /// A requested one keeps to the same budget on a Mac or a phone: the Low preset's fixed
 /// 0.75 of a Retina window drew more pixels than the budget allows (3.24 of 2.8 million
 /// on a 3200x1800 window), and the automatic scale would never have drawn that many.
-pub(crate) fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
+pub fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
     let pixels = width as f32 * height as f32;
     if requested > 0.0 {
         let requested = requested.clamp(0.5, 1.0);

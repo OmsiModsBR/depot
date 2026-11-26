@@ -12,7 +12,7 @@ impl Renderer {
     /// Vanilla with reflections: the high-range picture brought into the target, the overlays
     /// on top when the picture is not scaled.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_reflection_resolve(
+    pub fn encode_reflection_resolve(
         &self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,
@@ -49,7 +49,7 @@ impl Renderer {
 
     /// The puddles' reflections (whether they are drawn is returned).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_reflections(
+    pub fn encode_reflections(
         &mut self,
         scene: &Scene,
         encoder: &mut wgpu::CommandEncoder,

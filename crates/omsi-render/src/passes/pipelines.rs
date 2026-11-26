@@ -10,30 +10,30 @@ use super::snow::SnowBuilder;
 
 /// The builders of the passes that draw in the main pass, and what decides which pipelines
 /// are made.
-pub(crate) struct PathBuilders<'a> {
-    pub(crate) scene: SceneBuilder<'a>,
-    pub(crate) corona: CoronaBuilder<'a>,
-    pub(crate) snow: SnowBuilder<'a>,
-    pub(crate) sky: SkyBuilder<'a>,
+pub struct PathBuilders<'a> {
+    pub scene: SceneBuilder<'a>,
+    pub corona: CoronaBuilder<'a>,
+    pub snow: SnowBuilder<'a>,
+    pub sky: SkyBuilder<'a>,
     /// The scene's sample count (the rain's films are single-sampled).
-    pub(crate) msaa: u32,
+    pub msaa: u32,
     /// Leave the snowfall out (`basic_pipelines`).
-    pub(crate) basic: bool,
+    pub basic: bool,
 }
 
 /// The fragment entry points of one shading path, for each pass that draws in the main pass.
-pub(crate) struct PathShaders<'a> {
-    pub(crate) scene: &'a str,
-    pub(crate) corona: &'a str,
-    pub(crate) corona_blend: wgpu::BlendState,
-    pub(crate) smoke: &'a str,
-    pub(crate) snow: &'a str,
-    pub(crate) sky: &'a str,
+pub struct PathShaders<'a> {
+    pub scene: &'a str,
+    pub corona: &'a str,
+    pub corona_blend: wgpu::BlendState,
+    pub smoke: &'a str,
+    pub snow: &'a str,
+    pub sky: &'a str,
 }
 
 impl PathBuilders<'_> {
     /// The main pass's pipelines of a path, drawn in `format`.
-    pub(crate) fn path(&self, format: wgpu::TextureFormat, fs: &PathShaders) -> PassPipelines {
+    pub fn path(&self, format: wgpu::TextureFormat, fs: &PathShaders) -> PassPipelines {
         PassPipelines {
             pipelines: self.scene.pipelines(format, fs.scene, self.msaa),
             rain_pipelines: self.scene.pipelines(format, fs.scene, 1),
@@ -45,7 +45,7 @@ impl PathBuilders<'_> {
     }
 
     /// The pipelines of a path's sky, drawn alone (the mirrors' sky of the enhanced mode).
-    pub(crate) fn sky_only(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
+    pub fn sky_only(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
         self.sky.pipeline(format, fs)
     }
 }

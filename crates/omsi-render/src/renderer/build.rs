@@ -27,7 +27,7 @@ use crate::targets::TargetCache;
 
 /// The render mode of a graphics path: the one function that names the modes. They keep no
 /// state of their own yet, so they are shared, and the path may change from frame to frame.
-pub(crate) fn mode_for(path: ShadingPath) -> &'static dyn RenderMode {
+pub fn mode_for(path: ShadingPath) -> &'static dyn RenderMode {
     match path {
         ShadingPath::Hdr => &Enhanced,
         ShadingPath::Linear => &VanillaPlus,
@@ -36,12 +36,12 @@ pub(crate) fn mode_for(path: ShadingPath) -> &'static dyn RenderMode {
 
 /// The scene module of a graphics path: the core's shader with the path's own fragment shader
 /// (Vanilla+ draws with the core's alone).
-pub(crate) fn scene_shader_for(path: ShadingPath, gl: bool) -> String {
+pub fn scene_shader_for(path: ShadingPath, gl: bool) -> String {
     scene_shader_source(gl, &scene_own_text(path))
 }
 
 /// The sky fragment shaders a path adds to the core's sky module.
-pub(crate) fn sky_own_text(path: ShadingPath) -> &'static str {
+pub fn sky_own_text(path: ShadingPath) -> &'static str {
     match path {
         ShadingPath::Hdr => crate::modes::enhanced::sky_text(),
         ShadingPath::Linear => "",
@@ -49,7 +49,7 @@ pub(crate) fn sky_own_text(path: ShadingPath) -> &'static str {
 }
 
 /// The corona and smoke fragment shaders a path adds to the core's corona module.
-pub(crate) fn corona_own_text(path: ShadingPath) -> String {
+pub fn corona_own_text(path: ShadingPath) -> String {
     match path {
         ShadingPath::Hdr => crate::modes::enhanced::corona_text(),
         ShadingPath::Linear => String::new(),
@@ -57,7 +57,7 @@ pub(crate) fn corona_own_text(path: ShadingPath) -> String {
 }
 
 /// The snowfall fragment shader a path adds to the core's snow module.
-pub(crate) fn snow_own_text(path: ShadingPath) -> &'static str {
+pub fn snow_own_text(path: ShadingPath) -> &'static str {
     match path {
         ShadingPath::Hdr => crate::modes::enhanced::snow_text(),
         ShadingPath::Linear => "",
@@ -65,7 +65,7 @@ pub(crate) fn snow_own_text(path: ShadingPath) -> &'static str {
 }
 
 /// The fragment shaders a path adds to the core's scene module: the chosen mode's alone.
-pub(crate) fn scene_own_text(path: ShadingPath) -> String {
+pub fn scene_own_text(path: ShadingPath) -> String {
     match path {
         ShadingPath::Hdr => crate::modes::enhanced::scene_text(),
         ShadingPath::Linear => vanilla_plus::scene_text().to_string(),
@@ -74,7 +74,7 @@ pub(crate) fn scene_own_text(path: ShadingPath) -> String {
 
 impl Renderer {
     /// The pipelines, samplers and fixed textures of a renderer whose options are settled.
-    pub(crate) fn build(
+    pub fn build(
         device: wgpu::Device,
         queue: wgpu::Queue,
         adapter_name: String,

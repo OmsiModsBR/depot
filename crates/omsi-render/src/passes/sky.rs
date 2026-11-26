@@ -9,9 +9,9 @@ use crate::sky::{SkyResources, SKY_CUBE_EVERY, SKY_CUBE_HISTORY, SKY_CUBE_ROUNDS
 
 /// What the sky's pipelines are made from: the sky shader (the sky resources draw with it
 /// too), its layout and the dome's vertex.
-pub(crate) struct SkyBuilder<'a> {
+pub struct SkyBuilder<'a> {
     device: &'a wgpu::Device,
-    pub(crate) module: wgpu::ShaderModule,
+    pub module: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
     msaa: u32,
 }
@@ -25,7 +25,7 @@ const SKY_VERTEX: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
 
 impl<'a> SkyBuilder<'a> {
     /// `mode`: the mode's own sky fragment shaders, added to the module (see `sky_shader_source`).
-    pub(crate) fn new(device: &'a wgpu::Device, layouts: &Layouts, msaa: u32, mode: &str) -> Self {
+    pub fn new(device: &'a wgpu::Device, layouts: &Layouts, msaa: u32, mode: &str) -> Self {
         log::info!("renderer: compiling the sky and clouds shaders");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sky"),
@@ -44,7 +44,7 @@ impl<'a> SkyBuilder<'a> {
         }
     }
 
-    pub(crate) fn pipeline(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
+    pub fn pipeline(&self, format: wgpu::TextureFormat, fs: &str) -> wgpu::RenderPipeline {
         self.device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("sky"),
@@ -88,7 +88,7 @@ impl<'a> SkyBuilder<'a> {
 impl SkyResources {
     /// The enhanced sky cube: a face a frame, all six the first time and for a new sky.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_sky_cube(
+    pub fn encode_sky_cube(
         &mut self,
         scene: &Scene,
         prepass_encoder: &mut wgpu::CommandEncoder,
@@ -177,7 +177,7 @@ impl SkyResources {
 
     /// The enhanced path's reflection probe: the sky into its six faces, then the blurred
     /// mip levels.
-    pub(crate) fn encode_probe(
+    pub fn encode_probe(
         &mut self,
         scene: &Scene,
         prepass_encoder: &mut wgpu::CommandEncoder,

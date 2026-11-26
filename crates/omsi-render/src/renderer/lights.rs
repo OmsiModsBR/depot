@@ -15,7 +15,7 @@ impl Renderer {
     /// Upload this frame's coronas.
     /// `cab`: the box of the vehicle the camera is in, whose own flares Omsi.exe draws
     /// after the vehicle (0x6f0a2c -> 0x6f07bc), the others before it (0x6f0400/0x6f0418).
-    pub(crate) fn prepare_coronas(
+    pub fn prepare_coronas(
         &self,
         scene: &mut Scene,
         lighting: &Lighting,
@@ -139,7 +139,7 @@ impl Renderer {
     ///
     /// `mirror`: the picture is a mirror's (a render texture), which shows no smoke when the
     /// options say so ([`RenderOptions::smoke_in_mirrors`]).
-    pub(crate) fn prepare_smoke(&self, scene: &mut Scene, eye: DVec3, mirror: bool) {
+    pub fn prepare_smoke(&self, scene: &mut Scene, eye: DVec3, mirror: bool) {
         let ro = scene.render_origin;
         scene.last_smoke.clear();
         if mirror && !self.options.smoke_in_mirrors {
@@ -194,7 +194,7 @@ impl Renderer {
     /// by, whose radius it reads as 0, and the mirrors show no headlight pools. The three
     /// stand-in points stay out of it, or a street full of cars would fill the grid cells'
     /// sixteen places before the street lamps got theirs.
-    pub(crate) fn prepare_lights(
+    pub fn prepare_lights(
         &self,
         scene: &mut Scene,
         cam_rel: Vec3,

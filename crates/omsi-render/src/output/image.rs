@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use anyhow::{Context, Result};
 
 /// A texture's pixels read back (rows without the copy's padding), the GPU waited for.
-pub(crate) fn read_texture(
+pub fn read_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     texture: &wgpu::Texture,

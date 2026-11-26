@@ -1,9 +1,9 @@
 //! Timing render passes (OMSI_GPU_TIMERS): the timestamp writes of a timed pass.
 
-pub(crate) const GPU_TIMER_PASSES: u32 = 16;
+pub const GPU_TIMER_PASSES: u32 = 16;
 
 /// The timestamp writes of the next timed pass (none when this frame is not timed).
-pub(crate) fn pass_timer<'a>(
+pub fn pass_timer<'a>(
     set: Option<&'a wgpu::QuerySet>,
     timed: &mut Vec<&'static str>,
     label: &'static str,

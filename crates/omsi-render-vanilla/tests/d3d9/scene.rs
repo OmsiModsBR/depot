@@ -1,11 +1,13 @@
 //! Device tests of the scene layer, skipped like the others without a usable device.
 
-use super::tests::device;
-use super::*;
-use crate::scene::{
+use crate::device::device;
+use omsi_render_vanilla::scene::{
     env_factor, DrawKind, SceneBatch, SceneFrame, SceneLamps, SceneLight, SceneMaterial,
     SceneTexture, TexAddress, TexFormat, BLOB_SURFACE_CODE, MATERIAL_VECTORS,
 };
+use omsi_render_vanilla::testing::d3d9::*;
+use omsi_render_vanilla::*;
+use windows::Win32::Graphics::Direct3D9::*;
 
 const W: u32 = 8;
 const H: u32 = 4;
@@ -1363,7 +1365,7 @@ fn a_shadow_blob_shows_by_its_texture_alpha_and_not_as_a_solid_box() {
 
 /// A red glow over the whole target, facing the camera on its axis, at clip depth `z`;
 /// `picture` its picture (0 the standard glow). Its centre is `[red, 0, 0]`.
-fn red_glow(z: f32, picture: u16) -> ([f32; crate::scene::CORONA_FLOATS], u16) {
+fn red_glow(z: f32, picture: u16) -> ([f32; omsi_render_vanilla::scene::CORONA_FLOATS], u16) {
     (
         [
             0.0, 0.0, z, 10.0, // position, size
@@ -1391,7 +1393,7 @@ fn draw_coronas(
     dev: &mut D3d9Device,
     quad_z: Option<f32>,
     late_quad: bool,
-    sprites: &[[f32; crate::scene::CORONA_FLOATS]],
+    sprites: &[[f32; omsi_render_vanilla::scene::CORONA_FLOATS]],
     runs: &[(u16, u32, u32, bool)],
 ) -> Vec<u8> {
     if let Some(z) = quad_z {
@@ -1421,7 +1423,7 @@ fn draw_coronas(
         cab,
         surface_bias: -24,
         lamps: Default::default(),
-        coronas: crate::scene::SceneCoronas { sprites, runs },
+        coronas: omsi_render_vanilla::scene::SceneCoronas { sprites, runs },
         sky: Default::default(),
         rain: Default::default(),
         smoke: Default::default(),
@@ -1524,7 +1526,7 @@ fn a_corona_is_blended_on_the_pictures_own_values() {
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
-        coronas: crate::scene::SceneCoronas {
+        coronas: omsi_render_vanilla::scene::SceneCoronas {
             sprites: &[sprite],
             runs: &[(5, 0, 1, false)],
         },
@@ -1643,7 +1645,7 @@ fn a_corona_run_outside_the_sprites_is_refused() {
         cab: &[],
         surface_bias: -24,
         lamps: Default::default(),
-        coronas: crate::scene::SceneCoronas {
+        coronas: omsi_render_vanilla::scene::SceneCoronas {
             sprites: &[sprite],
             runs: &[(0, 0, 2, false)],
         },
@@ -1688,7 +1690,7 @@ fn draw_sky(
     fog: [f32; 4],
     textures: Option<[usize; 3]>,
 ) -> Vec<u8> {
-    let sky = crate::scene::SceneSky {
+    let sky = omsi_render_vanilla::scene::SceneSky {
         textures,
         params,
         ..Default::default()
@@ -1699,7 +1701,7 @@ fn draw_sky(
 /// Draws a frame with nothing but `sky`, seen through `view_proj`, and returns its pixels.
 fn draw_sky_with(
     dev: &mut D3d9Device,
-    sky: crate::scene::SceneSky,
+    sky: omsi_render_vanilla::scene::SceneSky,
     view_proj: [[f32; 4]; 4],
     light: SceneLight,
     (width, height): (u32, u32),
@@ -1809,7 +1811,7 @@ fn the_scene_is_drawn_over_the_sky() {
     let batches = [batch(DrawKind::Opaque, 3, 0, 0..1)];
     let params = [VISIBLE, SECOND];
     let mut frame = quad_frame(&batches, &[IDENTITY], &params, &[0]);
-    frame.sky = crate::scene::SceneSky {
+    frame.sky = omsi_render_vanilla::scene::SceneSky {
         textures: Some([0, 1, 2]),
         params: [0.0, 1.0, 0.0, 0.0],
         ..Default::default()
@@ -1839,12 +1841,12 @@ const LOOK_UP: [[f32; 4]; 4] = [
 fn dark_sky(
     dev: &mut D3d9Device,
     params: [f32; 4],
-    clouds: crate::scene::SceneClouds,
-) -> crate::scene::SceneSky {
+    clouds: omsi_render_vanilla::scene::SceneClouds,
+) -> omsi_render_vanilla::scene::SceneSky {
     for id in 0..3 {
         rgba(dev, id, [0, 0, 0, 255]);
     }
-    crate::scene::SceneSky {
+    omsi_render_vanilla::scene::SceneSky {
         textures: Some([0, 1, 2]),
         params,
         clouds,
@@ -1859,7 +1861,7 @@ fn the_clouds_cover_the_sky_above_the_horizon_only() {
     let Some(mut dev) = device() else { return };
     // a picture with full cover
     rgba(&mut dev, 4, [255, 255, 255, 255]);
-    let clouds = crate::scene::SceneClouds {
+    let clouds = omsi_render_vanilla::scene::SceneClouds {
         texture: Some(4),
         params: [0.5, 0.0, 0.0, 1500.0],
     };
@@ -1877,7 +1879,7 @@ fn no_cloud_without_a_cover_a_picture_or_a_shape() {
     let Some(mut dev) = device() else { return };
     rgba(&mut dev, 4, [255, 255, 255, 255]);
     rgba(&mut dev, 5, [255, 255, 255, 0]);
-    let on = |texture, cover| crate::scene::SceneClouds {
+    let on = |texture, cover| omsi_render_vanilla::scene::SceneClouds {
         texture,
         params: [cover, 0.0, 0.0, 1500.0],
     };
@@ -1899,14 +1901,14 @@ fn no_cloud_without_a_cover_a_picture_or_a_shape() {
 fn the_cloud_layer_is_left_out_when_the_option_says_so_but_still_thins_the_glow() {
     let Some(mut dev) = device() else { return };
     rgba(&mut dev, 4, [255, 255, 255, 255]);
-    let clouds = crate::scene::SceneClouds {
+    let clouds = omsi_render_vanilla::scene::SceneClouds {
         texture: Some(4),
         params: [0.5, 0.0, 0.0, 1500.0],
     };
     let sky = dark_sky(&mut dev, [0.0, 1.0, 0.0, 0.0], clouds);
     let with = draw_sky_with(&mut dev, sky, LOOK_NORTH, light([0.0; 4]), (W, H));
     assert!(!all(&with, [0, 0, 0, 255], 2), "the layer should show");
-    let hidden = crate::scene::SceneSky {
+    let hidden = omsi_render_vanilla::scene::SceneSky {
         no_cloud_layer: true,
         ..sky
     };
@@ -1918,7 +1920,7 @@ fn the_cloud_layer_is_left_out_when_the_option_says_so_but_still_thins_the_glow(
 fn clouds_at_night_are_hardly_lighter_than_the_night_sky() {
     let Some(mut dev) = device() else { return };
     rgba(&mut dev, 4, [255, 255, 255, 255]);
-    let clouds = crate::scene::SceneClouds {
+    let clouds = omsi_render_vanilla::scene::SceneClouds {
         texture: Some(4),
         params: [0.5, 0.0, 0.0, 1500.0],
     };
@@ -1968,12 +1970,12 @@ fn one_star(dev: &mut D3d9Device, size: f32, code: u8) {
 /// `sky` with the test's star map, the stars' frame turned by `frame` (rows), as bright as
 /// `bright`.
 fn starry(
-    sky: crate::scene::SceneSky,
+    sky: omsi_render_vanilla::scene::SceneSky,
     frame: [[f32; 3]; 3],
     bright: f32,
-) -> crate::scene::SceneSky {
+) -> omsi_render_vanilla::scene::SceneSky {
     let row = |r: [f32; 3], w: f32| [r[0], r[1], r[2], w];
-    crate::scene::SceneSky {
+    omsi_render_vanilla::scene::SceneSky {
         stars: Some(6),
         star_frame: [
             row(frame[0], bright),
@@ -2073,7 +2075,7 @@ fn the_stars_are_left_out_when_the_option_says_so() {
     let on = starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0);
     let with = draw_sky_with(&mut dev, on, LOOK_UP, light([0.0; 4]), size);
     assert!(!star_pixels(&with).is_empty());
-    let off = crate::scene::SceneSky {
+    let off = omsi_render_vanilla::scene::SceneSky {
         no_stars: true,
         ..starry(dark_sky(&mut dev, night, Default::default()), UNTURNED, 1.0)
     };
@@ -2153,10 +2155,10 @@ fn peak(px: &[u8], x: u32, y: u32) -> u8 {
 }
 
 /// A dark sky with the sun's and the moon's pictures (white, scene textures 6 and 7) as asked.
-fn bodies_sky(dev: &mut D3d9Device, sun: bool, moon: bool) -> crate::scene::SceneSky {
+fn bodies_sky(dev: &mut D3d9Device, sun: bool, moon: bool) -> omsi_render_vanilla::scene::SceneSky {
     rgba(dev, 6, [255, 255, 255, 255]);
     rgba(dev, 7, [255, 255, 255, 255]);
-    crate::scene::SceneSky {
+    omsi_render_vanilla::scene::SceneSky {
         bodies: [sun.then_some(6), moon.then_some(7)],
         ..dark_sky(dev, [0.0, 1.0, 0.0, 0.0], Default::default())
     }
@@ -2196,7 +2198,7 @@ fn the_moon_shows_the_phase_the_sun_gives_it() {
     let n = (x * x + y * y + z * z).sqrt();
     let m = [x / n, y / n, z / n, 0.0];
     let back = [-m[0], -m[1], -m[2], 0.0];
-    let sky = |dev: &mut D3d9Device| crate::scene::SceneSky {
+    let sky = |dev: &mut D3d9Device| omsi_render_vanilla::scene::SceneSky {
         moon_dir: m,
         ..bodies_sky(dev, false, true)
     };
@@ -2222,7 +2224,7 @@ fn a_closed_deck_of_cloud_hides_the_stars() {
         dark_sky(
             dev,
             [0.0, 0.0, 0.0, 1.0],
-            crate::scene::SceneClouds {
+            omsi_render_vanilla::scene::SceneClouds {
                 texture,
                 params: [1.0, 0.0, 0.0, 1500.0],
             },
@@ -2243,7 +2245,7 @@ fn a_closed_deck_of_cloud_hides_the_stars() {
 
 /// A white smoke puff over the whole target, facing the camera, at clip depth `z`, of the
 /// alpha `alpha`, with no ground to fade into.
-fn smoke_puff(z: f32, alpha: f32) -> [f32; crate::scene::CORONA_FLOATS] {
+fn smoke_puff(z: f32, alpha: f32) -> [f32; omsi_render_vanilla::scene::CORONA_FLOATS] {
     [
         0.0, 0.0, z, 10.0, // position, size
         1.0, 1.0, 1.0, alpha, // colour, alpha
@@ -2282,7 +2284,7 @@ fn draw_smoke(
     dev: &mut D3d9Device,
     quad_z: Option<f32>,
     late_quad: bool,
-    sprites: &[[f32; crate::scene::CORONA_FLOATS]],
+    sprites: &[[f32; omsi_render_vanilla::scene::CORONA_FLOATS]],
 ) -> Vec<u8> {
     if let Some(z) = quad_z {
         let (v, i) = quad(z);
@@ -2314,7 +2316,7 @@ fn draw_smoke(
         coronas: Default::default(),
         sky: Default::default(),
         rain: Default::default(),
-        smoke: crate::scene::SceneSmoke { sprites },
+        smoke: omsi_render_vanilla::scene::SceneSmoke { sprites },
         rain_reflection: None,
     };
     let u = uniform(0.0);
@@ -2408,7 +2410,7 @@ const PANE: u32 = 64;
 fn draw_pane(
     dev: &mut D3d9Device,
     map: Option<usize>,
-    rain: crate::SceneRain,
+    rain: omsi_render_vanilla::SceneRain,
     late_quad: bool,
 ) -> Vec<u8> {
     dev.begin_frame(&FrameDesc {
@@ -2472,8 +2474,8 @@ fn pane_device() -> Option<D3d9Device> {
     Some(dev)
 }
 
-fn raining(seconds: f32, wiper: Option<f32>) -> crate::SceneRain {
-    crate::SceneRain {
+fn raining(seconds: f32, wiper: Option<f32>) -> omsi_render_vanilla::SceneRain {
+    omsi_render_vanilla::SceneRain {
         intensity: 1.0,
         wiper,
         seconds,
@@ -2484,7 +2486,12 @@ fn raining(seconds: f32, wiper: Option<f32>) -> crate::SceneRain {
 fn rain_gathers_drops_on_a_pane_with_a_raindrop_map() {
     let Some(mut dev) = pane_device() else { return };
     // dry: nothing, whatever the map
-    let px = draw_pane(&mut dev, Some(1), crate::SceneRain::default(), false);
+    let px = draw_pane(
+        &mut dev,
+        Some(1),
+        omsi_render_vanilla::SceneRain::default(),
+        false,
+    );
     assert_eq!(glow(&px), 0);
     for _ in 0..12 {
         draw_pane(&mut dev, Some(1), raining(0.25, None), false);

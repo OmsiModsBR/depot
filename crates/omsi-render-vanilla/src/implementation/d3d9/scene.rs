@@ -13,7 +13,7 @@ use crate::scene::{
 };
 use crate::{BackendError, Result};
 
-pub(super) const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
+pub const INSTANCE_STRIDE: u32 = (INSTANCE_FLOATS * 4) as u32;
 
 /// The scene shader's samplers: diffuse, transmap, night, light, sphere map, its mask, bump.
 const SAMPLERS: u32 = 7;
@@ -29,24 +29,24 @@ const BORDER_REGISTER: u32 = 24;
 
 /// What the scene layer may use beyond the floor, read when the device opens.
 #[derive(Debug, Clone, Copy, Default)]
-pub(super) struct SceneCaps {
+pub struct SceneCaps {
     /// DXT1, DXT3 and DXT5 textures.
-    pub(super) dxt: [bool; 3],
+    pub dxt: [bool; 3],
     /// Alpha blended with its own factors (`SEPARATEALPHABLENDENABLE`).
-    pub(super) separate_alpha: bool,
+    pub separate_alpha: bool,
     /// The interface is blended in linear light: textures read as sRGB, the target written
     /// as sRGB and converted after the blend (`D3DPMISCCAPS_POSTBLENDSRGBCONVERT`).
-    pub(super) linear_ui: bool,
+    pub linear_ui: bool,
     /// The lamps can be read from float textures (32-bit RGBA and R, dynamic), at most this
     /// wide and high.
-    pub(super) lamps: bool,
-    pub(super) max_texture: (u32, u32),
+    pub lamps: bool,
+    pub max_texture: (u32, u32),
     /// Instruction slots a Shader Model 3.0 pixel shader may take here.
-    pub(super) ps_slots: u32,
+    pub ps_slots: u32,
 }
 
 impl SceneCaps {
-    pub(super) fn read(d3d: &IDirect3D9Ex, raw: &D3DCAPS9) -> Self {
+    pub fn read(d3d: &IDirect3D9Ex, raw: &D3DCAPS9) -> Self {
         let mut mode = D3DDISPLAYMODE::default();
         // SAFETY: the out-parameter is a live local.
         let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
@@ -103,10 +103,10 @@ impl SceneCaps {
 }
 
 /// Shaders and the vertex layout of the scene, made at the first scene frame.
-pub(super) struct ScenePipeline {
-    pub(super) decl: IDirect3DVertexDeclaration9,
-    pub(super) vs: IDirect3DVertexShader9,
-    pub(super) ps: IDirect3DPixelShader9,
+pub struct ScenePipeline {
+    pub decl: IDirect3DVertexDeclaration9,
+    pub vs: IDirect3DVertexShader9,
+    pub ps: IDirect3DPixelShader9,
     /// Bound for a night, light or sphere map that is not there: it adds nothing.
     black: IDirect3DTexture9,
     /// x OR y of two bytes, at (x, y) of a 256 x 256 picture (`or_table`).
@@ -125,7 +125,7 @@ fn or_table() -> Vec<u8> {
 }
 
 /// The sampler states of an addressing.
-pub(super) fn address_mode(a: TexAddress) -> u32 {
+pub fn address_mode(a: TexAddress) -> u32 {
     match a {
         TexAddress::Wrap => D3DTADDRESS_WRAP.0 as u32,
         TexAddress::Mirror => D3DTADDRESS_MIRROR.0 as u32,
@@ -135,31 +135,31 @@ pub(super) fn address_mode(a: TexAddress) -> u32 {
 
 /// The scene's resources. Ids are the game's (slots it reuses), so they index sparse lists.
 #[derive(Default)]
-pub(super) struct SceneStore {
-    pub(super) meshes: Vec<Option<Mesh>>,
-    pub(super) textures: Vec<Option<IDirect3DTexture9>>,
-    pub(super) pipeline: Option<ScenePipeline>,
+pub struct SceneStore {
+    pub meshes: Vec<Option<Mesh>>,
+    pub textures: Vec<Option<IDirect3DTexture9>>,
+    pub pipeline: Option<ScenePipeline>,
     /// The raindrops-on-glass pass (see `glass_rain`).
-    pub(super) glass: super::glass_rain::GlassStore,
+    pub glass: super::glass_rain::GlassStore,
     /// The wet road pass (see `wet_road`).
-    pub(super) wet: super::wet_road::WetStore,
+    pub wet: super::wet_road::WetStore,
     /// The light coronas' pass (not cleared with a scene: its pictures belong to the renderer).
-    pub(super) coronas: super::coronas::CoronaStore,
+    pub coronas: super::coronas::CoronaStore,
     /// The sky dome's pass.
-    pub(super) sky: super::sky::SkyStore,
+    pub sky: super::sky::SkyStore,
     /// The smoke and particles' pass (likewise kept with the renderer).
-    pub(super) smoke: super::smoke::SmokeStore,
+    pub smoke: super::smoke::SmokeStore,
     /// Why the pipeline cannot be made on this device (it is not tried again every frame).
     unsupported: Option<String>,
     /// The dynamic buffer the per-frame instance records go up in (with the records it
     /// holds).
-    pub(super) instances: Option<(IDirect3DVertexBuffer9, usize)>,
+    pub instances: Option<(IDirect3DVertexBuffer9, usize)>,
     /// What every mesh and texture was made from.
-    pub(super) copies: SceneCopies,
+    pub copies: SceneCopies,
     lamps: Lamps,
     tile_map: Option<TileMap>,
     /// The depth surface scene targets are drawn with, and its size (the largest asked).
-    pub(super) target_depth: Option<(u32, u32, IDirect3DSurface9)>,
+    pub target_depth: Option<(u32, u32, IDirect3DSurface9)>,
 }
 
 /// The tile light map atlas: the light maps of the tiles round the camera (the lamps baked
@@ -296,19 +296,19 @@ fn fill_float_texture(
 /// 9's managed pool keeps it (the default pool of a 9Ex device does not), so that a device
 /// opened again after a loss gets them all back ([`D3d9Device::restore_scene`]).
 #[derive(Default)]
-pub(super) struct SceneCopies {
+pub struct SceneCopies {
     meshes: Vec<Option<(Vec<f32>, Vec<u32>)>>,
     textures: Vec<Option<TextureCopy>>,
     /// The lights' coronas' own pictures, under the renderer's picture numbers (they outlive
     /// a scene).
-    pub(super) coronas: Vec<Option<TextureCopy>>,
+    pub coronas: Vec<Option<TextureCopy>>,
     /// The smoke particles' picture (it outlives a scene as well).
-    pub(super) smoke: Option<TextureCopy>,
+    pub smoke: Option<TextureCopy>,
     /// The tile light map atlas: its side and its pixels (RGBA).
     tile_map: Option<(u32, Vec<u8>)>,
 }
 
-pub(super) struct TextureCopy {
+pub struct TextureCopy {
     width: u32,
     height: u32,
     format: TexFormat,
@@ -320,7 +320,7 @@ pub(super) struct TextureCopy {
 }
 
 impl TextureCopy {
-    pub(super) fn of(t: &SceneTexture) -> Self {
+    pub fn of(t: &SceneTexture) -> Self {
         let kept = if t.wants_mips() { 1 } else { t.levels.len() };
         Self {
             translucent: t.alpha_in_use(),
@@ -332,7 +332,7 @@ impl TextureCopy {
         }
     }
 
-    pub(super) fn texture(&self) -> SceneTexture<'_> {
+    pub fn texture(&self) -> SceneTexture<'_> {
         SceneTexture {
             width: self.width,
             height: self.height,
@@ -373,10 +373,7 @@ fn d3d_format(format: TexFormat) -> D3DFORMAT {
 
 /// Uploads every level through a system-memory texture into a default-pool one. The texture
 /// must have been validated.
-pub(super) fn make_texture(
-    device: &IDirect3DDevice9Ex,
-    t: &SceneTexture,
-) -> Result<IDirect3DTexture9> {
+pub fn make_texture(device: &IDirect3DDevice9Ex, t: &SceneTexture) -> Result<IDirect3DTexture9> {
     let made;
     let levels: &[Vec<u8>] = if t.wants_mips() {
         let mut all = vec![t.levels[0].clone()];
@@ -550,7 +547,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex, ps_slots: u32) -> Result<ScenePip
 /// code on the adaptive-tessellation state (`ATOC`, Nvidia and others) or on the point-size state
 /// (`A2M1`, AMD). A driver with neither draws the cut by discard as without multisampling.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum A2c {
+pub enum A2c {
     None,
     Atoc,
     A2m,
@@ -559,7 +556,7 @@ pub(super) enum A2c {
 impl A2c {
     /// The switch the driver reports having: it answers a format query for the code of the
     /// one it reads (the documented way to ask), the first of the two it offers.
-    pub(super) fn probe(d3d: &IDirect3D9Ex) -> Self {
+    pub fn probe(d3d: &IDirect3D9Ex) -> Self {
         let mut mode = D3DDISPLAYMODE::default();
         // SAFETY: the out-parameter is a live local.
         let display = unsafe { d3d.GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mut mode) }
@@ -589,7 +586,7 @@ impl A2c {
     }
 
     /// Switches alpha-to-coverage on or off (nothing for a vendor without one).
-    pub(super) fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
+    pub fn set(self, device: &IDirect3DDevice9Ex, on: bool) -> Result<()> {
         let (state, value) = match (self, on) {
             (Self::None, _) => return Ok(()),
             (Self::Atoc, true) => (D3DRS_ADAPTIVETESS_Y, four_cc(b"ATOC")),
@@ -609,11 +606,7 @@ const fn four_cc(c: &[u8; 4]) -> u32 {
 /// What an alpha-tested draw does at its cut: discard below the reference, or (`coverage`, on a
 /// multisampled target) hand its alpha to the multisampling as coverage, which smooths the
 /// edge as multisampled OMSI 2 does.
-pub(super) fn kind_states(
-    device: &IDirect3DDevice9Ex,
-    kind: DrawKind,
-    coverage: A2c,
-) -> Result<()> {
+pub fn kind_states(device: &IDirect3DDevice9Ex, kind: DrawKind, coverage: A2c) -> Result<()> {
     let coverage_now = kind == DrawKind::AlphaTest && coverage != A2c::None;
     let flags = [
         ALPHA_CUT,
@@ -758,7 +751,7 @@ impl D3d9Device {
 
     /// Texture `id` is `texture`, a render target the device draws itself: no copy is kept
     /// (a device opened again has none until it is drawn again).
-    pub(super) fn put_scene_target(&mut self, id: usize, texture: IDirect3DTexture9) {
+    pub fn put_scene_target(&mut self, id: usize, texture: IDirect3DTexture9) {
         put(&mut self.scene.textures, id, texture);
         take(&mut self.scene.copies.textures, id);
     }
@@ -790,7 +783,7 @@ impl D3d9Device {
 
     /// Puts `copies` (a lost device's) up on this one under the same ids. One that cannot be
     /// made is left out and the first such failure returned, after the others went up.
-    pub(super) fn restore_scene(&mut self, copies: SceneCopies) -> Result<()> {
+    pub fn restore_scene(&mut self, copies: SceneCopies) -> Result<()> {
         let mut done = Ok(());
         for (id, kept) in copies.meshes.into_iter().enumerate() {
             if let Some((vertices, indices)) = kept {
@@ -904,7 +897,7 @@ impl D3d9Device {
         self.scene.textures.get(id).is_some_and(Option::is_some)
     }
 
-    pub(super) fn scene_texture(&self, id: usize) -> Option<&IDirect3DTexture9> {
+    pub fn scene_texture(&self, id: usize) -> Option<&IDirect3DTexture9> {
         self.scene.textures.get(id).and_then(Option::as_ref)
     }
 
@@ -974,7 +967,7 @@ impl D3d9Device {
 
     /// Back to the backend's own states after a scene, whatever happened, with depth as the
     /// backend expects it.
-    pub(super) fn restore_scene_states(&mut self) -> Result<()> {
+    pub fn restore_scene_states(&mut self) -> Result<()> {
         // (the alpha-to-coverage and anisotropic filtering of the scene stay with it)
         self.a2c.set(&self.device, false)?;
         for stage in 0..4 {
@@ -1011,7 +1004,7 @@ impl D3d9Device {
     }
 
     /// The alpha-to-coverage switch for a draw to the window's picture: when it is multisampled.
-    pub(super) fn coverage(&self) -> A2c {
+    pub fn coverage(&self) -> A2c {
         if self.msaa.1 > 1 {
             self.a2c
         } else {
@@ -1302,7 +1295,7 @@ impl D3d9Device {
     /// One picture of the scene, pass by pass: the depth cleared, the sky, then for the world
     /// and then for the vehicle the camera is in its batches, the wet road, the glass rain, the
     /// smoke (the world's only) and the coronas.
-    pub(super) fn draw_scene_inner<'m>(
+    pub fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
         material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
@@ -1759,7 +1752,7 @@ impl D3d9Device {
     /// the material's). The picture maps - the diffuse, transparency, night and detail
     /// textures - take the anisotropic filtering option; the sphere, mask and bump maps do not.
     /// The scene's maps are stored colour, read as they are (no sRGB conversion).
-    pub(super) fn scene_sampler(&self, stage: u32) -> Result<()> {
+    pub fn scene_sampler(&self, stage: u32) -> Result<()> {
         let min = if self.anisotropy > 1 && stage < 4 {
             D3DTEXF_ANISOTROPIC
         } else {

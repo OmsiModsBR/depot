@@ -16,10 +16,10 @@ pub struct SurfaceState<'w> {
     pub surface: std::mem::ManuallyDrop<wgpu::Surface<'w>>,
     pub config: wgpu::SurfaceConfiguration,
     /// The renderer's `device_lost`.
-    pub(crate) lost: Arc<std::sync::Mutex<Option<String>>>,
+    pub lost: Arc<std::sync::Mutex<Option<String>>>,
     /// Another renderer shows the pictures (see [`SurfaceState::shown_elsewhere`]): the
     /// surface is never configured and gives no frames.
-    pub(crate) elsewhere: bool,
+    pub elsewhere: bool,
 }
 
 impl Drop for SurfaceState<'_> {
@@ -50,7 +50,7 @@ pub mod winit_window {
 }
 
 /// The HUD overlays: their bind group layout, shader and pipeline.
-pub(crate) fn overlay_pipeline(
+pub fn overlay_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     msaa: u32,
@@ -139,7 +139,7 @@ pub(crate) fn overlay_pipeline(
 
 /// The overlays drawn single-sampled and the VR interface's pipeline (xr_ui.wgsl), both on
 /// the overlays' layout.
-pub(crate) fn overlay_1x_pipelines(
+pub fn overlay_1x_pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     overlay_pl: &wgpu::PipelineLayout,
@@ -182,7 +182,7 @@ pub(crate) fn overlay_1x_pipelines(
 
 /// The render scale's pipelines (upscale.wgsl): the scaled-up picture, the plain copy and a
 /// triple screen's panel, with their bind group layout and uniform buffer.
-pub(crate) fn upscale_pipelines(
+pub fn upscale_pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
 ) -> (
@@ -251,7 +251,7 @@ pub(crate) fn upscale_pipelines(
 /// blended every pixel of one placed between pixels with its neighbour: the interface's texts
 /// were soft at every size whose layout fell between them (most but 100 %, and the timetable's
 /// rows at that too). A line thinner than a pixel stays one pixel wide or high.
-pub(crate) fn snap_rect(r: [f32; 4]) -> [f32; 4] {
+pub fn snap_rect(r: [f32; 4]) -> [f32; 4] {
     // (half up the same way left of the window as right of it: `round` goes away from zero,
     // and a rectangle across the left edge came out a pixel wider)
     let snap = |v: f32| (v + 0.5).floor();
@@ -271,28 +271,28 @@ pub(crate) fn snap_rect(r: [f32; 4]) -> [f32; 4] {
 
 /// Delivering the picture: scaling it to the window, the triple screen's panels, the HUD and the
 /// headset's UI.
-pub(crate) struct Presenter {
+pub struct Presenter {
     /// The HUD and overlays drawn into the multisampled picture, and their layout.
-    pub(crate) overlay_pipeline: wgpu::RenderPipeline,
-    pub(crate) overlay_layout: wgpu::BindGroupLayout,
+    pub overlay_pipeline: wgpu::RenderPipeline,
+    pub overlay_layout: wgpu::BindGroupLayout,
     /// Overlay pipeline without multisampling, for drawing the HUD after the post pass.
-    pub(crate) overlay_pipeline_1x: wgpu::RenderPipeline,
-    pub(crate) xr_ui_pipeline: wgpu::RenderPipeline,
+    pub overlay_pipeline_1x: wgpu::RenderPipeline,
+    pub xr_ui_pipeline: wgpu::RenderPipeline,
     /// Render scale: the pipeline that scales the 3D picture up to the window, its
     /// parameters, and the smaller targets per size (with their bind groups).
-    pub(crate) upscale_pipeline: wgpu::RenderPipeline,
-    pub(crate) copy_pipeline: wgpu::RenderPipeline,
+    pub upscale_pipeline: wgpu::RenderPipeline,
+    pub copy_pipeline: wgpu::RenderPipeline,
     /// Triple screen: a panel's picture copied 1:1 to its place in the window.
-    pub(crate) panel_pipeline: wgpu::RenderPipeline,
-    pub(crate) upscale_layout: wgpu::BindGroupLayout,
-    pub(crate) upscale_buf: wgpu::Buffer,
-    pub(crate) triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
+    pub panel_pipeline: wgpu::RenderPipeline,
+    pub upscale_layout: wgpu::BindGroupLayout,
+    pub upscale_buf: wgpu::Buffer,
+    pub triple_targets: Option<((u32, u32), Vec<(wgpu::TextureView, wgpu::BindGroup)>)>,
 }
 
 impl Presenter {
     /// The bind group of a picture the upscale and copy pipelines read (`sampler`: the post
     /// passes' sampler).
-    pub(crate) fn picture_group(
+    pub fn picture_group(
         &self,
         device: &wgpu::Device,
         sampler: &wgpu::Sampler,
@@ -323,7 +323,7 @@ impl Presenter {
     /// With a render scale: the smaller picture scaled up to the window, the overlays on top
     /// at full size.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn encode_present(
+    pub fn encode_present(
         &self,
         queue: &wgpu::Queue,
         scene: &Scene,
@@ -373,7 +373,7 @@ impl Presenter {
 
 impl Presenter {
     /// The overlay, scaling and panel pipelines for the window's `format`.
-    pub(crate) fn new(device: &wgpu::Device, format: wgpu::TextureFormat, msaa: u32) -> Self {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, msaa: u32) -> Self {
         let (overlay_layout, overlay_shader, overlay_pl, premul, overlay_pipeline) =
             overlay_pipeline(device, format, msaa);
         let (overlay_pipeline_1x, xr_ui_pipeline) =
@@ -398,7 +398,7 @@ impl Presenter {
 impl Presenter {
     /// The HUD overlays' rect buffers and bind groups for this frame, kept between frames.
     /// `sampler`: the one the overlays' pictures are read with.
-    pub(crate) fn prepare_overlays(
+    pub fn prepare_overlays(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,

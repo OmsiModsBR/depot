@@ -33,7 +33,7 @@ fn hash13(p: [f32; 3], k: f32) -> f32 {
 }
 
 /// Value noise on a lattice that repeats every `tile` cells.
-fn value_noise(x: [f32; 3], tile: f32) -> f32 {
+pub fn value_noise(x: [f32; 3], tile: f32) -> f32 {
     let p = [x[0].floor(), x[1].floor(), x[2].floor()];
     let f = [fract(x[0]), fract(x[1]), fract(x[2])];
     let u = f.map(|f| f * f * (3.0 - 2.0 * f));
@@ -57,7 +57,7 @@ fn value_noise(x: [f32; 3], tile: f32) -> f32 {
 
 /// Worley (cellular) noise, 1 at a cell's point falling off with the squared distance,
 /// on cells that repeat every `tile`.
-fn worley(x: [f32; 3], tile: f32) -> f32 {
+pub fn worley(x: [f32; 3], tile: f32) -> f32 {
     let p = [x[0].floor(), x[1].floor(), x[2].floor()];
     let f = [fract(x[0]), fract(x[1]), fract(x[2])];
     let mut best = 100.0f32;
@@ -212,28 +212,4 @@ pub fn detail_volume() -> Vec<Vec<u8>> {
         size = half;
     }
     levels
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn noise_tiles_and_spans_its_range() {
-        // the lattices repeat: one period on, the same value
-        let a = worley([0.3 * 8.0, 0.7 * 8.0, 4.0], 8.0);
-        let b = worley([0.3 * 8.0 + 8.0, 0.7 * 8.0, 4.0], 8.0);
-        assert!((a - b).abs() < 1e-5);
-        let a = value_noise([1.3, 2.7, 0.5], 4.0);
-        let b = value_noise([5.3, 2.7, 0.5], 4.0);
-        assert!((a - b).abs() < 1e-5);
-        let shape = shape_map();
-        assert_eq!(shape.len(), SHAPE_SIZE.trailing_zeros() as usize + 1);
-        let r: Vec<u8> = shape[0].chunks(4).map(|p| p[0]).collect();
-        let (lo, hi) = (
-            r.iter().min().copied().unwrap_or(0),
-            r.iter().max().copied().unwrap_or(0),
-        );
-        assert!(hi - lo > 120, "shape R spans {lo}..{hi}");
-    }
 }

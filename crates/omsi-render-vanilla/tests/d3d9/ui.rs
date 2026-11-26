@@ -1,9 +1,10 @@
 //! Device tests of the interface layer, skipped like the others without a usable device.
 
-use super::tests::device;
-use super::*;
-use crate::scene::{SceneTexture, TexFormat};
-use crate::ui::{UiDraw, UiFrame, UiLayer, UiOverlay, UI_VERTEX_FLOATS};
+use crate::device::device;
+use omsi_render_vanilla::scene::{SceneTexture, TexFormat};
+use omsi_render_vanilla::testing::d3d9::*;
+use omsi_render_vanilla::ui::{UiDraw, UiFrame, UiLayer, UiOverlay, UI_VERTEX_FLOATS};
+use omsi_render_vanilla::*;
 
 const W: u32 = 8;
 const H: u32 = 4;

@@ -44,7 +44,7 @@ struct Image {
 /// One owner's resources, with the pixels they were made from (a device opened again after
 /// a loss gets them back, see [`D3d9Device::restore_ui`]).
 #[derive(Default)]
-pub(super) struct Owner {
+pub struct Owner {
     images: Vec<Option<Image>>,
     atlas: Option<Atlas>,
     atlas_pixels: Vec<u8>,
@@ -52,8 +52,8 @@ pub(super) struct Owner {
 }
 
 #[derive(Default)]
-pub(super) struct UiStore {
-    pub(super) owners: HashMap<usize, Owner>,
+pub struct UiStore {
+    pub owners: HashMap<usize, Owner>,
     pipeline: Option<UiPipeline>,
     /// The dynamic vertex buffer and its capacity in vertices.
     vb: Option<(IDirect3DVertexBuffer9, usize)>,
@@ -107,7 +107,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<UiPipeline> {
 
 /// An sRGB-encoded value of linear `c` (a clear colour, which wgpu takes linear).
 /// Whether `t` is a render target of `w` by `h`.
-pub(super) fn is_target_of(t: &IDirect3DTexture9, w: u32, h: u32) -> bool {
+pub fn is_target_of(t: &IDirect3DTexture9, w: u32, h: u32) -> bool {
     let mut desc = D3DSURFACE_DESC::default();
     // SAFETY: the out-parameter is a live local.
     unsafe { t.GetLevelDesc(0, &mut desc) }.is_ok()
@@ -335,7 +335,7 @@ impl D3d9Device {
     }
 
     /// Puts `owners` (a lost device's) up again on this one.
-    pub(super) fn restore_ui(&mut self, owners: HashMap<usize, Owner>) -> Result<()> {
+    pub fn restore_ui(&mut self, owners: HashMap<usize, Owner>) -> Result<()> {
         let mut done = Ok(());
         for (owner, old) in owners {
             self.ui.owners.entry(owner).or_default().buffers = old.buffers;

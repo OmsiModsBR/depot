@@ -6,14 +6,14 @@ use crate::assets::{GpuMesh, MeshId};
 use glam::{DVec3, Mat4, Vec3};
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct InstanceBounds {
-    pub(crate) centre: Vec3,
-    pub(crate) radius: f32,
-    pub(crate) scale: f32,
+pub struct InstanceBounds {
+    pub centre: Vec3,
+    pub radius: f32,
+    pub scale: f32,
 }
 
 impl InstanceBounds {
-    pub(crate) fn new(mesh: &GpuMesh, transform: Mat4) -> Self {
+    pub fn new(mesh: &GpuMesh, transform: Mat4) -> Self {
         let scale = transform_scale(transform);
         Self {
             centre: transform.transform_point3(mesh.bounds_center),
@@ -23,11 +23,11 @@ impl InstanceBounds {
     }
 }
 
-pub(crate) const CULL_BLOCK: usize = 128;
+pub const CULL_BLOCK: usize = 128;
 
-pub(crate) const CULL_BLOCK_REBUILDS: usize = 8;
+pub const CULL_BLOCK_REBUILDS: usize = 8;
 
-pub(crate) fn transform_scale(transform: Mat4) -> f32 {
+pub fn transform_scale(transform: Mat4) -> f32 {
     transform
         .x_axis
         .truncate()
@@ -39,10 +39,7 @@ pub(crate) fn transform_scale(transform: Mat4) -> f32 {
 
 /// Is `p` inside a vehicle's `[boundingbox]` (origin, heading in degrees, w l h cx cy cz)?
 /// The same box the shader keeps the weather out of, without its margins.
-pub(crate) fn point_in_vehicle_box(
-    p: DVec3,
-    (origin, heading, bb): &(DVec3, f64, [f32; 6]),
-) -> bool {
+pub fn point_in_vehicle_box(p: DVec3, (origin, heading, bb): &(DVec3, f64, [f32; 6])) -> bool {
     let d = (p - *origin).as_vec3();
     let (sh, ch) = (*heading as f32).to_radians().sin_cos();
     let x = d.x * ch - d.y * sh - bb[3];
@@ -54,7 +51,7 @@ pub(crate) fn point_in_vehicle_box(
 /// Bounding sphere of an instance relative to the render origin: the mesh's sphere
 /// through the instance transform (the model matrix is that transform moved by the
 /// origin, so no matrix product is needed), the radius scaled by the largest axis.
-pub(crate) fn bounding_sphere(scene: &Scene, i: &Instance) -> (Vec3, f32) {
+pub fn bounding_sphere(scene: &Scene, i: &Instance) -> (Vec3, f32) {
     let b = if scene.cache_bounds {
         i.bounds
     } else {
@@ -66,7 +63,7 @@ pub(crate) fn bounding_sphere(scene: &Scene, i: &Instance) -> (Vec3, f32) {
     )
 }
 
-pub(crate) fn instance_scale(scene: &Scene, i: &Instance) -> f32 {
+pub fn instance_scale(scene: &Scene, i: &Instance) -> f32 {
     if scene.cache_bounds {
         i.bounds.scale
     } else {
@@ -74,7 +71,7 @@ pub(crate) fn instance_scale(scene: &Scene, i: &Instance) -> f32 {
     }
 }
 
-pub(crate) fn mesh_bounds_changed(scene: &mut Scene, mesh: MeshId) {
+pub fn mesh_bounds_changed(scene: &mut Scene, mesh: MeshId) {
     scene.bounds_meshes.resize(scene.meshes.len(), false);
     scene.bounds_meshes[mesh] = true;
     scene.bounds_dirty = true;
@@ -86,7 +83,7 @@ pub(crate) fn mesh_bounds_changed(scene: &mut Scene, mesh: MeshId) {
 }
 
 /// Slot `mesh` holds another mesh now (freed, or recycled): no longer a reshaped one.
-pub(crate) fn mesh_slot_replaced(scene: &mut Scene, mesh: MeshId) {
+pub fn mesh_slot_replaced(scene: &mut Scene, mesh: MeshId) {
     scene.bounds_meshes.resize(scene.meshes.len(), false);
     scene.bounds_meshes[mesh] = true;
     scene.bounds_dirty = true;
@@ -97,7 +94,7 @@ pub(crate) fn mesh_slot_replaced(scene: &mut Scene, mesh: MeshId) {
     }
 }
 
-pub(crate) fn prepare_bounds(scene: &mut Scene) {
+pub fn prepare_bounds(scene: &mut Scene) {
     if !scene.cache_bounds {
         return;
     }
@@ -191,7 +188,7 @@ pub(crate) fn prepare_bounds(scene: &mut Scene) {
     }
 }
 
-pub(crate) fn cull_blocks(scene: &Scene) -> Option<Vec<(Vec3, f32)>> {
+pub fn cull_blocks(scene: &Scene) -> Option<Vec<(Vec3, f32)>> {
     (scene.cache_bounds && scene.block_bounds.len() == scene.instances.len().div_ceil(CULL_BLOCK))
         .then(|| {
             scene

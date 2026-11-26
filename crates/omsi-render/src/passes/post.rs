@@ -8,33 +8,33 @@ use crate::shaders::post_shader_source;
 /// The enhanced path's post passes (post.wgsl `PostParams`).
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct PostUniform {
-    pub(crate) a: [f32; 4],
-    pub(crate) b: [f32; 4],
-    pub(crate) c: [f32; 4],
-    pub(crate) d: [f32; 4],
+pub struct PostUniform {
+    pub a: [f32; 4],
+    pub b: [f32; 4],
+    pub c: [f32; 4],
+    pub d: [f32; 4],
 }
 
 /// The enhanced path's post pipelines (post.wgsl).
-pub(crate) struct PostPipelines {
-    pub(crate) down_first: wgpu::RenderPipeline,
-    pub(crate) down: wgpu::RenderPipeline,
-    pub(crate) up: wgpu::RenderPipeline,
-    pub(crate) meter: wgpu::RenderPipeline,
-    pub(crate) adapt: wgpu::RenderPipeline,
+pub struct PostPipelines {
+    pub down_first: wgpu::RenderPipeline,
+    pub down: wgpu::RenderPipeline,
+    pub up: wgpu::RenderPipeline,
+    pub meter: wgpu::RenderPipeline,
+    pub adapt: wgpu::RenderPipeline,
     /// Straight into the target, or gamma-encoded for FXAA.
-    pub(crate) tonemap: wgpu::RenderPipeline,
-    pub(crate) tonemap_encoded: wgpu::RenderPipeline,
-    pub(crate) fxaa: wgpu::RenderPipeline,
+    pub tonemap: wgpu::RenderPipeline,
+    pub tonemap_encoded: wgpu::RenderPipeline,
+    pub fxaa: wgpu::RenderPipeline,
     /// Their bind group layout, uniform buffer and sampler.
-    pub(crate) post_layout: wgpu::BindGroupLayout,
-    pub(crate) post_buf: wgpu::Buffer,
-    pub(crate) post_sampler: wgpu::Sampler,
+    pub post_layout: wgpu::BindGroupLayout,
+    pub post_buf: wgpu::Buffer,
+    pub post_sampler: wgpu::Sampler,
 }
 
 /// The enhanced path's post passes (post.wgsl): their bind group layout, uniform buffer,
 /// sampler and pipelines.
-pub(crate) fn post_pipelines(
+pub fn post_pipelines(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     hdr_format: wgpu::TextureFormat,
@@ -108,23 +108,23 @@ pub(crate) fn post_pipelines(
 
 /// The eye's adaptation: the metered luminance, the adapted value and the exposure as it follows
 /// the sky.
-pub(crate) struct Exposure {
+pub struct Exposure {
     /// The metered mean log luminance (1x1), and the adapted value in two textures drawn
     /// into by turns (`adapt_front` is the current one), with their bind groups.
-    pub(crate) meter_view: wgpu::TextureView,
-    pub(crate) adapt_views: [wgpu::TextureView; 2],
-    pub(crate) adapt_bg: [wgpu::BindGroup; 2],
-    pub(crate) adapt_front: usize,
+    pub meter_view: wgpu::TextureView,
+    pub adapt_views: [wgpu::TextureView; 2],
+    pub adapt_bg: [wgpu::BindGroup; 2],
+    pub adapt_front: usize,
     /// The lamps' and headlights' light on what the camera looks at (`view_lamp_light`),
     /// which the eye adapts to by night.
-    pub(crate) view_lamps: Option<f32>,
+    pub view_lamps: Option<f32>,
     /// The pre-exposure (natural log) as it follows the sky's.
-    pub(crate) exposure: Option<f32>,
+    pub exposure: Option<f32>,
 }
 
 impl Exposure {
     /// The meter's and the adapted value's textures and their bind groups.
-    pub(crate) fn new(
+    pub fn new(
         device: &wgpu::Device,
         post: &PostPipelines,
         white_texture: &GpuTexture,

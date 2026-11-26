@@ -18,6 +18,8 @@
 mod domain;
 mod implementation;
 mod interface;
+#[cfg(feature = "test-support")]
+pub mod testing;
 
 // The modules keep the paths they always had.
 pub use domain::{caps, glass_rain, render_scale, scene, ui, wet_road};

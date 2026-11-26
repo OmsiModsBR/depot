@@ -253,8 +253,8 @@ measured on both (quickstart Q4).
 
 ## Phase 7: Polish & cross-cutting
 
-- [ ] T074 [P] [ph C9] Move `crates/omsi-render/src/tests.rs`, `src/tests_units.rs` and the in-file `#[cfg(test)]` modules to `crates/omsi-render/tests/`, through `crates/omsi-render/src/testing.rs` behind `test-support`; remove the test-only globs from `crates/omsi-render/src/lib.rs`; the test count stays the same (SC-010). Best before T057 (smaller moves)
-- [ ] T075 [P] [ph C9] Move `scene_tests.rs`, `ui_tests.rs`, `upscale_tests.rs` and `tests.rs` of the Vanilla crate's `d3d9/` folder to its `tests/`
+- [x] T074 [P] [ph C9] Move `crates/omsi-render/src/tests.rs`, `src/tests_units.rs` and the in-file `#[cfg(test)]` modules to `crates/omsi-render/tests/`, through `crates/omsi-render/src/testing.rs` behind `test-support`; remove the test-only globs from `crates/omsi-render/src/lib.rs`; the test count stays the same (SC-010). Best before T057 (smaller moves)
+- [x] T075 [P] [ph C9] Move `scene_tests.rs`, `ui_tests.rs`, `upscale_tests.rs` and `tests.rs` of the Vanilla crate's `d3d9/` folder to its `tests/`
 - [ ] T076 [ph C10] Rewrite `crates/omsi-render/ARCHITECTURE.md`: the two new layers, the mode rules, where new code goes per mode; correct rule 8 ("unused code is not deleted") to Principle X, rule 7 (tests) to Principle VI, and the drift on `RenderOptions`
 - [ ] T077 [P] [ph C10] Update `crates/omsi-render-vanilla/README.md` (it says smoke and mirrors are not drawn; they are; the crate is the Vanilla mode), `README.md`, `docs/USER_GUIDE.md` (three modes, the option table), `docs/ENVIRONMENT.md`, and the references in `docs/MACRO_REFACTOR_DRAFT.md` and `docs/OMSI_APP_REFACTOR.md`; the user guide says that the launcher's vehicle preview is drawn as Vanilla+ whatever the mode (spec, Edge Cases)
 - [ ] T078 [ph C10] Final measurements against T003: per-mode frame measurement (SC-006), Vanilla+ start-up (SC-007), `wc -l` of the rendering crates (SC-009); record them in `.ai/specs/001-graphics-modes/research.md`

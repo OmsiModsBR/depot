@@ -16,49 +16,49 @@ use crate::targets::TargetCache;
 
 /// The pipelines of the main pass for one colour target format: the swap chain's, and
 /// the high-range one of the enhanced path.
-pub(crate) struct PassPipelines {
+pub struct PassPipelines {
     /// Single-sampled films, drawn after resolving the scene and its reflections.
-    pub(crate) rain_pipelines: Vec<wgpu::RenderPipeline>,
+    pub rain_pipelines: Vec<wgpu::RenderPipeline>,
     /// Indexed by `pipe_code`: 4 depth/blend kinds x culled x depth-biased.
-    pub(crate) pipelines: Vec<wgpu::RenderPipeline>,
-    pub(crate) corona_pipeline: wgpu::RenderPipeline,
+    pub pipelines: Vec<wgpu::RenderPipeline>,
+    pub corona_pipeline: wgpu::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
-    pub(crate) smoke_pipeline: wgpu::RenderPipeline,
+    pub smoke_pipeline: wgpu::RenderPipeline,
     /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
     /// `basic_pipelines`.
-    pub(crate) snow_pipeline: Option<wgpu::RenderPipeline>,
-    pub(crate) sky_pipeline: wgpu::RenderPipeline,
+    pub snow_pipeline: Option<wgpu::RenderPipeline>,
+    pub sky_pipeline: wgpu::RenderPipeline,
 }
 
 /// What the main pass draws with: the device, the targets, the pipelines and the sky and
 /// sprites drawn among the scene.
-pub(crate) struct MainParts<'a> {
-    pub(crate) device: &'a wgpu::Device,
-    pub(crate) queue: &'a wgpu::Queue,
+pub struct MainParts<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
     /// The swap chain's colour format and the multisampling.
-    pub(crate) format: wgpu::TextureFormat,
-    pub(crate) msaa: u32,
-    pub(crate) targets: &'a mut TargetCache,
-    pub(crate) prepass: &'a PrepassPipelines,
+    pub format: wgpu::TextureFormat,
+    pub msaa: u32,
+    pub targets: &'a mut TargetCache,
+    pub prepass: &'a PrepassPipelines,
     /// The main pass's pipelines for this picture (`Renderer::main_pass`).
-    pub(crate) pipes: &'a PassPipelines,
-    pub(crate) sky_mirror_pipeline: Option<&'a wgpu::RenderPipeline>,
-    pub(crate) sky: &'a SkyResources,
-    pub(crate) sprites: &'a SpriteResources,
+    pub pipes: &'a PassPipelines,
+    pub sky_mirror_pipeline: Option<&'a wgpu::RenderPipeline>,
+    pub sky: &'a SkyResources,
+    pub sprites: &'a SpriteResources,
     /// The presenter's pipeline for the HUD overlays.
-    pub(crate) overlay_pipeline: &'a wgpu::RenderPipeline,
+    pub overlay_pipeline: &'a wgpu::RenderPipeline,
     /// Seconds since the renderer started (the snowfall's drift).
-    pub(crate) seconds: f32,
+    pub seconds: f32,
     /// What the pass leaves out when the options say so.
-    pub(crate) smoke: bool,
-    pub(crate) snowfall: bool,
-    pub(crate) coronas: bool,
+    pub smoke: bool,
+    pub snowfall: bool,
+    pub coronas: bool,
 }
 
 /// The main pass: the scene over the sky, with its depth from the prepass where it can
 /// share it, split over several encoders when the bundles allow (the parts are returned).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn encode_main_pass(
+pub fn encode_main_pass(
     ctx: MainParts,
     scene: &Scene,
     encoder: &mut wgpu::CommandEncoder,
@@ -544,24 +544,24 @@ fn draw_overlays(
 
 /// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the
 /// snow's parameters.
-pub(crate) struct SpriteResources {
-    pub(crate) corona_bind_group: wgpu::BindGroup,
+pub struct SpriteResources {
+    pub corona_bind_group: wgpu::BindGroup,
     /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
-    pub(crate) snow_buf: wgpu::Buffer,
-    pub(crate) snow_bind_group: wgpu::BindGroup,
+    pub snow_buf: wgpu::Buffer,
+    pub snow_bind_group: wgpu::BindGroup,
     /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
-    pub(crate) smoke_bind_group: wgpu::BindGroup,
+    pub smoke_bind_group: wgpu::BindGroup,
     /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
     /// unused).
-    pub(crate) corona_textures: Vec<Option<wgpu::BindGroup>>,
-    pub(crate) corona_layout: wgpu::BindGroupLayout,
-    pub(crate) corona_sampler: wgpu::Sampler,
+    pub corona_textures: Vec<Option<wgpu::BindGroup>>,
+    pub corona_layout: wgpu::BindGroupLayout,
+    pub corona_sampler: wgpu::Sampler,
 }
 
 impl SpriteResources {
     /// The coronas' and the smoke's pictures, and the snowfall's parameters (laid out by
     /// `snow_layout`).
-    pub(crate) fn new(
+    pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         snow_layout: &wgpu::BindGroupLayout,

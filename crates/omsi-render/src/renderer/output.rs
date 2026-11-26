@@ -9,7 +9,7 @@ use crate::scene::{panel_width, Camera, Scene, TripleScreen};
 use anyhow::Result;
 
 impl Renderer {
-    pub(crate) fn render_image(
+    pub fn render_image(
         &mut self,
         scene: &mut Scene,
         width: u32,
@@ -24,7 +24,7 @@ impl Renderer {
     /// `render_image`; with `with_interface` false the picture holds the scene alone: the HUD
     /// overlays and the overlay hook's layer are left out (and put back after the frame).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_image_with(
+    pub fn render_image_with(
         &mut self,
         scene: &mut Scene,
         width: u32,
@@ -94,7 +94,7 @@ impl Renderer {
     }
 
     /// A texture's pixels read back, the GPU waited for.
-    pub(crate) fn read_texture(
+    pub fn read_texture(
         &self,
         texture: &wgpu::Texture,
         aspect: wgpu::TextureAspect,
@@ -104,7 +104,7 @@ impl Renderer {
 
     /// Three independently culled and shaded panels, composited into a spanning window.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_triple_frame(
+    pub fn render_triple_frame(
         &mut self,
         scene: &mut Scene,
         target: &wgpu::TextureView,
@@ -176,12 +176,7 @@ impl Renderer {
 
     /// Call the overlay hook (when one is set) for `target`, a picture of `size` pixels, in
     /// an encoder of its own; `clear` empties the picture first (a texture of its own).
-    pub(crate) fn run_overlay_hook(
-        &mut self,
-        target: &wgpu::TextureView,
-        size: (u32, u32),
-        clear: bool,
-    ) {
+    pub fn run_overlay_hook(&mut self, target: &wgpu::TextureView, size: (u32, u32), clear: bool) {
         let Some(hook) = self.overlay_hook.as_mut() else {
             return;
         };
@@ -213,12 +208,12 @@ impl Renderer {
     }
 
     /// Swap in a triple screen panel's own culling history.
-    pub(crate) fn swap_triple_culling(&mut self, panel: usize) {
+    pub fn swap_triple_culling(&mut self, panel: usize) {
         swap_triple_culling(&mut self.culling, panel);
     }
 
     /// The HUD overlays' rect buffers and bind groups for this frame.
-    pub(crate) fn prepare_overlays(&self, scene: &mut Scene, full_w: u32, full_h: u32) {
+    pub fn prepare_overlays(&self, scene: &mut Scene, full_w: u32, full_h: u32) {
         self.presenter.prepare_overlays(
             &self.device,
             &self.queue,
@@ -230,7 +225,7 @@ impl Renderer {
     }
 
     /// Take in the pass times of the last timed frame once its readback has arrived.
-    pub(crate) fn collect_gpu_timers(&mut self) {
+    pub fn collect_gpu_timers(&mut self) {
         self.diagnostics
             .collect_gpu_timers(&self.device, &self.queue);
     }

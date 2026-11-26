@@ -10,20 +10,20 @@ use crate::shaders::lamp_pass_source;
 use crate::sky::enhanced_weather_fog;
 
 /// The pass's module: its own fragment shader in the core's lamp-pass frame.
-pub(crate) fn fog_lamps_shader_source() -> String {
+pub fn fog_lamps_shader_source() -> String {
     lamp_pass_source(include_str!("shaders/fog_lamps.wgsl"))
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct FogLampUniform {
-    pub(crate) inv_view_proj: [[f32; 4]; 4],
-    pub(crate) size: [f32; 4],
+pub struct FogLampUniform {
+    pub inv_view_proj: [[f32; 4]; 4],
+    pub size: [f32; 4],
 }
 
 /// The lamps' light in the fog: its bind group layout, uniform buffer and the two pipelines
 /// (none on OpenGL).
-pub(crate) fn fog_lamps_pipelines(
+pub fn fog_lamps_pipelines(
     device: &wgpu::Device,
     camera_layout: &wgpu::BindGroupLayout,
     gl: bool,
@@ -109,7 +109,7 @@ pub(crate) fn fog_lamps_pipelines(
 impl FogLampsPass {
     /// The lamps' light in the weather's fog and the sun's shafts between the shadows, over the
     /// picture before its glow and metering.
-    pub(crate) fn encode_fog_lamps(&self, parts: FogLampsParts<'_>) {
+    pub fn encode_fog_lamps(&self, parts: FogLampsParts<'_>) {
         let FogLampsParts {
             queue,
             fog,
@@ -199,10 +199,10 @@ impl FogLampsPass {
 }
 
 /// The lamps' light in the fog: its pipelines, bind group layout and parameters.
-pub(crate) struct FogLampsPass {
+pub struct FogLampsPass {
     /// Enhanced: the lamps' light the fog scatters, added over the drawn picture (none on
     /// OpenGL and without storage buffers), its bind group layout and parameters.
-    pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
-    pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
-    pub(crate) fog_lamps_buf: wgpu::Buffer,
+    pub fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
+    pub fog_lamps_layout: wgpu::BindGroupLayout,
+    pub fog_lamps_buf: wgpu::Buffer,
 }

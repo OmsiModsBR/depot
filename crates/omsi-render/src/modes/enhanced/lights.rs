@@ -5,7 +5,7 @@ use glam::Vec3;
 
 /// Does Enhanced draw the light? Its own lights and the shared ones; a vehicle's headlight
 /// stand-in for the plain shader is left out (Enhanced has the real spot light).
-pub(crate) fn draws(l: &PointLight) -> bool {
+pub fn draws(l: &PointLight) -> bool {
     lights_up(l) && l.mode != LightMode::Vanilla
 }
 
@@ -15,7 +15,7 @@ pub(crate) fn draws(l: &PointLight) -> bool {
 /// one came out lighter on the screen than the content asks: an amber lamp turned a pale
 /// cream. Decoded, then scaled back to the luminance the numbers had, so the light keeps
 /// its strength and only its hue and saturation change.
-pub(crate) fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
+pub fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
     let decode = |x: f32| {
         let x = x.max(0.0);
         if x <= 0.04045 {
@@ -34,7 +34,7 @@ pub(crate) fn linear_light_colour(c: [f32; 3]) -> [f32; 3] {
 }
 
 /// The light as the Enhanced shaders read it: the common record with the colour in linear terms.
-pub(crate) fn record(l: &PointLight, p: Vec3) -> GpuPointLight {
+pub fn record(l: &PointLight, p: Vec3) -> GpuPointLight {
     let mut g = gpu_light(l, p);
     let c = linear_light_colour(l.color);
     g.color = [c[0], c[1], c[2], l.intensity];

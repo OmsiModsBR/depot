@@ -7,12 +7,12 @@ use crate::gpu::{array_path, ArrayPath, ARRAY_TEX_WIDTH};
 
 /// A full-screen pass's shader with the shared triangle (`common/fullscreen.wgsl`) ahead
 /// of it.
-pub(crate) fn with_fullscreen(src: &str) -> String {
+pub fn with_fullscreen(src: &str) -> String {
     [include_str!("common/fullscreen.wgsl"), src].join("\n")
 }
 
 /// The post passes' shader (`post/post.wgsl`), with the sRGB curves of `common/colour.wgsl`.
-pub(crate) fn post_shader_source() -> String {
+pub fn post_shader_source() -> String {
     with_fullscreen(
         &[
             include_str!("common/colour.wgsl"),
@@ -29,14 +29,14 @@ pub(crate) fn post_shader_source() -> String {
 /// masks are read through `s_diffuse` at a UV clamped half a texel inside the tile, which
 /// is what `s_tile`'s clamp to edge gives; reading `t_trans`/`t_night` through both
 /// samplers fails the whole module ("Conflicting samplers").
-pub(crate) fn scene_shader_source(gl: bool, mode: &str) -> String {
+pub fn scene_shader_source(gl: bool, mode: &str) -> String {
     arrays_as_textures(&scene_shader_text(gl, mode), array_path())
 }
 
 /// The scene module with its arrays read as `path` has them (see `ArrayPath`): each
 /// storage array the device cannot read becomes a texture and its `name[i]` a function
 /// that loads texel `i`; without storage at all the point lights are none.
-pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
+pub fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
     if path == ArrayPath::Storage {
         return src.to_string();
     }
@@ -89,7 +89,7 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
 }
 
 /// `name[expr]` (the whole word `name`) turned into `call(expr)`.
-pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
+pub fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
     let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let pat = format!("{name}[");
     let mut out = String::with_capacity(src.len());
@@ -129,7 +129,7 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
 
 /// The scene module's text: the core's sources, then `mode`, the fragment shader the mode
 /// draws the scene with (empty for a mode with none of its own).
-pub(crate) fn scene_shader_text(gl: bool, mode: &str) -> String {
+pub fn scene_shader_text(gl: bool, mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -159,12 +159,12 @@ pub(crate) fn scene_shader_text(gl: bool, mode: &str) -> String {
 
 /// How far the cloud field reaches before it repeats (m): a cumulus is then half a kilometre
 /// to two across. Written into the sky shaders by `sky_shader_source`.
-pub(crate) const CLOUD_FIELD_TILE: f32 = 14000.0;
+pub const CLOUD_FIELD_TILE: f32 = 14000.0;
 
 /// The sky module: the dome of the plain path, the clouds' and the stars' pieces and the
 /// reflection probe every mode has, then `mode`, the mode's own sky fragment shaders (empty for
 /// a mode with none).
-pub(crate) fn sky_shader_source(mode: &str) -> String {
+pub fn sky_shader_source(mode: &str) -> String {
     let cloud_tile = format!("const CLOUD_FIELD_TILE: f32 = {CLOUD_FIELD_TILE:?};");
     [
         cloud_tile.as_str(),
@@ -183,7 +183,7 @@ pub(crate) fn sky_shader_source(mode: &str) -> String {
 
 /// The snowfall (snow.wgsl) and `mode`, the mode's own fragment shader for it, with the lamps
 /// the mode may light it by (none without storage buffers).
-pub(crate) fn snow_shader_source(mode: &str) -> String {
+pub fn snow_shader_source(mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -209,16 +209,16 @@ pub(crate) fn snow_shader_source(mode: &str) -> String {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct SnowUniform {
-    pub(crate) wind: [f32; 4],
-    pub(crate) fall: [f32; 4],
+pub struct SnowUniform {
+    pub wind: [f32; 4],
+    pub fall: [f32; 4],
 }
 
 /// The snowfall's flakes for a snowfall of strength `s` (0..1): how many each layer of
 /// snow.wgsl holds (the near one at the density of a heavy fall, some 190 a cubic metre,
 /// scaled down for a lighter one) and their mean diameter (m) - a light fall single
 /// crystals of a millimetre, a heavy one aggregates of several.
-pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
+pub fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
     let k = 0.08 + 0.92 * s.clamp(0.0, 1.0);
     (
         [
@@ -234,7 +234,7 @@ pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
 /// fragment shader): the camera, math and full-screen pieces ahead of it, the sky's uniform,
 /// the lamps' bindings and the air's light after it. The lamps are none without storage
 /// buffers, so the pass is not built there.
-pub(crate) fn lamp_pass_source(own: &str) -> String {
+pub fn lamp_pass_source(own: &str) -> String {
     [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),
@@ -249,13 +249,13 @@ pub(crate) fn lamp_pass_source(own: &str) -> String {
 
 /// The scene's point lights and their grid as the fog pass reads them (`lamp_air.wgsl`):
 /// the scene shader's bindings (the types are in `common/camera.wgsl`).
-pub(crate) const FOG_LAMP_LIGHTS: &str =
+pub const FOG_LAMP_LIGHTS: &str =
     "@group(0) @binding(3) var<storage, read> lights: array<PointLight>;
 @group(0) @binding(4) var<storage, read> grid: array<u32>;
 ";
 
 /// The light coronas and smoke: the plain fragment shaders, and `mode`, the mode's own.
-pub(crate) fn corona_shader_source(mode: &str) -> String {
+pub fn corona_shader_source(mode: &str) -> String {
     let src = [
         include_str!("common/camera.wgsl"),
         include_str!("common/math.wgsl"),

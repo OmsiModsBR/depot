@@ -11,7 +11,7 @@ use glam::{DVec3, Vec3};
 
 impl Renderer {
     /// Take in a newly computed sky: its table goes to the GPU, the probe is redrawn.
-    pub(crate) fn install_sky(&mut self, st: atmosphere::SkyState) {
+    pub fn install_sky(&mut self, st: atmosphere::SkyState) {
         let mut bytes: Vec<u8> = Vec::with_capacity(st.lut.len() * 8);
         for texel in &st.lut {
             for v in texel {
@@ -49,7 +49,7 @@ impl Renderer {
     /// The enhanced path's light for this frame: the sky (recomputed when the sun or the
     /// weather has moved on), the exposure following it, the sky table and the uniform.
     /// Returns whether the reflection probe is to be drawn this frame.
-    pub(crate) fn prepare_enhanced(
+    pub fn prepare_enhanced(
         &mut self,
         lighting: &Lighting,
         cam_rel: Vec3,

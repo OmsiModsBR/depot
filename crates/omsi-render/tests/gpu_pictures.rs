@@ -1,6 +1,6 @@
 //! The renderer's tests: pictures drawn on a real or software adapter.
 
-use super::*;
+use omsi_render::testing::internals::*;
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
 /// grid of street lamps, looking down at it, the eye adapts to the lit lot - not, as

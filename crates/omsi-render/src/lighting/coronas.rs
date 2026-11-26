@@ -7,7 +7,7 @@ use glam::DVec3;
 /// of its drawn radius, between 6 and 25 cm - enough that no line shows where the road
 /// meets it, little enough that a wheel's spray, all but a few tens of centimetres of which
 /// is under the road, still shows as the mist round the tyres Omsi.exe draws.
-pub(crate) fn smoke_ground_fade(size: f32) -> f32 {
+pub fn smoke_ground_fade(size: f32) -> f32 {
     (0.2 * 0.9 * size).clamp(0.06, 0.25)
 }
 
@@ -16,7 +16,7 @@ pub(crate) fn smoke_ground_fade(size: f32) -> f32 {
 /// render origin `ro`, `up.y` 1 when it has one), its z offset and how high the fade into
 /// the ground reaches. `None` for a puff too faint or small to draw, or wholly under its
 /// ground.
-pub(crate) fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
+pub fn smoke_sprite(p: &SmokeParticle, ro: DVec3) -> Option<GpuCorona> {
     if !(p.alpha > 0.002 && p.size > 0.0) {
         return None;
     }

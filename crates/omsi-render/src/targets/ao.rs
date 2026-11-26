@@ -5,17 +5,17 @@ use super::{GroupParts, TargetCache};
 use crate::gpu::{target_2d, DEPTH_FORMAT};
 
 /// The textures of the ambient-occlusion pass for one target size.
-pub(crate) struct AoTargets {
-    pub(crate) size: (u32, u32),
-    pub(crate) depth_view: wgpu::TextureView,
-    pub(crate) ao_view: wgpu::TextureView,
-    pub(crate) blur_view: wgpu::TextureView,
-    pub(crate) ssao_bg: wgpu::BindGroup,
-    pub(crate) blur_bg: wgpu::BindGroup,
+pub struct AoTargets {
+    pub size: (u32, u32),
+    pub depth_view: wgpu::TextureView,
+    pub ao_view: wgpu::TextureView,
+    pub blur_view: wgpu::TextureView,
+    pub ssao_bg: wgpu::BindGroup,
+    pub blur_bg: wgpu::BindGroup,
     /// The lamps' light in the fog (`fog_lamps.wgsl`): worked out at half size into
     /// `fog_view`, then added onto the picture (bind groups of the two passes).
-    pub(crate) fog_view: wgpu::TextureView,
-    pub(crate) fog_bg: Option<[wgpu::BindGroup; 2]>,
+    pub fog_view: wgpu::TextureView,
+    pub fog_bg: Option<[wgpu::BindGroup; 2]>,
 }
 
 impl TargetCache {
@@ -23,7 +23,7 @@ impl TargetCache {
     /// `ssao`: the SSAO passes' layout and parameters; `fog_lamps`: the lamps-in-the-fog
     /// pass's, when it has its pipelines; `puddles`: the puddles' reflections are on (they
     /// copy the prepass depth).
-    pub(crate) fn ensure_ao(
+    pub fn ensure_ao(
         &mut self,
         device: &wgpu::Device,
         ssao: GroupParts,

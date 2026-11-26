@@ -14,14 +14,14 @@ pub const MSAA: u32 = 4;
 /// glow's source keeps and multiplies up (see `post.wgsl`). b carries the puddle's
 /// reflected-light weight; a is blend coverage. Sharing this attachment avoids another
 /// geometry pass or a full normal/material buffer just for water.
-pub(crate) const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+pub const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-pub(crate) const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+pub const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 /// The colour targets of a pipeline drawing into `format`: Enhanced and classic puddle
 /// shading draw into `HDR_FORMAT` with the screen mask beside it,
 /// written by the scene's own shader only (`mask`), coverage-blended where the colour is.
-pub(crate) fn color_targets(
+pub fn color_targets(
     format: wgpu::TextureFormat,
     blend: Option<wgpu::BlendState>,
     write: wgpu::ColorWrites,

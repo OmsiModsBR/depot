@@ -2,42 +2,42 @@
 //! lights, coronas and smoke particles, and their records on the GPU.
 
 use glam::{DVec3, Vec3};
-pub(crate) use omsi_geometry::util::smoothstep;
+pub use omsi_geometry::util::smoothstep;
 
 /// The illuminance a light's core gives (maplight colour 1, in the sky model's units:
 /// 55 lux, so the street under a lamp gets its 15-25 lux).
-pub(crate) const LAMP_E: f32 = 0.0055;
+pub const LAMP_E: f32 = 0.0055;
 
 /// Illuminance of a bus saloon's lamps on the seats and the floor (300 lux).
-pub(crate) const CABIN_E: f32 = 0.03;
+pub const CABIN_E: f32 = 0.03;
 
 /// A lit window's radiance at night.
-pub(crate) const WINDOW_RADIANCE: f32 = 0.0022;
+pub const WINDOW_RADIANCE: f32 = 0.0022;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct GpuPointLight {
-    pub(crate) pos: [f32; 4],
-    pub(crate) color: [f32; 4],
+pub struct GpuPointLight {
+    pub pos: [f32; 4],
+    pub color: [f32; 4],
     /// Spot direction and cosine of the outer cone (-2 = a point light).
-    pub(crate) dir: [f32; 4],
+    pub dir: [f32; 4],
     /// Cosine of the inner cone, the core radius, a headlamp's beam (1 low, -1 full), the
     /// radius (`pos.w` is 0 on a light only the enhanced path draws, which the vanilla
     /// shader then passes by).
-    pub(crate) extra: [f32; 4],
+    pub extra: [f32; 4],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct GpuCorona {
-    pub(crate) pos: [f32; 3],
-    pub(crate) size: f32,
-    pub(crate) color: [f32; 4],
-    pub(crate) dir: [f32; 4],
+pub struct GpuCorona {
+    pub pos: [f32; 3],
+    pub size: f32,
+    pub color: [f32; 4],
+    pub dir: [f32; 4],
     /// xyz: the up axis; w: rotating mode
-    pub(crate) up: [f32; 4],
+    pub up: [f32; 4],
     /// x: inner cone cosine, y: z offset, z: flags
-    pub(crate) extra: [f32; 4],
+    pub extra: [f32; 4],
 }
 
 /// A point light in world space (`[maplight]`, `[interiorlight]`, headlights).
@@ -451,13 +451,13 @@ impl Default for Lighting {
 
 /// Does a light give light at all? Which mode draws it is the mode's to say
 /// (`RenderMode::draws_light`).
-pub(crate) fn lights_up(l: &PointLight) -> bool {
+pub fn lights_up(l: &PointLight) -> bool {
     l.radius > 0.0 && l.intensity > 0.0
 }
 
 /// A light as the shaders read it, at `p` relative to the render origin, its colour as the
 /// content gives it (Enhanced takes it in linear terms, `modes/enhanced/lights.rs`).
-pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
+pub fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
     let spot = l.direction.length_squared() > 1e-6;
     let dir = if spot {
         l.direction.normalize().extend(l.cone[1]).to_array()
@@ -492,6 +492,6 @@ pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
 /// leaves the `[matl_envmap]` photo's structure out of the reflections. A blended surface
 /// shows its values as if it were opaque: an invisible layer round the player's bus hides
 /// the bus in these views.
-pub(crate) fn debug_view() -> f32 {
+pub fn debug_view() -> f32 {
     crate::gpu::debug().debug_enhanced.unwrap_or(0.0)
 }

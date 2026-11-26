@@ -3,7 +3,7 @@
 use super::model::Scene;
 
 /// Note that instance `i` needs its per-draw entries rewritten.
-pub(crate) fn mark_changed(scene: &mut Scene, i: usize) {
+pub fn mark_changed(scene: &mut Scene, i: usize) {
     if scene.dirty || i >= scene.uploaded_instances {
         return;
     }

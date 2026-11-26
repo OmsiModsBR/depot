@@ -6,30 +6,30 @@ use crate::gpu::{sampler_entry, texture_entry, uniform_entry};
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct MaterialUniform {
-    pub(crate) color: [f32; 4],
-    pub(crate) params: [f32; 4],
-    pub(crate) extra: [f32; 4],
-    pub(crate) params2: [f32; 4],
+pub struct MaterialUniform {
+    pub color: [f32; 4],
+    pub params: [f32; 4],
+    pub extra: [f32; 4],
+    pub params2: [f32; 4],
     /// rgb: emissive colour; w: an explicitly identified transparent glass layer
-    pub(crate) emissive: [f32; 4],
-    pub(crate) specular: [f32; 4],
+    pub emissive: [f32; 4],
+    pub specular: [f32; 4],
     /// x: `[matl_bumpmap]` factor, y: has a bump map, z/w: noZwrite/noZcheck
-    pub(crate) bump: [f32; 4],
+    pub bump: [f32; 4],
     /// The PBR maps beside the diffuse texture (`Scene::pbr_maps`): x has a normal map,
     /// y an occlusion, z a roughness, w a metalness channel.
-    pub(crate) pbr: [f32; 4],
+    pub pbr: [f32; 4],
     /// x: a screen (`MaterialExtra::screen`); y: 1 `[matl_texadress_border]`, 2
     /// `[matl_texadress_mirroronce]`; z the border colour's rgb packed as r * 65536 + g * 256 + b
     /// (bytes), w its alpha.
-    pub(crate) flags: [f32; 4],
+    pub flags: [f32; 4],
     /// rgb: the D3D material's ambient colour, which takes the ambient light (C); w: 1 for
     /// a texture that is a season's snow picture (no snow laid over it), 2 the map's water,
     /// -1 a slot without a texture
-    pub(crate) ambient: [f32; 4],
+    pub ambient: [f32; 4],
     /// `MaterialExtra::sway`: x 1 for foliage the wind moves, y its pivot's and z its top's
     /// height (mesh units), w how much it gives to the wind
-    pub(crate) sway: [f32; 4],
+    pub sway: [f32; 4],
 }
 
 /// The maps of a PBR set found beside a diffuse texture (`foo_n.png` and the rest, see
@@ -70,10 +70,10 @@ pub enum TexAddressing {
 /// What a material's bind group is made of: its textures (slot and generation), the
 /// sampler and the uniform values.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub(crate) struct BindKey {
-    pub(crate) textures: [(usize, u64); 7],
-    pub(crate) address: TexAddressing,
-    pub(crate) uniform: [u32; 44],
+pub struct BindKey {
+    pub textures: [(usize, u64); 7],
+    pub address: TexAddressing,
+    pub uniform: [u32; 44],
 }
 
 pub struct Material {
@@ -108,14 +108,14 @@ pub struct Material {
     /// `[matl_transmap]` (texture, its alpha channel is used).
     pub transmap: Option<(TextureId, bool)>,
     /// Its textures' addressing (`[matl_texadress_*]`).
-    pub(crate) address: TexAddressing,
+    pub address: TexAddressing,
     /// Keep the exact material parameters so a CTC texture swap can change only the diffuse
     /// map without losing map lighting, moisture, screen, or other renderer flags.
-    pub(crate) uniform: MaterialUniform,
-    pub(crate) buf: wgpu::Buffer,
-    pub(crate) bind_group: wgpu::BindGroup,
+    pub uniform: MaterialUniform,
+    pub buf: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
     /// Materials that draw alike (same textures, sampler and values) share this number.
-    pub(crate) look: u32,
+    pub look: u32,
 }
 
 impl Material {
@@ -292,20 +292,20 @@ pub struct MaterialExtra {
 
 /// The textures a material's bind group samples.
 #[derive(Clone, Copy)]
-pub(crate) struct MaterialMaps {
-    pub(crate) texture: Option<TextureId>,
-    pub(crate) transmap: Option<(TextureId, bool)>,
-    pub(crate) nightmap: Option<TextureId>,
-    pub(crate) lightmap: Option<TextureId>,
-    pub(crate) envmap: Option<(TextureId, f32)>,
-    pub(crate) env_mask: Option<TextureId>,
-    pub(crate) bump: Option<(TextureId, f32)>,
-    pub(crate) pbr: Option<PbrMaps>,
+pub struct MaterialMaps {
+    pub texture: Option<TextureId>,
+    pub transmap: Option<(TextureId, bool)>,
+    pub nightmap: Option<TextureId>,
+    pub lightmap: Option<TextureId>,
+    pub envmap: Option<(TextureId, f32)>,
+    pub env_mask: Option<TextureId>,
+    pub bump: Option<(TextureId, f32)>,
+    pub pbr: Option<PbrMaps>,
 }
 
 /// `MaterialUniform::ambient`'s w: 1 for a material whose texture is a season's snow
 /// picture (`snow`: `Scene::snow_textures`).
-pub(crate) fn snow_texture_flag(
+pub fn snow_texture_flag(
     snow: &std::collections::HashSet<TextureId>,
     texture: Option<TextureId>,
 ) -> f32 {
@@ -317,7 +317,7 @@ pub(crate) fn snow_texture_flag(
 }
 
 /// The material group's entries: its textures, its sampler and its uniform buffer.
-pub(crate) fn material_layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
+pub fn material_layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
     vec![
         texture_entry(0),
         sampler_entry(1),

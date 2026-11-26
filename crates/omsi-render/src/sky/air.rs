@@ -6,28 +6,23 @@ use crate::lighting::Lighting;
 use glam::{DVec3, Vec3};
 
 /// The sun's angular radius as drawn (a little larger than the real 0.27°).
-pub(crate) const SUN_RADIUS: f32 = 0.0065;
+pub const SUN_RADIUS: f32 = 0.0065;
 
 /// The moon's, as drawn (the real one is as large as the sun's; a little more, as the
 /// eye sees it).
-pub(crate) const MOON_RADIUS: f32 = 0.0062;
+pub const MOON_RADIUS: f32 = 0.0062;
 
 /// How much of the sun the enhanced sky's cumulus lets through to the camera: the same
 /// cloud the sky shader draws (sky_light.wgsl `cloud_base_shape`, `cloud_sigma`: the
 /// shape map's heaps cut by the cover, rounded with height, without the billows), its
 /// extinction integrated along the sun's direction through the layer, over a few rays a
 /// few tens of metres apart (the penumbra of a cloud a kilometre and a half up).
-pub(crate) const CLOUD_SHADOW_EROSION: f32 = 0.15;
+pub const CLOUD_SHADOW_EROSION: f32 = 0.15;
 
 /// How far the exposure follows the light into a cloud's shadow (log terms).
-pub(crate) const CLOUD_SHADE_ADAPT: f32 = 0.5;
+pub const CLOUD_SHADE_ADAPT: f32 = 0.5;
 
-pub(crate) fn cloud_sun_transmittance(
-    shape: &[u8],
-    lighting: &Lighting,
-    cam_rel: Vec3,
-    ro: DVec3,
-) -> f32 {
+pub fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> f32 {
     const BOTTOM: f32 = 1400.0;
     const TOP: f32 = 2800.0;
     const PERIOD: f32 = 13000.0;
@@ -116,12 +111,12 @@ pub(crate) fn cloud_sun_transmittance(
 
 /// How the enhanced picture's weather fog thins out with height (1/m): a 300 m scale height
 /// over the fog's base (`layer_depth` in enhanced_common.wgsl).
-pub(crate) const FOG_FALLOFF: f32 = 1.0 / 300.0;
+pub const FOG_FALLOFF: f32 = 1.0 / 300.0;
 
 /// The weather's own fog in the enhanced picture, its extinction at the base (1/m):
 /// vanilla's density, which the culling uses as well; none below 1e-4, where a clear day's
 /// air is the sky model's.
-pub(crate) fn enhanced_weather_fog(lighting: &Lighting) -> f32 {
+pub fn enhanced_weather_fog(lighting: &Lighting) -> f32 {
     let fog = if lighting.fog_density > 1e-4 {
         lighting.fog_density
     } else {
@@ -137,7 +132,7 @@ pub(crate) fn enhanced_weather_fog(lighting: &Lighting) -> f32 {
 /// inversely with the snowfall rate (Rasmussen et al., J. Appl. Meteor. 1999). A
 /// snowflake's big, flat cross-section takes several times the view of a raindrop of
 /// the same water.
-pub(crate) fn snowfall_extinction(s: f32) -> f32 {
+pub fn snowfall_extinction(s: f32) -> f32 {
     if s <= 0.01 {
         return 0.0;
     }
@@ -149,7 +144,7 @@ pub(crate) fn snowfall_extinction(s: f32) -> f32 {
 /// `sigma` at its base, thinning by `FOG_FALLOFF`) from a sun `sun_z` (the sine of its
 /// altitude) high: the layer's whole depth along the way, as the sky shader dims the
 /// sun's disc by it (`air_of` towards the sun).
-pub(crate) fn sun_through_fog(sigma: f32, sun_z: f32) -> f32 {
+pub fn sun_through_fog(sigma: f32, sun_z: f32) -> f32 {
     if sigma <= 0.0 {
         return 1.0;
     }
@@ -158,10 +153,7 @@ pub(crate) fn sun_through_fog(sigma: f32, sun_z: f32) -> f32 {
 
 /// What the enhanced sky is computed from for this light, and how much of the sun the
 /// clouds let through (the sky shader's `lights.w`, which lights the clouds and the disc).
-pub(crate) fn enhanced_sky_input(
-    lighting: &Lighting,
-    city_glow: f32,
-) -> (atmosphere::SkyInput, f32) {
+pub fn enhanced_sky_input(lighting: &Lighting, city_glow: f32) -> (atmosphere::SkyInput, f32) {
     let s = lighting.sun_dir.normalize_or_zero();
     // haze: the weather's visibility below a few kilometres thickens the aerosol
     let visibility = 2.3 / lighting.fog_density.max(1e-6);
@@ -215,15 +207,15 @@ pub(crate) fn enhanced_sky_input(
 
 /// The day's own air: what the sky of one calendar day is made of, as the weather of a
 /// real day leaves it (see `day_air`).
-pub(crate) struct DayAir {
+pub struct DayAir {
     /// aerosol amount relative to a clear day
-    pub(crate) haze: f32,
+    pub haze: f32,
     /// its Ångström exponent (fine dry particles 1.4-1.6, humid haze down to 0.5)
-    pub(crate) angstrom: f32,
+    pub angstrom: f32,
     /// the depth of the hazy boundary layer (m)
-    pub(crate) aerosol_height: f32,
+    pub aerosol_height: f32,
     /// the stratospheric aerosol's optical depth
-    pub(crate) strat_aod: f32,
+    pub strat_aod: f32,
 }
 
 /// The day's own air, drawn from the calendar day so that no two days look quite alike -
@@ -236,7 +228,7 @@ pub(crate) struct DayAir {
 /// and left standing as the evening's residual layer (a low sun shining through all of
 /// it). Now and then the stratosphere holds more aerosol than usual, and that evening's
 /// twilight turns purple. `OMSI_DAY_AIR=haze,angstrom[,height,strat]` fixes it.
-pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
+pub fn day_air(lighting: &Lighting) -> DayAir {
     static FIXED: std::sync::OnceLock<Option<Vec<f32>>> = std::sync::OnceLock::new();
     let fixed = FIXED.get_or_init(|| {
         let v = crate::gpu::debug().day_air.clone()?;
@@ -300,7 +292,7 @@ pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
 
 /// Has the sky moved on far enough from `a` to be computed again? The sun by a tenth of a
 /// degree (half a minute of the day), the weather by a per cent.
-pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInput) -> bool {
+pub fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInput) -> bool {
     let near = |x: f32, y: f32, tol: f32| (x - y).abs() <= tol;
     a.sun_dir.dot(b.sun_dir) < 0.999_998
         || !near(a.sun_visibility, b.sun_visibility, 0.01)
@@ -325,4 +317,4 @@ pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInp
 /// The period the sky's cloud patterns repeat with (m): 5 x the cloud field (14 km), 8 x
 /// its billow detail (8.75 km) and 28 x the high layer's (2.5 km) - the render origin is
 /// taken modulo this for them, which keeps centimetres of precision in 32 bits.
-pub(crate) const CLOUD_ORIGIN_PERIOD: f64 = 70000.0;
+pub const CLOUD_ORIGIN_PERIOD: f64 = 70000.0;

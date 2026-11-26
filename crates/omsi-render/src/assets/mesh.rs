@@ -8,26 +8,21 @@ use omsi_geometry::MeshData;
 
 /// Vertex and index buffers holding several meshes; the space a freed mesh leaves is
 /// handed to the next that fits.
-pub(crate) struct MeshPage {
-    pub(crate) vertex: wgpu::Buffer,
-    pub(crate) index: wgpu::Buffer,
-    pub(crate) vertex_top: u64,
-    pub(crate) index_top: u64,
-    pub(crate) vertex_free: Vec<(u64, u64)>,
-    pub(crate) index_free: Vec<(u64, u64)>,
+pub struct MeshPage {
+    pub vertex: wgpu::Buffer,
+    pub index: wgpu::Buffer,
+    pub vertex_top: u64,
+    pub index_top: u64,
+    pub vertex_free: Vec<(u64, u64)>,
+    pub index_free: Vec<(u64, u64)>,
 }
 
-pub(crate) const MESH_PAGE_VERTEX_BYTES: u64 = 32 << 20;
+pub const MESH_PAGE_VERTEX_BYTES: u64 = 32 << 20;
 
-pub(crate) const MESH_PAGE_INDEX_BYTES: u64 = 16 << 20;
+pub const MESH_PAGE_INDEX_BYTES: u64 = 16 << 20;
 
 /// First fit of `len` bytes in `free` (offset, length) or at `top` under `cap`.
-pub(crate) fn page_take(
-    free: &mut Vec<(u64, u64)>,
-    top: &mut u64,
-    cap: u64,
-    len: u64,
-) -> Option<u64> {
+pub fn page_take(free: &mut Vec<(u64, u64)>, top: &mut u64, cap: u64, len: u64) -> Option<u64> {
     if len == 0 {
         return Some(0);
     }
@@ -47,7 +42,7 @@ pub(crate) fn page_take(
 }
 
 /// Give `len` bytes at `at` back, joined to the free space beside them.
-pub(crate) fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len: u64) {
+pub fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len: u64) {
     if len == 0 {
         return;
     }
@@ -70,7 +65,7 @@ pub(crate) fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len:
 }
 
 impl MeshPage {
-    pub(crate) fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> MeshPage {
+    pub fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> MeshPage {
         let buffer = |size: u64, usage| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("mesh page"),
@@ -90,7 +85,7 @@ impl MeshPage {
     }
 
     /// Room for a mesh of these sizes: its vertex and index offsets.
-    pub(crate) fn take(&mut self, vertex_bytes: u64, index_bytes: u64) -> Option<(u64, u64)> {
+    pub fn take(&mut self, vertex_bytes: u64, index_bytes: u64) -> Option<(u64, u64)> {
         let v = page_take(
             &mut self.vertex_free,
             &mut self.vertex_top,
@@ -111,7 +106,7 @@ impl MeshPage {
         }
     }
 
-    pub(crate) fn give(&mut self, m: &GpuMesh) {
+    pub fn give(&mut self, m: &GpuMesh) {
         page_give(
             &mut self.vertex_free,
             &mut self.vertex_top,
@@ -127,7 +122,7 @@ impl MeshPage {
     }
 
     /// Write the mesh at these offsets.
-    pub(crate) fn place(
+    pub fn place(
         &self,
         queue: &wgpu::Queue,
         data: &MeshData,
@@ -164,7 +159,7 @@ impl MeshPage {
     }
 }
 
-pub(crate) fn mesh_vertices(data: &MeshData) -> Vec<Vertex> {
+pub fn mesh_vertices(data: &MeshData) -> Vec<Vertex> {
     data.positions
         .iter()
         .zip(&data.normals)
@@ -177,7 +172,7 @@ pub(crate) fn mesh_vertices(data: &MeshData) -> Vec<Vertex> {
         .collect()
 }
 
-pub(crate) fn mesh_page_bytes(data: &MeshData) -> (u64, u64) {
+pub fn mesh_page_bytes(data: &MeshData) -> (u64, u64) {
     let v = data
         .positions
         .len()
@@ -196,7 +191,7 @@ pub(crate) fn mesh_page_bytes(data: &MeshData) -> (u64, u64) {
 /// of it (its own rear section's glass included), and the culling block holding the mesh got
 /// a centre of NaN, which the shadow pass never finds in its light box - every mesh beside it
 /// in the block (the bus's body among them) cast no shadow.
-pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
+pub fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     let mut any = false;
     for p in data
@@ -218,7 +213,7 @@ pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
 
 /// The meshes in one page of their own, sized to them (each in a page of its own where the
 /// adapter cannot draw with a base vertex: `paged` false).
-pub(crate) fn make_meshes(
+pub fn make_meshes(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     data: &[&MeshData],
@@ -257,9 +252,9 @@ pub(crate) fn make_meshes(
 /// A mesh on the GPU, made on a worker thread; [`Renderer::add_prepared_mesh`] puts it into
 /// a scene.
 pub struct PreparedMesh(
-    pub(crate) GpuMesh,
+    pub GpuMesh,
     /// The vertices and indices, kept while a renderer mirrors its assets.
-    pub(crate) Option<Box<(Vec<Vertex>, Vec<u32>)>>,
+    pub Option<Box<(Vec<Vertex>, Vec<u32>)>>,
 );
 
 /// Make a mesh's GPU buffers on any thread (the device takes calls from all of them).
@@ -292,16 +287,16 @@ pub fn prepare_meshes(
 }
 
 pub struct GpuMesh {
-    pub(crate) vertex_buf: wgpu::Buffer,
-    pub(crate) index_buf: wgpu::Buffer,
+    pub vertex_buf: wgpu::Buffer,
+    pub index_buf: wgpu::Buffer,
     /// Where the mesh lies in its page's buffers (pages hold many meshes); `page` is its
     /// page in the scene's list, `u32::MAX` for a page of its own.
-    pub(crate) page: u32,
-    pub(crate) base_vertex: i32,
-    pub(crate) first_index: u32,
-    pub(crate) vertex_offset: u64,
-    pub(crate) vertex_bytes: u64,
-    pub(crate) index_bytes: u64,
+    pub page: u32,
+    pub base_vertex: i32,
+    pub first_index: u32,
+    pub vertex_offset: u64,
+    pub vertex_bytes: u64,
+    pub index_bytes: u64,
     pub ranges: Vec<(u32, u32, u32)>,
     pub bounds_center: Vec3,
     pub bounds_radius: f32,

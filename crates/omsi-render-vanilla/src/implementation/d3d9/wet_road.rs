@@ -18,12 +18,12 @@ use crate::wet_road::{sheen, wetness, wets};
 use crate::{BackendError, Result};
 
 /// The pass's pixel shader, made at the first scene frame.
-pub(super) struct WetPipeline {
+pub struct WetPipeline {
     ps: IDirect3DPixelShader9,
 }
 
 #[derive(Default)]
-pub(super) struct WetStore {
+pub struct WetStore {
     pipeline: Option<WetPipeline>,
     /// The pass cannot be made on this device (it is not tried again every frame).
     unsupported: bool,
@@ -44,7 +44,7 @@ fn build_pipeline(device: &IDirect3DDevice9Ex) -> Result<WetPipeline> {
 impl D3d9Device {
     /// Builds the pass if it is not there. A pass that cannot be made is remembered and the
     /// scene is drawn dry.
-    pub(super) fn ensure_wet_road(&mut self) {
+    pub fn ensure_wet_road(&mut self) {
         let wet = &mut self.scene.wet;
         if wet.pipeline.is_some() || wet.unsupported {
             return;
@@ -62,7 +62,7 @@ impl D3d9Device {
     /// Draws the wet road over the wet surfaces among `batches`, which the scene has just
     /// drawn. Leaves the pass's states set: the caller binds the scene's again. Returns
     /// whether anything was drawn.
-    pub(super) fn draw_wet_road<'m>(
+    pub fn draw_wet_road<'m>(
         &self,
         frame: &SceneFrame,
         batches: &[SceneBatch],

@@ -12,7 +12,7 @@ impl Renderer {
     /// The picture's passes, recorded into three encoders (and the main pass's parts): the
     /// shadow maps, the depth prepass with the ambient occlusion and the sky, and the picture
     /// itself up to its delivery to the output.
-    pub(crate) fn encode_frame(
+    pub fn encode_frame(
         &mut self,
         scene: &mut Scene,
         f: &FrameContext,

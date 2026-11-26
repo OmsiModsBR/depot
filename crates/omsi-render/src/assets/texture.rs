@@ -9,9 +9,9 @@ use crate::shaders::with_fullscreen;
 /// A texture on the GPU, made on a worker thread; [`Renderer::add_prepared_texture`] puts it
 /// into a scene.
 pub struct PreparedTexture(
-    pub(crate) GpuTexture,
+    pub GpuTexture,
     /// The levels as uploaded, kept while a renderer mirrors its assets.
-    pub(crate) Option<Box<omsi_texture::TextureData>>,
+    pub Option<Box<omsi_texture::TextureData>>,
 );
 
 impl PreparedTexture {
@@ -117,7 +117,7 @@ pub fn prepare_texture(
     ))
 }
 
-pub(crate) fn upload_texture(
+pub fn upload_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     img: &omsi_texture::Image,
@@ -134,7 +134,7 @@ pub(crate) fn upload_texture(
 
 /// A picture that holds numbers, not colours (the star map): its bytes are read as they
 /// are, one level, no sRGB decoding.
-pub(crate) fn upload_data_texture(
+pub fn upload_data_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     img: &omsi_texture::Image,
@@ -300,7 +300,7 @@ pub fn fit_texture(
 }
 
 /// A size halved (both sides, as `fit_texture` halves a picture) until neither passes `max`.
-pub(crate) fn fit_size(w: u32, h: u32, max: u32) -> (u32, u32) {
+pub fn fit_size(w: u32, h: u32, max: u32) -> (u32, u32) {
     let (mut w, mut h) = (w, h);
     while w > max || h > max {
         (w, h) = ((w / 2).max(1), (h / 2).max(1));
@@ -311,7 +311,7 @@ pub(crate) fn fit_size(w: u32, h: u32, max: u32) -> (u32, u32) {
 /// An RGBA picture of the game's own (a script's or a sign's text, an HTML display) larger
 /// than the graphics chip takes, halved until it fits (None when it fits as it is). Made at
 /// its full size, the texture was a device error, and so was every frame's write into it.
-pub(crate) fn fit_image(img: &omsi_texture::Image, max: u32) -> Option<omsi_texture::Image> {
+pub fn fit_image(img: &omsi_texture::Image, max: u32) -> Option<omsi_texture::Image> {
     if img.width <= max && img.height <= max {
         return None;
     }
@@ -332,67 +332,35 @@ pub(crate) fn fit_image(img: &omsi_texture::Image, max: u32) -> Option<omsi_text
     })
 }
 
-#[cfg(test)]
-pub(crate) mod fit_tests {
-    #[test]
-    fn a_big_picture_is_halved_until_it_fits() {
-        let data = omsi_texture::TextureData {
-            width: 8,
-            height: 4,
-            format: omsi_texture::PixelFormat::Rgba8,
-            levels: vec![vec![200; 8 * 4 * 4]],
-            has_alpha: false,
-            gpu_mips: true,
-        };
-        let small = super::fit_texture(&data, 2).unwrap();
-        assert_eq!((small.width, small.height), (2, 1));
-        assert_eq!(small.levels[0].len(), 2 * 4);
-        assert!(super::fit_texture(&data, 8).is_none());
-        // a picture of the game's own, and a size, the same way
-        let img = omsi_texture::Image {
-            width: 5000,
-            height: 300,
-            rgba: vec![9; 5000 * 300 * 4],
-            has_alpha: true,
-        };
-        let small = super::fit_image(&img, 2048).unwrap();
-        assert_eq!((small.width, small.height), (1250, 75));
-        assert_eq!(small.rgba.len(), 1250 * 75 * 4);
-        assert_eq!(super::fit_size(5000, 300, 2048), (1250, 75));
-        assert_eq!(super::fit_size(2048, 16, 2048), (2048, 16));
-        assert!(super::fit_image(&small, 2048).is_none());
-    }
-}
-
 /// An RGBA picture borrowed for an upload.
-pub(crate) struct RgbaRef<'a> {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) rgba: &'a [u8],
+pub struct RgbaRef<'a> {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: &'a [u8],
 }
 
 pub struct GpuTexture {
     #[allow(dead_code)]
-    pub(crate) texture: wgpu::Texture,
-    pub(crate) view: wgpu::TextureView,
-    pub(crate) size: (u32, u32),
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub size: (u32, u32),
     /// Bytes the texture takes on the GPU, all levels (0 for a freed slot's placeholder).
-    pub(crate) bytes: u64,
+    pub bytes: u64,
     /// Which texture this is (a slot is reused and a texture replaced): part of the
     /// key of a material bind group made this frame (see `Scene::bind_groups`).
-    pub(crate) gen: u64,
+    pub gen: u64,
 }
 
-pub(crate) static TEXTURE_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+pub static TEXTURE_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
-pub(crate) fn next_gen() -> u64 {
+pub fn next_gen() -> u64 {
     TEXTURE_GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl GpuTexture {
     /// A slot showing `view` (a picture the renderer draws: the one behind the rain on the
     /// glass), with `texture` a small stand-in the slot's bookkeeping asks about.
-    pub(crate) fn showing(
+    pub fn showing(
         texture: wgpu::Texture,
         view: wgpu::TextureView,
         size: (u32, u32),
@@ -406,7 +374,7 @@ impl GpuTexture {
         }
     }
 
-    pub(crate) fn new(texture: wgpu::Texture, size: (u32, u32), bytes: u64) -> GpuTexture {
+    pub fn new(texture: wgpu::Texture, size: (u32, u32), bytes: u64) -> GpuTexture {
         let view = texture.create_view(&Default::default());
         GpuTexture {
             texture,
@@ -419,7 +387,7 @@ impl GpuTexture {
 }
 
 /// Bytes of a texture of `format` with `levels` mip levels.
-pub(crate) fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels: u32) -> u64 {
+pub fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels: u32) -> u64 {
     let (bw, bh) = format.block_dimensions();
     let block = format.block_copy_size(None).unwrap_or(4) as u64;
     (0..levels)
@@ -430,7 +398,7 @@ pub(crate) fn texture_bytes(format: wgpu::TextureFormat, w: u32, h: u32, levels:
 /// Texture `t` without its `n` finest mip levels: the coarser levels copied into a smaller
 /// texture on the GPU. None when it cannot shrink so far (a block format needs sides that
 /// are multiples of four).
-pub(crate) fn drop_top_levels(
+pub fn drop_top_levels(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     t: &GpuTexture,
@@ -499,7 +467,7 @@ pub(crate) fn drop_top_levels(
 }
 
 /// How fast textures go up to the GPU, in MB/s: four 1024x1024 RGBA uploads timed.
-pub(crate) fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f64 {
+pub fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f64 {
     let n = 1024u32;
     let size = wgpu::Extent3d {
         width: n,
@@ -541,7 +509,7 @@ pub(crate) fn upload_speed_mb_s(device: &wgpu::Device, queue: &wgpu::Queue) -> f
 }
 
 /// The mip map generator (mip.wgsl): its bind group layout, pipeline and sampler.
-pub(crate) fn mip_pipeline(
+pub fn mip_pipeline(
     device: &wgpu::Device,
 ) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline, wgpu::Sampler) {
     // --- mipmaps on the GPU: the CPU box filter took up to a second per bus spawn
