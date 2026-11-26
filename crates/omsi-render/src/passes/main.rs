@@ -147,35 +147,14 @@ pub(crate) fn encode_main_pass(
             ctx.prepass.prepass_msaa_pipelines.as_ref(),
             targets.as_ref(),
         ) {
-            let mut pass = lead.as_mut().unwrap_or(&mut *encoder).begin_render_pass(
-                &wgpu::RenderPassDescriptor {
-                    label: Some("msaa depth prepass"),
-                    color_attachments: &[],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &t.1,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0.0),
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: pass_timer(tset.as_ref(), timed, "msaa prepass"),
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                },
-            );
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            // Alpha-tested colour draws use alpha-to-coverage, but the depth-only
-            // prepass uses a binary 0.5 cutoff. Letting those meshes write depth here
-            // can hide the opaque geometry behind samples the colour pass leaves
-            // uncovered (the sky then shows through buildings/terrain behind foliage).
-            // The main alpha-tested pass writes matching depth as it draws the colour.
-            encode_batches_filtered(
-                &mut pass,
+            encode_msaa_depth_prepass(
+                lead.as_mut().unwrap_or(&mut *encoder),
                 scene,
-                &prepass_batches,
-                |batch| batch.pipe / 2 != PIPE_ALPHA_TEST,
-                |pipe| &pipes[pipe as usize],
+                pipes,
+                &t.1,
+                prepass_batches,
+                tset,
+                timed,
             );
         }
     }
@@ -319,16 +298,7 @@ pub(crate) fn encode_main_pass(
                 });
                 pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
                 if first {
-                    if let Some(sky) = &scene.sky_bind_group {
-                        pass.set_pipeline(sky_pipe);
-                        pass.set_bind_group(1, sky, &[]);
-                        pass.set_vertex_buffer(0, ctx.sky.sky_mesh.0.slice(..));
-                        pass.set_index_buffer(
-                            ctx.sky.sky_mesh.1.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        pass.draw_indexed(0..ctx.sky.sky_mesh.2, 0, 0..1);
-                    }
+                    draw_sky(&mut pass, scene, sky_pipe, ctx.sky);
                 }
                 pass.execute_bundles(
                     main_bundles[g * per_part..((g + 1) * per_part).min(main_bundles.len())].iter(),
@@ -394,12 +364,8 @@ pub(crate) fn encode_main_pass(
             multiview_mask: None,
         });
         pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-        if let Some(sky) = scene.sky_bind_group.as_ref().filter(|_| parts == 1) {
-            pass.set_pipeline(sky_pipe);
-            pass.set_bind_group(1, sky, &[]);
-            pass.set_vertex_buffer(0, ctx.sky.sky_mesh.0.slice(..));
-            pass.set_index_buffer(ctx.sky.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
-            pass.draw_indexed(0..ctx.sky.sky_mesh.2, 0, 0..1);
+        if parts == 1 {
+            draw_sky(&mut pass, scene, sky_pipe, ctx.sky);
         }
         if main_bundles.is_empty() {
             pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
@@ -414,72 +380,166 @@ pub(crate) fn encode_main_pass(
         }
         // smoke, blended over the scene
         if scene.smoke_count > 0 && ctx.smoke {
-            if let Some(sb) = &scene.smoke_buf {
-                pass.set_pipeline(&pp.smoke_pipeline);
-                pass.set_bind_group(1, &ctx.sprites.smoke_bind_group, &[]);
-                pass.set_vertex_buffer(0, sb.slice(..));
-                pass.draw(0..6, 0..scene.smoke_count);
-            }
+            draw_smoke(&mut pass, scene, pp, ctx.sprites);
         }
-        // the snowfall, every flake worked out on the GPU (snow.wgsl), over the world and
-        // under the cab of the vehicle the camera is in
         if let Some(snow) = pp
             .snow_pipeline
             .as_ref()
             .filter(|_| lighting.snowfall > 0.01 && ctx.snowfall)
         {
-            let (counts, mean) = snowfall_flakes(lighting.snowfall);
-            let u = SnowUniform {
-                wind: lighting.wind.extend(ctx.seconds % 20000.0).to_array(),
-                fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
-            };
-            ctx.queue
-                .write_buffer(&ctx.sprites.snow_buf, 0, bytemuck::bytes_of(&u));
-            pass.set_pipeline(snow);
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-            pass.set_bind_group(1, &ctx.sprites.snow_bind_group, &[]);
-            pass.draw(0..6, 0..counts.iter().sum::<u32>());
+            draw_snowfall(&mut pass, &ctx, scene, lighting, snow);
         }
-        // light coronas, additive: the world's, then the vehicle the camera is in -
-        // drawn over them as Omsi.exe draws it last (see `cab_items`) - then its own
-        let coronas_on = scene.corona_count > 0 && ctx.coronas;
-        for late in [false, true] {
-            if late && !cab_batches.is_empty() {
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                encode_batches(&mut pass, scene, &cab_batches, |pipe| {
-                    main_pipeline(pp, pipe)
-                });
-            }
-            if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
-                pass.set_pipeline(&pp.corona_pipeline);
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
-                pass.set_vertex_buffer(0, cb.slice(..));
-                // in runs by picture (the standard glow, the lights' own bitmaps, the cone)
-                for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late) {
-                    let bg = ctx
-                        .sprites
-                        .corona_textures
-                        .get(tex as usize)
-                        .and_then(|b| b.as_ref())
-                        .unwrap_or(&ctx.sprites.corona_bind_group);
-                    pass.set_bind_group(1, bg, &[]);
-                    pass.draw(0..6, first..first + count);
-                }
-            }
-        }
+        draw_coronas_and_cab(&mut pass, &ctx, scene, cab_batches);
         // HUD overlays (on the vanilla path at full size; the enhanced path draws them
         // after grading, a scaled picture after scaling it up)
         if !overlays.is_empty() && !masked_frame && !scaled {
-            pass.set_pipeline(ctx.overlay_pipeline);
-            for (k, _) in overlays.iter().enumerate() {
-                if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                    pass.set_bind_group(0, bg, &[]);
-                    pass.draw(0..6, 0..1);
-                }
-            }
+            draw_overlays(&mut pass, ctx.overlay_pipeline, scene, overlays.len());
         }
     }
     main_parts
+}
+
+/// The multisampled depth the main pass reads when the single-sampled prepass cannot be shared.
+fn encode_msaa_depth_prepass(
+    encoder: &mut wgpu::CommandEncoder,
+    scene: &Scene,
+    pipes: &[wgpu::RenderPipeline],
+    depth_view: &wgpu::TextureView,
+    prepass_batches: &[Batch],
+    tset: &Option<wgpu::QuerySet>,
+    timed: &mut Vec<&'static str>,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("msaa depth prepass"),
+        color_attachments: &[],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(0.0),
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: pass_timer(tset.as_ref(), timed, "msaa prepass"),
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+    // Alpha-tested colour draws use alpha-to-coverage, but the depth-only
+    // prepass uses a binary 0.5 cutoff. Letting those meshes write depth here
+    // can hide the opaque geometry behind samples the colour pass leaves
+    // uncovered (the sky then shows through buildings/terrain behind foliage).
+    // The main alpha-tested pass writes matching depth as it draws the colour.
+    encode_batches_filtered(
+        &mut pass,
+        scene,
+        prepass_batches,
+        |batch| batch.pipe / 2 != PIPE_ALPHA_TEST,
+        |pipe| &pipes[pipe as usize],
+    );
+}
+
+/// The sky dome, drawn first under the world.
+fn draw_sky(
+    pass: &mut wgpu::RenderPass<'_>,
+    scene: &Scene,
+    pipe: &wgpu::RenderPipeline,
+    sky: &SkyResources,
+) {
+    if let Some(bind_group) = &scene.sky_bind_group {
+        pass.set_pipeline(pipe);
+        pass.set_bind_group(1, bind_group, &[]);
+        pass.set_vertex_buffer(0, sky.sky_mesh.0.slice(..));
+        pass.set_index_buffer(sky.sky_mesh.1.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..sky.sky_mesh.2, 0, 0..1);
+    }
+}
+
+/// The smoke particles, blended over the scene.
+fn draw_smoke(
+    pass: &mut wgpu::RenderPass<'_>,
+    scene: &Scene,
+    pipes: &PassPipelines,
+    sprites: &SpriteResources,
+) {
+    if let Some(sb) = &scene.smoke_buf {
+        pass.set_pipeline(&pipes.smoke_pipeline);
+        pass.set_bind_group(1, &sprites.smoke_bind_group, &[]);
+        pass.set_vertex_buffer(0, sb.slice(..));
+        pass.draw(0..6, 0..scene.smoke_count);
+    }
+}
+
+/// The snowfall, every flake worked out on the GPU (snow.wgsl), over the world and under the
+/// cab of the vehicle the camera is in.
+fn draw_snowfall(
+    pass: &mut wgpu::RenderPass<'_>,
+    ctx: &MainParts,
+    scene: &Scene,
+    lighting: &Lighting,
+    snow: &wgpu::RenderPipeline,
+) {
+    let (counts, mean) = snowfall_flakes(lighting.snowfall);
+    let u = SnowUniform {
+        wind: lighting.wind.extend(ctx.seconds % 20000.0).to_array(),
+        fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
+    };
+    ctx.queue
+        .write_buffer(&ctx.sprites.snow_buf, 0, bytemuck::bytes_of(&u));
+    pass.set_pipeline(snow);
+    pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+    pass.set_bind_group(1, &ctx.sprites.snow_bind_group, &[]);
+    pass.draw(0..6, 0..counts.iter().sum::<u32>());
+}
+
+/// The light coronas, additive: the world's, then the vehicle the camera is in (drawn over
+/// them as Omsi.exe draws it last, see `cab_items`), then its own.
+fn draw_coronas_and_cab<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    ctx: &MainParts<'a>,
+    scene: &'a Scene,
+    cab_batches: &[Batch],
+) {
+    let pp = ctx.pipes;
+    let coronas_on = scene.corona_count > 0 && ctx.coronas;
+    for late in [false, true] {
+        if late && !cab_batches.is_empty() {
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+            encode_batches(pass, scene, cab_batches, |pipe| main_pipeline(pp, pipe));
+        }
+        if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
+            pass.set_pipeline(&pp.corona_pipeline);
+            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap(), &[]);
+            pass.set_vertex_buffer(0, cb.slice(..));
+            // in runs by picture (the standard glow, the lights' own bitmaps, the cone)
+            for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late) {
+                let bg = ctx
+                    .sprites
+                    .corona_textures
+                    .get(tex as usize)
+                    .and_then(|b| b.as_ref())
+                    .unwrap_or(&ctx.sprites.corona_bind_group);
+                pass.set_bind_group(1, bg, &[]);
+                pass.draw(0..6, first..first + count);
+            }
+        }
+    }
+}
+
+/// The HUD overlays drawn straight into the picture.
+fn draw_overlays(
+    pass: &mut wgpu::RenderPass<'_>,
+    pipeline: &wgpu::RenderPipeline,
+    scene: &Scene,
+    count: usize,
+) {
+    pass.set_pipeline(pipeline);
+    for k in 0..count {
+        if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
+            pass.set_bind_group(0, bg, &[]);
+            pass.draw(0..6, 0..1);
+        }
+    }
 }
 
 /// The light sprites' and the snowfall's resources: the coronas' and the smoke's pictures and the
