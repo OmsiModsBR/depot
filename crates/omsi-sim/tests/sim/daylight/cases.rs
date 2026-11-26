@@ -199,3 +199,58 @@ fn the_stars_turn_about_the_pole_once_a_sidereal_day() {
         }
     }
 }
+
+/// The local time (hours) the sun stands due south at Spandau on day `doy`.
+fn spandau_noon(doy: i32) -> f64 {
+    let mut c = SimClock {
+        year: 1989,
+        day_of_year: doy,
+        ..Default::default()
+    };
+    let off_south = |minute: i32| {
+        c.time = minute as f64 * 60.0;
+        (sun_position(&c, &SunPlace::default()).1 - 180.0).abs()
+    };
+    let minute = (660..780)
+        .map(off_south)
+        .enumerate()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .unwrap()
+        .0;
+    (660 + minute) as f64 / 60.0
+}
+
+#[test]
+fn noon_drifts_over_the_year_as_the_real_suns() {
+    // mean noon at 13.28 E in UTC+1 is 12:07; the sun comes south some minutes after it in
+    // February and before it in early November
+    let feb = spandau_noon(40);
+    let nov = spandau_noon(310);
+    assert!(feb > 12.25, "February noon {feb:.3}");
+    assert!(nov < 12.05, "November noon {nov:.3}");
+}
+
+#[test]
+fn the_sun_stands_north_at_noon_south_of_the_equator() {
+    // Sao Paulo, UTC-3: the June noon sun to the north and low, the December sun nearly
+    // overhead
+    let sao_paulo = SunPlace {
+        latitude: -23.55,
+        longitude: -46.634,
+        timezone: -3.0,
+        dst: Vec::new(),
+    };
+    let mut c = SimClock {
+        day_of_year: 172,
+        time: 12.0 * 3600.0,
+        ..Default::default()
+    };
+    let (alt, az) = sun_position(&c, &sao_paulo);
+    assert!(
+        (az < 10.0 || az > 350.0) && (alt - 43.0).abs() < 1.5,
+        "June noon: alt {alt:.1} az {az:.1}"
+    );
+    c.day_of_year = 355;
+    let (alt, _) = sun_position(&c, &sao_paulo);
+    assert!(alt > 85.0, "December noon: alt {alt:.1}");
+}
