@@ -440,7 +440,7 @@ impl ApplicationHandler for App {
                     desktop_vsync,
                     self.settings.msaa,
                     u32::from(self.settings.anisotropy),
-                    self.settings.dx9_effects(),
+                    self.settings.vanilla_effects(),
                 );
                 self.output.set_render_scale(
                     self.settings.dx9_render_scale(),

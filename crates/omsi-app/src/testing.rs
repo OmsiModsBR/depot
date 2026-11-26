@@ -281,6 +281,10 @@ pub mod output {
     pub mod rain_reflection {
         pub use crate::output::domain::rain_reflection::*;
     }
+    pub mod vanilla {
+        pub use crate::output::domain::backend::VanillaEffects;
+        pub use crate::output::implementation::vanilla::*;
+    }
     pub mod xr {
         pub mod navigator {
             pub use crate::output::domain::vr_navigator::*;

@@ -2,9 +2,9 @@
 //! Direct3D 9Ex device that shows its pictures. Off Windows there is only wgpu, and the
 //! device's calls do nothing.
 
-use super::super::domain::backend::{Backend, Dx9Effects};
+use super::super::domain::backend::{Backend, VanillaEffects};
 #[cfg(windows)]
-use super::d3d9::D3d9Output;
+use super::vanilla::VanillaOutput;
 use anyhow::Result;
 use omsi_render::Renderer;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use winit::window::Window;
 pub(crate) struct Output {
     backend: Backend,
     #[cfg(windows)]
-    d3d9: Option<D3d9Output>,
+    vanilla: Option<VanillaOutput>,
 }
 
 impl Output {
@@ -35,10 +35,10 @@ impl Output {
         window: &Arc<Window>,
         vsync: bool,
         quality: (u32, u32),
-        effects: Dx9Effects,
+        effects: VanillaEffects,
     ) -> Result<()> {
-        let out = D3d9Output::attach(renderer, window, vsync, quality, effects)?;
-        self.d3d9 = Some(out);
+        let out = VanillaOutput::attach(renderer, window, vsync, quality, effects)?;
+        self.vanilla = Some(out);
         self.backend = Backend::D3d9;
         Ok(())
     }
@@ -51,7 +51,7 @@ impl Output {
         _window: &Arc<Window>,
         _vsync: bool,
         _quality: (u32, u32),
-        _effects: Dx9Effects,
+        _effects: VanillaEffects,
     ) -> Result<()> {
         Err(anyhow::anyhow!("Direct3D 9Ex draws on Windows only"))
     }
@@ -60,7 +60,7 @@ impl Output {
     #[cfg_attr(not(windows), allow(unused_variables))]
     pub(crate) fn resize(&self, width: u32, height: u32) {
         #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
+        if let Some(d) = self.vanilla.as_ref() {
             d.resize(width, height);
         }
     }
@@ -68,7 +68,7 @@ impl Output {
     /// The game starts a new scene: what the old one put up goes.
     pub(crate) fn new_scene(&self) {
         #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
+        if let Some(d) = self.vanilla.as_ref() {
             d.new_scene();
         }
     }
@@ -81,10 +81,10 @@ impl Output {
         vsync: bool,
         msaa: u32,
         anisotropy: u32,
-        effects: Dx9Effects,
+        effects: VanillaEffects,
     ) {
         #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
+        if let Some(d) = self.vanilla.as_ref() {
             d.set_vsync(vsync);
             d.set_quality(msaa, anisotropy);
             d.set_effects(effects);
@@ -97,7 +97,7 @@ impl Output {
     #[cfg_attr(not(windows), allow(unused_variables))]
     pub(crate) fn set_render_scale(&self, scale: f32, sharp: bool) {
         #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
+        if let Some(d) = self.vanilla.as_ref() {
             d.set_render_scale(scale, sharp);
         }
     }
@@ -105,7 +105,7 @@ impl Output {
     /// Shows the picture the renderer drew this frame (under wgpu the surface does).
     pub(crate) fn present(&self) {
         #[cfg(windows)]
-        if let Some(d) = self.d3d9.as_ref() {
+        if let Some(d) = self.vanilla.as_ref() {
             d.present();
         }
     }
@@ -116,7 +116,7 @@ impl Output {
     /// own picture back.
     pub(crate) fn capture_window(&self) -> Option<Result<(u32, u32, Vec<u8>)>> {
         #[cfg(windows)]
-        return self.d3d9.as_ref().map(|d| d.capture());
+        return self.vanilla.as_ref().map(|d| d.capture());
         #[cfg(not(windows))]
         None
     }
@@ -125,7 +125,7 @@ impl Output {
     /// (none under wgpu).
     pub(crate) fn ui_mirror(&self) -> Option<omsi_ui::UiMirror> {
         #[cfg(windows)]
-        return self.d3d9.as_ref().map(|d| d.ui_mirror());
+        return self.vanilla.as_ref().map(|d| d.ui_mirror());
         #[cfg(not(windows))]
         None
     }

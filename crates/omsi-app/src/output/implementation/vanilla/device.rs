@@ -1,4 +1,4 @@
-//! The "DirectX9 (D3D9Ex)" renderer of the game window. `omsi-render` keeps doing the books
+//! The "DirectX9 (D3D9Ex)" device of the game window. `omsi-render` keeps doing the books
 //! on wgpu's noop device (the scene, culling, level of detail, the alpha order), as the
 //! dedicated server does, and hands its asset events and each window picture's frame plan
 //! to the Direct3D 9Ex device of `omsi-render-vanilla`, which draws them into the window and
@@ -6,8 +6,8 @@
 //!
 //! A window picture is drawn in three steps into one Direct3D frame: the plan sink draws the
 //! scene and the HUD's pictures over it and leaves the frame open; the new interface's
-//! `omsi-ui` draws, mirrored ([`D3d9Output::ui_mirror`]), go over that while the renderer
-//! records its own; and [`D3d9Output::present`] ends the frame and shows it once the game's
+//! `omsi-ui` draws, mirrored ([`VanillaOutput::ui_mirror`]), go over that while the renderer
+//! records its own; and [`VanillaOutput::present`] ends the frame and shows it once the game's
 //! frame is done.
 //!
 //! What the plan does not carry yet is not drawn in this mode: shadows and pictures
@@ -16,16 +16,14 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::output::Dx9Effects;
+use super::{scene_batches, scene_frame, scene_material, ui_overlays, FrameParts};
+use crate::output::VanillaEffects;
 use anyhow::{anyhow, Result};
-use omsi_render::{
-    FramePlan, MirrorEvent, MirrorTexture, PlanKind, Renderer, Scene, TexAddressing,
-};
+use omsi_render::{FramePlan, MirrorEvent, MirrorTexture, Renderer, Scene};
 use omsi_render_vanilla::d3d9::D3d9Device;
 use omsi_render_vanilla::{
-    BackendError, DrawKind, FrameDesc, RenderBackend, SceneBatch, SceneClouds, SceneCoronas,
-    SceneFrame, SceneLamps, SceneLight, SceneMaterial, SceneRain, SceneSky, SceneSmoke,
-    SceneTexture, TexAddress, TexFormat, UiDraw, UiFrame, UiLayer, UiOverlay,
+    BackendError, FrameDesc, RenderBackend, SceneBatch, SceneTexture, TexFormat, UiDraw, UiFrame,
+    UiLayer, UiOverlay,
 };
 use omsi_ui::UiEvent;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -40,12 +38,12 @@ struct Inner {
     overlays: Vec<UiOverlay>,
     layers: Vec<UiLayer>,
     draws: Vec<UiDraw>,
-    /// A frame is begun and waits for [`D3d9Output::present`].
+    /// A frame is begun and waits for [`VanillaOutput::present`].
     open: bool,
     /// When the last window picture was drawn (raindrops on glass move on by the time between).
     last_window_picture: Option<std::time::Instant>,
-    /// The options that leave effects out (see [`Dx9Effects`]).
-    effects: Dx9Effects,
+    /// The options that leave effects out (see [`VanillaEffects`]).
+    effects: VanillaEffects,
     /// Problems already logged (each kind once, not every frame or every asset).
     warned: hashbrown::HashSet<&'static str>,
     /// The device draws into this window: it lives as long as the device.
@@ -161,27 +159,10 @@ impl Inner {
                 return;
             }
         }
-        let batch = |b: &omsi_render::PlanBatch| SceneBatch {
-            kind: match b.kind {
-                PlanKind::Opaque => DrawKind::Opaque,
-                PlanKind::AlphaTest => DrawKind::AlphaTest,
-                PlanKind::Blend => DrawKind::Blend,
-                PlanKind::BlendNoWrite => DrawKind::BlendNoWrite,
-                PlanKind::SurfaceDepth => DrawKind::SurfaceDepth,
-                PlanKind::TerrainPaint => DrawKind::TerrainPaint,
-            },
-            cull: b.cull,
-            surface: b.surface,
-            mesh: b.mesh,
-            first: b.first,
-            count: b.count,
-            material: b.material,
-            instances: b.instances.clone(),
-        };
         self.main.clear();
-        self.main.extend(plan.main.iter().map(batch));
+        scene_batches(&plan.main, &mut self.main);
         self.cab.clear();
-        self.cab.extend(plan.cab.iter().map(batch));
+        scene_batches(&plan.cab, &mut self.cab);
         let lights = scene.frame_lights();
         // (only a window picture carries time; a mirror's picture leaves the drops where they are)
         let seconds = if target.is_none() {
@@ -192,116 +173,20 @@ impl Inner {
         } else {
             0.0
         };
-        let frame = SceneFrame {
-            view_proj: plan.view_proj,
-            light: SceneLight {
-                cam_pos: plan.cam_pos,
-                sun_dir: plan.sun_dir,
-                sun_color: plan.sun_color,
-                ambient: plan.ambient,
-                fog: plan.fog,
-                sky_color: plan.sky_color,
-                cam_right: plan.cam_right,
-                cam_up: plan.cam_up,
-                weather: [
-                    plan.wetness,
-                    0.0,
-                    plan.world_origin[0],
-                    plan.world_origin[1],
-                ],
-            },
-            list: &plan.list,
-            models: scene.slot_models(),
-            params: scene.slot_params(),
-            main: &self.main,
-            cab: &self.cab,
-            surface_bias: omsi_cfg::flags::SURFACE_BIAS.number::<i32>().unwrap_or(-24),
-            coronas: if !self.effects.coronas {
-                SceneCoronas::default()
-            } else {
-                SceneCoronas {
-                    sprites: scene.frame_coronas(),
-                    runs: scene.frame_corona_runs(),
-                }
-            },
-            // (OMSI's own particles; the renderer leaves the mirrors' out when the options say
-            // so, and the game's tyre spray is no OMSI smoke: it is not among them)
-            smoke: if !self.effects.smoke {
-                SceneSmoke::default()
-            } else {
-                SceneSmoke {
-                    sprites: scene.frame_smoke(),
-                }
-            },
-            lamps: SceneLamps {
+        let frame = scene_frame(
+            plan,
+            scene,
+            FrameParts {
+                main: &self.main,
+                cab: &self.cab,
                 lights: &lights,
-                grid: scene.frame_light_grid(),
-                place: plan.light_grid,
-                tile_map: plan.light_map,
-                cell_cap: plan.lamp_cap as usize,
             },
-            // (no rain on the glass: the drops never gather, and what had gathered dries)
-            rain: if self.effects.glass_rain {
-                SceneRain {
-                    intensity: plan.rain,
-                    wiper: scene.glass_wiper,
-                    seconds,
-                }
-            } else {
-                SceneRain {
-                    intensity: 0.0,
-                    wiper: None,
-                    seconds,
-                }
-            },
-            sky: SceneSky {
-                textures: scene.sky_textures(),
-                params: plan.sky,
-                // (no cloud picture: the sky is drawn without the layer; the clouds' cover
-                // still dims the light, as the plan has it)
-                clouds: SceneClouds {
-                    texture: scene.sky_cloud_picture(),
-                    params: plan.clouds,
-                },
-                no_cloud_layer: !self.effects.cloud_picture,
-                no_stars: !self.effects.stars,
-                bodies: {
-                    let (sun, moon) = scene.sky_bodies();
-                    [sun, moon]
-                },
-                moon_dir: plan.moon,
-                stars: scene.sky_stars().map(|(t, _)| t),
-                star_frame: plan.stars,
-            },
-            rain_reflection: plan.rain_reflection,
-        };
-        let material = |id: usize| {
-            scene.materials.get(id).map(|m| SceneMaterial {
-                texture: m.texture,
-                transmap: m.transmap.map(|t| t.0),
-                nightmap: m.nightmap,
-                lightmap: m.lightmap,
-                envmap: m.envmap.map(|e| e.0),
-                env_mask: m.env_mask,
-                bump: m.bump.map(|b| b.0),
-                raindrop_map: m.raindrop_map,
-                address: match m.addressing() {
-                    TexAddressing::Wrap => TexAddress::Wrap,
-                    TexAddressing::Mirror => TexAddress::Mirror,
-                    TexAddressing::Clamp => TexAddress::Clamp,
-                    TexAddressing::MirrorOnce => TexAddress::MirrorOnce,
-                },
-                uniform: m.uniform_vectors(),
-            })
-        };
+            &self.effects,
+            seconds,
+        );
+        let material = |id: usize| scene_material(scene, id);
         self.overlays.clear();
-        self.overlays
-            .extend(plan.overlays.iter().map(|&(texture, rect)| UiOverlay {
-                texture,
-                rect,
-                premultiplied: scene.premultiplied.contains(&texture),
-                transposed: scene.transposed.contains(&texture),
-            }));
+        ui_overlays(plan, scene, &mut self.overlays);
         let device = &mut self.device;
         if let Some(texture) = target {
             if let Err(e) = device.draw_scene_into(
@@ -436,11 +321,11 @@ impl Inner {
 }
 
 /// The Direct3D 9Ex output of the game window, fed by the renderer's hooks.
-pub(crate) struct D3d9Output {
+pub(crate) struct VanillaOutput {
     inner: Arc<Mutex<Inner>>,
 }
 
-impl D3d9Output {
+impl VanillaOutput {
     /// Opens the device on `window` and hooks it to `renderer` (which must run on wgpu's noop
     /// device, before its first asset goes up).
     pub(crate) fn attach(
@@ -448,7 +333,7 @@ impl D3d9Output {
         window: &Arc<Window>,
         vsync: bool,
         (msaa, anisotropy): (u32, u32),
-        effects: Dx9Effects,
+        effects: VanillaEffects,
     ) -> Result<Self> {
         let hwnd = match window.window_handle().map(|h| h.as_raw()) {
             Ok(RawWindowHandle::Win32(h)) => {
@@ -556,10 +441,10 @@ impl D3d9Output {
     /// next picture on. The texture size limit is not among them: it is read once, when the
     /// device is opened (a limit changed in the game's options takes effect at the next start,
     /// so one session never mixes sharp and soft textures).
-    pub(crate) fn set_effects(&self, effects: Dx9Effects) {
+    pub(crate) fn set_effects(&self, effects: VanillaEffects) {
         let mut inner = self.lock();
         let texture_limit = inner.effects.texture_limit;
-        inner.effects = Dx9Effects {
+        inner.effects = VanillaEffects {
             texture_limit,
             ..effects
         };

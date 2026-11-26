@@ -218,7 +218,7 @@ impl App {
                 &window,
                 self.settings.vsync,
                 (self.settings.msaa, u32::from(self.settings.anisotropy)),
-                self.settings.dx9_effects(),
+                self.settings.vanilla_effects(),
             ) {
                 fatal_message(&vanilla_cannot_open(&format!("{e:#}")));
                 crate::core::platform::exit(event_loop);

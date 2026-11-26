@@ -20,9 +20,9 @@ pub fn vanilla_cannot_open(cause: &str) -> String {
 
 /// The options that take effort off "DirectX9 (D3D9Ex)" (all ours, none OMSI 2's; every one
 /// defaults to what the renderer draws without them). Read from the settings
-/// ([`crate::settings::Settings::dx9_effects`]) and handed to the device.
+/// ([`crate::settings::Settings::vanilla_effects`]) and handed to the device.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Dx9Effects {
+pub struct VanillaEffects {
     /// Raindrops gather on the panes in the rain.
     pub glass_rain: bool,
     /// The glow round the lights.
@@ -37,7 +37,7 @@ pub struct Dx9Effects {
     pub texture_limit: u32,
 }
 
-impl Default for Dx9Effects {
+impl Default for VanillaEffects {
     fn default() -> Self {
         Self {
             glass_rain: true,

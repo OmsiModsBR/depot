@@ -8,20 +8,27 @@
 #
 # Domains on the same layer do not import each other, nothing imports `api`, and only
 # `renderer` and `api` import `output`. Grouped imports (`use crate::{a, b}`) count like paths.
-# The crate root (lib.rs) and the tests are not checked. Two more rules (render modes,
+# The crate root (lib.rs) and the tests are not checked. Three more rules (render modes,
 # `.ai/specs/001-graphics-modes/contracts/render-structure.md`):
 #
 #   - only `renderer/build.rs`, the one function that builds the mode, names a mode;
 #   - a mode's `shaders/` folder is included by that mode alone (`modes/<a>/shaders/` in a
-#     file outside `modes/<a>` is an error).
+#     file outside `modes/<a>` is an error);
+#   - rule 5: neither rendering crate (`omsi-render`, `omsi-render-vanilla`) depends on the
+#     other: the two `Cargo.toml` are read, and `cargo tree` must not list the other crate.
 #
 #   scripts/check-render-layers.sh [--strict]
 #
-# `RENDER_SRC=<dir>` checks another source folder (the script's own tests plant imports there).
+# `RENDER_SRC=<dir>` checks another source folder and `RENDER_CRATES=<dir>` another folder
+# holding the two crates (the script's own tests plant imports and dependencies there; `cargo
+# tree` is run only on the real workspace).
 #
 # Prints one line per import that points up or sideways. Exit status: 0, or 1 with --strict
 # when there is one (as CI runs it).
 set -euo pipefail
+
+crates_dir="${RENDER_CRATES:-$(cd "$(dirname "$0")/../crates" && pwd)}"
+workspace="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "${RENDER_SRC:-$(dirname "$0")/../crates/omsi-render/src}"
 
@@ -115,6 +122,27 @@ while IFS=: read -r file line name; do
     count=$((count + 1))
 done < <(grep -rnoE --include='*.rs' 'modes/[a-z_]+/shaders/' . \
     | sed -E 's#^([^:]+):([0-9]+):modes/([a-z_]+)/shaders/#\1:\2:\3#' | sort -u)
+
+# rule 5: neither rendering crate depends on the other
+check_independent() {
+    local crate="$1" other="$2" manifest="$crates_dir/$1/Cargo.toml"
+    if [ -f "$manifest" ]; then
+        # (`other = ...`, `other.workspace = true` and `[dependencies.other]`, in any table)
+        while IFS=: read -r line _; do
+            echo "crates/$crate/Cargo.toml:$line: $other: the rendering crates do not depend on each other"
+            count=$((count + 1))
+        done < <(grep -nE "^[[:space:]]*$other[[:space:]]*[=.]|^\[[a-z.-]*dependencies\.$other\]" "$manifest" || true)
+    fi
+    if [ -z "${RENDER_CRATES:-}" ] && command -v cargo >/dev/null; then
+        if (cd "$workspace" && cargo tree --locked -p "$crate" --prefix none 2>/dev/null) \
+            | grep -qE "^$other v"; then
+            echo "crates/$crate: cargo tree lists $other: the rendering crates do not depend on each other"
+            count=$((count + 1))
+        fi
+    fi
+}
+check_independent omsi-render omsi-render-vanilla
+check_independent omsi-render-vanilla omsi-render
 
 echo "$count import(s) out of layer"
 if [ "$count" -gt 0 ] && [ "${1:-}" = --strict ]; then

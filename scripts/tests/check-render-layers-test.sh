@@ -23,6 +23,15 @@ tree() {
     echo "// the build function" >"$1/renderer/build.rs"
 }
 
+# The two rendering crates' manifests, each with a dependency list: `crates_tree <dir>`.
+crates_tree() {
+    rm -rf "$1"
+    for c in omsi-render omsi-render-vanilla; do
+        mkdir -p "$1/$c"
+        printf '[package]\nname = "%s"\n\n[dependencies]\nlog = "0.4"\n' "$c" >"$1/$c/Cargo.toml"
+    done
+}
+
 # `plant <dir> <file> <line>`: appends a line to a file of the tree.
 plant() {
     echo "$3" >>"$1/$2"
@@ -102,6 +111,34 @@ expect_fail "a mode includes another's shaders" modes/vanilla_plus/mod.rs \
     'const S: &str = include_str!("../enhanced/shaders/post.wgsl"); // modes/enhanced/shaders/post.wgsl'
 expect_pass "a mode includes its own shaders" modes/enhanced/mod.rs \
     'const S: &str = include_str!("shaders/post.wgsl"); // modes/enhanced/shaders/post.wgsl'
+
+# rule 5: neither rendering crate depends on the other
+expect_crates_fail() {
+    local dir="$work/crates"
+    crates_tree "$dir"
+    echo "$3" >>"$dir/$2/Cargo.toml"
+    if RENDER_CRATES="$dir" RENDER_SRC="$work/clean" "$script" --strict >/dev/null; then
+        echo "FAIL  $1: the script passed a planted dependency ($3 in $2)"
+        failures=$((failures + 1))
+    else
+        echo "ok    $1"
+    fi
+}
+crates_tree "$work/crates"
+if RENDER_CRATES="$work/crates" RENDER_SRC="$work/clean" "$script" --strict >/dev/null; then
+    echo "ok    two independent crates"
+else
+    echo "FAIL  two independent crates were refused"
+    failures=$((failures + 1))
+fi
+expect_crates_fail "omsi-render depends on the vanilla crate" omsi-render \
+    'omsi-render-vanilla = { path = "../omsi-render-vanilla" }'
+expect_crates_fail "omsi-render depends on it through the workspace" omsi-render \
+    'omsi-render-vanilla.workspace = true'
+expect_crates_fail "the vanilla crate depends on omsi-render" omsi-render-vanilla \
+    'omsi-render = { path = "../omsi-render" }'
+expect_crates_fail "a dependency table names the other crate" omsi-render-vanilla \
+    $'[dev-dependencies.omsi-render]\npath = "../omsi-render"'
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures check(s) failed"
