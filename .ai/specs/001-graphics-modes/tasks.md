@@ -200,8 +200,18 @@ the layer check passes; goldens and frame times unchanged (quickstart Q9, Q10).
 
 - [x] T062 [US3] [ph C6] `RenderOptions::path: ShadingPath` replaces `no_enhanced` in `crates/omsi-render/src/renderer/options.rs`; `build` creates only the chosen mode; the app sets the path from `GraphicsMode` in `crates/omsi-app/src/core/implementation/make.rs`; the launcher's vehicle preview builds Vanilla+ only
   - Done (#861): the path is set in `crates/omsi-app/src/settings.rs` (`render_options`), not `make.rs`; the showroom's options say `Linear`. Enhanced where OpenGL's texture units do not fit is built as Vanilla+, with the warning it had. Found mode-specific: the puddles' reflected-vehicle fragments (`fs_puddle_vehicle`, `fs_puddle_chassis`) chose the shading at run time by `camera.post.x`; each mode now has its own, so the scene module holds one mode's text. `RenderOptions::default()` stays Enhanced's path, as the old default built it.
-- [ ] T063 [P] [US3] [ph C6] Test in `crates/omsi-render/tests/mode_build.rs`: a `ShadingPath::Linear` renderer creates no Enhanced pipeline, look-up table or probe, and the other way round (counted through `crates/omsi-render/src/testing.rs`); record the start-up time against T003 (SC-007, quickstart Q9)
-  - Test written in `crates/omsi-render/tests/mode_build.rs` (GPU, ignored here); counts the Enhanced `own_mode` and Vanilla+'s reflection pass through `testing::modes_built`. Look-up table and probe are shared (kept in the core), so only the pipelines are counted. Open: the start-up time against T003 (needs a GPU host).
+- [x] T063 [P] [US3] [ph C6] Test in `crates/omsi-render/tests/mode_build.rs`: a `ShadingPath::Linear` renderer creates no Enhanced pipeline, look-up table or probe, and the other way round (counted through `crates/omsi-render/src/testing.rs`); record the start-up time against T003 (SC-007, quickstart Q9)
+  - Test written in `crates/omsi-render/tests/mode_build.rs` (GPU, ignored here); counts the Enhanced `own_mode` and Vanilla+'s reflection pass through `testing::modes_built`. Look-up table and probe are shared (kept in the core), so only the pipelines are counted. Start-up time (SC-007, measured from `game.log` on the owner's machine, RTX 4070 Ti, DX12, 3440x1440, MSAA 8, `--no-menu`, map Desafio, same bus; "first frame" is the first `profile interval` line, shaders = log time from "compiling renderer pipelines" to the window line):
+
+  | Session | Build | Shaders | Map ready | First frame |
+  |---|---|---|---|---|
+  | Enhanced, cold file cache | 7857dcd3 (before #861) | ~5 s | 22.1 s | 23.7 s |
+  | Vanilla+ | 7857dcd3 (before #861) | ~5.5 s | 13.0 s | 14.4 s |
+  | Enhanced | 49a4f53e (before #861) | ~5 s | 12.0 s | 13.5 s |
+  | Enhanced | d4ad08f2 (#861) | ~5 s | 11.9 s | 13.3 s |
+  | Vanilla+ | d4ad08f2 (#861) | ~2.5 s | 9.0 s | 10.4 s |
+
+  Vanilla+ opens 4.0 s (28 %) faster and no longer compiles Enhanced's snow and lamps-in-fog shaders; Enhanced is unchanged within noise (0.2 s). About 1 s of the Vanilla+ gain is the first-area cut/textures step (5.5 s against 6.3 s), which varies with the operating system's file cache; the other ~3 s are the shaders. One session per case, so treat the figures as indicative.
 
 ### Frame stages `feat/render-frame-stages`
 
