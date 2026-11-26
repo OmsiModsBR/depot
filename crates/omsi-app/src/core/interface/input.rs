@@ -16,6 +16,19 @@ pub(crate) mod app {
 pub(crate) use super::super::domain::cli;
 pub(crate) use super::super::implementation::launcher_link;
 
+/// `depot/env.txt` on a phone: the switches it may set.
+#[cfg(target_os = "android")]
+pub(crate) mod env_file {
+    pub(crate) use super::super::super::domain::env_file::*;
+    pub(crate) use super::super::super::implementation::env_file::*;
+}
+
+/// The device's clock and the real-time sync (the game's date and time follow it).
+pub(crate) mod real_time {
+    pub(crate) use super::super::super::domain::real_time::*;
+    pub(crate) use super::super::super::implementation::real_time::*;
+}
+
 /// What the game answers of a LAN session and the server admin list: none without LAN play.
 pub(crate) mod lan {
     pub(crate) use super::super::super::domain::lan_off::lan::*;
@@ -27,7 +40,6 @@ pub(crate) mod admin {
 }
 #[cfg(steam)]
 pub(crate) mod steam {
-    pub(crate) use super::super::super::domain::steam::*;
     pub(crate) use super::super::super::implementation::steam::*;
 }
 #[cfg(target_os = "android")]

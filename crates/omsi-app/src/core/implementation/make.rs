@@ -20,7 +20,7 @@ use crate::services::run_export;
 use crate::situation::apply_situation;
 use crate::ui_language;
 use crate::weather::{puddles, rain};
-use crate::{hud, radio, real_time, tutorial};
+use crate::{hud, radio, tutorial};
 use anyhow::Result;
 use std::time::Instant;
 
@@ -156,7 +156,7 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         && args.server.is_none()
         && args.offscreen.is_none()
     {
-        real_time::start_at_now(&mut args);
+        crate::core::real_time::start_at_now(&mut args);
     }
     if args.export_glb.is_none() && args.lan_join.is_none() {
         place_on_duty(&mut args);

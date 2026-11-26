@@ -949,7 +949,7 @@ impl App {
     /// Set the clock to `to` (date and time), the traffic's clock with it, as moving it does
     /// (`App::shift_clock`).
     fn set_date_time(&mut self, to: SimClock) {
-        let gap = crate::real_time::gap(&self.clock, &to);
+        let gap = crate::core::real_time::gap(&self.clock, &to);
         if gap.abs() < 1.0 || self.real_time_locked() {
             return;
         }

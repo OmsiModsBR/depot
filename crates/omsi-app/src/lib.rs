@@ -10,7 +10,6 @@
 //! the game in one window of one process.
 
 mod describe;
-mod env_file;
 mod frame;
 mod gameplay;
 mod hud;
@@ -26,7 +25,6 @@ mod ui;
 mod weather;
 mod world;
 
-mod real_time;
 mod settings;
 mod showroom;
 
