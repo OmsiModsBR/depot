@@ -7,7 +7,8 @@ use super::state::Renderer;
 use crate::gpu::{
     basic_pipelines, debug, dedicated_vram_mb, fallback_load, fallback_store, fault_is,
     gpu_error_text, note_adapter, vulkan_vram_mb, ArrayPath, FaultHook, ARRAY_PATH,
-    BASIC_PIPELINES, DEPTH_FORMAT, GL_BACKEND, MASK_FORMAT, MSAA,
+    BASIC_PIPELINES, DEPTH_FORMAT, ENHANCED_SAMPLED_TEXTURES, ENHANCED_TEXTURES_FIT, GL_BACKEND,
+    MASK_FORMAT, MSAA,
 };
 use anyhow::{anyhow, Context, Result};
 
@@ -123,6 +124,15 @@ impl Renderer {
             );
             limits = adapter.limits();
         }
+        // the enhanced scene shader reads one texture more than the WebGPU default of sixteen
+        // in a stage (the panes' transmission map): asked for where the adapter has it
+        limits.max_sampled_textures_per_shader_stage =
+            limits.max_sampled_textures_per_shader_stage.max(
+                adapter
+                    .limits()
+                    .max_sampled_textures_per_shader_stage
+                    .min(ENHANCED_SAMPLED_TEXTURES),
+            );
         // OMSI_GPU_LIMITS=default|downlevel: the WebGPU defaults (or the downlevel ones) and
         // nothing more, whatever this machine could do - to find what a stricter driver refuses
         match crate::gpu::debug().gpu_limits.as_deref() {
@@ -130,6 +140,10 @@ impl Renderer {
             Some("downlevel") => limits = wgpu::Limits::downlevel_defaults(),
             _ => {}
         }
+        ENHANCED_TEXTURES_FIT.store(
+            limits.max_sampled_textures_per_shader_stage >= ENHANCED_SAMPLED_TEXTURES,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         // the shadow atlas is two maps wide: no wider than the card draws
         let shadow_size = shadow_size
             .min(limits.max_texture_dimension_2d / 2)

@@ -92,6 +92,10 @@ impl Renderer {
                 binding: 19,
                 resource: self.light_map.lm_uniform.as_entire_binding(),
             },
+            wgpu::BindGroupEntry {
+                binding: 20,
+                resource: wgpu::BindingResource::TextureView(&self.shadows.glass_view),
+            },
         ];
         // (the point lights where the device has storage buffers for them)
         if array_path() != ArrayPath::NoStorage {

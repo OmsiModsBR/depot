@@ -66,6 +66,9 @@ pub struct CameraUniform {
     /// into the stars' frame, w of the first how bright the stars are (0 none), w of the
     /// second the star map's cells across a face (0: no map), w of the third 0.
     pub stars: [[f32; 4]; 3],
+    /// Sunlight through glass (Enhanced): x 1 when the transmission map beside the close
+    /// shadow cascade is drawn this picture, y its size in texels a side.
+    pub glass: [f32; 4],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -138,8 +141,8 @@ impl Camera {
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the sky cube.
-pub const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
+/// table, the sky cube and the panes' transmission map.
+pub const ENHANCED_CAMERA_TEXTURES: [u32; 4] = [12, 14, 17, 20];
 
 /// The camera group's entries on a device whose arrays take `path`, without the enhanced
 /// path's textures where it has `sixteen` texture units (see `sixteen_texture_units`).
@@ -186,6 +189,8 @@ pub fn camera_layout_entries(path: ArrayPath, sixteen: bool) -> Vec<wgpu::BindGr
         // the tile light maps around the camera, and where they lie
         texture_entry(18),
         uniform_entry(19, wgpu::ShaderStages::FRAGMENT),
+        // the sunlight the panes let through, as seen from the sun
+        texture_entry(20),
     ];
     // the point lights and their grid (see `ArrayPath::NoStorage`)
     if path != ArrayPath::NoStorage {

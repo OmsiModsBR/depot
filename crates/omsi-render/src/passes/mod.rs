@@ -31,7 +31,9 @@ pub use main::{encode_main_pass, MainParts, PassPipelines, SpriteResources};
 pub use pipelines::{PathBuilders, PathShaders};
 pub use post::{post_pipelines, Exposure, PostPipelines, PostUniform};
 pub use scene_pipelines::SceneBuilder;
-pub use shadow::{shadow_pipe, ShadowResources, ShadowSchedule, LAMP_CASCADE, SHADOW_CLOSE_MAX};
+pub use shadow::{
+    glass_map_size, shadow_pipe, ShadowResources, ShadowSchedule, LAMP_CASCADE, SHADOW_CLOSE_MAX,
+};
 pub use shadow::{SHADOW_RANGE, SHADOW_RANGE_CLOSE, SHADOW_RANGE_FAR};
 pub use sky::SkyBuilder;
 pub use snow::{snow_layout, SnowBuilder};

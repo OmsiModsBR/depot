@@ -41,6 +41,9 @@ struct Camera {
     // frame; w of the first how bright the stars are (0 none), w of the second the star
     // map's cells across a face (0: no map)
     stars: array<vec4<f32>, 3>,
+    // Sunlight through glass (Enhanced): x 1 when the transmission map beside the close
+    // cascade is drawn, y its size in texels a side
+    glass: vec4<f32>,
 };
 
 struct PointLight {
