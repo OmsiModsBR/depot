@@ -392,21 +392,7 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
             })
             .map(|f| f.to_ascii_lowercase())
     })?;
-    // (content generation, the folder's files by lower-case name)
-    type Index = Mutex<HashMap<String, (u64, Arc<HashMap<String, Vec<PathBuf>>>)>>;
-    static INDEX: std::sync::OnceLock<Index> = std::sync::OnceLock::new();
-    let generation = omsi_cfg::content_generation();
-    let index = {
-        let mut all = INDEX.get_or_init(|| Mutex::new(HashMap::new())).lock();
-        match all.get(&top) {
-            Some((g, i)) if *g == generation => i.clone(),
-            _ => {
-                let i = Arc::new(texture_index(&top));
-                all.insert(top.clone(), (generation, i.clone()));
-                i
-            }
-        }
-    };
+    let index = texture_index_for(&top);
     let key = |p: &Path| {
         p.file_stem()
             .and_then(|s| s.to_str())
@@ -458,10 +444,54 @@ fn find_texture_elsewhere(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
     Some(found)
 }
 
+/// The folder's files by lower-case stem ([`texture_index`]), built once per content generation:
+/// whoever asks first builds it, the others wait for that one (a slot per folder, so the two
+/// folders build side by side).
+fn texture_index_for(top: &str) -> Arc<HashMap<String, Vec<PathBuf>>> {
+    type Slot = Arc<Mutex<Option<(u64, Arc<HashMap<String, Vec<PathBuf>>>)>>>;
+    static SLOTS: std::sync::OnceLock<Mutex<HashMap<String, Slot>>> = std::sync::OnceLock::new();
+    let slot = SLOTS
+        .get_or_init(Default::default)
+        .lock()
+        .entry(top.to_string())
+        .or_default()
+        .clone();
+    let generation = omsi_cfg::content_generation();
+    let mut held = slot.lock();
+    match held.as_ref() {
+        Some((g, i)) if *g == generation => i.clone(),
+        _ => {
+            let started = std::time::Instant::now();
+            let i = Arc::new(texture_index(top));
+            log::debug!(
+                "texture index of {top}: {} names in {:.2} s",
+                i.len(),
+                started.elapsed().as_secs_f64()
+            );
+            *held = Some((generation, i.clone()));
+            i
+        }
+    }
+}
+
+/// Starts building the indexes of `Splines` and `Sceneryobjects` in the background, so the first
+/// texture a model lacks (the look-up of the nearest same-named file) does not walk the whole
+/// content on the loading screen. Call it once the content roots are set.
+pub fn prewarm_texture_index() {
+    for top in ["splines", "sceneryobjects"] {
+        let _ = std::thread::Builder::new()
+            .name(format!("texture-index-{top}"))
+            .spawn(move || {
+                texture_index_for(top);
+            });
+    }
+}
+
 /// Image files under `top` (`splines`/`sceneryobjects`) of every content root and mounted archive, by stem.
+/// The folders of each level are read in parallel.
 fn texture_index(top: &str) -> HashMap<String, Vec<PathBuf>> {
-    let mut out: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    let mut stack: Vec<PathBuf> = omsi_cfg::content_roots()
+    use rayon::prelude::*;
+    let mut level: Vec<PathBuf> = omsi_cfg::content_roots()
         .into_iter()
         .filter_map(|r| {
             let (name, _) = omsi_cfg::vfs::list_dir(&r)?
@@ -470,19 +500,31 @@ fn texture_index(top: &str) -> HashMap<String, Vec<PathBuf>> {
             Some(r.join(name))
         })
         .collect();
-    while let Some(dir) = stack.pop() {
-        let Some(entries) = omsi_cfg::vfs::list_dir(&dir) else {
-            continue;
-        };
-        for (name, is_dir) in entries {
-            let p = dir.join(name);
-            if is_dir {
-                stack.push(p);
-            } else if p
-                .extension()
-                .and_then(|x| x.to_str())
-                .is_some_and(|x| EXTENSIONS.iter().any(|t| x.eq_ignore_ascii_case(t)))
-            {
+    let mut out: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    while !level.is_empty() {
+        let read: Vec<(Vec<PathBuf>, Vec<PathBuf>)> = level
+            .par_iter()
+            .map(|dir| {
+                let (mut dirs, mut files) = (Vec::new(), Vec::new());
+                for (name, is_dir) in omsi_cfg::vfs::list_dir(dir).unwrap_or_default() {
+                    let p = dir.join(name);
+                    if is_dir {
+                        dirs.push(p);
+                    } else if p
+                        .extension()
+                        .and_then(|x| x.to_str())
+                        .is_some_and(|x| EXTENSIONS.iter().any(|t| x.eq_ignore_ascii_case(t)))
+                    {
+                        files.push(p);
+                    }
+                }
+                (dirs, files)
+            })
+            .collect();
+        level = Vec::new();
+        for (dirs, files) in read {
+            level.extend(dirs);
+            for p in files {
                 if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
                     out.entry(stem.to_ascii_lowercase()).or_default().push(p);
                 }

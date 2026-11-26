@@ -5552,7 +5552,7 @@ impl World {
             }
             let total = started.elapsed().as_secs_f64();
             if total >= 1.0 {
-                log::info!(
+                log::debug!(
                     "tile loading: cut/textures of {} tile(s) took {total:.2} s: ground and roads {raster_secs:.2} (of it {:.2} s of surface-map look-ups, summed over threads), looking up {wanted_count} texture name(s) {look_secs:.2}, decoding {} file(s) {decode_secs:.2}",
                     prepared.len(),
                     surf_lookup_us.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1e6,

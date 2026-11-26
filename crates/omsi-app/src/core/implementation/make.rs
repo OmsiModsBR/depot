@@ -143,6 +143,9 @@ pub(crate) fn make_app(mut args: Args, server_cfg: Option<ServerCfg>) -> Result<
         args.situation = Some(tutorial::SITUATIONS[n - 1].to_string());
     }
     apply_situation(&mut args)?;
+    // the index of the content's textures (for a model whose texture is not in its folders) is
+    // built beside the start-up work instead of on the loading screen
+    omsi_texture::prewarm_texture_index();
     // a duty starts at its trip, as in OMSI (not at the map's entry point); a joining
     // player's once the host's world is known (below): it was never placed at all, and
     // "Automatic" put it at the map's first entry point, the depot
