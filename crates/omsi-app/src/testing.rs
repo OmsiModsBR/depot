@@ -102,7 +102,8 @@ pub mod core {
     }
 }
 pub mod describe {
-    pub use crate::describe::*;
+    pub use crate::hud::domain::describe::*;
+    pub use crate::hud::implementation::describe::*;
 
     /// The control names as the tests build them.
     pub trait ControlNamesInternals {

@@ -30,7 +30,7 @@ pub struct PagesView {
 
 // --- controls ---------------------------------------------------------------------------------
 
-pub(super) fn action_text(names: &crate::describe::ControlNames, a: &str) -> String {
+pub(super) fn action_text(names: &crate::hud::describe::ControlNames, a: &str) -> String {
     known_action(a).unwrap_or_else(|| names.control(a))
 }
 

@@ -163,7 +163,7 @@ pub(crate) fn place_description(app: &App, bus: &str) -> String {
     let Ok(path) = crate::gameplay::spawn::player_bus_path(&app.args.root, bus) else {
         return String::new();
     };
-    let lang = crate::describe::language_code(&app.settings.language);
+    let lang = crate::hud::describe::language_code(&app.settings.language);
     omsi_content::Dsc::find(&path, &lang)
         .map(|d| d.description)
         .filter(|t| !t.trim().is_empty())

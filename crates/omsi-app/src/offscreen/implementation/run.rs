@@ -3,7 +3,7 @@
 use crate::core::cli::{parse_time, parse_triggers, Args};
 use crate::core::memory::texture_budget;
 use crate::core::startup::graphics_instance;
-use crate::describe;
+use crate::hud::describe;
 use crate::gameplay::diagnostics::{log_physics, standing_reasons};
 use crate::frame::quit;
 use crate::frame::session;
