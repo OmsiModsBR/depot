@@ -23,6 +23,12 @@ pub(crate) mod env_file {
     pub(crate) use super::super::super::implementation::env_file::*;
 }
 
+/// File names of screenshots, and the notice raised once one is saved.
+pub(crate) mod screenshot_name {
+    pub(crate) use super::super::super::domain::screenshot_name::*;
+    pub(crate) use super::super::super::implementation::screenshot_name::*;
+}
+
 /// The device's clock and the real-time sync (the game's date and time follow it).
 pub(crate) mod real_time {
     pub(crate) use super::super::super::domain::real_time::*;

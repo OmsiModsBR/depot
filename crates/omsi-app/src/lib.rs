@@ -19,7 +19,6 @@ mod mapview;
 mod menu;
 mod output;
 mod radio;
-mod screenshot_name;
 mod tr_fill;
 mod ui;
 mod weather;

@@ -3378,7 +3378,7 @@ impl ApplicationHandler for App {
                                     // the capture, so it is never part of the saved picture)
                                     if !include_touch {
                                         self.service_msg =
-                                            Some(crate::screenshot_name::notice(&path));
+                                            Some(crate::core::screenshot_name::notice(&path));
                                     }
                                 }
                                 Err(e) => {

@@ -477,7 +477,7 @@ impl NewUi {
         let shared = self.shared.clone();
         let gen = self.loading_gen();
         let path = omsi_cfg::resolve_path(root, bus);
-        let folder = crate::screenshot_name::folder_of(bus).unwrap_or_default();
+        let folder = crate::core::screenshot_name::folder_of(bus).unwrap_or_default();
         let paint = paint.map(str::to_string);
         let _ = std::thread::Builder::new()
             .name("loading-bus".into())

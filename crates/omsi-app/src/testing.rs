@@ -329,7 +329,8 @@ pub mod schedule_paper {
     pub use crate::gameplay::schedule_paper::*;
 }
 pub mod screenshot_name {
-    pub use crate::screenshot_name::*;
+    pub use crate::core::domain::screenshot_name::*;
+    pub use crate::core::implementation::screenshot_name::*;
 }
 pub mod services {
     pub use crate::services::*;

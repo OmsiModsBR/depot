@@ -9,5 +9,5 @@ pub(in crate::ui) use crate::gameplay::schedule::PlayerDuty;
 pub(in crate::ui) use crate::hud::lists::{self, ListKind, Move};
 pub(in crate::ui) use crate::hud::{Frame, Hits, MenuKind};
 pub(in crate::ui) use crate::input::{PlaceAt, ROUTE_NUMBER_MAX};
-pub(in crate::ui) use crate::screenshot_name::folder_of;
+pub(in crate::ui) use crate::core::screenshot_name::folder_of;
 pub(in crate::ui) use omsi_launcher_ui::picture::MapPicture;
