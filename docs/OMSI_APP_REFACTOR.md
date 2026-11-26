@@ -36,6 +36,8 @@ O crate tem 155 arquivos `.rs` e 144,3 mil linhas em `src/` (era 124,8 mil em 11
 
 O `omsi-app` está fora do `fmt --check` bloqueante: `cargo fmt --check -p omsi-app` acusa 5.480 trechos, e o passo do CI que cobre o workspace inteiro é informativo. É o crate mais tocado do repositório, então o commit de `cargo fmt` conflita com quase toda branch aberta nele. O `scripts/fmt-merge.sh` e o `.git-blame-ignore-revs`, previstos na Frente A2 para este caso, nunca foram criados.
 
+> Nota de 26/11/2026: o `omsi-render-d3d9` chama-se hoje `omsi-render-vanilla` (o modo gráfico Vanilla). Os nomes antigos neste documento ficam como foram escritos na época.
+
 Os crates que entraram com o código novo já estão quase formatados: `omsi-render-d3d9` e `omsi-launcher-core` não acusam nada, e `omsi-launcher-ui` acusa um trecho. Nenhum dos três está na lista bloqueante.
 
 ### Testes misturados com o código

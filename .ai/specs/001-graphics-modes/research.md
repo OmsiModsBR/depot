@@ -490,3 +490,44 @@ checked without a graphics adapter in the loop. Per T045 the key stays launcher-
 with its row in the launcher's Picture page. `ssao` (merged) and `clouds` (T044) are unaffected. If
 reflections should be live later, it is its own feature: keep the maps in the material and move the
 "has a reflection map" decisions of the shaders to one place first.
+
+## Final measurements (phase C10, T078, 2026-11-26, main at 0e1dcbe3)
+
+**Frame time per mode.** The same scene, the same lavapipe host and the same method as the baseline
+above, one process per case. The host is shared and its speed drifts from day to day (the
+Vanilla+ case without shadows or AO read 25 ms then and 29.7 ms now), so compare the ratios, not the
+absolute values. Medians in ms per frame:
+
+| Case | Baseline | Final | Final / Vanilla+ plain |
+|---|---:|---:|---:|
+| Vanilla+ without shadows or AO | 25 | 29.7 | 1.00 |
+| Vanilla+ with shadows | 39 | 44.4 | 1.50 |
+| Vanilla+ with SSAO | 54 | 53.5 | 1.80 |
+| Vanilla+ with shadows and SSAO | 60 | 74.7 | 2.5 |
+| Enhanced without shadows, AO or FXAA | 114 | 119.2 | 4.0 |
+| Enhanced with shadows, SSAO and FXAA | 147 | 158.3 | 5.3 |
+
+Baseline ratios were 1.6 (shadows), 2.2 (SSAO), 2.4 (both), 4.6 (Enhanced plain) and 5.9 (Enhanced
+full), so no Vanilla+ or Enhanced case got relatively heavier except shadows plus SSAO (2.4 to 2.5, inside the
+spread of the runs: the maximum of that case is 87 ms). Enhanced with shadows, SSAO and FXAA now includes
+the glass transmission of #879; on a graphics card it measured no cost (108.0 to 109.3 fps, see the A2 notes).
+One earlier run of the shadows-and-SSAO case stopped on a device error and the rerun passed; it did not recur.
+Enhanced+ was removed (A1), and the wgpu Vanilla path was removed (A6); the DirectX9 mode cannot be
+measured here (Windows only, exempted from FR-008).
+
+**Start-up.** Unchanged from the table in tasks.md (T063 and #867): Vanilla+ 14.4 s to 5.6 s to the first
+frame, Enhanced 13.5 s to 7.3 s, measured on the maintainer's computer. A fresh Vanilla+ session
+since #870 has not been re-measured here; it needs the maintainer's computer.
+
+**Size (SC-009).** Lines of Rust, WGSL and HLSL, counted with `wc -l`:
+
+| Scope | Before (19290ac) | Now | Change |
+|---|---:|---:|---:|
+| `src/` of the two rendering crates (`omsi-render` + `omsi-render-d3d9`, now `omsi-render-vanilla`) | 48,808 | 38,743 (29,781 + 8,962) | -10,065 (-20.6%) |
+| Whole crates, tests included | 50,853 | 52,503 | +1,650 |
+
+The code in `src/` shrank by a fifth; the whole crates grew because the tests moved out of `src/`
+into `tests/` (C9) and new ones were added. The `omsi-app` glue is not counted.
+
+**Still needing the maintainer's computer:** frame times on a graphics card for each mode (SC-006) and
+T056, the Windows same-camera screenshot pair for T069, and a fresh Vanilla+ start-up.
