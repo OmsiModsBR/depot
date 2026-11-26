@@ -26,7 +26,6 @@ mod ui;
 mod weather;
 mod world;
 
-mod real_time;
 mod settings;
 mod showroom;
 

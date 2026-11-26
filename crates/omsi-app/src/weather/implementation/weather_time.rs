@@ -392,10 +392,10 @@ impl App {
         if !self.real_time_locked() {
             return;
         }
-        let Some(real) = crate::real_time::clock_now(&self.clock) else {
+        let Some(real) = crate::core::real_time::clock_now(&self.clock) else {
             return;
         };
-        let gap = crate::real_time::gap(&self.clock, &real);
+        let gap = crate::core::real_time::gap(&self.clock, &real);
         if gap.abs() < 0.25 {
             return;
         }
