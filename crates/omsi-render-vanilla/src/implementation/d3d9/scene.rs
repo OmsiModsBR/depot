@@ -1299,6 +1299,9 @@ impl D3d9Device {
         }
     }
 
+    /// One picture of the scene, pass by pass: the depth cleared, the sky, then for the world
+    /// and then for the vehicle the camera is in its batches, the wet road, the glass rain, the
+    /// smoke (the world's only) and the coronas.
     pub(super) fn draw_scene_inner<'m>(
         &mut self,
         frame: &SceneFrame,
@@ -1310,6 +1313,37 @@ impl D3d9Device {
         let lamps = self.bind_lamps(&frame.lamps)?;
         self.bind_or_table()?;
         let records = frame.list.len();
+        let bytes = self.reserve_instances(records)?;
+        let sprites = self.upload_sprites(frame)?;
+        let pixel = [-1.0 / width as f32, 1.0 / height as f32, 0.0, 0.0];
+        self.write_instances(frame, records, bytes)?;
+        self.clear_depth()?;
+        // the sky first, behind everything; the setup below sets what the scene needs
+        // again (its depth test, blending, shaders, filters and constants)
+        self.draw_sky(frame, pixel, coverage)?;
+        self.bind_scene_state(frame, &lamps, pixel)?;
+        let mut state = LayerState {
+            bound: Bound::default(),
+            skipped: 0,
+            depth_bias: surface_depth_bias(frame.surface_bias),
+        };
+        // the world's passes, then the vehicle the camera is in and its own
+        for (late, batches) in [(false, frame.main), (true, frame.cab)] {
+            self.draw_layer(
+                frame, batches, material, coverage, late, sprites, &mut state,
+            )?;
+        }
+        if state.skipped > 0 {
+            log::debug!(
+                "d3d9 scene: {} batches without their mesh or material",
+                state.skipped
+            );
+        }
+        Ok(())
+    }
+
+    /// The instance buffer made large enough for `records` records; its size in bytes.
+    fn reserve_instances(&mut self, records: usize) -> Result<u32> {
         let too_many = || BackendError::InvalidArgument(format!("{records} instances"));
         let bytes = u32::try_from(records)
             .ok()
@@ -1337,8 +1371,13 @@ impl D3d9Device {
             }
             self.scene.instances = Some((some(vb, "instance buffer")?, capacity));
         }
+        Ok(bytes)
+    }
+
+    /// The coronas and the smoke put up for this frame, and whether each can be drawn.
+    fn upload_sprites(&mut self, frame: &SceneFrame) -> Result<SpritesReady> {
         // (a frame whose coronas cannot be put up is drawn without them)
-        let coronas_ready = match self.upload_coronas(frame) {
+        let coronas = match self.upload_coronas(frame) {
             Ok(()) => true,
             Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
             Err(e) => {
@@ -1347,7 +1386,7 @@ impl D3d9Device {
             }
         };
         // (a frame whose smoke cannot be put up is drawn without it)
-        let smoke_ready = match self.upload_smoke(frame) {
+        let smoke = match self.upload_smoke(frame) {
             Ok(()) => self.smoke_ready(frame),
             Err(e @ (BackendError::DeviceLost | BackendError::DeviceNotReset)) => return Err(e),
             Err(e) => {
@@ -1355,22 +1394,13 @@ impl D3d9Device {
                 false
             }
         };
-        let d = &self.device;
-        let pipeline = self.scene.pipeline.as_ref().expect("built above");
-        let light = &frame.light;
-        let lights = [
-            light.cam_pos,
-            light.sun_dir,
-            light.sun_color,
-            light.ambient,
-            light.fog,
-            light.sky_color,
-        ];
-        let pixel = [-1.0 / width as f32, 1.0 / height as f32, 0.0, 0.0];
-        let (bias, slope) = surface_depth_bias(frame.surface_bias);
-        // SAFETY: plain calls on a live device; constant arrays outlive the calls; the
-        // instance buffer holds at least `records` records, locked with DISCARD and written
-        // whole, straight from the frame's lists (no copy in between).
+        Ok(SpritesReady { coronas, smoke })
+    }
+
+    /// The frame's instance records written whole into the instance buffer.
+    fn write_instances(&self, frame: &SceneFrame, records: usize, bytes: u32) -> Result<()> {
+        // SAFETY: the instance buffer holds at least `records` records, locked with DISCARD and
+        // written whole, straight from the frame's lists (no copy in between).
         unsafe {
             if let (Some((vb, _)), true) = (&self.scene.instances, records > 0) {
                 let mut p = std::ptr::null_mut();
@@ -1382,12 +1412,41 @@ impl D3d9Device {
                 ));
                 vb.Unlock().map_err(map_err)?;
             }
-            // reversed depth: cleared to the far plane, 0, and nearer is greater
-            d.Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 0.0, 0)
-                .map_err(map_err)?;
-            // the sky first, behind everything; the setup below sets what the scene needs
-            // again (its depth test, blending, shaders, filters and constants)
-            self.draw_sky(frame, pixel, coverage)?;
+        }
+        Ok(())
+    }
+
+    /// The depth cleared to the far plane (reversed depth: 0, and nearer is greater).
+    fn clear_depth(&self) -> Result<()> {
+        // SAFETY: a plain call on a live device.
+        unsafe {
+            self.device
+                .Clear(0, std::ptr::null(), D3DCLEAR_ZBUFFER as u32, 0, 0.0, 0)
+                .map_err(map_err)
+        }
+    }
+
+    /// The scene's whole state set: depth test, blending, shaders, filters and constants, with
+    /// the instance buffer on stream 1.
+    fn bind_scene_state(
+        &self,
+        frame: &SceneFrame,
+        lamps: &[[f32; 4]; 4],
+        pixel: [f32; 4],
+    ) -> Result<()> {
+        let d = &self.device;
+        let pipeline = self.scene.pipeline.as_ref().expect("built above");
+        let light = &frame.light;
+        let lights = [
+            light.cam_pos,
+            light.sun_dir,
+            light.sun_color,
+            light.ambient,
+            light.fog,
+            light.sky_color,
+        ];
+        // SAFETY: plain calls on a live device; constant arrays outlive the calls.
+        unsafe {
             d.SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE.0 as u32)
                 .map_err(map_err)?;
             d.SetRenderState(D3DRS_ZFUNC, D3DCMP_GREATEREQUAL.0 as u32)
@@ -1437,129 +1496,164 @@ impl D3d9Device {
                     .map_err(map_err)?;
             }
         }
-        let mut bound = Bound::default();
-        let mut skipped = 0usize;
-        // the scene's shaders and blend after a pass of the smoke's or the coronas' own
-        let rebind = || -> Result<()> {
-            // SAFETY: plain calls on a live device; the pipeline belongs to it.
-            unsafe {
-                d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
-                d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
-                d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
-                d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
-                    .map_err(map_err)?;
-                d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
-                    .map_err(map_err)?;
-                d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
-                    .map_err(map_err)?;
-            }
-            Ok(())
-        };
-        // the world's batches and its coronas, then the vehicle the camera is in and its own
-        for (late, batches) in [(false, frame.main), (true, frame.cab)] {
-            for b in batches {
-                if b.count == 0 || b.instances.is_empty() {
-                    continue;
-                }
-                let (Some(Some(mesh)), Some(m)) =
-                    (self.scene.meshes.get(b.mesh), material(b.material))
-                else {
-                    skipped += 1;
-                    continue;
-                };
-                check_batch(b, mesh, &m)?;
-                // SAFETY: as above; the buffers and textures belong to this device.
-                unsafe {
-                    if bound.kind != Some(b.kind) {
-                        kind_states(d, b.kind, coverage)?;
-                        bound.kind = Some(b.kind);
-                    }
-                    if bound.cull != Some(b.cull) {
-                        let mode = if b.cull { D3DCULL_CCW } else { D3DCULL_NONE };
-                        d.SetRenderState(D3DRS_CULLMODE, mode.0 as u32)
-                            .map_err(map_err)?;
-                        bound.cull = Some(b.cull);
-                    }
-                    if bound.surface != Some(b.surface) {
-                        let (c, s) = if b.surface { (bias, slope) } else { (0.0, 0.0) };
-                        d.SetRenderState(D3DRS_DEPTHBIAS, c.to_bits())
-                            .map_err(map_err)?;
-                        d.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, s.to_bits())
-                            .map_err(map_err)?;
-                        bound.surface = Some(b.surface);
-                    }
-                    if bound.material != Some(b.material) {
-                        self.bind_material(&m, &mut bound.maps)?;
-                        bound.material = Some(b.material);
-                    }
-                    // (batches of one mesh follow each other: its buffers stay bound)
-                    if bound.mesh != Some(b.mesh) {
-                        if bound.mesh.is_none() {
-                            d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
-                                .map_err(map_err)?;
-                        }
-                        d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
-                        d.SetIndices(&mesh.ib).map_err(map_err)?;
-                        bound.mesh = Some(b.mesh);
-                    }
-                    // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
-                    // black box on the road: it is left out, the runs between are drawn)
-                    let hide_blobs = b.kind.blends() && !self.covers(&m);
-                    for run in blob_free_runs(frame, b.instances.clone(), hide_blobs) {
-                        let n = run.end - run.start;
-                        d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
-                            .map_err(map_err)?;
-                        if let Some((vb, _)) = &self.scene.instances {
-                            // (no overflow: the run lies in the list, whose bytes were checked
-                            // above)
-                            d.SetStreamSource(1, vb, run.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
-                                .map_err(map_err)?;
-                        }
-                        d.DrawIndexedPrimitive(
-                            D3DPT_TRIANGLELIST,
-                            0,
-                            0,
-                            mesh.vertices,
-                            b.first,
-                            b.count / 3,
-                        )
-                        .map_err(map_err)?;
-                    }
-                }
-            }
-            if self.draw_wet_road(frame, batches, material, coverage)? {
-                rebind()?;
-                bound = Bound::default();
-            }
-            if self.draw_glass_rain(frame, batches, material, coverage, late)? {
-                // SAFETY: plain calls on a live device; the pipeline belongs to it.
-                unsafe {
-                    d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
-                    d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
-                    d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
-                    d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
-                        .map_err(map_err)?;
-                    d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
-                        .map_err(map_err)?;
-                }
-                bound = Bound::default();
-            }
-            // the world's smoke, over its batches and under the vehicle the camera is in
-            if !late && smoke_ready {
-                self.draw_smoke(frame)?;
-                rebind()?;
-                // (the batches' states and material are bound again)
-                bound = Bound::default();
-            }
-            if coronas_ready && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
-                self.draw_coronas(frame, late)?;
-                rebind()?;
-                // (the batches' states and material are bound again)
-                bound = Bound::default();
-            }
+        Ok(())
+    }
+
+    /// The scene's shaders and blend again, after a pass of the smoke's or the coronas' own.
+    fn rebind_scene(&self) -> Result<()> {
+        let d = &self.device;
+        let pipeline = self.scene.pipeline.as_ref().expect("built above");
+        // SAFETY: plain calls on a live device; the pipeline belongs to it.
+        unsafe {
+            d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
+            d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
+            d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
+            d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_COLORWRITEENABLE, 0xF)
+                .map_err(map_err)?;
         }
-        if skipped > 0 {
-            log::debug!("d3d9 scene: {skipped} batches without their mesh or material");
+        Ok(())
+    }
+
+    /// The scene's shaders and blend again, after the glass rain's pass.
+    fn rebind_after_glass_rain(&self) -> Result<()> {
+        let d = &self.device;
+        let pipeline = self.scene.pipeline.as_ref().expect("built above");
+        // SAFETY: plain calls on a live device; the pipeline belongs to it.
+        unsafe {
+            d.SetVertexDeclaration(&pipeline.decl).map_err(map_err)?;
+            d.SetVertexShader(&pipeline.vs).map_err(map_err)?;
+            d.SetPixelShader(&pipeline.ps).map_err(map_err)?;
+            d.SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA.0 as u32)
+                .map_err(map_err)?;
+            d.SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA.0 as u32)
+                .map_err(map_err)?;
+        }
+        Ok(())
+    }
+
+    /// One layer of the scene, the world's (`late` false) or the camera's vehicle's: its
+    /// batches, the wet road, the glass rain, the smoke (the world's only) and the coronas.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_layer<'m>(
+        &self,
+        frame: &SceneFrame,
+        batches: &[SceneBatch],
+        material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
+        coverage: A2c,
+        late: bool,
+        sprites: SpritesReady,
+        state: &mut LayerState,
+    ) -> Result<()> {
+        self.draw_batches(frame, batches, material, coverage, state)?;
+        if self.draw_wet_road(frame, batches, material, coverage)? {
+            self.rebind_scene()?;
+            state.bound = Bound::default();
+        }
+        if self.draw_glass_rain(frame, batches, material, coverage, late)? {
+            self.rebind_after_glass_rain()?;
+            state.bound = Bound::default();
+        }
+        // the world's smoke, over its batches and under the vehicle the camera is in
+        if !late && sprites.smoke {
+            self.draw_smoke(frame)?;
+            self.rebind_scene()?;
+            // (the batches' states and material are bound again)
+            state.bound = Bound::default();
+        }
+        if sprites.coronas && frame.coronas.runs.iter().any(|r| r.3 == late && r.2 > 0) {
+            self.draw_coronas(frame, late)?;
+            self.rebind_scene()?;
+            // (the batches' states and material are bound again)
+            state.bound = Bound::default();
+        }
+        Ok(())
+    }
+
+    /// The layer's batches, each with only the state that differs from the last one's.
+    fn draw_batches<'m>(
+        &self,
+        frame: &SceneFrame,
+        batches: &[SceneBatch],
+        material: &impl Fn(usize) -> Option<SceneMaterial<'m>>,
+        coverage: A2c,
+        state: &mut LayerState,
+    ) -> Result<()> {
+        let d = &self.device;
+        let (bias, slope) = state.depth_bias;
+        let bound = &mut state.bound;
+        for b in batches {
+            if b.count == 0 || b.instances.is_empty() {
+                continue;
+            }
+            let (Some(Some(mesh)), Some(m)) = (self.scene.meshes.get(b.mesh), material(b.material))
+            else {
+                state.skipped += 1;
+                continue;
+            };
+            check_batch(b, mesh, &m)?;
+            // SAFETY: plain calls on a live device; the buffers and textures belong to this
+            // device, and the instance buffer's bytes were checked when it was filled.
+            unsafe {
+                if bound.kind != Some(b.kind) {
+                    kind_states(d, b.kind, coverage)?;
+                    bound.kind = Some(b.kind);
+                }
+                if bound.cull != Some(b.cull) {
+                    let mode = if b.cull { D3DCULL_CCW } else { D3DCULL_NONE };
+                    d.SetRenderState(D3DRS_CULLMODE, mode.0 as u32)
+                        .map_err(map_err)?;
+                    bound.cull = Some(b.cull);
+                }
+                if bound.surface != Some(b.surface) {
+                    let (c, s) = if b.surface { (bias, slope) } else { (0.0, 0.0) };
+                    d.SetRenderState(D3DRS_DEPTHBIAS, c.to_bits())
+                        .map_err(map_err)?;
+                    d.SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, s.to_bits())
+                        .map_err(map_err)?;
+                    bound.surface = Some(b.surface);
+                }
+                if bound.material != Some(b.material) {
+                    self.bind_material(&m, &mut bound.maps)?;
+                    bound.material = Some(b.material);
+                }
+                // (batches of one mesh follow each other: its buffers stay bound)
+                if bound.mesh != Some(b.mesh) {
+                    if bound.mesh.is_none() {
+                        d.SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1)
+                            .map_err(map_err)?;
+                    }
+                    d.SetStreamSource(0, &mesh.vb, 0, 32).map_err(map_err)?;
+                    d.SetIndices(&mesh.ib).map_err(map_err)?;
+                    bound.mesh = Some(b.mesh);
+                }
+                // (a vehicle's shadow blob whose picture has no alpha is a solid quad, a
+                // black box on the road: it is left out, the runs between are drawn)
+                let hide_blobs = b.kind.blends() && !self.covers(&m);
+                for run in blob_free_runs(frame, b.instances.clone(), hide_blobs) {
+                    let n = run.end - run.start;
+                    d.SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | n)
+                        .map_err(map_err)?;
+                    if let Some((vb, _)) = &self.scene.instances {
+                        // (no overflow: the run lies in the list, whose bytes were checked
+                        // above)
+                        d.SetStreamSource(1, vb, run.start * INSTANCE_STRIDE, INSTANCE_STRIDE)
+                            .map_err(map_err)?;
+                    }
+                    d.DrawIndexedPrimitive(
+                        D3DPT_TRIANGLELIST,
+                        0,
+                        0,
+                        mesh.vertices,
+                        b.first,
+                        b.count / 3,
+                    )
+                    .map_err(map_err)?;
+                }
+            }
         }
         Ok(())
     }
@@ -1567,6 +1661,22 @@ impl D3d9Device {
 
 /// The material maps a scene batch binds, one a stage.
 const MAPS: usize = 7;
+
+/// Whether the frame's coronas and smoke were put up and can be drawn.
+#[derive(Clone, Copy)]
+struct SpritesReady {
+    coronas: bool,
+    smoke: bool,
+}
+
+/// What the layers of one scene picture share: the states the batch loop has bound, the
+/// batches left out for want of their mesh or material, and the road surfaces' depth bias
+/// (the constant and the slope scale).
+struct LayerState {
+    bound: Bound,
+    skipped: usize,
+    depth_bias: (f32, f32),
+}
 
 /// What the batch loop has bound since the scene's states were last set whole: a batch sets
 /// only what differs. Unknown (`None`) after a pass of another shader.

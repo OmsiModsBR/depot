@@ -1583,8 +1583,8 @@ impl Settings {
     }
 
     /// The effort-saving options of "DirectX9 (D3D9Ex)", for the device.
-    pub(crate) fn dx9_effects(&self) -> crate::output::Dx9Effects {
-        crate::output::Dx9Effects {
+    pub(crate) fn vanilla_effects(&self) -> crate::output::VanillaEffects {
+        crate::output::VanillaEffects {
             glass_rain: self.dx9_glass_rain,
             coronas: self.dx9_coronas && !omsi_cfg::flags::NO_CORONAS.is_set(),
             smoke: !omsi_cfg::flags::NO_SMOKE.is_set(),
