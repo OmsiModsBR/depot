@@ -174,23 +174,34 @@ pub fn place() -> std::sync::Arc<SunPlace> {
         .unwrap_or_default()
 }
 
+/// The sun's ecliptic longitude is zero this many days into the year (the March equinox).
+const EQUINOX_DAY: f64 = 80.0;
+
+/// The tilt of the earth's axis against its orbit (degrees).
+const OBLIQUITY_DEG: f64 = 23.439;
+
+/// Greenwich sidereal time (hours) at 0:00 UTC at the turn of the year.
+const SIDEREAL_HOURS_AT_NEW_YEAR: f64 = 6.69;
+
 /// Sun altitude and azimuth (degrees; azimuth clockwise from north) for the map clock at
-/// `place`.
+/// `place`: the sun goes round a circular orbit, a 365th of the ecliptic a day from the March
+/// equinox, and the sky turns over the map once a sidereal day. Because the sun's right
+/// ascension runs unevenly along the tilted ecliptic, noon drifts some minutes either side of
+/// 12:00 local solar time over the year, as the real sun does.
 pub fn sun_position(clock: &SimClock, place: &SunPlace) -> (f64, f64) {
     let doy = clock.day_of_year as f64;
-    let decl =
-        (23.44f64).to_radians() * ((2.0 * std::f64::consts::PI * (284.0 + doy) / 365.0).sin());
-    let hour = place.solar_hours(clock);
-    let h = (15.0 * (hour - 12.0)).to_radians();
+    let ecliptic = 2.0 * std::f64::consts::PI * (doy - EQUINOX_DAY) / 365.0;
+    let eps = OBLIQUITY_DEG.to_radians();
+    let ra = (eps.cos() * ecliptic.sin()).atan2(ecliptic.cos());
+    let decl = (eps.sin() * ecliptic.sin()).asin();
+    let utc = clock.time / 3600.0 - place.timezone - place.dst_hours(clock);
+    let sidereal = (doy * 24.0 / 365.0 + SIDEREAL_HOURS_AT_NEW_YEAR + utc) * 15.0;
+    let h = (sidereal + place.longitude).to_radians() - ra;
     let lat = place.latitude.to_radians();
     let sin_alt = lat.sin() * decl.sin() + lat.cos() * decl.cos() * h.cos();
     let alt = sin_alt.clamp(-1.0, 1.0).asin();
-    let cos_az = (decl.sin() - lat.sin() * sin_alt) / (lat.cos() * alt.cos()).max(1e-6);
-    let mut az = cos_az.clamp(-1.0, 1.0).acos();
-    if h.sin() > 0.0 {
-        az = 2.0 * std::f64::consts::PI - az;
-    }
-    (alt.to_degrees(), az.to_degrees())
+    let az = (-h.sin()).atan2(decl.tan() * lat.cos() - lat.sin() * h.cos());
+    (alt.to_degrees(), az.to_degrees().rem_euclid(360.0))
 }
 
 fn stops(colors: &[[f32; 3]; 5], twilight: (f32, f32), alt: f32) -> Vec3 {
