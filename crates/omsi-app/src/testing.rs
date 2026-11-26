@@ -481,7 +481,7 @@ pub mod traffic_density {
     pub use crate::gameplay::traffic_density::*;
 }
 pub mod tutorial {
-    pub use crate::tutorial::*;
+    pub use crate::gameplay::domain::tutorial::*;
 }
 pub mod ui {
     pub mod add {
