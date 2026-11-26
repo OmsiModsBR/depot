@@ -1,6 +1,7 @@
 //! The game play's procedures, one module per subject.
 pub(crate) mod bus_service;
 pub(crate) mod career;
+pub(crate) mod diagnostics;
 pub(crate) mod driver;
 pub(crate) mod duty_start;
 pub(crate) mod humans;

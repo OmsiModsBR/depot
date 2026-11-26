@@ -127,7 +127,8 @@ pub mod describe {
     }
 }
 pub mod diagnostics {
-    pub use crate::diagnostics::*;
+    pub use crate::gameplay::domain::diagnostics::*;
+    pub use crate::gameplay::implementation::diagnostics::*;
 }
 pub mod driver {
     pub use crate::gameplay::driver::lever_grade;

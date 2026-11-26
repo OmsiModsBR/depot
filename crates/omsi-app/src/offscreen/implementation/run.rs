@@ -4,7 +4,7 @@ use crate::core::cli::{parse_time, parse_triggers, Args};
 use crate::core::memory::texture_budget;
 use crate::core::startup::graphics_instance;
 use crate::describe;
-use crate::diagnostics::{log_physics, standing_reasons};
+use crate::gameplay::diagnostics::{log_physics, standing_reasons};
 use crate::frame::quit;
 use crate::frame::session;
 use crate::gameplay::career;
@@ -895,7 +895,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
                 // (once per reason: the numbers in a line change all the time)
                 if i % 30 == 0 {
                     let why = standing_reasons(&player.vehicle, &|a| {
-                        crate::diagnostics::rebound_key(&player.bindings, a)
+                        crate::gameplay::diagnostics::rebound_key(&player.bindings, a)
                     });
                     let key = |l: &String| l.split('(').next().unwrap_or_default().to_string();
                     for line in why
