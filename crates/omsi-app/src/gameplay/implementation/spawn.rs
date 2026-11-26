@@ -553,6 +553,7 @@ pub(crate) fn spawn_player(
             .map(|c| c.mesh_parts())
             .unwrap_or(0)
     );
+    let init_started = std::time::Instant::now();
     let bindings = omsi_content::KeyboardCfg::load(&crate::core::startup::keyboard_cfg(&args.root))
         .map(|k| k.with_game_defaults().vehicles)
         .unwrap_or_default();
@@ -617,6 +618,7 @@ pub(crate) fn spawn_player(
     for _ in 0..3 {
         p.vehicle.update(1.0 / 30.0);
     }
+    let scripts_secs = init_started.elapsed().as_secs_f64();
     if let Some(sv) = &args.setvar {
         for kv in sv.split(',') {
             if let Some((k, v)) = kv.split_once('=') {
@@ -790,11 +792,19 @@ pub(crate) fn spawn_player(
             log::info!("${v} = {:?}", p.vehicle.str_var(v));
         }
     }
+    let driver_started = std::time::Instant::now();
     p.driver = crate::gameplay::driver::DriverFigure::new(world, renderer, scene, &p.vehicle, 0);
+    let driver_secs = driver_started.elapsed().as_secs_f64();
+    let transforms_started = std::time::Instant::now();
     p.sync_transforms(
         renderer,
         scene,
         matches!(args.view.as_str(), "driver" | "pax"),
+    );
+    log::info!(
+        "spawn: player set up in {:.2} s: scripts (the first three updates) {scripts_secs:.2}, driver figure {driver_secs:.2}, transforms {:.2}",
+        init_started.elapsed().as_secs_f64(),
+        transforms_started.elapsed().as_secs_f64()
     );
     // The sounds the scripts asked for while the bus was being set up ({init}, the state it
     // is put in - cold, ready, the situation's) are not played: the first frame played them
