@@ -97,8 +97,8 @@ impl FrameClock {
 /// The draw lists of a picture (see `Renderer::draw_lists`).
 pub struct DrawLists {
     pub list: Vec<u32>,
-    /// Near, far, close, the street lamps'.
-    pub shadow_batches: [Vec<Batch>; 4],
+    /// Near, far, close, the street lamps', and the panes of the transmission map.
+    pub shadow_batches: [Vec<Batch>; 5],
     pub prepass_batches: Vec<Batch>,
     pub main_batches: Vec<Batch>,
     pub cab_batches: Vec<Batch>,

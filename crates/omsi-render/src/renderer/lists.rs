@@ -24,12 +24,17 @@ pub enum ShadowCaster {
     Solid,
     /// Where its texture's alpha passes the test.
     CutOut,
+    /// A pane: it lets the sun through, dimmed by its alpha and colour (the transmission
+    /// map beside the close cascade, Enhanced only).
+    Glass,
 }
 
 /// How a material casts into the shadow maps, None when it casts nothing: an opaque one is
 /// solid, an alpha-tested one is cut out, and so is a blended one whose transmap cuts a body
-/// that writes depth (a bus's paint); any other blended layer (a pane, a decal, dirt) and a
-/// material drawn without the depth check cast nothing.
+/// that writes depth (a bus's paint); any other blended layer (a pane, a decal, dirt) is
+/// glass, which dims the sun instead of blocking it; a material drawn without the depth
+/// check casts nothing. Whether a layer of the world's surface (a road's decal) counts as
+/// glass is the instance's say, not the material's (see `shadow_casters`).
 pub fn shadow_caster(
     alpha: AlphaMode,
     has_transmap: bool,
@@ -43,7 +48,7 @@ pub fn shadow_caster(
         AlphaMode::Opaque => Some(ShadowCaster::Solid),
         AlphaMode::Test => Some(ShadowCaster::CutOut),
         AlphaMode::Blend if has_transmap && !no_z_write => Some(ShadowCaster::CutOut),
-        AlphaMode::Blend => None,
+        AlphaMode::Blend => Some(ShadowCaster::Glass),
     }
 }
 
@@ -232,6 +237,7 @@ impl Renderer {
             *c.entry("ktris shadow near").or_default() += tris(&shadow_batches[0]);
             *c.entry("ktris shadow far").or_default() += tris(&shadow_batches[1]);
             *c.entry("ktris shadow close").or_default() += tris(&shadow_batches[2]);
+            *c.entry("ktris shadow glass").or_default() += tris(&shadow_batches[4]);
         }
         if self.diagnostics.profiling
             && with_overlays
@@ -272,6 +278,15 @@ impl Renderer {
             rain_batches = rain;
             main_batches = main;
         }
+        // no pane in the close cascade's box: the shaders skip the transmission map, which is
+        // then not drawn either (see `encode_shadow_maps`)
+        if f.draw_shadows && f.features.own_shading && shadow_batches[4].is_empty() {
+            self.queue.write_buffer(
+                &self.camera_buf,
+                std::mem::offset_of!(crate::scene::CameraUniform, glass) as u64,
+                bytemuck::bytes_of(&0.0f32),
+            );
+        }
         self.upload_draw_list(scene, &list);
         clock.stage(self, "upload", "mirror.upload");
         self.scratch.items = items;
@@ -288,14 +303,14 @@ impl Renderer {
         }
     }
 
-    /// The shadow casters of each cascade (near, far, close, and the street lamps'), with
-    /// their draws appended to `list`.
+    /// The shadow casters of each cascade (near, far, close, the street lamps', and the panes
+    /// of the transmission map beside the close cascade), with their draws appended to `list`.
     fn shadow_casters(
         &self,
         scene: &Scene,
         f: &FrameContext,
         list: &mut Vec<u32>,
-    ) -> [Vec<Batch>; 4] {
+    ) -> [Vec<Batch>; 5] {
         let debug_draws = crate::gpu::debug().debug_draws;
         let camera = f.camera;
         let cam_rel = f.cam_rel;
@@ -309,8 +324,10 @@ impl Renderer {
         let shadows = f.shadows;
         let omsi_shadow_casters = self.options.omsi_shadow_casters;
         // near, far, close
-        // (3: the street lamps' maps, every caster within a chosen lamp's reach under its head)
-        let mut shadow_batches: [Vec<Batch>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        // (3: the street lamps' maps, every caster within a chosen lamp's reach under its head;
+        // 4: the panes the close cascade's transmission map is drawn from, Enhanced only)
+        let panes_on = f.features.own_shading;
+        let mut shadow_batches: [Vec<Batch>; 5] = std::array::from_fn(|_| Vec::new());
         let lamp_reach = |c: Vec3, r: f32| {
             lamp_shadows
                 .iter()
@@ -348,9 +365,10 @@ impl Renderer {
             .as_deref()
             .and_then(|v| v.trim().parse().ok())
             .unwrap_or(3.0);
-        let casters = |span: std::ops::Range<usize>| -> [Vec<DrawItem>; 4] {
-            let mut out: [Vec<DrawItem>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        let casters = |span: std::ops::Range<usize>| -> [Vec<DrawItem>; 5] {
+            let mut out: [Vec<DrawItem>; 5] = std::array::from_fn(|_| Vec::new());
             let mut ranges: Vec<(u8, u32, u32, usize, u32)> = Vec::new();
+            let mut glass: Vec<(u32, u32, usize, u32)> = Vec::new();
             for inst in &scene.instances[span] {
                 if !inst.visible || !inst.casts_shadow || (omsi_shadow_casters && !inst.omsi_caster)
                 {
@@ -383,6 +401,10 @@ impl Renderer {
                     }
                 }
                 ranges.clear();
+                glass.clear();
+                // (a road's or a ground's own blended layers are not panes)
+                let pane_ok =
+                    panes_on && !inst.surface && !world_surface_phase(effective_render_phase(inst));
                 for (ri, (_, _, slot)) in m.ranges.iter().enumerate() {
                     let mat_id = inst.materials.get(*slot as usize).copied().unwrap_or(0);
                     let mat = &scene.materials[mat_id];
@@ -393,13 +415,19 @@ impl Renderer {
                         mat.no_z_check,
                     ) else {
                         if dbg_shadow && r >= dbg_r {
-                            log::info!("shadow: mesh r={r:.1} at {:?} slot {slot} is blended, never a caster", inst.origin);
+                            log::info!("shadow: mesh r={r:.1} at {:?} slot {slot} is drawn without the depth check, never a caster", inst.origin);
                         }
                         continue;
                     };
                     let kind = match caster {
                         ShadowCaster::Solid => PIPE_OPAQUE,
                         ShadowCaster::CutOut => PIPE_ALPHA_TEST,
+                        ShadowCaster::Glass => {
+                            if pane_ok {
+                                glass.push((ri as u32, *slot, mat_id, mat.look));
+                            }
+                            continue;
+                        }
                     };
                     ranges.push((kind, ri as u32, *slot, mat_id, mat.look));
                 }
@@ -464,6 +492,19 @@ impl Renderer {
                             entry: inst.base + slot,
                         });
                     }
+                    if cascade == 2 {
+                        for &(ri, slot, mat_id, look) in &glass {
+                            let (material, look) = depth_only_material(PIPE_BLEND, mat_id, look);
+                            out[4].push(DrawItem {
+                                pipe: PIPE_BLEND,
+                                mesh: inst.mesh as u32,
+                                range: ri,
+                                material,
+                                look,
+                                entry: inst.base + slot,
+                            });
+                        }
+                    }
                 }
             }
             out
@@ -491,9 +532,9 @@ impl Renderer {
                         })
                 })
             };
-            let mut found: [Vec<DrawItem>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+            let mut found: [Vec<DrawItem>; 5] = std::array::from_fn(|_| Vec::new());
             for part in run_parts(self.gpu.encoding_pool.as_ref(), parts, |p| {
-                let mut out: [Vec<DrawItem>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+                let mut out: [Vec<DrawItem>; 5] = std::array::from_fn(|_| Vec::new());
                 let end = ((p + 1) * chunk).min(n);
                 let mut b = p * chunk;
                 while b < end {
@@ -511,7 +552,7 @@ impl Renderer {
                     a.extend(b);
                 }
             }
-            for cascade in 0..4 {
+            for cascade in 0..5 {
                 if cascade < 3 && !active[cascade] {
                     continue;
                 }

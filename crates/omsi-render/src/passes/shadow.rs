@@ -26,6 +26,19 @@ pub const SHADOW_RANGE_CLOSE: f32 = 32.0;
 /// of the shadow pass's 4.6 ms.
 pub const SHADOW_CLOSE_MAX: u32 = 2048;
 
+/// The transmission map's most texels a side: the panes' dimming of the sun is soft, and the
+/// map is cleared every picture, so it is smaller than the close cascade's.
+pub const GLASS_MAP_MAX: u32 = 1024;
+
+/// The transmission map's size (texels a side) for a shadow map setting.
+pub fn glass_map_size(shadow_size: u32) -> u32 {
+    shadow_size.min(GLASS_MAP_MAX)
+}
+
+/// The transmission map's colour: what share of the sun a pane lets through (rgb) and the
+/// pane's depth in the close cascade's light space (a), 1 where there is none.
+pub const GLASS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
 /// The first cascade of the street lamps' maps: the sun's are 0 (near), 1 (far) and 2 (close).
 pub const LAMP_CASCADE: usize = 3;
 
@@ -210,6 +223,58 @@ pub fn shadow_pipelines(
     )
 }
 
+/// The pipeline that draws the panes into the transmission map: the close cascade's vertex
+/// stage, `fs_shadow_glass`, the nearest pane kept.
+fn glass_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    shadow_layout: &wgpu::BindGroupLayout,
+    material_layout: &wgpu::BindGroupLayout,
+    vertex_layout: &wgpu::VertexBufferLayout<'_>,
+) -> wgpu::RenderPipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("glass transmission"),
+        bind_group_layouts: &[Some(shadow_layout), Some(material_layout)],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("glass transmission"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_shadow_close"),
+            buffers: &[vertex_layout.clone()],
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            front_face: wgpu::FrontFace::Cw,
+            ..Default::default()
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: DEPTH_FORMAT,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_shadow_glass"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: GLASS_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
 impl ShadowResources {
     /// The sun's shadow maps (the near and far cascades, the close one beside the near) and
     /// the street lamps' maps under the far one.
@@ -219,9 +284,10 @@ impl ShadowResources {
         shadow_size: u32,
         scene: &Scene,
         shadow_encoder: &mut wgpu::CommandEncoder,
-        shadow_batches: &[Vec<Batch>; 4],
+        shadow_batches: &[Vec<Batch>; 5],
         lamp_shadows: &[LampShadow],
         draw_shadows: bool,
+        glass_pass: bool,
         redraw_near: bool,
         redraw_far: bool,
         tset: &Option<wgpu::QuerySet>,
@@ -291,6 +357,37 @@ impl ShadowResources {
                 });
             }
         }
+        // the transmission map: the panes seen from the sun over the close cascade's box
+        if glass_pass {
+            if let Some(pipeline) = &self.glass_pipeline {
+                let mut pass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("glass transmission"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.glass_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            // (1 lets all the sun through; a depth of 1 is behind everything)
+                            load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.glass_depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Discard,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: pass_timer(tset.as_ref(), timed, "glass transmission"),
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap(), &[]);
+                encode_batches(&mut pass, scene, &shadow_batches[4], |_| pipeline);
+            }
+        }
         // the street lamps' maps: tiles of a quarter of the shadow size under the far map,
         // each cleared and drawn every frame
         if !lamp_shadows.is_empty() {
@@ -343,6 +440,12 @@ pub struct ShadowResources {
     /// Depth-only pipeline that fills its viewport with the far depth: clears the close
     /// cascade's part of the atlas when the near part is kept from the frame before.
     pub shadow_clear_pipeline: wgpu::RenderPipeline,
+    /// The transmission map beside the close cascade (Enhanced's sunlight through glass): the
+    /// nearest pane's dimming of the sun and depth, as seen from the sun.
+    pub glass_view: wgpu::TextureView,
+    pub glass_depth_view: wgpu::TextureView,
+    /// Draws the panes into it; None where the device keeps to the basic pipelines.
+    pub glass_pipeline: Option<wgpu::RenderPipeline>,
 }
 
 impl ShadowResources {
@@ -372,7 +475,43 @@ impl ShadowResources {
                 material_layout,
                 vertex_layout,
             );
+        let glass_size = glass_map_size(shadow_size);
+        let glass_extent = wgpu::Extent3d {
+            width: glass_size,
+            height: glass_size,
+            depth_or_array_layers: 1,
+        };
+        let glass_view = target_2d(
+            device,
+            "glass transmission",
+            glass_extent,
+            1,
+            GLASS_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
+        let glass_depth_view = target_2d(
+            device,
+            "glass transmission depth",
+            glass_extent,
+            1,
+            DEPTH_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        )
+        .create_view(&Default::default());
+        let glass_pipeline = (!basic_pipelines()).then(|| {
+            glass_pipeline(
+                device,
+                shader,
+                &shadow_layout,
+                material_layout,
+                vertex_layout,
+            )
+        });
         Self {
+            glass_view,
+            glass_depth_view,
+            glass_pipeline,
             shadow_far_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
             shadow_near_cache: std::cell::Cell::new((Mat4::IDENTITY, 0, DVec3::ZERO, Vec3::ZERO)),
             xr_shadow_cache: std::cell::Cell::new(None),

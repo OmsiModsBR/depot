@@ -4,7 +4,8 @@
 use super::state::Renderer;
 use crate::lighting::{LampShadow, Lighting};
 use crate::passes::{
-    FrameFeatures, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE, SHADOW_RANGE_CLOSE,
+    glass_map_size, FrameFeatures, ShadowSchedule, SHADOW_CLOSE_MAX, SHADOW_RANGE,
+    SHADOW_RANGE_CLOSE,
 };
 use crate::scene::{Camera, CameraUniform, Scene};
 use crate::sky::CLOUD_ORIGIN_PERIOD;
@@ -221,6 +222,12 @@ impl Renderer {
                     [f[2][0], f[2][1], f[2][2], 0.0],
                 ]
             },
+            glass: [
+                if own_shading && shadows { 1.0 } else { 0.0 },
+                glass_map_size(self.options.shadow_size) as f32,
+                0.0,
+                0.0,
+            ],
         }
     }
 }

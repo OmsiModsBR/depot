@@ -69,12 +69,24 @@ pub fn gl_backend() -> bool {
 /// down making its first pipeline ("index out of bounds: the len is 16 but the index is 16"
 /// in wgpu-hal's gles/device.rs, on the phones of #1133, #1154, #1162, #1176: OpenGL was
 /// passed over for Vulkan and the panic reported as the game's end). There the camera group
-/// leaves out the enhanced path's three textures, and the enhanced path is not made
+/// leaves out the enhanced path's four textures, and the enhanced path is not made
 /// (vanilla and vanilla+ draw as everywhere). OMSI_GL_TEXTURE_UNITS=1 takes this layout on
 /// any device (with OMSI_GPU_ARRAYS, to try it without such a chip).
 pub fn sixteen_texture_units() -> bool {
-    array_path() != ArrayPath::Storage && (gl_backend() || crate::gpu::debug().gl_texture_units)
+    !ENHANCED_TEXTURES_FIT.load(std::sync::atomic::Ordering::Relaxed)
+        || array_path() != ArrayPath::Storage
+            && (gl_backend() || crate::gpu::debug().gl_texture_units)
 }
+
+/// The sampled textures one shader stage of the enhanced scene shader reads: the camera
+/// group's eight (with the panes' transmission map) and the material group's nine.
+pub const ENHANCED_SAMPLED_TEXTURES: u32 = 17;
+
+/// The device takes `ENHANCED_SAMPLED_TEXTURES` in a stage (set when the device is opened;
+/// the WebGPU default is sixteen, so the renderer asks for more where the adapter has them).
+/// Without them the camera group leaves out the enhanced path's textures, as on OpenGL.
+pub static ENHANCED_TEXTURES_FIT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 
 /// Wait until the GPU has done `submission` (None: everything submitted so far).
 ///

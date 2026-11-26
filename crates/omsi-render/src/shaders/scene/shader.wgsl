@@ -810,6 +810,31 @@ fn fs_shadow_test(in: FsIn) {
     }
 }
 
+// A pane seen from the sun, drawn into the transmission map beside the close shadow cascade
+// (Enhanced's sunlight through glass): rgb the share of the sun it lets through, from its
+// alpha and its colour - a clear pane lets it all through, a dark opaque one none - and a
+// the pane's depth in the cascade's light space (the nearest pane is kept).
+@fragment
+fn fs_shadow_glass(in: FsIn) -> @location(0) vec4<f32> {
+    var duv = tex_address(in.uv);
+    if (material.extra.x > 0.5) {
+        duv = in.uv * material.extra.z;
+    }
+    let texel = diffuse_border(textureSample(t_diffuse, s_diffuse, duv), duv);
+    var a = texel.a;
+    if (material.params.z > 0.5) {
+        // (the transmap stays where it is, as in `fs_shadow_test`)
+        let tm = sample_transmap(tex_address(in.uv - in.params.zw));
+        a = select(1.0, tm.a, material.params.w > 0.5);
+    }
+    a = clamp(a * material.color.a * in.params.x, 0.0, 1.0);
+    if (a < 0.02) {
+        discard;
+    }
+    let tint = clamp(texel.rgb * material.color.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
+    return vec4<f32>(mix(vec3<f32>(1.0), tint, a), in.clip.z);
+}
+
 // Roads with feathered alpha borders stay blended while their overlaps compose.
 // Once the surface phases are complete, only fully covered diffuse pixels occlude
 // later scenery. The transparent borders must not become invisible depth walls.

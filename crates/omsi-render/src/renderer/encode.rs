@@ -104,6 +104,7 @@ impl Renderer {
             &shadow_batches,
             &lamp_shadows,
             draw_shadows,
+            f.features.own_shading && draw_shadows && !shadow_batches[4].is_empty(),
             redraw_near,
             redraw_far,
             &clock.tset,

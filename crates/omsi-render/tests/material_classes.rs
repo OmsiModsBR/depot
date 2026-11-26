@@ -37,11 +37,21 @@ fn a_blended_body_cut_by_its_transmap_casts_its_cut_out() {
 }
 
 #[test]
-fn any_other_blended_layer_casts_nothing() {
-    // a pane, a decal, dirt: no transmap, or a transmap on a layer that writes no depth
-    assert_eq!(shadow_caster(AlphaMode::Blend, false, false, false), None);
-    assert_eq!(shadow_caster(AlphaMode::Blend, false, true, false), None);
-    assert_eq!(shadow_caster(AlphaMode::Blend, true, true, false), None);
+fn any_other_blended_layer_is_glass() {
+    // a pane, a decal, dirt: no transmap, or a transmap on a layer that writes no depth; the
+    // instance decides whether it is a pane (a road's own layers are not)
+    assert_eq!(
+        shadow_caster(AlphaMode::Blend, false, false, false),
+        Some(ShadowCaster::Glass)
+    );
+    assert_eq!(
+        shadow_caster(AlphaMode::Blend, false, true, false),
+        Some(ShadowCaster::Glass)
+    );
+    assert_eq!(
+        shadow_caster(AlphaMode::Blend, true, true, false),
+        Some(ShadowCaster::Glass)
+    );
 }
 
 #[test]

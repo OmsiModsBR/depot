@@ -8,6 +8,9 @@
 // the normal. Everything is drawn pre-exposed into the high-range target.
 
 @group(0) @binding(12) var t_probe: texture_cube<f32>;
+// The sunlight the panes let through, seen from the sun over the close cascade's box
+// (`fs_shadow_glass`): rgb the share, a the nearest pane's depth (1: no pane).
+@group(0) @binding(20) var t_glass: texture_2d<f32>;
 
 fn d_ggx(nh: f32, a: f32) -> f32 {
     let a2 = a * a;
@@ -74,7 +77,7 @@ fn rain_env_enhanced(d: vec3<f32>, lod: f32) -> vec3<f32> {
 // camera-driven strips. The offsets are fixed in shadow-map space, so the only thing that
 // can change is the actual caster. `thin`: foliage, whose normals OMSI points up for even
 // lighting - no receiver plane can be taken from them, a leaf compares at its own depth.
-fn sun_shadow_soft(world_in: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
+fn sun_shadow_cascades(world_in: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
     if (camera.shadow.x < 0.5) {
         return 1.0;
     }
@@ -129,6 +132,48 @@ fn sun_shadow_soft(world_in: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
         far_safe = mix(1.0, far_value, clamp((0.5 - far_edge) * 12.0, 0.0, 1.0));
     }
     return mix(far_safe, near_value, near_weight);
+}
+
+// How much of the sun the panes between the point and the sun let through (1: none in the
+// way): the transmission map holds the nearest pane over each texel of the close cascade's
+// box, and counts for a point only when the pane is nearer to the sun than the point. A few
+// taps soften the edge, as the shadow's do; the effect fades out with the distance as the
+// close cascade does.
+fn glass_sun(world: vec3<f32>) -> f32 {
+    let range = camera.flags.w;
+    if (camera.glass.x < 0.5 || range <= 0.0) {
+        return 1.0;
+    }
+    let radial = distance(world, camera.cam_pos.xyz);
+    let w = 1.0 - smoothstep(range * 0.6, range * 0.9, radial);
+    if (w <= 0.001) {
+        return 1.0;
+    }
+    let lp = camera.light_view_proj_close * vec4<f32>(world, 1.0);
+    let uv = vec2<f32>(lp.x * 0.5 + 0.5, 0.5 - lp.y * 0.5);
+    if (max(abs(uv.x - 0.5), abs(uv.y - 0.5)) >= 0.48 || lp.z < 0.0 || lp.z > 1.0) {
+        return 1.0;
+    }
+    let size = camera.glass.y;
+    // (a pane is in front when it is nearer the sun by more than a hand's breadth)
+    let behind = lp.z - 0.15 / SHADOW_DEPTH_RANGE;
+    let centre = vec2<i32>(uv * size);
+    let last = vec2<i32>(i32(size) - 1);
+    var sum = 0.0;
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let g = textureLoad(t_glass, clamp(centre + vec2<i32>(x, y), vec2<i32>(0), last), 0);
+            let share = select(1.0, dot(g.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), behind > g.a);
+            sum = sum + share;
+        }
+    }
+    return mix(1.0, sum / 9.0, w);
+}
+
+// The sun's soft shadow at a point: the cascades' shadow of what is solid, and the dimming
+// of the panes in the way.
+fn sun_shadow_soft(world_in: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
+    return sun_shadow_cascades(world_in, n, thin) * glass_sun(world_in);
 }
 
 // The sun's shadow at a point by one compare in the finest cascade that holds it (the close

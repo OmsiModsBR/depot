@@ -243,9 +243,9 @@ measured on both (quickstart Q4).
 
 **Can start as soon as T010 is merged**; it does not wait for the other stories.
 
-- [ ] T071 [US4] [ph A2] Failing test first in `crates/omsi-render/tests/glass_sunlight.rs` (lavapipe): an opaque panel, a pane and the ground with the sun behind them; the pane's shadow lies between the panel's and the lit ground, and a pane with a higher alpha lets less through
-- [ ] T072 [US4] [ph A2] Extend the material classification (T007) with "blended, depth-checked → casts transmission (from the material's alpha and colour)" in `crates/omsi-render/src/renderer/lists.rs`; draw those materials into a transmission target beside the shadow map in `crates/omsi-render/src/passes/shadow.rs`; multiply the sun's soft shadow by it in `crates/omsi-render/src/shaders/modes/enhanced/shaders/enhanced.wgsl`
-- [ ] T073 [P] [US4] [ph A2] Measure Enhanced before and after (the per-mode measurement and a `profile window:` session on the same scene); same-camera screenshots of the cab in the sun; `CHANGELOG.md`; the pull request carries the numbers and the justification (Principle VII)
+- [x] T071 [US4] [ph A2] Failing test first in `crates/omsi-render/tests/glass_sunlight.rs` (lavapipe): an opaque panel, a pane and the ground with the sun behind them; the pane's shadow lies between the panel's and the lit ground, and a pane with a higher alpha lets less through
+- [x] T072 [US4] [ph A2] Extend the material classification (T007) with "blended, depth-checked → casts transmission (from the material's alpha and colour)" in `crates/omsi-render/src/renderer/lists.rs`; draw those materials into a transmission target beside the shadow map in `crates/omsi-render/src/passes/shadow.rs`; multiply the sun's soft shadow by it in `crates/omsi-render/src/shaders/modes/enhanced/shaders/enhanced.wgsl`
+- [x] T073 [P] [US4] [ph A2] Measure Enhanced before and after (the per-mode measurement and a `profile window:` session on the same scene); same-camera screenshots of the cab in the sun; `CHANGELOG.md`; the pull request carries the numbers and the justification (Principle VII)
 
 **Checkpoint**: User Story 4 passes; Vanilla+ golden unchanged.
 
