@@ -219,7 +219,7 @@ the layer check passes; goldens and frame times unchanged (quickstart Q9, Q10).
 
 ### Frame stages `feat/render-frame-stages`
 
-- [ ] T064 [US3] [ph C7] Split what is left of `begin_frame` (`crates/omsi-render/src/renderer/frame.rs`) and `encode_main_pass` (`crates/omsi-render/src/passes/main.rs`) into their stages (targets, lights and sprites, camera uniform; sky, world, cab, overlays), each a function of its own
+- [x] T064 [US3] [ph C7] Split what is left of `begin_frame` (`crates/omsi-render/src/renderer/frame.rs`) and `encode_main_pass` (`crates/omsi-render/src/passes/main.rs`) into their stages (targets, lights and sprites, camera uniform; sky, world, cab, overlays), each a function of its own. Done: `begin_frame` keeps the stages in order and calls `begin_device`, `prepare_picture` and `camera_uniform` (`renderer/camera_uniform.rs`); `encode_main_pass` calls `encode_msaa_depth_prepass`, `draw_sky`, `draw_smoke`, `draw_snowfall`, `draw_coronas_and_cab` and `draw_overlays`; no GPU in the cloud, so the golden and trace jobs in CI are the check
 
 ### The Vanilla crate `feat/render-vanilla-crate`
 

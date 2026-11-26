@@ -3,6 +3,7 @@
 
 mod assets;
 mod build;
+mod camera_uniform;
 mod encode;
 mod features;
 mod frame;
