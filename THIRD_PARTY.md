@@ -10,7 +10,7 @@ from other projects that was **adapted into this repository's own files**.
 | | |
 | --- | --- |
 | Used for | The optional "Sharper" up-scaling of the render scale under "DirectX9 (D3D9Ex)" |
-| Where | `crates/omsi-render-vanilla/src/d3d9/shaders/upscale.hlsl`, entry points `ps_easu` and `ps_rcas` |
+| Where | `crates/omsi-render-vanilla/src/implementation/d3d9/shaders/upscale.hlsl`, entry points `ps_easu` and `ps_rcas` |
 | Source | https://github.com/GPUOpen-Effects/FidelityFX-FSR, tag `v1.0.2` |
 | Commit | `a21ffb8f6c13233ba336352bdff293894c706575` (2021-08-20) |
 | Files used | `ffx-fsr/ffx_fsr1.h` (`FsrEasuF`, `FsrEasuTapF`, `FsrEasuSetF`, `FsrRcasF`, `FsrEasuCon`, `FsrRcasCon`); `ffx-fsr/ffx_a.h` only for the meaning of its helper functions |
@@ -33,7 +33,7 @@ What was changed from the reference, so that it runs as a `ps_3_0` pixel shader:
 - The sharpening strength is a fixed 0.25 stops below the maximum (`RCAS_STOPS` in
   `render_scale.rs`); there is no option for it.
 - The two passes run on a Direct3D 9Ex device through the Rust code in
-  `crates/omsi-render-vanilla/src/d3d9/upscale.rs`, which is Depot's own.
+  `crates/omsi-render-vanilla/src/implementation/d3d9/upscale.rs`, which is Depot's own.
 
 The licence text, as it must stay with the adapted code, is in the header of `upscale.hlsl`.
 
