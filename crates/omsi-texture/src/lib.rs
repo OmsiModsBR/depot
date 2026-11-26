@@ -463,7 +463,7 @@ fn texture_index_for(top: &str) -> Arc<HashMap<String, Vec<PathBuf>>> {
         _ => {
             let started = std::time::Instant::now();
             let i = Arc::new(texture_index(top));
-            log::info!(
+            log::debug!(
                 "texture index of {top}: {} names in {:.2} s",
                 i.len(),
                 started.elapsed().as_secs_f64()

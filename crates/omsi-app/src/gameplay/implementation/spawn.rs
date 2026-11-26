@@ -801,7 +801,7 @@ pub(crate) fn spawn_player(
         scene,
         matches!(args.view.as_str(), "driver" | "pax"),
     );
-    log::info!(
+    log::debug!(
         "spawn: player set up in {:.2} s: scripts (the first three updates) {scripts_secs:.2}, driver figure {driver_secs:.2}, transforms {:.2}",
         init_started.elapsed().as_secs_f64(),
         transforms_started.elapsed().as_secs_f64()
