@@ -10,7 +10,9 @@ fn main() {
 #[cfg(windows)]
 fn main() {
     use omsi_render_vanilla::d3d9::D3d9Device;
-    use omsi_render_vanilla::{AlphaMode, DrawBatch, FrameDesc, MeshDesc, RenderBackend, TextureDesc};
+    use omsi_render_vanilla::{
+        AlphaMode, DrawBatch, FrameDesc, MeshDesc, RenderBackend, TextureDesc,
+    };
     use windows::Win32::Foundation::HWND;
     use winit::application::ApplicationHandler;
     use winit::event::WindowEvent;
