@@ -37,10 +37,10 @@ fn bend(r: f64, grade: f64, s: f64) -> DVec3 {
     }
 }
 
-/// KA-1: the rotation point stays on the lane through a bend, within 1 cm (SC-006).
+/// KA-1: the front axle stays on the lane through a bend, within 1 cm (SC-006).
 /// Checks: KA-1
 #[test]
-fn ka1_the_rotation_point_stays_on_the_lane() {
+fn ka1_the_front_axle_stays_on_the_lane() {
     let def = bus();
     let mut body = AiClassic::new(&def);
     let (speed, dt, r) = (5.0f32, 1.0 / 30.0, 15.0);
@@ -51,17 +51,18 @@ fn ka1_the_rotation_point_stays_on_the_lane() {
         s += (speed * dt) as f64;
         let at = s;
         body.step(dt, speed, &|d| bend(r, 0.0, at + d as f64), None, None);
-        let on_lane = bend(r, 0.0, at + def.rot_pnt_long as f64).truncate();
+        let on_lane = bend(r, 0.0, at + 3.2).truncate();
         let origin = body.position.truncate();
         let heading = body.heading.to_radians();
-        let rot = origin + glam::DVec2::new(heading.sin(), heading.cos()) * def.rot_pnt_long as f64;
-        worst = worst.max((rot - on_lane).length());
+        let front = origin + glam::DVec2::new(heading.sin(), heading.cos()) * 3.2;
+        worst = worst.max((front - on_lane).length());
     }
-    assert!(worst < 0.01, "the rotation point is {worst} m off the lane");
+    assert!(worst < 0.01, "the front axle is {worst} m off the lane");
 }
 
-/// KA-1: in a steady bend the body's axis lags the path's tangent so that `sin ψ_r = L κ`,
-/// its front swung out of the bend, and the wheels point at the turning centre.
+/// KA-1: in a steady bend the body's axis lags the path's tangent at the front axle so that
+/// `sin ψ_r = L κ`, the rotation point cutting the inside of the bend as a real vehicle's rear
+/// axle does, and the wheels point at the turning centre.
 /// Checks: KA-1
 #[test]
 fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
@@ -77,21 +78,25 @@ fn ka1_the_axis_lags_the_path_in_a_steady_bend() {
     }
     let at = s;
     let tangent = {
-        let a = bend(r, 0.0, at + def.rot_pnt_long as f64).truncate();
-        let b = bend(r, 0.0, at + def.rot_pnt_long as f64 + 1.0).truncate();
+        let a = bend(r, 0.0, at + 3.2 - 0.5).truncate();
+        let b = bend(r, 0.0, at + 3.2 + 0.5).truncate();
         (b - a).x.atan2((b - a).y).to_degrees()
     };
     let length = (3.2 - def.rot_pnt_long) as f64;
     let want = (length / r).asin().to_degrees();
     let got = (tangent - body.heading + 540.0).rem_euclid(360.0) - 180.0;
     assert!((got - want).abs() < 0.5, "ψ_r {got}°, want {want}°");
-    // the front is outside the bend: farther from its centre than the lane
+    // the rotation point runs on the circle a trailing axle takes, `sqrt(r² - L²)` from the
+    // centre, inside the lane
     let h = body.heading.to_radians();
-    let front = body.position.truncate() + glam::DVec2::new(h.sin(), h.cos()) * 3.2;
+    let rot =
+        body.position.truncate() + glam::DVec2::new(h.sin(), h.cos()) * def.rot_pnt_long as f64;
     let centre = glam::DVec2::new(r, 40.0);
+    let inner = (r * r - length * length).sqrt();
     assert!(
-        (front - centre).length() > r,
-        "the front is inside the bend"
+        ((rot - centre).length() - inner).abs() < 0.05,
+        "the rotation point is {} m from the centre, want {inner} m",
+        (rot - centre).length()
     );
     let delta = (((3.2 - def.rot_pnt_long) as f64) / r).atan().to_degrees();
     assert!(
