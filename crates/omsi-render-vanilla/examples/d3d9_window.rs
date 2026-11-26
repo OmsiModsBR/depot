@@ -1,5 +1,5 @@
 //! Opens a window and draws a checkered quad with the Direct3D 9Ex renderer, to see the
-//! window path working on a real machine: `cargo run -p omsi-render-d3d9 --example d3d9_window`.
+//! window path working on a real machine: `cargo run -p omsi-render-vanilla --example d3d9_window`.
 //! The three columns show the alpha modes: opaque, test (holes) and blend.
 
 #[cfg(not(windows))]
@@ -9,8 +9,10 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
-    use omsi_render_d3d9::d3d9::D3d9Device;
-    use omsi_render_d3d9::{AlphaMode, DrawBatch, FrameDesc, MeshDesc, RenderBackend, TextureDesc};
+    use omsi_render_vanilla::d3d9::D3d9Device;
+    use omsi_render_vanilla::{
+        AlphaMode, DrawBatch, FrameDesc, MeshDesc, RenderBackend, TextureDesc,
+    };
     use windows::Win32::Foundation::HWND;
     use winit::application::ApplicationHandler;
     use winit::event::WindowEvent;
@@ -20,8 +22,8 @@ fn main() {
 
     struct Scene {
         dev: D3d9Device,
-        mesh: omsi_render_d3d9::MeshHandle,
-        tex: omsi_render_d3d9::TextureHandle,
+        mesh: omsi_render_vanilla::MeshHandle,
+        tex: omsi_render_vanilla::TextureHandle,
     }
 
     #[derive(Default)]

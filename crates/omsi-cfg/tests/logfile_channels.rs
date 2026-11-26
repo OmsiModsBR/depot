@@ -70,7 +70,7 @@ fn the_filter_gives_every_target_its_channels_level_or_the_global_one() {
     assert!(filter.starts_with("warn,"), "{filter}");
     assert!(filter.contains(",omsi_script=debug"), "{filter}");
     assert!(filter.contains(",omsi_render=error"), "{filter}");
-    assert!(filter.contains(",omsi_render_d3d9=error"), "{filter}");
+    assert!(filter.contains(",omsi_render_vanilla=error"), "{filter}");
     assert!(filter.contains(",omsi_audio=warn"), "{filter}");
     // (what is no channel's, the graphics libraries, never goes past info)
     assert!(own.filter(LogLevel::Debug).starts_with("info,"));

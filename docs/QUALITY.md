@@ -15,7 +15,7 @@ of wrapping), because the parsers read untrusted content.
 | --- | --- | --- |
 | `cargo build --locked --workspace` | passes | - |
 | `cargo test --locked --workspace` | passes (1317 passed, 0 failed, 35 ignored) | - |
-| `cargo fmt --all -- --check` | fails: about 8000 diff hunks; the baseline was never formatted | Format crate by crate (macro-refactor plan, track 1), never in one commit: one would break every open branch. Each formatted crate joins the blocking `rustfmt (formatted crates)` step. Formatted so far: `omsi-cfg`, `omsi-o3d`, `omsi-model`, `omsi-map`, `omsi-vehicle`, `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content`, `omsi-script` (all the format crates), `omsi-audio`, `omsi-ui`, `omsi-geometry`, `tools/omsi-check`, `omsi-render`, `omsi-sim`, `omsi-render-d3d9`, `omsi-launcher-core`, `omsi-launcher-ui` and `omsi-app`. Formatting commits are listed in `.git-blame-ignore-revs`; an open branch takes one with `scripts/fmt-merge.sh`. |
+| `cargo fmt --all -- --check` | fails: about 8000 diff hunks; the baseline was never formatted | Format crate by crate (macro-refactor plan, track 1), never in one commit: one would break every open branch. Each formatted crate joins the blocking `rustfmt (formatted crates)` step. Formatted so far: `omsi-cfg`, `omsi-o3d`, `omsi-model`, `omsi-map`, `omsi-vehicle`, `omsi-scenery`, `omsi-texture`, `omsi-timetable`, `omsi-content`, `omsi-script` (all the format crates), `omsi-audio`, `omsi-ui`, `omsi-geometry`, `tools/omsi-check`, `omsi-render`, `omsi-sim`, `omsi-render-vanilla`, `omsi-launcher-core`, `omsi-launcher-ui` and `omsi-app`. Formatting commits are listed in `.git-blame-ignore-revs`; an open branch takes one with `scripts/fmt-merge.sh`. |
 | `cargo clippy --workspace --all-targets` | passes with about 550 warnings | The most frequent: `chunks_exact` with constant size, very complex types, `is_multiple_of`, needless borrows/clones, too many arguments. Fix per crate, then use `-D warnings`. The ten format crates (`omsi-cfg` to `omsi-script`) have none since T1.3 of the macro-refactor plan. |
 | `cargo audit` | 2 warnings (unmaintained, no known vulnerability): `paste` (RUSTSEC-2024-0436), `ttf-parser` (RUSTSEC-2026-0192) | Find the dependency that pulls them in and replace or accept the risk in writing. |
 | `cargo deny check` | advisories: same two crates; licenses: `webpki-roots` is CDLA-Permissive-2.0 (allowed in `deny.toml` pending maintainer confirmation) | Confirm the CDLA decision. Sources and bans pass. |
@@ -134,7 +134,7 @@ that writes the file then sets the notice). Check on each renderer (Vulkan/DX12,
 
 1. Start a drive and press the screenshot key (or the Esc menu's Screenshot).
 2. Open the new file in `Screenshots/`: the top-left corner must show the scene only.
-3. With the information bar, minimap/navigator and Alt bar (and a window) open, the picture must hold the scene alone, none of the interface. (Vulkan/DX12 only: DirectX9 does not save the picture yet, see `crates/omsi-render-d3d9/README.md`.)
+3. With the information bar, minimap/navigator and Alt bar (and a window) open, the picture must hold the scene alone, none of the interface. (Vulkan/DX12 only: DirectX9 does not save the picture yet, see `crates/omsi-render-vanilla/README.md`.)
 4. Take two screenshots within 4 seconds: the second file must not show the first notice.
 5. The notice appears on screen in the frames after the capture, and also when the file
    could not be written ("Screenshot could not be saved: ...").

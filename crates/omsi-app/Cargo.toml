@@ -88,7 +88,7 @@ windows = { workspace = true, features = ["Win32_Devices_HumanInterfaceDevice", 
 openxr = { version = "0.22", default-features = false, features = ["static"] }
 wgpu-hal = { workspace = true, features = ["dx12"] }
 # the "DirectX9 (D3D9Ex)" render option (see `d3d9_output`)
-omsi-render-d3d9 = { path = "../omsi-render-d3d9" }
+omsi-render-vanilla = { path = "../omsi-render-vanilla" }
 
 # macOS: the axes of wheels and pedals straight from their HID elements (see `mac_hid`), and
 # Xbox-type controllers through the GameController framework (see `mac_game_controller`):

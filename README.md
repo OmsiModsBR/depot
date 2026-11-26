@@ -173,7 +173,7 @@ shown identical to OMSI 2 in a recorded comparison in the game; the deliberate i
 * **What it is for.** Compatibility and performance on older hardware, drawing the picture as close as possible
   to OMSI 2 within the graphics options OMSI 2 itself has: no extras. Settings → Graphics API → "DirectX9
   (D3D9Ex)"; "Automatic" never picks it, and VR is not available under it.
-* **How it was built.** A separate crate, `omsi-render-d3d9`, with a GPU-less test backend, Direct3D 9Ex device
+* **How it was built.** A separate crate, `omsi-render-vanilla`, with a GPU-less test backend, Direct3D 9Ex device
   bring-up with loss handling and Shader Model 3.0 shaders compiled at run time; the game's renderer keeps its
   own books and the DirectX 9 device draws and presents the window.
 * **What it draws:** meshes and textures (RGBA with mip chains, DXT1/3/5), vanilla shading with fog and the alpha
@@ -498,7 +498,7 @@ depot/
 │   ├── omsi-o3d/ omsi-model/ omsi-texture/ omsi-geometry/   meshes, models, textures, splines
 │   ├── omsi-map/ omsi-scenery/ omsi-timetable/ omsi-vehicle/ omsi-content/   content formats
 │   ├── omsi-sim/        vehicles, AI traffic, people, physics
-│   ├── omsi-render/ omsi-render-d3d9/   the wgpu renderer; the DirectX 9 (D3D9Ex) renderer
+│   ├── omsi-render/ omsi-render-vanilla/   the wgpu renderer; the DirectX 9 (D3D9Ex) renderer
 │   ├── omsi-audio/ omsi-ui/   sound, UI toolkit
 ├── tools/             developer tools: omsi-check (format coverage)
 ├── scripts/           the Windows build script, version.sh, packaging files

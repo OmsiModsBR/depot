@@ -1,4 +1,4 @@
-# omsi-render-d3d9
+# omsi-render-vanilla
 
 A **separate legacy Direct3D 9 renderer**, built step by step. It is meant to render with
 the feature set of OMSI 2 itself (not a reduced profile of the wgpu renderer).
@@ -262,7 +262,7 @@ workspace version, with the Direct3D 9, Direct3D (blob), GDI and library-loader 
 
 ## Testing
 
-`cargo test -p omsi-render-d3d9` runs on every platform. On Windows it also
+`cargo test -p omsi-render-vanilla` runs on every platform. On Windows it also
 
 * compiles every shader for `vs_3_0`/`ps_3_0` (CPU only, so it runs on CI without a GPU), and
 * runs device tests that draw small scenes off-screen and check the pixels: clear, texture

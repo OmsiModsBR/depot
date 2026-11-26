@@ -17,7 +17,7 @@ members = [
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
-    "crates/omsi-render-d3d9",
+    "crates/omsi-render-vanilla",
     "crates/omsi-html",
     "crates/omsi-trolley",
     "crates/omsi-sim",

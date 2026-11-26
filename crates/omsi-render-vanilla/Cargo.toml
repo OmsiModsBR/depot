@@ -1,5 +1,5 @@
 [package]
-name = "omsi-render-d3d9"
+name = "omsi-render-vanilla"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
