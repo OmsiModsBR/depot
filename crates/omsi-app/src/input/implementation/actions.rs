@@ -7,7 +7,7 @@ use crate::gameplay::player::Player;
 use crate::gameplay::spawn::spawn_player;
 use crate::input::{part_in_reach, PlaceAt};
 use crate::output::ORBIT_DEFAULT;
-use crate::services::{at_petrol_station, run_services};
+use crate::core::services::{at_petrol_station, run_services};
 use crate::situation::build_situation;
 use omsi_geometry::util::wrap_deg;
 use std::path::{Path, PathBuf};

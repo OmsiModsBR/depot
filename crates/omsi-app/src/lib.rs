@@ -34,7 +34,6 @@ mod offscreen;
 mod route_arrows;
 use crate::core::{admin, lan};
 
-mod services;
 mod situation;
 mod tutorial;
 

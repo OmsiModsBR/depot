@@ -147,7 +147,7 @@ impl App {
     /// Whether the bus driven stands where the pump and the wash work.
     pub(crate) fn at_service_station(&self) -> bool {
         match (self.world.as_ref(), self.player.as_ref()) {
-            (Some(w), Some(p)) => crate::services::on_petrol_station(w, &p.vehicle),
+            (Some(w), Some(p)) => crate::core::services::on_petrol_station(w, &p.vehicle),
             _ => false,
         }
     }
