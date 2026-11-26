@@ -200,7 +200,7 @@ pub(crate) fn place_on_duty(args: &mut Args) {
             // (Not for a joining player: the clock is the host's.)
             let leave = stop.arr.max(trip.departure) - way / 7.0 - 600.0;
             if args.lan_join.is_none()
-                && !crate::real_time::started_synced()
+                && !crate::core::real_time::started_synced()
                 && !args.keep_time
                 && leave - now > 15.0 * 60.0
             {

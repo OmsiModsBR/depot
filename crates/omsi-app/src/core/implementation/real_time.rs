@@ -1,25 +1,13 @@
-//! Real-time sync: the game's date and time follow this device's clock (the "Sync with real
-//! time" setting, `time_sync`; a dedicated server's `real_time` in server.cfg).
-//!
-//! In a LAN session the host's clock is the one that counts: a host or server with the sync
-//! on runs at real time, and the clients follow it as they always did.
+//! Real-time sync, the device's clock: reading it, setting a clock to it, and the start on
+//! the real time.
 
+use super::super::domain::real_time::Now;
 use omsi_sim::SimClock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The game was started on the real time (a duty must not move the clock then).
 static START_SYNCED: AtomicBool = AtomicBool::new(false);
-
-/// This device's local calendar date and time of day.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Now {
-    pub year: i32,
-    pub month: i32,
-    pub day: i32,
-    /// Seconds since local midnight.
-    pub secs: f64,
-}
 
 pub(crate) fn now() -> Option<Now> {
     local(SystemTime::now().duration_since(UNIX_EPOCH).ok()?)
@@ -66,12 +54,6 @@ fn local(_d: Duration) -> Option<Now> {
     None
 }
 
-/// The days from year 1 to the given day (a running number to subtract dates with).
-fn day_number(year: i32, day_of_year: i32) -> i64 {
-    let y = year as i64 - 1;
-    365 * y + y / 4 - y / 100 + y / 400 + day_of_year as i64
-}
-
 /// The real date and time as a clock (the other fields of `base` stay).
 pub(crate) fn clock_now(base: &SimClock) -> Option<SimClock> {
     let n = now()?;
@@ -79,13 +61,6 @@ pub(crate) fn clock_now(base: &SimClock) -> Option<SimClock> {
     c.set_date(n.year, n.month, n.day);
     c.time = n.secs.clamp(0.0, 86399.999);
     Some(c)
-}
-
-/// Seconds `real` is ahead of `mine` (negative: behind), across midnight too.
-pub(crate) fn gap(mine: &SimClock, real: &SimClock) -> f64 {
-    (day_number(real.year, real.day_of_year) - day_number(mine.year, mine.day_of_year)) as f64
-        * 86400.0
-        + (real.time - mine.time)
 }
 
 /// Make the arguments start the game at this device's date and time.
