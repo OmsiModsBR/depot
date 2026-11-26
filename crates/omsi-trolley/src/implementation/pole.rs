@@ -320,6 +320,7 @@ impl PoleSim {
             error,
             joints,
             wire_ended,
+            gap_dir,
         } = {
             let (forks, events, demand) = (&mut self.forks, &mut self.events, self.demand);
             let toward = self.auto.then(|| body.position + body.rotation * geo.base);
@@ -372,7 +373,11 @@ impl PoleSim {
         state.reach_error = error;
         let up = body.rotation * DVec3::Z;
         let end = point + up * decl.params.shoe_height_offset;
-        let wire_dir = walk::tangent(net, &cursor).unwrap_or(DVec3::Y);
+        // (in a switch's gap, the wire it draws there: the shoe turns with it as it goes
+        // across, not all at once past it)
+        let wire_dir = gap_dir
+            .or_else(|| walk::tangent(net, &cursor))
+            .unwrap_or(DVec3::Y);
         let (mut o, mut contact) = on_wire(decl, i, body, end, wire_dir);
         contact.wire_ended = wire_ended;
         o.in_special = net.special_near(point, wire_dir, SPECIAL_ZONE, SPECIAL_LANE);

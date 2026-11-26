@@ -70,13 +70,14 @@ pub(crate) fn gap_path(a: DVec3, ta: DVec3, b: DVec3, tb: DVec3) -> Vec<DVec3> {
     out
 }
 
-/// The first point of `path` (from its start) at `len` from `foot`.
-pub(crate) fn first_crossing(path: &[DVec3], foot: DVec3, len: f64) -> Option<DVec3> {
+/// The first point of `path` (from its start) at `len` from `foot`, with the direction of
+/// the path there (unit).
+pub(crate) fn first_crossing(path: &[DVec3], foot: DVec3, len: f64) -> Option<(DVec3, DVec3)> {
     path.windows(2).find_map(|w| {
         sphere_crossings(w[0], w[1], foot, len)
             .into_iter()
             .reduce(f64::min)
-            .map(|u| w[0].lerp(w[1], u))
+            .map(|u| (w[0].lerp(w[1], u), (w[1] - w[0]).normalize_or_zero()))
     })
 }
 
@@ -137,6 +138,9 @@ pub(crate) struct Reached {
     pub joints: Vec<Passed>,
     /// The wire ended before the pole reached it.
     pub wire_ended: bool,
+    /// The shoe is in a gap (see `reach`): the direction of the wire drawn across it there,
+    /// which the cursor's wire (the one the shoe came from) does not have.
+    pub gap_dir: Option<DVec3>,
 }
 
 pub(crate) fn point(net: &WireNetwork, c: &WireCursor) -> Option<DVec3> {
@@ -195,6 +199,7 @@ pub(crate) fn reach(
             error: 0.0,
             joints,
             wire_ended: false,
+            gap_dir: None,
         });
     }
     let t = tangent(net, &c)?;
@@ -240,6 +245,7 @@ pub(crate) fn reach(
                 error: 0.0,
                 joints,
                 wire_ended: false,
+                gap_dir: None,
             });
         }
         if start_error > 0.0 {
@@ -301,6 +307,7 @@ pub(crate) fn reach(
                 error: err.max(0.0),
                 joints,
                 wire_ended: true,
+                gap_dir: None,
             });
         }
         let pick = if ways.len() == 1 {
@@ -314,7 +321,7 @@ pub(crate) fn reach(
         // is past the gap: put on the joined wire, the next step would walk back across the
         // gap from there (and, at a switch's entry, choose a way again).
         let in_gap = first_crossing(&gap_path(q, travel, w.start, w.heading), foot, len);
-        if let Some(at) = in_gap {
+        if let Some((at, along)) = in_gap {
             return Some(Reached {
                 cursor: WireCursor {
                     t: f64::from(end as u8),
@@ -324,6 +331,7 @@ pub(crate) fn reach(
                 error: 0.0,
                 joints,
                 wire_ended: false,
+                gap_dir: Some(along),
             });
         }
         let merge_left = if ways.len() == 1 && w.via.is_some_and(WireObjectKind::is_switch) {
@@ -350,6 +358,7 @@ pub(crate) fn reach(
                 error: 0.0,
                 joints,
                 wire_ended: false,
+                gap_dir: None,
             });
         }
     }
@@ -360,6 +369,7 @@ pub(crate) fn reach(
         error: err.max(0.0),
         joints,
         wire_ended: false,
+        gap_dir: None,
     })
 }
 

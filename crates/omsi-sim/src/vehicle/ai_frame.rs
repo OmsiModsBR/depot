@@ -181,6 +181,11 @@ impl VehicleInstance {
         for &(id, v) in inputs.iter().chain(pinned) {
             self.put(Some(id), v);
         }
+        // the coupled parts follow all the same (other cars keep clear of them), and a
+        // trolleybus's poles follow the wire from where its parts stand, before the scripts
+        // and the animations read them
+        self.place_trailers(dt);
+        self.step_trolley(dt);
         let p = self.ty.program.clone();
         if p.frame_ai.is_empty() {
             self.vm.run_frame(&p, &mut self.state, &mut self.host);
@@ -193,14 +198,10 @@ impl VehicleInstance {
         }
         if self.ai_visuals {
             let dt = dt + std::mem::take(&mut self.ai_visuals_missed);
-            self.update_visuals(dt);
+            self.show_placed(dt);
         } else {
-            // the coupled parts follow all the same (other cars keep clear of them)
-            self.update_trailers(dt);
             self.ai_visuals_missed = (self.ai_visuals_missed + dt).min(10.0);
         }
-        // a trolleybus's poles, once its parts stand where they are drawn
-        self.step_trolley(dt);
     }
 
     /// The Classic AI driver's pedals (`KA-2`): `Throttle` and `Brake` for the scripts.

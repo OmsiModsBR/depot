@@ -19,12 +19,28 @@ use std::sync::Arc;
 
 impl VehicleInstance {
     /// Coupled vehicles follow and animate from this vehicle's variables.
+    #[cfg(feature = "test-support")]
     pub(crate) fn update_trailers(&mut self, dt: f32) {
+        self.place_trailers(dt);
+        self.animate_trailers(dt);
+    }
+
+    /// Coupled vehicles follow this vehicle (and write their joints' and wheels' variables).
+    pub(crate) fn place_trailers(&mut self, dt: f32) {
         let mut trailers = std::mem::take(&mut self.trailers);
         let mut lead: Option<(DVec3, Mat4, f64)> = None;
         for t in &mut trailers {
-            t.update(self, dt, lead);
+            t.place(self, dt, lead);
             lead = Some((t.position, t.body_rotation(), t.heading));
+        }
+        self.trailers = trailers;
+    }
+
+    /// Coupled vehicles animate from this vehicle's variables, where they stand.
+    pub(crate) fn animate_trailers(&mut self, dt: f32) {
+        let mut trailers = std::mem::take(&mut self.trailers);
+        for t in &mut trailers {
+            t.animate(self, dt);
         }
         self.trailers = trailers;
     }

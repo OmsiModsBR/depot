@@ -195,6 +195,52 @@ fn every_switch_takes_its_left_way_with_demand_and_its_right_way_without() {
     assert_eq!(coasting, [3, 3]);
 }
 
+/// Across a switch's gap the shoe turns with the wire the switch draws there, a little at a
+/// time, as it does on any wire: not held along the wire it came from and turned all at once
+/// when it is past the gap (into a 20 degree branch, by 20 degrees in one frame).
+#[test]
+fn across_a_switch_the_shoe_turns_with_the_wire_it_draws() {
+    let n = right_branch_switch();
+    let d = decl();
+    let mut sim = PoleSim::default();
+    let at = body(0.0, 20.0, 0.0);
+    let press = PoleInputs {
+        grab: [true, true],
+        ..Default::default()
+    };
+    sim.step(&d, &n, &at, press, 1.0 / 60.0);
+    for _ in 0..100 {
+        sim.step(&d, &n, &at, PoleInputs::default(), 1.0 / 60.0);
+    }
+    let mut before: Option<[f64; 2]> = None;
+    let mut worst = [0.0f64; 2];
+    let mut y = 20.0;
+    while y < 62.0 {
+        y += 0.1;
+        let o = sim.step(
+            &d,
+            &n,
+            &body(0.0, y, 0.0),
+            PoleInputs::default(),
+            1.0 / 60.0,
+        );
+        assert!(o.wire_present, "on the wire at y = {y:.1}");
+        let now = o.poles.map(|p| p.shoe_rot);
+        if let Some(b) = before {
+            for i in 0..2 {
+                worst[i] = worst[i].max((now[i] - b[i]).abs());
+            }
+        }
+        before = Some(now);
+    }
+    let on = [0, 1].map(|i| n.span(sim.poles[i].cursor.unwrap().span).unwrap().spline_id);
+    assert_eq!(on, [3, 3], "into the branch");
+    assert!(
+        worst.iter().all(|w| *w < 3.0),
+        "the shoes turned by {worst:?} degrees in a 10 cm step"
+    );
+}
+
 #[test]
 fn faster_than_the_limit_through_a_switch_the_poles_leave_the_wire() {
     let n = right_branch_switch();

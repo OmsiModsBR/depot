@@ -12,7 +12,13 @@ impl VehicleInstance {
     pub(crate) fn update_visuals(&mut self, dt: f32) {
         // coupled vehicles come first, because they write the joint's angles this vehicle's
         // plates and bellows turn with (a frame late, the joint lagged behind the rear section)
-        self.update_trailers(dt);
+        self.place_trailers(dt);
+        self.show_placed(dt);
+    }
+
+    /// `update_visuals` for a vehicle whose coupled parts were placed this frame already.
+    pub(crate) fn show_placed(&mut self, dt: f32) {
+        self.animate_trailers(dt);
         self.animate_meshes(dt);
         self.log_animation_debug();
         self.props_plan.refresh(&self.ty, &self.var_index);
