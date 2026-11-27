@@ -8,7 +8,8 @@
 
 **Input**: User description (maintainer, 2026-11-27): "Include Cumulus 3 and the other cloud types
 in the scope, so that every cloud casts a shadow on the scenery, its strength varying with the
-cloud's height and opacity." It follows the maintainer's report that in Enhanced, under a cloudy
+cloud's height and opacity." Added the same day: "Also include in the scope the moonlight being
+blocked by the clouds." It follows the maintainer's report that in Enhanced, under a cloudy
 sky, the game looked very bright and showed no shadows on the scenery, and the maintainer's choice
 of a per-point cloud shadow over the other options.
 
@@ -31,10 +32,14 @@ What Depot does today in the Enhanced graphics mode (code at `main` 5feb348):
   weather file is read, but the clouds are drawn and lit in a fixed layer.
 - The exposure follows half of the light lost in a cloud's shade, so under a cloud the shadowless
   picture comes out flat and bright.
+- **Moonlight ignores the cumulus.** On a clear night with the moon up, Enhanced lights the scene
+  with moonlight and draws moon shadows. The clouds only dim the moonlight evenly, by the overall
+  grey of the sky; a cumulus passing in front of the moon neither dims the moonlight nor takes the
+  moon shadows away, anywhere in the scene.
 
 This feature makes every cloud of the sky cast its own shadow on the scenery, where it stands
 between that point and the sun, with a strength that follows the cloud's opacity and an edge that
-follows its height. It is a Depot feature of the Enhanced mode. It is not an OMSI 2 behaviour and
+follows its height. The clouds block the moonlight by the same rule at night. It is a Depot feature of the Enhanced mode. It is not an OMSI 2 behaviour and
 the specification makes no claim about OMSI 2 (constitution, principle II).
 
 ### Cloud kinds in scope
@@ -47,6 +52,7 @@ the specification makes no claim about OMSI 2 (constitution, principle II).
 | Grey deck of the physical weather model | weather model deck | an even shade as dark as the deck is closed; patches where it is broken |
 | High veil (cirrus) of the physical weather model | weather model veil | a faint, even dimming of the sun and softer sun shadows; no patches |
 | Rain or snow falling from a closed deck | weather precipitation | the deck's shade, as for `Overcast` |
+| Any of the above at night with the moon up | same sources | the same shade, cast on the moonlight instead of the sunlight |
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -154,9 +160,40 @@ foreground with a sunlit area in the same frame and with the same foreground in 
    **Then** the shaded foreground stays darker than it looked in the sun (the eye does not fully
    make up for the cloud), as today's half-way adaptation intends.
 
+### User Story 5 - Clouds block the moonlight (Priority: P2)
+
+On a night with the moon up and a cumulus sky, parts of a dark country road lie in moonlight with
+faint moon shadows of trees and poles, and parts lie in the shade of a cloud, darker and without
+moon shadows. When a cloud passes in front of the moon seen from the camera, the moonlit places
+further away stay moonlit. Under an `Overcast` sky or a closed deck, no moonlight reaches the ground
+and there are no moon shadows.
+
+**Why this priority**: the maintainer asked for it; it reuses the cloud shade of User Stories 1 to 3
+with the moon in place of the sun, and only shows on moonlit nights away from street lamps.
+
+**Independent Test**: on a moonlit night (moon well above the horizon, more than half lit) with a
+`Cumulus 3` sky, on a road without street lamps, take views with a cloud in front of the moon and
+with the moon clear; the moonlit and cloud-shaded patches and the moon shadows behave as in User
+Story 1, and an `Overcast` sky leaves no moonlight on the ground.
+
+**Acceptance Scenarios**:
+
+1. **Given** a moonlit night with a `Cumulus 3` sky, **When** a view is taken, **Then** the ground
+   shows moonlit patches with moon shadows and cloud-shaded patches without them.
+2. **Given** a cloud in front of the moon as seen from the camera, **When** the view is taken,
+   **Then** the places beyond that cloud's shade on the ground stay moonlit.
+3. **Given** an `Overcast` sky or a closed deck at night, **When** any view is taken, **Then** no
+   direct moonlight reaches the ground and no moon shadows show.
+4. **Given** the clouds seen in the night sky, **When** the player looks from a cloud-shaded patch
+   towards the moon, **Then** a cloud stands in front of the moon.
+
 ### Edge Cases
 
-- Sun at or below the horizon: no cloud shadows (there is no sunlight to block); night unchanged.
+- Sun at or below the horizon: no sun cloud shadows (there is no sunlight to block); with the moon
+  up, the clouds block the moonlight instead (User Story 5).
+- Sun and moon both up (a day moon, or dusk): the sun's cloud shade applies; the moon's light is too
+  weak beside the sun to matter and needs no shade of its own.
+- New moon, or a moon too low or too dim to light the scene: no moonlight and no moon cloud shade.
 - Camera above the cloud base (a mountain map, a free camera flown high): clouds below the camera
   still shade the ground under them; the camera inside a cloud sees the ground in its shade.
 - Clouds switched off in the settings: no cloud shadows and no change from the clear-sky picture.
@@ -210,14 +247,21 @@ foreground with a sunlit area in the same frame and with the same foreground in 
   with today's behaviour and write the reason to the log once.
 - **FR-015**: The feature MUST NOT alter how a vehicle or object model looks beyond the light it
   receives: no rule based on a model's geometry, materials or position decides whether it is
-  shaded (the cloud between the point and the sun is the only rule).
+  shaded (the cloud between the point and the sun, or the moon, is the only rule).
+- **FR-016**: At night, the direct moonlight that reaches each visible point MUST be reduced by the
+  clouds between that point and the moon by the same rules as the sunlight (FR-001 to FR-008): per
+  point, strength from opacity, soft edge from height, sky light kept, patches matching the clouds
+  in the sky, moon shadows of objects only where moonlight reaches.
+- **FR-017**: The even dimming of the moonlight by the sky's overall cloud cover MUST be replaced by
+  FR-016, so that the moonlight is not dimmed twice by the same clouds.
 
 ### Key Entities
 
 - **Cloud layer**: the clouds of the current weather: their kind, cover, height, thickness and
   opacity, and their drift with the wind. It is the same for the sky picture and for the shade.
-- **Cloud shade**: for a ground or object point, the share of direct sunlight that the cloud layer
-  lets through towards the sun; 1 under a clear sky, 0 under a thick cloud.
+- **Cloud shade**: for a ground or object point, the share of direct sunlight (or, at night, direct
+  moonlight) that the cloud layer lets through towards the sun (or the moon); 1 under a clear sky, 0
+  under a thick cloud.
 - **Weather cloud kinds**: `Cumulus 1..3`, `Overcast` (weather file or METAR) and the cumulus, deck
   and veil of the physical weather model.
 
@@ -244,6 +288,9 @@ foreground with a sunlit area in the same frame and with the same foreground in 
   (or within the existing test tolerance) before and after.
 - **SC-008**: No visible jump in the shade patches over 5 minutes of play with a steady wind, and
   none while one weather blends into another.
+- **SC-009**: On a moonlit night with a `Cumulus 3` sky away from street lamps, every view with
+  moonlit ground shows moon shadows there, including views with a cloud in front of the moon from
+  the camera; under `Overcast`, no view shows moon shadows.
 
 ## Assumptions
 
@@ -261,5 +308,8 @@ foreground with a sunlit area in the same frame and with the same foreground in 
 - Performance is the main risk; the external practice the maintainer asked to check (a cloud shade
   computed once, seen from the sun, and read for every point) keeps the per-point cost to one read.
   The plan carries the measurements.
-- Out of scope: cloud shadows at night from the moon, cloud shadows in Vanilla+ or DX9, a new
+- Moonlight cloud shade follows the existing moonlight and moon shadow conditions of Enhanced (moon
+  up, sun down, moon bright enough); this feature does not change when moonlight or moon shadows
+  appear, only where the clouds block them.
+- Out of scope: cloud shadows in Vanilla+ or DX9 (including Vanilla+'s moonlight), a new
   setting to turn cloud shadows off on their own (unless SC-005 requires one), and rain shafts.
