@@ -41,7 +41,7 @@ in `crates/omsi-app/tests/`.
 **Purpose**: baselines that every later measurement compares against (principle VII).
 
 - [ ] T001 [ph 1] Record the "before" frame time on lavapipe: a `cloud_shade_bench` test-binary mode in `crates/omsi-render/tests/cloud_shade.rs` (Enhanced, 1280x720, the render-modes survey scene, `Cumulus 3`, median of 50 frames), run on `main`, number written to the P1 PR body
-- [ ] T002 [P] [ph 1] Ask the maintainer for the "before" in-game frame time (quickstart Q6: Desafio, MAN A23, `Cumulus 3`, 60 s, fps counter) on the build of `main` the P1 branch starts from
+- [x] T002 [P] [ph 1] Ask the maintainer for the "before" in-game frame time (quickstart Q6: Desafio, MAN A23, `Cumulus 3`, 60 s, fps counter) on the build of `main` the P1 branch starts from — **done 2026-11-27**: Desafio, NEOMAN Overhaul V3 cab view, 12:00, `Cumulus 3`, frame cap off: about 242 fps (4.13 ms), 1 % low 178 fps once settled (60 s); after the P1 change the average must stay at or above about 237 fps (+2 %)
 
 ---
 
