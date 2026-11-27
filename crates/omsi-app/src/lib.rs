@@ -25,7 +25,6 @@ mod showroom;
 mod core;
 mod input;
 mod offscreen;
-mod route_arrows;
 use crate::core::{admin, lan};
 
 mod situation;
