@@ -127,7 +127,7 @@ uses.
 | P4 | `feat/enhanced-cloud-shade-moon` | map for the moon at night, moon even dimming by `closed` | US5, FR-016, FR-017, SC-009 | moon case of `cloud_shade` |
 | P5 | `docs/spec-005-results` | in-game quickstart results, measurements table in this plan | SC-001..010 | maintainer's in-game checks |
 
-P2 can be built before P1 if the maintainer prefers to see the height first; P3 depends on P1 (without
+P2 depends on P1 (its edge width works on the map); P3 depends on P1 (without
 the map, removing the even dimming would leave cumulus skies with no darkening at all).
 
 ## Risks

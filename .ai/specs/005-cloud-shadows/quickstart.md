@@ -39,3 +39,8 @@ Expected:
 7. **Q6 (SC-005)**: with the in-game fps counter, 60 s on the same route before and after the PR;
    average frame time grows by at most 2 %.
 8. **Q7 (FR-013)**: Vanilla+ and Vanilla (DX9) look as before in the same weather.
+9. **Q8 (SC-008)**: 5 minutes with a steady wind, then switch the weather from `Cumulus 1` to
+   `Cumulus 3` in the menu: the shade patches drift smoothly and blend into the new cover, with no
+   jump or flash.
+10. **Q9 (FR-005, Q2)**: a `Cumulus 2` weather at 300 m on a hilly map: from a hilltop above the
+    base the clouds are drawn below and around the camera, and their shade lies under them.

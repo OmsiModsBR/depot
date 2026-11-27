@@ -7,7 +7,7 @@
 | Field | Source | Rule |
 | --- | --- | --- |
 | `cover` | `Lighting::cloud_density` (weather type: Cumulus 1/2/3 = 0.35/0.55/0.75, Overcast = 1; or the weather model) | 0..1 |
-| `base` (m above map ground) | `Lighting::cloud_height` (`[clouds]` height, METAR base in metres) | no floor; absent/zero/negative/non-finite -> 1400 |
+| `base` (m above the map's height zero) | `Lighting::cloud_height` (`[clouds]` height, METAR base in metres) | no floor; absent/zero/negative/non-finite -> 1400 |
 | `top` (m) | `base + 1400` | |
 | `drift` (m) | `Lighting::cloud_offset * 2500` | moves the map lookup between draws |
 | `closed` | `smoothstep(0.85, 1.0, cover)`, or the model deck's closed share | greys the sky and dims the light evenly (R-7) |

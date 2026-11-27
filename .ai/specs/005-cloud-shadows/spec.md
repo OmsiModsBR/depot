@@ -244,7 +244,9 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - **FR-004**: A shaded point MUST keep the light of the sky (and of the deck, under an overcast
   sky); a cloud only takes away direct sunlight.
 - **FR-005**: The shade patches on the ground MUST match the clouds drawn in the sky: same
-  positions, same drift with the wind, same cover for each cloud kind.
+  positions, same drift with the wind, same cover for each cloud kind. Clouds MUST be drawn
+  wherever they cast shade, also when they stand below or around the camera (a camera above a low
+  base, or inside the layer).
 - **FR-006**: The clouds MUST stand at the height the weather gives (`[clouds]` height, or the
   METAR layer base), both where they are drawn in the sky and where they cast shade, with no lower
   limit: a base of a few hundred metres or less is used as given; a missing or unusable height
@@ -256,7 +258,8 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   direct sun reaches, with their strength scaled by the sun that gets through the clouds there.
 - **FR-009**: The `Overcast` type and a closed deck MUST stop switching sun shadows off as a special
   case; they shade the scene through FR-001 to FR-004 like every other cloud, which removes direct
-  sun everywhere they are opaque.
+  sun everywhere they are opaque. Direct sun (and moon) light MUST be removed only by the per-point
+  shade, never also by an even dimming, so that no cloud cuts it twice.
 - **FR-010**: The exposure MUST keep adapting to the light where the camera is, but MUST make up
   for only a quarter of the light a cloud's shade over the camera takes away (in log terms; today
   half), while points elsewhere in view receive their own sunlight. The same share applies to the
@@ -282,8 +285,11 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   weather model MUST NOT grey the whole sky or dim the sunlight evenly over the scene: the sky
   between the clouds keeps its clear colour and the sun its clear strength, and the clouds darken
   the scene only through their own shade (FR-001 to FR-004) and their own picture in the sky. Only
-  `Overcast`, a closed deck and a sky that rain or snow falls from grey the sky and remove direct
-  sun evenly. Vanilla+ and DX9 keep their current cumulus lighting (FR-013).
+  `Overcast`, a closed deck and a sky that rain or snow falls from grey the sky and its light (the
+  sky's colour and the light it gives; direct sun is left to FR-009), and only they raise the
+  picture's gloom (the share of night look - lit windows, night maps - a dark weather brings by
+  day); the `Cumulus` types raise none. Vanilla+ and DX9 keep their current cumulus lighting
+  (FR-013).
 
 ### Key Entities
 
@@ -333,8 +339,11 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   repository will describe it as OMSI 2 behaviour.
 - "Opacity" is the cloud's optical thickness along the sun's path: thicker clouds, the denser parts
   of a heap and a closed deck block more; thin edges and a high veil block less.
-- "Height" is the cloud base the weather gives, above the map's ground level (for a METAR, above
-  the station); the layer's thickness keeps today's proportions.
+- "Height" is the cloud base the weather gives, measured from the map's height zero (the vertical
+  origin of the map's coordinates); a METAR base (given above the station) is taken as above that
+  zero. On a map whose terrain lies far above or below zero the clouds are as much lower or
+  higher above the ground; this is accepted (the weather does not know the map's terrain). The
+  layer's thickness keeps today's proportions.
 - The cover of each `Cumulus` number and of `Overcast` stays as Depot sets it today; this feature
   makes that cover cast shade and, for the `Cumulus` types only, removes the even greying of the
   sky and dimming of the sun (FR-018).

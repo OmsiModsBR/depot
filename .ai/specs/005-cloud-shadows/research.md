@@ -37,8 +37,8 @@ does (`sun_shadow_cascades`, 3x3 PCF in `modes/enhanced/shaders/enhanced.wgsl`).
 
 ## R-2 Map layout: indexed on the cloud base plane
 
-**Decision**: the map covers a square of the clouds' base plane (height `H` above the map's ground
-level) centred on where the sun ray from the camera meets that plane. A point `p` (world, z up) with
+**Decision**: the map covers a square of the clouds' base plane (height `H` above the map's height
+zero, research R-11) centred on where the sun ray from the camera meets that plane. A point `p` (world, z up) with
 sun direction `s` reads it at `p.xy + s.xy * (H - p.z) / s.z`. Each texel holds the optical depth
 through the whole layer from the base along `s`.
 
@@ -148,14 +148,23 @@ change it.
 **Rationale**: removes the double darkening (even dimming + per-point shade) the maintainer chose
 to drop (Q3), and lets the deck cast through the same rule as every cloud (FR-009).
 
+**Revised by the analysis of 2026-11-27 (finding I1, G1)**: the closed share greys only the sky and
+its light (`sky_color`, `ambient`, `secondary`, `fog_color`, the sky shader's grey dome); it no
+longer dims `sun_intensity`, and `enhanced_sky_input` no longer multiplies the reaching sun by
+`1 - closed`: under a closed cover the map's optical depth removes the direct sun by itself
+(FR-009), so it is cut once. The weather model's `sun_intensity = 1 - closed` goes for Hdr. The
+picture's gloom (`l.night = max(night, 0.45 * gloom)` in `apply_weather`) takes its cloud part from
+the closed share too, so `Cumulus 1..3` no longer bring the night look by day in Enhanced (rain
+keeps its part).
+
 ## R-8 Moonlight (FR-016, FR-017)
 
 **Decision**: a second map for the moon, drawn by the same passes with the moon's direction,
 only while `Lighting::casts_moon_shadows()` would hold the moon as a light (moon up, sun down,
 bright enough); the sun's map is not drawn then, so at most one map is drawn and both share one
 texture (the map stores whichever body lights the scene; the uniform says which). The even dimming
-`moon_disc * (1 - 0.9 * oc)` in `sky/atmosphere.rs` becomes `moon_disc` times the deck's closed
-share only (`1 - closed`), as for the sun in R-7, and the per-point map does the rest.
+`moon_disc * (1 - 0.9 * oc)` in `sky/atmosphere.rs` becomes plain `moon_disc`: the per-point map
+removes the moonlight under clouds, a closed deck included (R-7 revision).
 
 **Rationale**: sun and moon never both matter (spec edge case "sun and moon both up"), so one
 texture serves both and the texture budget grows by one, not two.
@@ -195,6 +204,13 @@ the Enhanced uniform: base = the weather's height (`Lighting::cloud_height`, alr
 height that is absent, zero, negative or not finite uses 1400 m (today's base) silently. The CPU
 `cloud_sun_transmittance` (still used for the exposure, R-12) takes the same base and top. A height
 change redraws the sky cube and the map.
+
+The height is measured from the map's height zero (finding A1): stable while the camera climbs a
+hill, and the only reference a weather file or a METAR can give. The sky shader today draws no
+cloud when the camera is above `CLOUD_BOTTOM` (`cloud_layer` returns early); with low bases
+allowed (Q2), the camera can stand above or inside the layer on a hilly map, so the march MUST
+start at the camera when it is inside the layer and look down through the base when it is above
+it (finding U1, FR-005).
 
 ## R-12 Exposure (FR-010, Q1)
 
