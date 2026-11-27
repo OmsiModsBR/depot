@@ -13,7 +13,7 @@ use crate::gameplay::schedule::{PlayerDuty, Schedule};
 use crate::gameplay::traffic::Traffic;
 use crate::gameplay::traffic_link::own_outlines;
 use crate::settings::Settings;
-use crate::situation::{start_clock, ticket_key_name};
+use crate::core::situation::{start_clock, ticket_key_name};
 use crate::weather::weather_setup::precip_of;
 use crate::world::scene::World;
 use omsi_render::{Renderer, Scene};

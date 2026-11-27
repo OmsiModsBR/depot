@@ -27,7 +27,6 @@ mod input;
 mod offscreen;
 use crate::core::{admin, lan};
 
-mod situation;
 
 /// The crate's insides for the tests in `tests/` (see `testing`).
 #[cfg(feature = "test-support")]

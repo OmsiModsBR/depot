@@ -8,7 +8,7 @@ use crate::gameplay::spawn::spawn_player;
 use crate::input::{part_in_reach, PlaceAt};
 use crate::output::ORBIT_DEFAULT;
 use crate::core::services::{at_petrol_station, run_services};
-use crate::situation::build_situation;
+use crate::core::situation::build_situation;
 use omsi_geometry::util::wrap_deg;
 use std::path::{Path, PathBuf};
 use winit::event_loop::ActiveEventLoop;
@@ -1638,7 +1638,7 @@ impl App {
     /// What goes beside a saved situation in files of their own: the script textures of its
     /// vehicles and the passengers of the player's bus (#34, #613).
     fn save_situation_extras(&self, osn: &std::path::Path) {
-        crate::situation::save_script_textures(osn, &self.situation_vehicles());
+        crate::core::situation::save_script_textures(osn, &self.situation_vehicles());
         let riders = self
             .session
             .humans
@@ -1646,7 +1646,7 @@ impl App {
             .filter(|_| self.player.is_some())
             .map(|h| h.riders_aboard())
             .unwrap_or_default();
-        let n = crate::situation::save_riders(osn, &riders);
+        let n = crate::core::situation::save_riders(osn, &riders);
         if n > 0 {
             log::info!("situation: {n} passenger(s) saved");
         }

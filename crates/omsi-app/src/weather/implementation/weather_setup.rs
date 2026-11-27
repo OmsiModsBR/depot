@@ -16,7 +16,7 @@ pub(crate) use omsi_launcher_lib::weather::{custom_weather, CustomWeather};
 pub(crate) fn load_weather(args: &Args) -> omsi_content::weather::Weather {
     // no weather chosen, or `natural`: the physical model (weather_model.rs)
     if crate::weather::weather_model::is_natural(args.weather.as_deref()) {
-        let w = crate::weather::weather_model::start(&crate::situation::start_clock(args));
+        let w = crate::weather::weather_model::start(&crate::core::situation::start_clock(args));
         scene::SNOW_WEATHER.store(w.snow, std::sync::atomic::Ordering::Relaxed);
         omsi_sim::host::set_ambient_weather(w.temp.0, w.temp.1);
         return w;
@@ -113,7 +113,7 @@ fn read_weather(
 pub fn weather_snow(args: &Args) -> (bool, bool) {
     let w = if crate::weather::weather_model::is_natural(args.weather.as_deref()) {
         crate::weather::weather_model::WeatherModel::new(
-            &crate::situation::start_clock(args),
+            &crate::core::situation::start_clock(args),
             &omsi_sim::daylight::place(),
         )
         .weather()

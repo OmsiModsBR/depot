@@ -216,7 +216,7 @@ pub struct Args {
     /// The passengers the bus carried when the situation was saved (`situation::load_riders`),
     /// seated again once the people exist.
     #[arg(skip)]
-    pub situation_riders: Vec<crate::situation::SavedRider>,
+    pub situation_riders: Vec<crate::core::situation::SavedRider>,
     /// Saved ordinal in the current timetable trip; absent in older situations.
     #[arg(skip)]
     pub situation_next_stop: Option<usize>,

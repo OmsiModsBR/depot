@@ -4,6 +4,6 @@
 pub(crate) use crate::core::cli::Args;
 pub(crate) use crate::gameplay::player;
 pub(crate) use crate::gameplay::spawn::{load_coupled_parts, paint_scheme, player_bus_path};
-pub(crate) use crate::situation::start_clock;
+pub(crate) use crate::core::situation::start_clock;
 pub(crate) use crate::weather::weather_setup::{load_weather, setup_sky, weather_lighting};
 pub(crate) use crate::world::scene;

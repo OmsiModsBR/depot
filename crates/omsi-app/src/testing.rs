@@ -454,7 +454,8 @@ pub mod showroom {
     }
 }
 pub mod situation {
-    pub use crate::situation::*;
+    pub use crate::core::domain::situation::*;
+    pub use crate::core::implementation::situation::*;
 }
 pub mod spawn {
     pub use crate::gameplay::spawn::load_coupled_parts;
