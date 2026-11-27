@@ -7,3 +7,4 @@ pub(crate) mod info_bar;
 pub(crate) mod legacy;
 pub(crate) mod lists;
 pub(crate) mod nav;
+pub(crate) mod tr_fill;
