@@ -10,7 +10,7 @@ use crate::gameplay::career;
 use crate::gameplay::spawn::spawn_player;
 use crate::hud;
 use crate::hud::nav;
-use crate::menu;
+use crate::hud::start_menu as menu;
 use crate::output::{vanilla_cannot_open, Backend};
 use crate::settings;
 use crate::situation::start_clock;

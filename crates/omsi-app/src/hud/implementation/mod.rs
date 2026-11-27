@@ -3,6 +3,7 @@
 //! objects.
 
 pub(crate) mod describe;
+pub(crate) mod menu;
 pub(crate) mod info_bar;
 pub(crate) mod legacy;
 pub(crate) mod lists;
