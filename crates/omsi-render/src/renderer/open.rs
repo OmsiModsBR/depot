@@ -145,10 +145,13 @@ impl Renderer {
             limits.max_sampled_textures_per_shader_stage >= ENHANCED_SAMPLED_TEXTURES,
             std::sync::atomic::Ordering::Relaxed,
         );
-        CLOUD_SHADE_FITS.store(
-            limits.max_sampled_textures_per_shader_stage >= CLOUD_SHADE_SAMPLED_TEXTURES,
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        let shade_fits =
+            limits.max_sampled_textures_per_shader_stage >= CLOUD_SHADE_SAMPLED_TEXTURES;
+        CLOUD_SHADE_FITS.store(shade_fits, std::sync::atomic::Ordering::Relaxed);
+        if !shade_fits && limits.max_sampled_textures_per_shader_stage >= ENHANCED_SAMPLED_TEXTURES
+        {
+            log::info!("renderer: no texture slot left for the clouds' shade map on {}; the clouds dim the sun over the whole picture", info.name);
+        }
         // the shadow atlas is two maps wide: no wider than the card draws
         let shadow_size = shadow_size
             .min(limits.max_texture_dimension_2d / 2)

@@ -210,3 +210,43 @@ fn the_shade_moves_with_the_clouds_and_stays_put_without_them() {
     let mean: f32 = a.iter().sum::<f32>() / a.len() as f32;
     assert!(diff > 0.0 && diff < 0.5 * mean, "moved by {diff} of {mean}");
 }
+
+#[test]
+fn the_exposure_makes_up_a_quarter_of_a_clouds_shade() {
+    use omsi_render::testing::internals::sky::atmosphere::exposure_for;
+    use omsi_render::testing::internals::sky::CLOUD_SHADE_ADAPT;
+    assert_eq!(CLOUD_SHADE_ADAPT, 0.25);
+    // the sun is 80 % of the light on a clear day; under a heap it is gone but for 5 %
+    let (e_sun, e_rest, through) = (0.8f32, 0.2f32, 0.05f32);
+    let full = exposure_for(e_sun + e_rest).ln();
+    let shaded = exposure_for(e_sun * through + e_rest).ln();
+    let exposure = (full + (shaded - full) * CLOUD_SHADE_ADAPT).exp() / full.exp();
+    // the picture under the heap, against the clear one: the light that is left, as exposed
+    let stops_darker = -((e_sun * through + e_rest) * exposure).log2();
+    assert!(
+        (1.5..1.9).contains(&stops_darker),
+        "{stops_darker:.2} stops darker under the cloud"
+    );
+}
+
+/// The scene shader on a device with no slot for the map is a valid module that does not read it.
+#[test]
+fn the_scene_shader_without_the_map_slot_is_valid_and_leaves_binding_21_out() {
+    use omsi_render::testing::internals::enhanced::scene_shader::without_cloud_shade;
+    use wgpu::naga;
+    let text = omsi_render::testing::internals::scene_own_text(ShadingPath::Hdr);
+    assert!(text.contains("t_cloud_shade"), "the map is read by default");
+    let src = omsi_render::testing::internals::scene_shader_text(true, &without_cloud_shade(text));
+    assert!(!src.contains("t_cloud_shade"));
+    let module = naga::front::wgsl::parse_str(&src).unwrap();
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap();
+    assert!(!module.global_variables.iter().any(|(_, g)| g
+        .binding
+        .as_ref()
+        .is_some_and(|b| b.group == 0 && b.binding == 21)));
+}

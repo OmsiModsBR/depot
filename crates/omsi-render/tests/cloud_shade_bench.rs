@@ -75,7 +75,11 @@ fn enhanced_frame_time_under_clouds() {
         let start = Instant::now();
         let frames = 5;
         for i in 0..frames {
-            let el = if moving { 50.0 + 0.5 * (i + 1) as f32 } else { 50.0 };
+            let el = if moving {
+                50.0 + 0.5 * (i + 1) as f32
+            } else {
+                50.0
+            };
             let _ = renderer.render_to_image(&mut scene, 256, 144, &camera, &lighting(el));
         }
         let ms = start.elapsed().as_secs_f64() * 1000.0 / frames as f64;

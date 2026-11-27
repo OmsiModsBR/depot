@@ -93,11 +93,11 @@ Re-check after Phase 1: no violation; Complexity Tracking empty.
 ```text
 crates/omsi-render/src/
 ├── modes/enhanced/
-│   ├── cloud_shade.rs                 # NEW: map resources, redraw policy (R-3, R-5), uniform fields
 │   └── shaders/
-│       ├── cloud_shade.wgsl           # NEW: depth pass + blur passes (R-2, R-4)
 │       └── enhanced.wgsl              # read the map in the sun and moon terms (R-6, R-8)
-├── shaders/sky/sky_light.wgsl         # CLOUD_BOTTOM/TOP -> uniform base/top (R-11)
+├── sky/cloud_shade.rs                 # NEW (core, not the mode): map resources, redraw policy (R-3, R-5)
+├── shaders/sky/sky_light.wgsl         # CLOUD_BOTTOM/TOP -> uniform base/top (R-11); `fs_cloud_shade` depth pass
+├── shaders/sky/cloud_shade_blur.wgsl  # NEW: the blur passes (R-4)
 ├── shaders/common/enhanced_common.wgsl# uniform: cloud_shade, cloud_layer, cloud_light
 ├── renderer/sky.rs                    # scene sun without cloud_t; uniform fill (R-6)
 ├── renderer/mirror.rs                 # mirrors read the same map (FR-011)
@@ -113,10 +113,12 @@ crates/omsi-app/tests/
 └── weather_lighting.rs                # NEW or extended: Hdr vs Linear
 ```
 
-**Structure Decision**: the map is an Enhanced-only resource, so it lives in `modes/enhanced/`
-next to the mode's other resources (`pipelines.rs`, `lights.rs`), built by `EnhancedResources`;
-the cloud shape/extinction functions it needs stay in the core sky shader, which the mode already
-uses.
+**Structure Decision** (revised while implementing P1): the map lives in core, `sky/cloud_shade.rs`,
+built by `SkyResources` and drawn next to the sky cube. The camera bind group that holds the map
+(binding 21) is core, and the depth pass is an entry point of the core sky shader module, which has
+the cloud shape/extinction functions; a mode resource would have needed a new
+`ModeResources::encode_before_main` hook and a copy of the sky layouts. Only the read
+(`cloud_shade_at`, `enhanced.wgsl`) is Enhanced's.
 
 ## Delivery phases (one PR each, in order)
 
