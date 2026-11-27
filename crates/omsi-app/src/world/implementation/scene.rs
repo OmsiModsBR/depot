@@ -10437,8 +10437,12 @@ pub fn sync_vehicle_part(
 
 /// Resolve a vehicle `[matl_freetex]` name. OMSI add-ons often write paths such as
 /// `..\\Texture\\mb_pmon\\warning.bmp`: if the normal lookup misses, retry the part
-/// below the `Texture` component against the vehicle's texture search directories.
+/// below the `Texture` component against the vehicle's texture search directories. The
+/// driver's timetable paper, drawn into the game's own cache, is taken from there.
 pub fn find_vehicle_freetex(name: &str, dirs: &[&Path]) -> Option<PathBuf> {
+    if let Some(path) = crate::gameplay::schedule_paper::cached_paper(name) {
+        return Some(path);
+    }
     if let Some(path) = omsi_texture::find_texture(name, dirs) {
         return Some(path);
     }
