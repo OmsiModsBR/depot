@@ -1,30 +1,10 @@
-//! OMSI 2's dynamic route arrows (the `nav_arrows` setting): OMSI puts the scenery
-//! objects `Sceneryobjects\Generic\routearrow_{L,R,dn}_dyn.sco` over the junctions of the
-//! player's route and `routearrows_busstop.sco` at its stops (the original, called as the
-//! bus comes onto the route's paths), each with a text on it. Here the navigator says where
-//! the route goes (`Navigator::arrow_spots`) and the objects are put into the world
-//! outside the tiles (`World::add_helper_object`), the ones behind the bus taken away.
+//! Putting the route arrows into the world and taking them away again. The state of the arrows
+//! and their objects are in `domain/route_arrows.rs`.
 
-use crate::world::scene::{TileGpu, World};
+use super::super::domain::route_arrows::{sco, RouteArrows};
+use crate::world::scene::World;
 use glam::DVec3;
 use omsi_render::{Renderer, Scene};
-
-#[derive(Default)]
-pub(crate) struct RouteArrows {
-    /// What stands now: its key and the object.
-    placed: Vec<(u64, TileGpu)>,
-    /// Seconds to the next look at the route.
-    wait: f32,
-}
-
-fn sco(kind: &str) -> &'static str {
-    match kind {
-        "L" => "Sceneryobjects\\Generic\\routearrow_L_dyn.sco",
-        "R" => "Sceneryobjects\\Generic\\routearrow_R_dyn.sco",
-        "busstop" => "Sceneryobjects\\Generic\\routearrows_busstop.sco",
-        _ => "Sceneryobjects\\Generic\\routearrow_dn_dyn.sco",
-    }
-}
 
 impl RouteArrows {
     /// Twice a second: the arrows of the route ahead stand, the others go.
@@ -95,11 +75,6 @@ impl RouteArrows {
                 );
             }
         }
-    }
-
-    /// Whether any arrow stands.
-    pub(crate) fn any(&self) -> bool {
-        !self.placed.is_empty()
     }
 
     /// Every arrow goes at once: the setting was switched off (`tick` is no longer called

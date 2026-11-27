@@ -13,6 +13,10 @@ pub(crate) mod lights {
     pub(crate) use super::super::super::implementation::lights::*;
 }
 
+pub(crate) mod route_arrows {
+    pub(crate) use super::super::super::domain::route_arrows::*;
+}
+
 pub(crate) mod scene {
     pub use crate::world::domain::scene::*;
     pub use crate::world::implementation::scene::*;
