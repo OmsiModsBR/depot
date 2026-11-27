@@ -244,7 +244,8 @@ pub mod launcher {
     }
 }
 pub mod lights {
-    pub use crate::lights::*;
+    pub use crate::world::domain::lights::*;
+    pub use crate::world::implementation::lights::*;
 }
 pub mod line_times {
     pub use crate::gameplay::line_times::*;

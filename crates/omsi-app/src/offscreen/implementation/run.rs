@@ -17,7 +17,7 @@ use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::input::actions::dump_display_textures;
-use crate::lights;
+use crate::world::lights;
 use crate::output::{
     cursor_ray, follow_camera, follow_id, look_of, offscreen_orbit, pixel_angle, render_mirrors,
 };
@@ -61,9 +61,9 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
         settings.render_options(),
     ))?;
     log::info!("adapter: {}", renderer.adapter_name);
-    crate::lights::load_smoke_texture(&mut renderer, &args.root);
-    crate::lights::set_smoke_options(settings.smoke, settings.smoke_user_only, settings.smoke_max);
-    crate::lights::set_corona_root(&args.root);
+    crate::world::lights::load_smoke_texture(&mut renderer, &args.root);
+    crate::world::lights::set_smoke_options(settings.smoke, settings.smoke_user_only, settings.smoke_max);
+    crate::world::lights::set_corona_root(&args.root);
     let mut scene = renderer.new_scene();
     let (world, mut camera) = load_world(args, &renderer, &mut scene)?;
     // the map's own route arrows, with OMSI 2's route arrows
@@ -2511,7 +2511,7 @@ pub(crate) fn run_offscreen(args: &Args, out: &PathBuf) -> Result<()> {
     lighting.glass_wind = player_ref
         .as_ref()
         .or(player.as_ref())
-        .map(|p| crate::lights::vehicle_velocity(&p.vehicle))
+        .map(|p| crate::world::lights::vehicle_velocity(&p.vehicle))
         .unwrap_or_default();
     // OMSI_CONDENSATION=<minutes>,<people>[,engine 0/1]: the cabin air and the condensation
     // on the player's glass after that long with that many aboard

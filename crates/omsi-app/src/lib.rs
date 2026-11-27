@@ -13,7 +13,6 @@ mod frame;
 mod gameplay;
 mod hud;
 mod launcher;
-mod lights;
 mod mapview;
 mod output;
 mod ui;

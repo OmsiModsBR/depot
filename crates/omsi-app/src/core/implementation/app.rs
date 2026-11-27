@@ -242,13 +242,13 @@ impl App {
             log::error!("graphics: the driver copies only {upload:.0} MB/s towards the card (thousands are usual); every texture and buffer the game sends waits on it, down to a few frames a second - restarting the computer usually brings it back");
             self.service_msg = Some((format!("Graphics driver is slow ({upload:.0} MB/s): the game will stutter. Restarting the computer usually fixes it."), 30.0));
         }
-        crate::lights::load_smoke_texture(&mut renderer, &self.args.root);
-        crate::lights::set_smoke_options(
+        crate::world::lights::load_smoke_texture(&mut renderer, &self.args.root);
+        crate::world::lights::set_smoke_options(
             self.settings.smoke,
             self.settings.smoke_user_only,
             self.settings.smoke_max,
         );
-        crate::lights::set_corona_root(&self.args.root);
+        crate::world::lights::set_corona_root(&self.args.root);
         let size = window.inner_size();
         let surface = if backend == Backend::D3d9 {
             SurfaceState::shown_elsewhere(

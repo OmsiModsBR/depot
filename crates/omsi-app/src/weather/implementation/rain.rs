@@ -270,7 +270,7 @@ impl Rain {
         // (a snowflake is a sprite of the game's snowflake picture, a cone of -3; a raindrop
         // a streak, -2)
         let (cone_cos, texture) = if self.kind == 2 {
-            (-3.0, crate::lights::snowflake_texture_id())
+            (-3.0, crate::world::lights::snowflake_texture_id())
         } else {
             (-2.0, 0)
         };

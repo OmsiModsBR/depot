@@ -8,6 +8,11 @@ pub(crate) use super::super::implementation::tiles;
 pub(crate) use super::super::implementation::world_load;
 
 /// The scene: its types (`domain/scene.rs`) and its procedures (`implementation/scene.rs`).
+pub(crate) mod lights {
+    pub(crate) use super::super::super::domain::lights::*;
+    pub(crate) use super::super::super::implementation::lights::*;
+}
+
 pub(crate) mod scene {
     pub use crate::world::domain::scene::*;
     pub use crate::world::implementation::scene::*;
