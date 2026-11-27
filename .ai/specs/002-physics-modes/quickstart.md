@@ -79,8 +79,8 @@ document error (corrected in `docs/physics/`), decided in the pull request.
   slower (R-P). The frame time with 10 loose AI vehicles is measured and reported (there is no
   limit on loose vehicles).
 - In the game: the same junction filmed in Q2, in OMSI 2 and in Depot Classic, side by side; the
-  maintainer judges the body and the rear sections by eye (SC-006). The 1 cm bound on the turning
-  point is the automated test on the test bends.
+  maintainer judges the body and the rear sections by eye (SC-006). The 1 cm bound on the front
+  axle is the automated test on the test bends.
 
 ## Q10. Phase 9: the setting
 

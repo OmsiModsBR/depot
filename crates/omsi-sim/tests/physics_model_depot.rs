@@ -192,7 +192,8 @@ mod model_ai;
 /// axle led along the lane by pure pursuit, within about a metre in a 12 m bend; `DA-5` the
 /// sprung body leaning into the bend; `DA-6` the static sag shared about `[cog]`.
 fn depot_ai_follows_the_lane(defs: Vec<omsi_vehicle::Vehicle>) {
-    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Depot);
+    let (rot, _) = omsi_sim::ai::rotation_point(&defs[0]);
+    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Depot, rot);
     assert!(off < 1.05, "the rotation point {off} m off the lane");
     assert!(roll > 0.3 && roll < 5.0, "roll {roll} deg");
     assert!(gap < 0.02, "a joint {gap} m apart");

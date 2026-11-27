@@ -1,7 +1,8 @@
 //! The OMSI Classic AI body (`KA-1` to `KA-11` of `docs/physics/classic-model.md`): on its route
-//! a vehicle is no rigid body. Its rotation point sits on the lane, its heading is a state of its
-//! own integrated as a rod whose front end does not slip sideways, and its height and attitude come from the path:
-//! it has no springs, no settling and no dynamic pitch or roll.
+//! a vehicle is no rigid body. Its front axle runs on the lane, its heading is a state of its
+//! own integrated as a trailer pulled by that axle (the rotation point trails behind it and cuts
+//! the inside of a bend), and its height and attitude come from the path: it has no springs, no
+//! settling and no dynamic pitch or roll.
 //!
 //! Every rule here is **to validate** against OMSI 2 (see the status of each `KA-*` row).
 
@@ -15,14 +16,15 @@ use crate::physics::AiSpec;
 use crate::vehicle::VehicleInstance;
 use glam::{DVec2, DVec3, Vec3};
 use omsi_vehicle::Vehicle;
+use std::f64::consts::FRAC_PI_2;
 
-/// How far ahead along the way the curvature is measured (m).
+/// The stretch of the way, centred on the front axle, the curvature is measured over (m).
 const CURVATURE_SPAN: f32 = 2.0;
 
 #[derive(Debug, Clone)]
 pub struct AiClassic {
     /// The line the body turns about, `[rot_pnt_long]`, and `L`, the length of the kinematic
-    /// bicycle from it to the front of the vehicle (m).
+    /// bicycle from it to the front axle (m).
     rot_long: f32,
     length: f32,
     front_long: f32,
@@ -37,9 +39,9 @@ pub struct AiClassic {
     /// Knocked off its route (`KA-6`): the vehicle runs its rigid body, and this is the
     /// kinematic state it goes back to.
     loose: Option<crate::physics::PhysicsState>,
-    /// World position of the rotation point.
-    rear: DVec2,
-    /// The path's heading at the rotation point (deg, clockwise from north), how far the
+    /// World position of the front axle, on the lane.
+    front: DVec2,
+    /// The path's heading at the front axle (deg, clockwise from north), how far the
     /// body's axis lags behind it, `ψ_r` (rad, + = behind a bend to the right), and the
     /// vehicle's curvature `κ_v = sin ψ_r / L` (1/m).
     path_heading: f64,
@@ -93,7 +95,7 @@ impl AiClassic {
             started: false,
             near: true,
             loose: None,
-            rear: DVec2::ZERO,
+            front: DVec2::ZERO,
             path_heading: 0.0,
             lag: 0.0,
             kappa_v: 0.0,
@@ -110,12 +112,12 @@ impl AiClassic {
     }
 
     /// The path's curvature at its point `d` metres along it (1/m, + = to the right): the
-    /// change of heading over [`CURVATURE_SPAN`].
+    /// change of heading over [`CURVATURE_SPAN`] centred on it.
     fn curvature(way: &dyn Fn(f32) -> DVec3, d: f32) -> f64 {
         let (a, b, c) = (
+            way(d - 0.5 * CURVATURE_SPAN).truncate(),
             way(d).truncate(),
             way(d + 0.5 * CURVATURE_SPAN).truncate(),
-            way(d + CURVATURE_SPAN).truncate(),
         );
         match (heading_of(b - a), heading_of(c - b)) {
             (Some(h0), Some(h1)) => wrap(h1 - h0).to_radians() / (0.5 * CURVATURE_SPAN as f64),
@@ -151,15 +153,18 @@ impl AiClassic {
             self.a_long += (a - self.a_long) * (dt / 0.15).min(1.0);
         }
         self.last_speed = speed;
-        // (KA-1) the rotation point is on the lane. The body's axis lags the path's tangent by
-        // `ψ_r`: the path turns by `Δθ = Δs κ` and the axis follows it as a rod of length `L`
-        // whose front end does not slip sideways, `Δψ_r = Δθ - (Δs / L) sin(ψ_r + Δθ / 2)`, so
-        // that in a steady bend `sin ψ_r = L κ` with the front swung out of the bend
-        let on = way(self.rot_long);
-        self.rear = on.truncate();
-        let ahead = way(self.rot_long + 1.0).truncate();
-        let path = heading_of(ahead - self.rear).unwrap_or(self.path_heading);
-        let kappa = Self::curvature(way, self.rot_long);
+        // (KA-1) the front axle is on the lane. The body's axis lags the path's tangent there
+        // by `ψ_r`: the path turns by `Δθ = Δs κ` and the axis follows it as a trailer of
+        // length `L` pulled by the front axle, its rotation point not slipping sideways,
+        // `Δψ_r = Δθ - (Δs / L) sin(ψ_r + Δθ / 2)`, so that in a steady bend `sin ψ_r = L κ`
+        // with the rotation point on the inside of the bend; the tangent from a chord centred on the axle, so that it does not lead into a bend
+        self.front = way(self.front_long).truncate();
+        let (behind, ahead) = (
+            way(self.front_long - 0.5).truncate(),
+            way(self.front_long + 0.5).truncate(),
+        );
+        let path = heading_of(ahead - behind).unwrap_or(self.path_heading);
+        let kappa = Self::curvature(way, self.front_long);
         let length = self.length as f64;
         if !self.started {
             // put down already in the steady state of its bend, with no swing at the start
@@ -170,6 +175,9 @@ impl AiClassic {
             let turn = ds * kappa;
             self.lag += turn - (ds / length) * (self.lag + 0.5 * turn).sin();
         }
+        // a bend tighter than `L` has no steady state: the axis stops square across the path
+        // rather than spinning round
+        self.lag = self.lag.clamp(-FRAC_PI_2, FRAC_PI_2);
         self.path_heading = path;
         self.heading = (path - self.lag.to_degrees()).rem_euclid(360.0);
         // each axle's wheels point at the turning centre, `δ_i = atan((y_i - r) κ_v)`, with the
@@ -191,7 +199,7 @@ impl AiClassic {
     /// (KA-4) The pose from the path alone: the height of the origin, the pitch between the
     /// axles' heights and no roll.
     fn pose(&mut self, way: &dyn Fn(f32) -> DVec3) {
-        let o = self.rear - dir(self.heading) * self.rot_long as f64;
+        let o = self.front - dir(self.heading) * self.front_long as f64;
         let (front, rear) = (way(self.front_long), way(self.rear_long));
         let span = (self.front_long - self.rear_long).abs().max(0.5);
         self.position = DVec3::new(o.x, o.y, way(0.0).z);

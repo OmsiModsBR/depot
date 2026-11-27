@@ -371,7 +371,7 @@ directly.
 - **SC-005**: A bus file with `[depot_physics]` loads and drives in OMSI 2 with no visible or logged
   difference from the same file without it.
 - **SC-006**: In OMSI Classic, an AI bus turning through each test bend (90° junction, roundabout,
-  lane change) keeps its turning point within 1 cm of its lane path in the automated tests, and its
+  lane change) keeps its front axle within 1 cm of its lane path in the automated tests, and its
   body and rear sections look the same as in OMSI 2 through the same junction, side by side, as the
   maintainer judges.
 - **SC-007**: The game's frame rate with 40 AI vehicles is not lower in OMSI Classic than before this

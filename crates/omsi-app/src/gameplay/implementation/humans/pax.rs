@@ -41,6 +41,7 @@ use crate::world::scene::World;
 use glam::{DVec2, DVec3, Vec3};
 use hashbrown::{HashMap, HashSet};
 use omsi_render::{Renderer, Scene};
+use omsi_sim::traffic::Network;
 use omsi_sim::VehicleInstance;
 
 impl Task {
@@ -866,6 +867,7 @@ impl Humans {
         &mut self,
         dt: f32,
         world: &World,
+        net: Option<&Network>,
         buses: &[BusNow],
         bus_ix: &HashMap<BusId, usize>,
         at_stops: &HashMap<BusId, BusAtStops>,
@@ -898,6 +900,7 @@ impl Humans {
                 i,
                 dt,
                 world,
+                net,
                 buses,
                 bus_ix,
                 at_stops,
@@ -1025,6 +1028,7 @@ impl Humans {
         i: usize,
         dt: f32,
         world: &World,
+        net: Option<&Network>,
         buses: &[BusNow],
         bus_ix: &HashMap<BusId, usize>,
         at_stops: &HashMap<BusId, BusAtStops>,
@@ -1079,6 +1083,7 @@ impl Humans {
             i,
             dt,
             world,
+            net,
             buses,
             bus_ix,
             at_stops,
@@ -1848,6 +1853,7 @@ impl Humans {
         i: usize,
         dt: f32,
         world: &World,
+        net: Option<&Network>,
         buses: &[BusNow],
         bus_ix: &HashMap<BusId, usize>,
         at_stops: &HashMap<BusId, BusAtStops>,
@@ -1954,7 +1960,7 @@ impl Humans {
                 scene,
                 taken_ticket,
             ),
-            Task::InBusToExit => self.task_to_exit(i, buses, bus_ix, at_stops, world, remove),
+            Task::InBusToExit => self.task_to_exit(i, buses, bus_ix, at_stops, net, remove),
             Task::WalkingToBusstop => {
                 if p.st == 3 {
                     self.set_task(i, Task::WaitingForBus, buses, bus_ix, world);
@@ -2243,7 +2249,7 @@ impl Humans {
         buses: &[BusNow],
         bus_ix: &HashMap<BusId, usize>,
         at_stops: &HashMap<BusId, BusAtStops>,
-        world: &World,
+        net: Option<&Network>,
         remove: &mut Vec<usize>,
     ) {
         let p = self.pax(i).unwrap().clone();
@@ -2341,7 +2347,7 @@ impl Humans {
                 p.door
             );
         }
-        self.walk_street(i, w, h, stop, world, remove);
+        self.walk_street(i, w, h, stop, net, remove);
     }
 
     /// Task 8: on as a pedestrian along the pavement from the stop - or gone
@@ -2352,21 +2358,26 @@ impl Humans {
         at: DVec3,
         heading: f64,
         stop: Option<i64>,
-        world: &World,
+        net: Option<&Network>,
         remove: &mut Vec<usize>,
     ) {
-        let _ = world;
-        self.walk_street_plain(i, at, heading, stop, remove)
+        self.walk_street_plain(i, at, heading, stop, net, remove)
     }
 
+    /// On along the pavement from where they stand: the nearest point of it they reach
+    /// without going over a carriageway, else the stop's point of it. Started from the stop's
+    /// point whatever the door, the people off the back doors of a long bus that stood away
+    /// from the kerb walked the length of it on the road, along its side, to the front.
     pub(super) fn walk_street_plain(
         &mut self,
         i: usize,
         at: DVec3,
         heading: f64,
         stop: Option<i64>,
+        net: Option<&Network>,
         remove: &mut Vec<usize>,
     ) {
+        let near = net.and_then(|n| self.ped.as_ref().and_then(|pn| pn.start_leg(n, at)));
         let lane = stop.and_then(|s| self.stops.get(&s)).and_then(|s| s.lane);
         let p = &mut self.people[i];
         p.position = at;
@@ -2375,13 +2386,15 @@ impl Humans {
         p.interior = 0.0;
         p.vel = DVec2::ZERO;
         let _ = &remove;
-        match (lane, self.ped.as_ref()) {
-            (Some((l, s)), Some(_)) => {
-                let leg = Leg {
-                    lane: l,
-                    a: s,
-                    b: s,
-                };
+        let leg = near.or_else(|| {
+            lane.map(|(l, s)| Leg {
+                lane: l,
+                a: s,
+                b: s,
+            })
+        });
+        match (leg, self.ped.as_ref()) {
+            (Some(leg), Some(_)) => {
                 p.state = State::Strolling(PedWalk::new(vec![leg], true, 0.0));
             }
             _ => p.state = State::Standing,

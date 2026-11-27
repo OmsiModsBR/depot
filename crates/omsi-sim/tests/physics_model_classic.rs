@@ -187,11 +187,16 @@ fn release_v5_articulated_8x2() {
 
 mod model_ai;
 
-/// The AI's rows (OMSI Classic): `KA-1` the rotation point on the lane within 1 cm (SC-006),
+/// The AI's rows (OMSI Classic): `KA-1` the front axle on the lane within 1 cm (SC-006),
 /// `KA-4` no roll, `KA-5` the rear sections on their joints.
 fn classic_ai_follows_the_lane(defs: Vec<omsi_vehicle::Vehicle>) {
-    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Classic);
-    assert!(off < 0.01, "the rotation point {off} m off the lane");
+    let front = defs[0]
+        .axles
+        .iter()
+        .map(|a| a.long)
+        .fold(f32::MIN, f32::max);
+    let (off, roll, gap) = model_ai::route_following(&defs, omsi_cfg::PhysicsMode::Classic, front);
+    assert!(off < 0.01, "the front axle {off} m off the lane");
     assert_eq!(roll, 0.0);
     assert!(gap < 0.02, "a joint {gap} m apart");
     // `KA-4`, FR-015: the static sag the scripts read is shared about the origin

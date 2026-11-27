@@ -153,7 +153,7 @@ An AI road vehicle has two physical states, shared by all its sections: **on its
 
 The traffic planner, the AI driver's target-speed decisions and the rail and air followers are shared
 and unchanged. In the rules below, `L` is the length of the kinematic bicycle (from the point at
-`[rot_pnt_long]` to the front of the vehicle), `κ` the curvature of the lane path, `κ_v` the
+`[rot_pnt_long]` to the front axle), `κ` the curvature of the lane path, `κ_v` the
 curvature of the vehicle, `y_i` an axle's place along the body and `r` is `[rot_pnt_long]`.
 
 Module for all the `KA-*` rules: `ai/classic/` (new, phase 8), using `physics/` for the loose state.
@@ -163,13 +163,17 @@ Module for all the `KA-*` rules: `ai/classic/` (new, phase 8), using `physics/` 
 - **Inputs**: the lane path (planner), `[rot_pnt_long]`, `achse_long`, the lane change's sideways shift.
   **Outputs**: the pose of the leading section and each axle's steering angle. **Module**:
   `ai/classic/` (route and pose, phase 8).
-- **Basis**: *OMSI*. **Status**: **confirmed** by the maintainer's in-game check (2026-11-11).
-  **Check**: film an AI bus from above through a tight junction turn and a lane change; the rotation
-  point stays on the lane while the front swings out.
+- **Basis**: *OMSI*. **Status**: **to validate**. The maintainer's check of 2026-11-11 confirmed the
+  heading equation; on 2026-11-26 the maintainer saw long AI buses swing their rear out of bends as
+  if on a rail, with the rotation point held on the lane. The equation is the one of a trailer, so
+  the point on the lane is now the front axle and the rotation point trails it.
+  **Check**: film an AI bus from above through a tight junction turn and a lane change; the front
+  axle stays on the lane while the rear cuts the inside of the bend.
 
-The point at `[rot_pnt_long]` moves along the lane path, shifted sideways during a lane change. The
-body's axis lags the path's tangent by `ψ_r`, a state of its own: the axis follows the path as a rod
-of length `L` whose front end does not slip sideways. Over a step `Δs = v · dt` along the path:
+The front axle moves along the lane path, shifted sideways during a lane change. The body's axis
+lags the path's tangent there by `ψ_r`, a state of its own: the axis follows the path as a trailer
+of length `L` pulled by the front axle, the point at `[rot_pnt_long]` not slipping sideways. Over a
+step `Δs = v · dt` along the path, with `κ` taken at the front axle:
 
 ```
 Δθ   = Δs · κ                                     (the path's turn)
@@ -178,8 +182,10 @@ of length `L` whose front end does not slip sideways. Over a step `Δs = v · dt
 δ_i  = atan((y_i - r) · κ_v)                      (each axle, with κ_v of the frame before)
 ```
 
-In a steady bend `sin ψ_r = L · κ`: the rotation point stays on the lane and the front swings out of
-the bend. A vehicle put down on a bend starts in that steady state.
+In a steady bend `sin ψ_r = L · κ`: the front axle stays on the lane and the rotation point runs
+on the inner circle of radius `sqrt(R² − L²)`, as a real vehicle's rear axle does. A vehicle put down
+on a bend starts in that steady state. In a bend tighter than `L` there is no steady state, and
+`ψ_r` stops at 90°.
 
 ## KA-2. Speed near the camera
 

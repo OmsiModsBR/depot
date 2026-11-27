@@ -106,11 +106,9 @@ fn frame(body: &mut AiMotion, v: &mut VehicleInstance, r: f64, s: f64, speed: f3
     );
 }
 
-/// The farthest the rotation point (`[rot_pnt_long]` on the body's axis) strays from the lane
-/// through bends of 12 and 20 m radius at 5 m/s, the worst roll (deg) and the worst gap at a
-/// joint (m).
-pub fn route_following(defs: &[Vehicle], mode: PhysicsMode) -> (f64, f32, f64) {
-    let (rot, _) = omsi_sim::ai::rotation_point(&defs[0]);
+/// The farthest the point `probe` metres along the body's axis strays from the lane through
+/// bends of 12 and 20 m radius at 5 m/s, the worst roll (deg) and the worst gap at a joint (m).
+pub fn route_following(defs: &[Vehicle], mode: PhysicsMode, probe: f32) -> (f64, f32, f64) {
     let (mut off, mut roll, mut gap) = (0.0f64, 0.0f32, 0.0f64);
     for r in [12.0, 20.0] {
         let mut v = instance(defs, mode);
@@ -126,7 +124,7 @@ pub fn route_following(defs: &[Vehicle], mode: PhysicsMode) -> (f64, f32, f64) {
                 continue;
             }
             let h = v.heading.to_radians();
-            let p = v.position.truncate() + DVec2::new(h.sin(), h.cos()) * rot as f64;
+            let p = v.position.truncate() + DVec2::new(h.sin(), h.cos()) * probe as f64;
             off = off.max(off_bend(r, p));
             roll = roll.max(v.bank.abs());
             let mut lead = (v.position, v.body_rotation());

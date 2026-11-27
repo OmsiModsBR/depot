@@ -276,8 +276,10 @@ fn pavement_corners_are_joined_and_routed() {
     assert!(turn.a > turn.b);
 }
 
+/// A vehicle standing on a crossing (a bus at its stop) holds the people about to cross until
+/// it drives off; only after a minute does anybody start across and go round it.
 #[test]
-fn a_vehicle_standing_on_a_crossing_holds_people_only_for_a_moment() {
+fn a_vehicle_standing_on_a_crossing_holds_people_until_it_leaves() {
     let mut net = Network::default();
     net.lanes.push(lane(
         vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 8.0, 0.0)],
@@ -297,14 +299,68 @@ fn a_vehicle_standing_on_a_crossing_holds_people_only_for_a_moment() {
     };
     let stopped = [(DVec2::new(0.0, 4.0), DVec2::ZERO, 6.0)];
     let mut held = |s: f32| h.may_cross(Some(&mut ped), &net, &next, None, &stopped, 1.4, s);
-    assert!(held(0.0).is_err());
+    assert_eq!(held(0.0), Err(VEHICLE_ON_CROSSING));
     assert!(held(2.0).is_err());
-    assert!(held(30.0).is_ok());
+    assert!(held(30.0).is_err());
+    assert!(held(70.0).is_ok());
     // one driving across is waited for however long they have stood
     let moving = [(DVec2::new(-8.0, 4.0), DVec2::new(8.0, 0.0), 2.0)];
     assert!(h
         .may_cross(Some(&mut ped), &net, &next, None, &moving, 1.4, 30.0)
         .is_err());
+}
+
+/// A stroller held by a vehicle standing on the crossing turns back after a while, one held by
+/// a red light after three minutes; waiting for a car to pass never makes them turn.
+#[test]
+fn strollers_give_up_waiting_for_a_vehicle_on_the_crossing() {
+    assert!(!gives_up_crossing(VEHICLE_ON_CROSSING, 30.0));
+    assert!(gives_up_crossing(VEHICLE_ON_CROSSING, 50.0));
+    assert!(!gives_up_crossing("red light", 50.0));
+    assert!(gives_up_crossing("red light", 181.0));
+    assert!(!gives_up_crossing("waits for a car to pass", 500.0));
+}
+
+/// Waiting for a vehicle standing on the crossing, people stand back on the pavement, clear of
+/// it, not at the kerb beside it.
+#[test]
+fn people_wait_for_a_vehicle_on_the_crossing_back_on_the_pavement() {
+    for id in 0..9 {
+        let back = vehicle_wait_back(id);
+        assert!((2.5..=3.8).contains(&back), "person {id}: {back} m");
+    }
+}
+
+/// Off a bus standing 1.8 m from the kerb, a passenger starts along the pavement at the point
+/// level with their door, not at the stop's point by the front of the bus, and never on the
+/// pavement across the street even when that one is nearer.
+#[test]
+fn off_a_bus_away_from_the_kerb_people_step_onto_the_pavement_by_their_door() {
+    let mut net = Network::default();
+    // the bus's lane, northwards
+    net.lanes.push(lane(
+        vec![DVec3::new(0.0, -50.0, 0.0), DVec3::new(0.0, 50.0, 0.0)],
+        LaneKind::Street,
+    ));
+    // the stop's pavement on the right, 3 m off the lane's middle
+    net.lanes.push(lane(
+        vec![DVec3::new(4.5, -40.0, 0.0), DVec3::new(4.5, 40.0, 0.0)],
+        LaneKind::Sidewalk,
+    ));
+    // the pavement across the street, a little nearer
+    net.lanes.push(lane(
+        vec![DVec3::new(-0.9, -40.0, 0.0), DVec3::new(-0.9, 40.0, 0.0)],
+        LaneKind::Sidewalk,
+    ));
+    net.link(1.5);
+    let ped = PedNet::build(&net);
+    // the rear door of an articulated bus, 14 m behind the stop's point at y = 6
+    let door = DVec3::new(1.8, -8.0, 0.0);
+    let leg = ped.start_leg(&net, door).expect("a pavement within reach");
+    assert_eq!(leg.lane, 1);
+    assert!(leg.len() < 1e-3);
+    let (q, _) = leg.at(&net, 0.0);
+    assert!((q.y - door.y).abs() < 0.5, "starts at y = {:.1}", q.y);
 }
 
 #[test]
