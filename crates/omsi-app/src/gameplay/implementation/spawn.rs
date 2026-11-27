@@ -2,7 +2,7 @@
 
 use crate::core::cli::{parse_triggers, Args};
 use crate::gameplay::player::Player;
-use crate::situation::{find_hof, start_clock};
+use crate::core::situation::{find_hof, start_clock};
 use crate::world::scene::{self, World};
 use anyhow::{Context, Result};
 use glam::{DVec3, Vec3};
@@ -643,7 +643,7 @@ pub(crate) fn spawn_player(
         restore_saved_controls(&mut p, &args.situation_vars, &args.situation_trailers);
         // (after the scripts' init, which starts the textures afresh)
         if let Some(prefix) = &args.situation_script_textures {
-            let n = crate::situation::restore_script_textures(&mut p.vehicle, prefix);
+            let n = crate::core::situation::restore_script_textures(&mut p.vehicle, prefix);
             if n > 0 {
                 log::info!("situation: {n} script texture(s) restored");
             }

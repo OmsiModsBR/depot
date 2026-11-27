@@ -17,7 +17,7 @@ use crate::input::touch;
 use crate::offscreen::run_offscreen;
 use crate::output::ORBIT_DEFAULT;
 use crate::core::services::run_export;
-use crate::situation::apply_situation;
+use crate::core::situation::apply_situation;
 use crate::ui_language;
 use crate::weather::{puddles, rain};
 use crate::{gameplay, hud};

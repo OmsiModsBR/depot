@@ -40,7 +40,7 @@
 
 pub(crate) use crate::gameplay::domain::humans::*;
 use crate::gameplay::traffic::Traffic;
-use crate::situation::SavedRider;
+use crate::core::situation::SavedRider;
 use crate::weather::ambience;
 use crate::world::scene::World;
 use glam::{DVec2, DVec3, Mat4, Vec3};
