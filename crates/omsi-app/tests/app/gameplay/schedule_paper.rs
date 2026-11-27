@@ -134,3 +134,26 @@ fn paper_lines_are_drawn_from_60_90_one_font_height_apart() {
     assert!(!ink(PAPER_X - 1, PAPER_TOP));
     assert!(!ink(PAPER_X, PAPER_TOP - 1));
 }
+
+#[test]
+fn a_drawn_paper_is_found_only_right_inside_the_cache() {
+    let root = std::env::temp_dir().join("depot-schedule-paper-cache-test");
+    let cache = root.join("cache").join("schedules");
+    std::fs::create_dir_all(&cache).unwrap();
+    let paper = cache.join("schedule-v7-0123456789abcdef.png");
+    std::fs::write(&paper, b"x").unwrap();
+    let outside = root.join("other.png");
+    std::fs::write(&outside, b"x").unwrap();
+
+    let name = paper.to_string_lossy().into_owned();
+    assert_eq!(paper_in_cache(&name, &cache), Some(paper.clone()));
+    assert_eq!(paper_in_cache(&format!("  {name} "), &cache), Some(paper));
+    // (a file elsewhere, a way out of the folder, a missing drawing, a bare name)
+    assert_eq!(paper_in_cache(&outside.to_string_lossy(), &cache), None);
+    let escape = cache.join("..").join("..").join("other.png");
+    assert_eq!(paper_in_cache(&escape.to_string_lossy(), &cache), None);
+    let missing = cache.join("schedule-v7-ffffffffffffffff.png");
+    assert_eq!(paper_in_cache(&missing.to_string_lossy(), &cache), None);
+    assert_eq!(paper_in_cache("Schedule.bmp", &cache), None);
+    let _ = std::fs::remove_dir_all(root);
+}
