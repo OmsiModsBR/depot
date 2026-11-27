@@ -19,6 +19,11 @@ pub(crate) mod tr_fill {
     pub(crate) use super::super::super::implementation::tr_fill::*;
 }
 
+/// The start menu: its choices and the reading of the folders behind them.
+pub(crate) mod start_menu {
+    pub(crate) use super::super::super::domain::menu::*;
+}
+
 /// The menu's lists and settings windows, by subject.
 pub(crate) mod lists {
     pub(crate) use super::super::super::domain::lists::*;

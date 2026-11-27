@@ -6,7 +6,7 @@ use crate::frame::domain::session::Session;
 use crate::gameplay::player::Player;
 use crate::hud;
 use crate::hud::nav;
-use crate::menu;
+use crate::hud::start_menu as menu;
 use crate::gameplay::radio;
 use crate::settings;
 use crate::weather::ambience;

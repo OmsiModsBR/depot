@@ -15,7 +15,6 @@ mod hud;
 mod launcher;
 mod lights;
 mod mapview;
-mod menu;
 mod output;
 mod ui;
 mod weather;
