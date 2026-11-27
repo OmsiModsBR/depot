@@ -1,6 +1,7 @@
 //! The world's procedures, one module per subject.
 
 pub(crate) mod editor;
+pub(crate) mod lights;
 pub(crate) mod export;
 pub(crate) mod map_surface;
 pub(crate) mod placing;

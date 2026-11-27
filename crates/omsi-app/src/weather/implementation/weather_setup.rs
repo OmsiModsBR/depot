@@ -2,7 +2,7 @@
 
 use crate::core::cli::Args;
 use crate::core::startup::{CLOUDS, FAIR_CLOUDS};
-use crate::lights;
+use crate::world::lights;
 use crate::world::scene;
 pub(crate) use omsi_content::weather::psychro::{
     absolute_humidity_of_relative as absolute_humidity, dew_point_of_relative as dew_point_c,
@@ -239,8 +239,8 @@ pub(crate) fn setup_sky(
     renderer.set_sun_glare(
         scene,
         Some([
-            crate::lights::glow_texture_id(),
-            crate::lights::star_texture_id(),
+            crate::world::lights::glow_texture_id(),
+            crate::world::lights::star_texture_id(),
         ]),
     );
     renderer.set_sky_textures_clouds(scene, [ids[0], ids[1], ids[2]], clouds);

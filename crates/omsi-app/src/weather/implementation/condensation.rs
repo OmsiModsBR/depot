@@ -256,7 +256,7 @@ pub fn inputs_for(
     CabinInputs {
         outside: w.temp.0,
         dew_point: dew_point(w.temp.0, w.temp.1).min(w.temp.0),
-        speed: crate::lights::vehicle_velocity(v).length(),
+        speed: crate::world::lights::vehicle_velocity(v).length(),
         engine: omsi_sim::startup::engine_running(v),
         people: riders + 1,
         doors_open,
