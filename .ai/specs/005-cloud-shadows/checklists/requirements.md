@@ -37,5 +37,5 @@
   to explain the problem; the requirements themselves stay free of implementation.
 - SC-005 (frame time within 2 %) is the gate for principle VII; the plan must carry before/after
   measurements on the maintainer's machine.
-- Open for `/speckit-clarify`, decided here by assumption: no separate cloud-shadow setting
-  (FR-012); the exposure rule is not retuned; the grey sky per cumulus type is not retuned.
+- Clarified 2026-11-27 (4 questions): exposure makes up a quarter of a cloud's shade; real cloud
+  height, no floor; only Overcast/closed deck/precipitation grey the sky; no separate setting.

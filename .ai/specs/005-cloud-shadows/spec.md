@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-27
 
-**Status**: Draft
+**Status**: Clarified (2026-11-27, `/speckit-clarify` session, 4 questions)
 
 **Input**: User description (maintainer, 2026-11-27): "Include Cumulus 3 and the other cloud types
 in the scope, so that every cloud casts a shadow on the scenery, its strength varying with the
@@ -53,6 +53,23 @@ the specification makes no claim about OMSI 2 (constitution, principle II).
 | High veil (cirrus) of the physical weather model | weather model veil | a faint, even dimming of the sun and softer sun shadows; no patches |
 | Rain or snow falling from a closed deck | weather precipitation | the deck's shade, as for `Overcast` |
 | Any of the above at night with the moon up | same sources | the same shade, cast on the moonlight instead of the sunlight |
+
+## Clarifications
+
+### Session 2026-11-27
+
+- Q1: How much should the picture make up for a cloud's shade over the camera? → A (maintainer): a
+  quarter of the light lost, in log terms (today: half). A shaded foreground comes out about 1.7
+  stops darker than in sun on a clear day, instead of about 1.2 (FR-010, SC-006).
+- Q2: Should the clouds use the real height even when it is very low (a METAR `BKN009` puts the
+  base near 270 m)? → A (maintainer): yes, the real height with no floor: a low base may cut into
+  tall buildings and hills of the map, and that is shown as it is (FR-006, edge cases).
+- Q3: Does fixing the over-grey sky under cumulus belong in this spec? → A (maintainer): yes: only
+  `Overcast` (and a closed deck, rain or snow) greys the sky and takes the sun away evenly; the
+  `Cumulus` types stop doing it, and each cloud's own shade does the darkening (FR-018).
+- Q4: Should cloud shadows have their own setting? → A (maintainer): no: they follow the existing
+  clouds setting; a setting of their own comes only if the measurements of SC-005 call for it
+  (FR-012).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -158,7 +175,7 @@ foreground with a sunlit area in the same frame and with the same foreground in 
    view is brighter than the shaded foreground.
 2. **Given** the camera moving from sun into a cloud's shade, **When** the exposure settles,
    **Then** the shaded foreground stays darker than it looked in the sun (the eye does not fully
-   make up for the cloud), as today's half-way adaptation intends.
+   make up for the cloud): the exposure makes up for a quarter of the light lost (FR-010).
 
 ### User Story 5 - Clouds block the moonlight (Priority: P2)
 
@@ -196,6 +213,9 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - New moon, or a moon too low or too dim to light the scene: no moonlight and no moon cloud shade.
 - Camera above the cloud base (a mountain map, a free camera flown high): clouds below the camera
   still shade the ground under them; the camera inside a cloud sees the ground in its shade.
+- A cloud base lower than the buildings or hills of the map (FR-006 sets no floor): the parts of
+  the scenery inside a cloud are shaded by how deep in it they stand, the parts above it get the
+  sun, and the clouds are drawn where they are, cutting into the scenery.
 - Clouds switched off in the settings: no cloud shadows and no change from the clear-sky picture.
 - Sun shadows switched off in the settings: cloud shade still dims the sunlight where clouds stand
   (it is light, not a shadow map), but no object shadows are drawn.
@@ -226,8 +246,10 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - **FR-005**: The shade patches on the ground MUST match the clouds drawn in the sky: same
   positions, same drift with the wind, same cover for each cloud kind.
 - **FR-006**: The clouds MUST stand at the height the weather gives (`[clouds]` height, or the
-  METAR layer base), both where they are drawn in the sky and where they cast shade; a missing or
-  unusable height falls back to a default without a message to the player.
+  METAR layer base), both where they are drawn in the sky and where they cast shade, with no lower
+  limit: a base of a few hundred metres or less is used as given; a missing or unusable height
+  (absent, zero, negative or not a number) falls back to a default without a message to the
+  player.
 - **FR-007**: The width of a cloud shadow's soft edge MUST grow with the cloud's height above the
   ground point.
 - **FR-008**: Sun shadows of objects (buildings, trees, vehicles, people) MUST show only where
@@ -235,8 +257,10 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - **FR-009**: The `Overcast` type and a closed deck MUST stop switching sun shadows off as a special
   case; they shade the scene through FR-001 to FR-004 like every other cloud, which removes direct
   sun everywhere they are opaque.
-- **FR-010**: The exposure MUST keep adapting to the light where the camera is, as today (half way
-  into a cloud's shade), while points elsewhere in view receive their own sunlight.
+- **FR-010**: The exposure MUST keep adapting to the light where the camera is, but MUST make up
+  for only a quarter of the light a cloud's shade over the camera takes away (in log terms; today
+  half), while points elsewhere in view receive their own sunlight. The same share applies to the
+  moonlight at night.
 - **FR-011**: The feature MUST apply to everything lit by the sun in Enhanced: terrain, scenery
   objects, splines, vehicles (outside and through their windows), people, and the views used for
   mirrors and reflections.
@@ -254,6 +278,12 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   in the sky, moon shadows of objects only where moonlight reaches.
 - **FR-017**: The even dimming of the moonlight by the sky's overall cloud cover MUST be replaced by
   FR-016, so that the moonlight is not dimmed twice by the same clouds.
+- **FR-018**: The `Cumulus` types (weather file or METAR) and the cumulus heaps of the physical
+  weather model MUST NOT grey the whole sky or dim the sunlight evenly over the scene: the sky
+  between the clouds keeps its clear colour and the sun its clear strength, and the clouds darken
+  the scene only through their own shade (FR-001 to FR-004) and their own picture in the sky. Only
+  `Overcast`, a closed deck and a sky that rain or snow falls from grey the sky and remove direct
+  sun evenly. Vanilla+ and DX9 keep their current cumulus lighting (FR-013).
 
 ### Key Entities
 
@@ -282,8 +312,9 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - **SC-005**: On the maintainer's machine and scenario, the average frame time in Enhanced grows by
   no more than 2 % with the feature on, measured before and after (constitution, principle VII);
   loading time does not grow measurably.
-- **SC-006**: With the camera under a cloud, a sunlit area in the same frame is at least one stop
-  brighter than the shaded foreground.
+- **SC-006**: With the camera under a cloud on an otherwise clear day, after the exposure settles,
+  the shaded foreground is between 1.5 and 1.9 stops darker than the same foreground in sun, and a
+  sunlit area in the same frame is at least 1.5 stops brighter than the shaded foreground.
 - **SC-007**: Vanilla+ and Vanilla (DX9) pictures of a fixed scene are unchanged pixel for pixel
   (or within the existing test tolerance) before and after.
 - **SC-008**: No visible jump in the shade patches over 5 minutes of play with a steady wind, and
@@ -291,6 +322,8 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
 - **SC-009**: On a moonlit night with a `Cumulus 3` sky away from street lamps, every view with
   moonlit ground shows moon shadows there, including views with a cloud in front of the moon from
   the camera; under `Overcast`, no view shows moon shadows.
+- **SC-010**: Under a `Cumulus 3` sky, a sunlit point receives the same direct sunlight as under a
+  clear sky at the same time of day, and the sky between the clouds shows the clear sky's colour.
 
 ## Assumptions
 
@@ -300,11 +333,11 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   repository will describe it as OMSI 2 behaviour.
 - "Opacity" is the cloud's optical thickness along the sun's path: thicker clouds, the denser parts
   of a heap and a closed deck block more; thin edges and a high veil block less.
-- "Height" is the cloud base the weather gives; the layer's thickness keeps today's proportions.
+- "Height" is the cloud base the weather gives, above the map's ground level (for a METAR, above
+  the station); the layer's thickness keeps today's proportions.
 - The cover of each `Cumulus` number and of `Overcast` stays as Depot sets it today; this feature
-  only makes that cover cast shade. Retuning how grey the sky looks for each type is out of scope.
-- The exposure keeps today's rule of following half of a cloud's shade at the camera; it is not
-  retuned here.
+  makes that cover cast shade and, for the `Cumulus` types only, removes the even greying of the
+  sky and dimming of the sun (FR-018).
 - Performance is the main risk; the external practice the maintainer asked to check (a cloud shade
   computed once, seen from the sun, and read for every point) keeps the per-point cost to one read.
   The plan carries the measurements.
