@@ -100,7 +100,7 @@ impl App {
                 self.service_msg = Some((
                     format!(
                         "{}: {key}",
-                        crate::describe::names(&self.args.root, &self.settings.language)
+                        crate::hud::describe::names(&self.args.root, &self.settings.language)
                             .control(&action)
                     ),
                     3.0,
@@ -136,7 +136,7 @@ impl App {
 
 pub(in crate::hud) fn keyboard_pages(app: &App) -> Vec<Page> {
     let cfg = keyboard_cfg(app);
-    let names = crate::describe::names(&app.args.root, &app.settings.language);
+    let names = crate::hud::describe::names(&app.args.root, &app.settings.language);
     let mut vehicle = vec![opens(
         "Add a vehicle event…",
         "Choose a control supplied by the bus or its mods",

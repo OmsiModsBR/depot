@@ -48,12 +48,12 @@ impl omsi_launcher_ui::Host for GameHost {
     }
 
     fn action_text(&self, root: &str, lang: &str, action: &str) -> String {
-        let names = crate::describe::names(std::path::Path::new(root), lang);
+        let names = crate::hud::describe::names(std::path::Path::new(root), lang);
         super::pages::action_text(names, action)
     }
 
     fn actions(&self, root: &str, lang: &str) -> Vec<(String, String)> {
-        crate::describe::names(std::path::Path::new(root), lang).events()
+        crate::hud::describe::names(std::path::Path::new(root), lang).events()
     }
 
     fn key_name(&self, scan: i64, modifier: i64) -> String {

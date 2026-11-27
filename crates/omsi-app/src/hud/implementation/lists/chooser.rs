@@ -60,7 +60,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             return keyboard_pages(app).swap_remove((*tab).min(1)).1;
         }
         ListKind::Events => {
-            let names = crate::describe::names(&app.args.root, &app.settings.language);
+            let names = crate::hud::describe::names(&app.args.root, &app.settings.language);
             let mut events = names.events();
             if let Some(p) = app.player.as_ref() {
                 for action in p.vehicle.ty.program.trigger_names() {

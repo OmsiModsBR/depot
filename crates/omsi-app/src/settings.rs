@@ -905,7 +905,7 @@ impl Settings {
                         }
                     }
                 }
-                "language" | "lang" => s.language = crate::describe::language_code(v),
+                "language" | "lang" => s.language = crate::hud::describe::language_code(v),
                 "pax_voices" => {
                     s.pax_voices = match v.to_ascii_lowercase().as_str() {
                         "tickets" => "tickets".into(),

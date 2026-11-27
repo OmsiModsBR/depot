@@ -9,7 +9,6 @@
 //! calls `android_main` (see `core/implementation/android.rs`), which runs the launcher and
 //! the game in one window of one process.
 
-mod describe;
 mod frame;
 mod gameplay;
 mod hud;

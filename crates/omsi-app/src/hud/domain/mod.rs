@@ -1,5 +1,6 @@
 //! What the HUD is about: the objects a frame hands it and their fields, with no drawing.
 
+pub(crate) mod describe;
 mod frame;
 mod hits;
 mod info;

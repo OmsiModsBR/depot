@@ -69,7 +69,7 @@ pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
 
 use crate::core::app::{App, FrozenMirrors};
 use crate::core::startup::process_cpu_seconds;
-use crate::describe;
+use crate::hud::describe;
 use crate::gameplay::diagnostics::{log_physics, standing_reasons};
 use crate::frame::quit;
 use crate::frame::session;
