@@ -1852,7 +1852,7 @@ fn push_lamp_sprites(
             size: size * 1.25,
             rotating: 2,
             flags: 8,
-            texture: crate::lights::star_texture_id(),
+            texture: crate::world::lights::star_texture_id(),
             ..glow
         });
     }
@@ -1865,7 +1865,7 @@ fn push_lamp_sprites(
             direction: glow.direction,
             cone_cos: halo_cone.0,
             inner_cos: halo_cone.1,
-            texture: crate::lights::glow_texture_id(),
+            texture: crate::world::lights::glow_texture_id(),
             halo: true,
             ..Default::default()
         });
@@ -1937,9 +1937,9 @@ pub fn model_lights_owned(
                 texture: l
                     .texture
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id(&model_dir, b))
+                    .map(|b| crate::world::lights::corona_texture_id(&model_dir, b))
                     .filter(|t| *t != 0)
-                    .unwrap_or_else(crate::lights::glow_texture_id),
+                    .unwrap_or_else(crate::world::lights::glow_texture_id),
                 ..Default::default()
             };
             push_lamp_sprites(&mut out, glow, effect, l.size, (0.0, 0.0));
@@ -2001,9 +2001,9 @@ pub fn model_lights_owned(
                 texture: l
                     .bitmap
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id(&model_dir, b))
+                    .map(|b| crate::world::lights::corona_texture_id(&model_dir, b))
                     .filter(|t| *t != 0)
-                    .unwrap_or_else(crate::lights::glow_texture_id),
+                    .unwrap_or_else(crate::world::lights::glow_texture_id),
                 ..Default::default()
             };
             push_lamp_sprites(
@@ -2036,7 +2036,7 @@ pub fn model_lights_owned(
                     direction: dir,
                     cone_cos: (l.cone_outer * 0.5).to_radians(),
                     inner_cos: (l.cone_inner * 0.5).to_radians(),
-                    texture: crate::lights::cone_texture_id(),
+                    texture: crate::world::lights::cone_texture_id(),
                     beam: true,
                     ..Default::default()
                 });

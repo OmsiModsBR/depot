@@ -10,6 +10,12 @@ pub(crate) use super::super::implementation::money;
 pub(crate) use super::super::implementation::schedule_paper;
 pub(crate) use super::super::implementation::traffic_link;
 
+/// The bus radio: its stations and the rules of tuning (`domain/radio.rs`), and the streams
+/// tuned in while it plays (`implementation/radio.rs`).
+pub(crate) mod radio {
+    pub use crate::gameplay::implementation::radio::*;
+}
+
 /// Why the bus does not move, the rebound keys, and the physics in the log.
 pub(crate) mod diagnostics {
     pub use crate::gameplay::domain::diagnostics::*;

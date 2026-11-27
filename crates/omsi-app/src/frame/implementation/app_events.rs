@@ -69,7 +69,7 @@ pub fn render_scale_step(fps: f32, slow_frame_wait_share: f32) -> f32 {
 
 use crate::core::app::{App, FrozenMirrors};
 use crate::core::startup::process_cpu_seconds;
-use crate::describe;
+use crate::hud::describe;
 use crate::gameplay::diagnostics::{log_physics, standing_reasons};
 use crate::frame::quit;
 use crate::frame::session;
@@ -79,7 +79,7 @@ use crate::gameplay::traffic_link::{lay_down_poles, traffic_inputs};
 use crate::hud;
 use crate::hud::nav;
 use crate::hud::{info_bar, InfoData, InfoMode};
-use crate::lights;
+use crate::world::lights;
 use crate::output::{render_mirrors, Backend, ORBIT_DEFAULT, ORBIT_MAX, ORBIT_MIN};
 use crate::weather::puddles;
 use crate::weather::weather_setup::{
@@ -3289,7 +3289,7 @@ impl ApplicationHandler for App {
                 lighting.glass_wind = self
                     .player
                     .as_ref()
-                    .map(|p| crate::lights::vehicle_velocity(&p.vehicle))
+                    .map(|p| crate::world::lights::vehicle_velocity(&p.vehicle))
                     .unwrap_or_default();
                 lighting.condensation = self.cabin_air.appearance();
                 // an LED panel's dots burn this much above their own colour (16 levels,

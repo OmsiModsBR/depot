@@ -35,7 +35,7 @@ fn index(devices: &[DeviceCfg], name: &str) -> Option<usize> {
 }
 
 fn event_names(app: &App, device: &DeviceCfg) -> Vec<(String, String)> {
-    let names = crate::describe::names(&app.args.root, &app.settings.language);
+    let names = crate::hud::describe::names(&app.args.root, &app.settings.language);
     let mut events = names.events();
     for action in configurations(app)
         .iter()
@@ -171,7 +171,7 @@ pub fn axis_rows(d: &DeviceCfg, live: Option<&crate::input::controllers::Connect
 
 /// Only assigned buttons and latching switches appear here; empty hardware slots stay
 /// available through physical capture or the separate button-number list.
-pub fn button_rows(d: &DeviceCfg, names: &crate::describe::ControlNames) -> Rows {
+pub fn button_rows(d: &DeviceCfg, names: &crate::hud::describe::ControlNames) -> Rows {
     let mut out = vec![
         crate::hud::lists::opens(
             "Press a button to assign it…",
@@ -418,7 +418,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 2 => {
                     out = button_rows(
                         &d,
-                        &crate::describe::names(&app.args.root, &app.settings.language),
+                        &crate::hud::describe::names(&app.args.root, &app.settings.language),
                     )
                 }
                 _ => {
@@ -510,7 +510,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 .max(d.latching.iter().max().map(|b| b + 1).unwrap_or(0))
                 .max(32)
                 .min(crate::input::controllers::HAT_BUTTONS + 16);
-            let names = crate::describe::names(&app.args.root, &app.settings.language);
+            let names = crate::hud::describe::names(&app.args.root, &app.settings.language);
             for b in (0..count.min(crate::input::controllers::HAT_BUTTONS)).chain(
                 crate::input::controllers::HAT_BUTTONS..crate::input::controllers::HAT_BUTTONS + 16,
             ) {
@@ -531,7 +531,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Rows {
                 .map(|i| devices[i].clone())
                 .unwrap_or_default();
             let action = d.buttons.get(*b).map(|x| x.0.as_str()).unwrap_or("");
-            let names = crate::describe::names(&app.args.root, &app.settings.language);
+            let names = crate::hud::describe::names(&app.args.root, &app.settings.language);
             let value = if action.is_empty() {
                 "Unassigned".into()
             } else {

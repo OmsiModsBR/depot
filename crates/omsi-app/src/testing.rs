@@ -102,7 +102,8 @@ pub mod core {
     }
 }
 pub mod describe {
-    pub use crate::describe::*;
+    pub use crate::hud::domain::describe::*;
+    pub use crate::hud::implementation::describe::*;
 
     /// The control names as the tests build them.
     pub trait ControlNamesInternals {
@@ -243,7 +244,8 @@ pub mod launcher {
     }
 }
 pub mod lights {
-    pub use crate::lights::*;
+    pub use crate::world::domain::lights::*;
+    pub use crate::world::implementation::lights::*;
 }
 pub mod line_times {
     pub use crate::gameplay::line_times::*;
@@ -311,7 +313,8 @@ pub mod quit {
     }
 }
 pub mod radio {
-    pub use crate::radio::*;
+    pub use crate::gameplay::domain::radio::*;
+    pub use crate::gameplay::implementation::radio::*;
 }
 pub mod rain {
     pub use crate::weather::rain::*;
@@ -463,7 +466,8 @@ pub mod touch {
     pub use crate::input::touch::*;
 }
 pub mod tr_fill {
-    pub use crate::tr_fill::*;
+    pub use crate::hud::domain::tr_fill::*;
+    pub use crate::hud::implementation::tr_fill::*;
 
     /// Enough words around the values to tell the template apart ("%{a}: %{b}" is not).
     pub fn telling(parts: &[String]) -> bool {

@@ -747,7 +747,7 @@ impl App {
     /// Read the vehicles that can be placed, once (the place list and the "Add vehicle" window).
     pub(crate) fn load_vehicle_list(&mut self) {
         if self.vehicle_list.is_empty() {
-            let menu = crate::menu::Menu::new(&self.args.root, &self.args.map);
+            let menu = crate::hud::start_menu::Menu::new(&self.args.root, &self.args.map);
             self.vehicle_meta = menu
                 .vehicles
                 .iter()

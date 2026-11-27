@@ -9,17 +9,12 @@
 //! calls `android_main` (see `core/implementation/android.rs`), which runs the launcher and
 //! the game in one window of one process.
 
-mod describe;
 mod frame;
 mod gameplay;
 mod hud;
 mod launcher;
-mod lights;
 mod mapview;
-mod menu;
 mod output;
-mod radio;
-mod tr_fill;
 mod ui;
 mod weather;
 mod world;
@@ -50,7 +45,7 @@ pub(crate) fn ui_language(code: &str) {
     omsi_ui::i18n::set_lookup(|lang, text| {
         _rust_i18n_try_translate(lang, text)
             .map(|t| t.into_owned())
-            .or_else(|| tr_fill::fill(lang, text))
+            .or_else(|| hud::tr_fill::fill(lang, text))
     });
     let iso = omsi_launcher_lib::language_iso(code);
     omsi_ui::i18n::set_language(iso);
