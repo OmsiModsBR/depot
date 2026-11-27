@@ -175,6 +175,19 @@ impl SkyResources {
         }
     }
 
+    /// The clouds' shade map, when the frame's light needs it drawn (sky/cloud_shade.rs).
+    pub fn encode_cloud_shade(
+        &mut self,
+        scene: &Scene,
+        prepass_encoder: &mut wgpu::CommandEncoder,
+        own_shading: bool,
+    ) {
+        if own_shading {
+            self.cloud_shade
+                .encode(scene.sky_bind_group.as_ref(), prepass_encoder);
+        }
+    }
+
     /// The enhanced path's reflection probe: the sky into its six faces, then the blurred
     /// mip levels.
     pub fn encode_probe(

@@ -33,4 +33,14 @@ pub struct EnhancedUniform {
     pub moon_light: [f32; 4],
     /// `Lighting::condensation`
     pub condensation: [f32; 4],
+    /// rgb the sun's irradiance before the clouds over the camera, for the scene's direct
+    /// light: the clouds' shade map (below) says how much of it each point gets. Where the
+    /// device has no slot for the map, the sun after the clouds over the camera, as `sun`.
+    pub sun_open: [f32; 4],
+    /// xy the shade map's centre in the clouds' frame, z the mean light through the clouds,
+    /// w 1 where there is a map to read (`sky/cloud_shade.rs`)
+    pub cloud_shade: [f32; 4],
+    /// x, y the heights of the cloud layer's base and top, zw how far the clouds have
+    /// drifted since the map was drawn (m)
+    pub cloud_layer: [f32; 4],
 }

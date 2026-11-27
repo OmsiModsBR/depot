@@ -476,6 +476,43 @@ fn pane_condensation(world: vec3<f32>) -> f32 {
     return amount;
 }
 
+// --- the clouds' shade map (sky/cloud_shade.rs): the share of the sun's light that gets through
+// the cloud layer to a point, read along the light's way from the point to the layer's base.
+// The map lies on that base round a centre in the clouds' frame (world modulo 70 km, as
+// `cloud_ground` has it), drawn some time ago: the clouds have drifted `enh.cloud_layer.zw`
+// since, which moves where the shape is. A point inside the layer sees the part of it above
+// (the more of the layer is above, the more of the shade); its border blends to the mean.
+@group(0) @binding(21) var t_cloud_shade: texture_2d<f32>;
+
+fn cloud_map_texel(uv: vec2<f32>) -> f32 {
+    return textureSampleLevel(t_cloud_shade, s_lin, uv, 0.0).r;
+}
+
+const CLOUD_MAP_SIZE: f32 = 12000.0;
+const CLOUD_MAP_PERIOD: f32 = 70000.0;
+
+fn cloud_shade_at(world: vec3<f32>) -> f32 {
+    let s = camera.sun_dir.xyz;
+    if (enh.cloud_shade.w < 0.5 || s.z <= 0.02) {
+        return 1.0;
+    }
+    let base = enh.cloud_layer.x;
+    let top = enh.cloud_layer.y;
+    // above the layer there is nothing between the point and the sun
+    let inside = clamp((top - world.z) / (top - base), 0.0, 1.0);
+    if (inside <= 0.0) {
+        return 1.0;
+    }
+    let way = max(base - world.z, 0.0) / s.z;
+    let q = world.xy + camera.world_origin.zw + enh.cloud_layer.zw + s.xy * way;
+    var d = q - enh.cloud_shade.xy;
+    d = d - CLOUD_MAP_PERIOD * round(d / CLOUD_MAP_PERIOD);
+    let uv = d / CLOUD_MAP_SIZE + vec2<f32>(0.5);
+    let edge = max(abs(uv.x - 0.5), abs(uv.y - 0.5)) * 2.0;
+    let t = cloud_map_texel(clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)));
+    return pow(mix(t, enh.cloud_shade.z, smoothstep(0.9, 1.0, edge)), inside);
+}
+
 fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bool, eye: vec3<f32>) -> vec4<f32> {
     if (material.emissive.w > 1.5) {
         // a pane's film of water: drops, not the sliding texture (see `rain_glass`), each a
@@ -896,7 +933,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     let s = camera.sun_dir.xyz;
     let nl = dot(n, s);
     var direct = vec3<f32>(0.0);
-    if (enh.lights.w > 0.0 && max(enh.sun.r, enh.sun.g) > 1e-5) {
+    if (enh.lights.w > 0.0 && max(enh.sun_open.r, enh.sun_open.g) > 1e-5) {
         var shadow = 0.0;
         if (glass && nl > 0.0) {
             // a pane lets nearly all of it through: the sun on it is its glint, for which one
@@ -906,7 +943,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         } else if (nl > 0.0 || thin) {
             shadow = sun_shadow_soft(in.world, n, thin);
         }
-        let e_sun = enh.sun.rgb * shadow;
+        let e_sun = enh.sun_open.rgb * shadow * cloud_shade_at(in.world);
         if (thin) {
             // foliage: a crown of leaves facing every way, whose normals OMSI points up
             // only to light it evenly - lit by the sun from any side (the shadow map

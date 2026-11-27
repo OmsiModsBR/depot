@@ -48,6 +48,14 @@ struct Enhanced {
     // rear, and how far the defroster has cleared the windscreen (0..1; omsi-app
     // condensation.rs)
     condensation: vec4<f32>,
+    // rgb the sun's irradiance before the clouds over the camera (the scene's direct light:
+    // the clouds' shade map says how much of it a point gets)
+    sun_open: vec4<f32>,
+    // xy the shade map's centre (the clouds' frame), z the mean light through the clouds,
+    // w 1 where there is a map to read
+    cloud_shade: vec4<f32>,
+    // xy heights of the layer's base and top, zw the clouds' drift since the map was drawn
+    cloud_layer: vec4<f32>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;

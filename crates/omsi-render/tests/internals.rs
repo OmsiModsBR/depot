@@ -773,16 +773,22 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
         ArrayPath::NoStorage,
     ] {
         let sixteen = path != ArrayPath::Storage;
-        let n = textures(&camera_layout_entries(path, sixteen)) + material;
-        // storage carries the enhanced path's seventeenth texture; the others keep to sixteen
-        let units = if sixteen { 16 } else { 17 };
+        let n = textures(&camera_layout_entries(path, sixteen, !sixteen)) + material;
+        // storage carries the enhanced path's seventeenth and eighteenth textures; the others
+        // keep to sixteen
+        let units = if sixteen { 16 } else { 18 };
         assert!(n <= units, "{path:?}: {n} textures");
     }
     // (and nothing is left out where storage buffers carry the arrays: the enhanced path
-    // reads one more, the glass transmission map, so it takes seventeen, and the device is
-    // opened with that limit or builds no enhanced path)
+    // reads two more, the glass transmission map and the clouds' shade map, so it takes
+    // eighteen; the device is opened with seventeen at least or builds no enhanced path, and
+    // without the eighteenth the shade map is left out of the group)
     assert_eq!(
-        textures(&camera_layout_entries(ArrayPath::Storage, false)) + material,
+        textures(&camera_layout_entries(ArrayPath::Storage, false, true)) + material,
+        18
+    );
+    assert_eq!(
+        textures(&camera_layout_entries(ArrayPath::Storage, false, false)) + material,
         17
     );
     // the entry points that read a texture left out are the enhanced path's, the

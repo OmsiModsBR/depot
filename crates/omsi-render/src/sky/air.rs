@@ -19,8 +19,9 @@ pub const MOON_RADIUS: f32 = 0.0062;
 /// few tens of metres apart (the penumbra of a cloud a kilometre and a half up).
 pub const CLOUD_SHADOW_EROSION: f32 = 0.15;
 
-/// How far the exposure follows the light into a cloud's shadow (log terms).
-pub const CLOUD_SHADE_ADAPT: f32 = 0.5;
+/// How far the exposure follows the light into a cloud's shadow (log terms): a quarter of it,
+/// as the eye makes up for the rest and the scene keeps its picture under a passing cloud.
+pub const CLOUD_SHADE_ADAPT: f32 = 0.25;
 
 pub fn cloud_sun_transmittance(shape: &[u8], lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> f32 {
     const BOTTOM: f32 = 1400.0;

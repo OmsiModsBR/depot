@@ -30,8 +30,9 @@ pub use arrays::{
 };
 pub use buffers::buffer_init;
 pub use caps::{
-    dedicated_vram_mb, gl_worker_turn, sixteen_texture_units, vulkan_vram_mb,
-    ENHANCED_SAMPLED_TEXTURES, ENHANCED_TEXTURES_FIT, GL_BACKEND,
+    cloud_shade_fits, dedicated_vram_mb, gl_worker_turn, sixteen_texture_units, vulkan_vram_mb,
+    CLOUD_SHADE_FITS, CLOUD_SHADE_SAMPLED_TEXTURES, ENHANCED_SAMPLED_TEXTURES,
+    ENHANCED_TEXTURES_FIT, GL_BACKEND,
 };
 pub use context::{GpuContext, Samplers};
 pub use debug::debug;

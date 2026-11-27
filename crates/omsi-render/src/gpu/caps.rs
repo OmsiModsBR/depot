@@ -82,6 +82,21 @@ pub fn sixteen_texture_units() -> bool {
 /// group's eight (with the panes' transmission map) and the material group's nine.
 pub const ENHANCED_SAMPLED_TEXTURES: u32 = 17;
 
+/// One more with the clouds' shade map (`sky/cloud_shade.rs`), which the scene shader reads
+/// for the sun's light at every point. A device with `ENHANCED_SAMPLED_TEXTURES` but not
+/// this many draws Enhanced as before the map: the sun dimmed by the clouds over the camera.
+pub const CLOUD_SHADE_SAMPLED_TEXTURES: u32 = ENHANCED_SAMPLED_TEXTURES + 1;
+
+/// The device takes `CLOUD_SHADE_SAMPLED_TEXTURES` in a stage (set with `ENHANCED_TEXTURES_FIT`).
+pub static CLOUD_SHADE_FITS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
+
+/// Whether the camera group carries the clouds' shade map: the device has the texture slot
+/// and is not one of the sixteen-unit ones.
+pub fn cloud_shade_fits() -> bool {
+    CLOUD_SHADE_FITS.load(std::sync::atomic::Ordering::Relaxed) && !sixteen_texture_units()
+}
+
 /// The device takes `ENHANCED_SAMPLED_TEXTURES` in a stage (set when the device is opened;
 /// the WebGPU default is sixteen, so the renderer asks for more where the adapter has them).
 /// Without them the camera group leaves out the enhanced path's textures, as on OpenGL.

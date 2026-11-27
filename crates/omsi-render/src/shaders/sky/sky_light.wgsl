@@ -400,3 +400,36 @@ fn fs_sky_cube(in: FsIn) -> @location(0) vec4<f32> {
     col = col * a.a + a.rgb;
     return vec4<f32>(col / max(enh.ground.w, 1e-8), c.a);
 }
+
+// --- the clouds' shade map (sky/cloud_shade.rs): for each texel of a square laid on the base
+// of the cloud layer, how much of the sun's light gets through the layer along the way to the
+// sun. The same heaps the sky draws (`cloud_sigma`, their cover cut by the weather's own
+// picture, less the billows' erosion that the map leaves out, no detail volume), 24 steps
+// through the layer. `probe.p` is, for this pass: xy the square's centre in the clouds'
+// frame (world coordinates modulo CLOUD_ORIGIN_PERIOD, as `cloud_ground` gives them), z and
+// w the heights of the layer's base and top.
+const SHADE_TEXELS: f32 = 1024.0;
+const SHADE_SIZE: f32 = 12000.0;
+const SHADE_EROSION: f32 = 0.15;
+const SHADE_STEPS: i32 = 24;
+
+@fragment
+fn fs_cloud_shade(in: FsIn) -> @location(0) vec4<f32> {
+    let s = normalize(camera.sun_dir.xyz);
+    if (s.z <= 0.02 || camera.clouds.x <= 0.001) {
+        return vec4<f32>(1.0);
+    }
+    let base = probe.p.z;
+    let thick = probe.p.w - base;
+    let xy = probe.p.xy + (in.clip.xy / SHADE_TEXELS - vec2<f32>(0.5)) * SHADE_SIZE;
+    let steps = trips(SHADE_STEPS);
+    let ds = min(thick / s.z, 12000.0) / f32(steps);
+    var od = 0.0;
+    for (var k = 0; k < steps; k = k + 1) {
+        let t = (f32(k) + 0.5) * ds;
+        let p = vec3<f32>(xy + s.xy * t, base + s.z * t);
+        let coverage = clamp(cloud_coverage(p.xy) - SHADE_EROSION, 0.0, 1.0);
+        od = od + cloud_sigma(p, s.z * t / thick, coverage, 0.0, false) * ds;
+    }
+    return vec4<f32>(exp(-od), 0.0, 0.0, 1.0);
+}

@@ -141,12 +141,18 @@ impl Camera {
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table, the sky cube and the panes' transmission map.
-pub const ENHANCED_CAMERA_TEXTURES: [u32; 4] = [12, 14, 17, 20];
+/// table, the sky cube, the panes' transmission map and the clouds' shade map.
+pub const ENHANCED_CAMERA_TEXTURES: [u32; 5] = [12, 14, 17, 20, 21];
 
 /// The camera group's entries on a device whose arrays take `path`, without the enhanced
-/// path's textures where it has `sixteen` texture units (see `sixteen_texture_units`).
-pub fn camera_layout_entries(path: ArrayPath, sixteen: bool) -> Vec<wgpu::BindGroupLayoutEntry> {
+/// path's textures where it has `sixteen` texture units (see `sixteen_texture_units`), and
+/// without the clouds' shade map unless the device has a slot for it (`cloud_map`, see
+/// `cloud_shade_fits`).
+pub fn camera_layout_entries(
+    path: ArrayPath,
+    sixteen: bool,
+    cloud_map: bool,
+) -> Vec<wgpu::BindGroupLayoutEntry> {
     let mut camera_entries = vec![
         uniform_entry(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
         array_layout_entry_on(path, 1, wgpu::ShaderStages::VERTEX, true),
@@ -191,6 +197,8 @@ pub fn camera_layout_entries(path: ArrayPath, sixteen: bool) -> Vec<wgpu::BindGr
         uniform_entry(19, wgpu::ShaderStages::FRAGMENT),
         // the sunlight the panes let through, as seen from the sun
         texture_entry(20),
+        // the clouds' shade map: the sun's light through them, laid out on their base
+        texture_entry(21),
     ];
     // the point lights and their grid (see `ArrayPath::NoStorage`)
     if path != ArrayPath::NoStorage {
@@ -209,6 +217,8 @@ pub fn camera_layout_entries(path: ArrayPath, sixteen: bool) -> Vec<wgpu::BindGr
     }
     if sixteen {
         camera_entries.retain(|e| !ENHANCED_CAMERA_TEXTURES.contains(&e.binding));
+    } else if !cloud_map {
+        camera_entries.retain(|e| e.binding != 21);
     }
     camera_entries
 }

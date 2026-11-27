@@ -1,6 +1,7 @@
 //! The sky's GPU resources: the sky table, the clouds' noise, the reflection probe and the
 //! sky last computed.
 
+use super::cloud_shade::CloudShade;
 use super::probe::{Probe, PROBE_MIPS, PROBE_SIZE, SKY_CUBE_ROUNDS, SKY_CUBE_SIZE};
 use super::{atmosphere, clouds};
 use crate::gpu::{
@@ -23,6 +24,8 @@ pub struct SkyResources {
     pub sky_lut: wgpu::Texture,
     pub sky_lut_view: wgpu::TextureView,
     pub probe: Option<Probe>,
+    /// The clouds' shade map (camera binding 21).
+    pub cloud_shade: CloudShade,
     pub sky_state: Option<atmosphere::SkyState>,
     /// How much the lamps round the camera light the night sky, relative to a city's
     /// (`lamp_sky_glow`), as the sky is computed with it.
@@ -396,7 +399,16 @@ impl SkyResources {
                 cube_recapture: false,
             }
         };
+        let cloud_shade = CloudShade::new(
+            device,
+            queue,
+            sky_layout,
+            sky_shader,
+            camera_buf,
+            lin_sampler,
+        );
         Self {
+            cloud_shade,
             sky_lut,
             sky_lut_view,
             probe: Some(probe),

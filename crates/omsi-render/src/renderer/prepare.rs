@@ -3,7 +3,7 @@
 
 use super::options::RenderOptions;
 use super::state::Renderer;
-use crate::gpu::{array_path, sixteen_texture_units, ArrayPath, GpuArray};
+use crate::gpu::{array_path, cloud_shade_fits, sixteen_texture_units, ArrayPath, GpuArray};
 use crate::scene::{Scene, ENHANCED_CAMERA_TEXTURES};
 
 impl Renderer {
@@ -96,6 +96,10 @@ impl Renderer {
                 binding: 20,
                 resource: wgpu::BindingResource::TextureView(&self.shadows.glass_view),
             },
+            wgpu::BindGroupEntry {
+                binding: 21,
+                resource: wgpu::BindingResource::TextureView(&self.sky.cloud_shade.view),
+            },
         ];
         // (the point lights where the device has storage buffers for them)
         if array_path() != ArrayPath::NoStorage {
@@ -110,6 +114,8 @@ impl Renderer {
         }
         if sixteen_texture_units() {
             entries.retain(|e| !ENHANCED_CAMERA_TEXTURES.contains(&e.binding));
+        } else if !cloud_shade_fits() {
+            entries.retain(|e| e.binding != 21);
         }
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera"),

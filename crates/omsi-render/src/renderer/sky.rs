@@ -4,10 +4,10 @@ use crate::lighting::{debug_view, tone_contrast, Lighting, CABIN_E, LAMP_E, WIND
 use crate::renderer::Renderer;
 use crate::sky::{
     atmosphere, cloud_sun_transmittance, enhanced_sky_input, enhanced_weather_fog,
-    sky_input_differs, EnhancedUniform, CLOUD_SHADE_ADAPT, FOG_FALLOFF, MOON_RADIUS, PROBE_MIPS,
-    SUN_RADIUS,
+    sky_input_differs, EnhancedUniform, ShadeInputs, CLOUD_LAYER_BASE, CLOUD_LAYER_TOP,
+    CLOUD_SHADE_ADAPT, FOG_FALLOFF, MOON_RADIUS, PROBE_MIPS, SUN_RADIUS,
 };
-use glam::{DVec3, Vec3};
+use glam::{DVec3, Vec2, Vec3};
 
 impl Renderer {
     /// Take in a newly computed sky: its table goes to the GPU, the probe is redrawn.
@@ -127,6 +127,39 @@ impl Renderer {
             let t = self.sky.cloud_sun.map(|c| c + (now - c) * k).unwrap_or(now);
             self.sky.cloud_sun = Some(t);
             t
+        };
+        // the clouds' shade map: drawn again when what it shows has changed, and the uniform
+        // says where it lies; where the device has no slot for it the scene's sun is dimmed by
+        // the clouds over the camera as before (`cloud_t`)
+        let shade_map = crate::gpu::cloud_shade_fits();
+        let (cloud_shade, cloud_layer) = if shade_map {
+            let inputs = ShadeInputs {
+                light: lighting.sun_dir.normalize_or_zero(),
+                cover: lighting.cloud_density.clamp(0.0, 1.0),
+                offset: Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]),
+                base: CLOUD_LAYER_BASE,
+                top: CLOUD_LAYER_TOP,
+                camera: ro + cam_rel.as_dvec3(),
+                camera_z: cam_rel.z,
+            };
+            if self.sky.cloud_shade.state.due(&inputs) {
+                // (the map's border blends to the light the clouds let through on average:
+                // the light over a grid of places round the camera)
+                let mut sum = 0.0;
+                for (i, j) in (-1..=1).flat_map(|i| (-1..=1).map(move |j| (i, j))) {
+                    let at = cam_rel + Vec3::new(i as f32, j as f32, 0.0) * 4000.0;
+                    sum += cloud_sun_transmittance(&self.sky.cloud_shape_cpu, lighting, at, ro);
+                }
+                self.sky
+                    .cloud_shade
+                    .set_drawn(&self.queue, &inputs, sum / 9.0);
+            }
+            self.sky.cloud_shade.state.uniform(&inputs)
+        } else {
+            (
+                [0.0, 0.0, 1.0, 0.0],
+                [CLOUD_LAYER_BASE, CLOUD_LAYER_TOP, 0.0, 0.0],
+            )
         };
         let st = self.sky.sky_state.as_ref().expect("sky state");
         // the exposure follows the light over a second or two (in log space); an offscreen
@@ -286,6 +319,11 @@ impl Renderer {
                 c
             },
             condensation: lighting.condensation,
+            sun_open: (if shade_map { st.sun } else { st.sun * cloud_t })
+                .extend(0.0)
+                .to_array(),
+            cloud_shade,
+            cloud_layer,
             moon_light: st
                 .moon_light
                 .extend(

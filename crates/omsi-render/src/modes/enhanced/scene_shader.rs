@@ -1,15 +1,37 @@
 //! Enhanced's scene fragment shader, as the mode hands it to the scene module.
 
-use crate::gpu::basic_pipelines;
+use crate::gpu::{basic_pipelines, cloud_shade_fits};
 
 /// The WGSL of the Enhanced shading (`fs_enhanced` and its helpers), for the scene module.
 pub fn scene_text() -> String {
     let src = include_str!("shaders/enhanced.wgsl").to_string();
+    let src = if cloud_shade_fits() {
+        src
+    } else {
+        without_cloud_shade(src)
+    };
     if basic_pipelines() {
         lean_scene(src)
     } else {
         src
     }
+}
+
+/// The scene shader on a device with no texture slot left for the clouds' shade map: the sun
+/// is dimmed by the clouds over the camera instead (the renderer puts that into `sun_open`),
+/// and the map reads as all light.
+pub fn without_cloud_shade(src: String) -> String {
+    let out = src
+        .replace(
+            "@group(0) @binding(21) var t_cloud_shade: texture_2d<f32>;",
+            "",
+        )
+        .replace(
+            "return textureSampleLevel(t_cloud_shade, s_lin, uv, 0.0).r;",
+            "return 1.0;",
+        );
+    debug_assert!(!out.contains("t_cloud_shade"));
+    out
 }
 
 /// The scene shader without the parts 0.2.0 added to every pixel's lighting that a phone's
