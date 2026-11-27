@@ -465,7 +465,8 @@ pub mod touch {
     pub use crate::input::touch::*;
 }
 pub mod tr_fill {
-    pub use crate::tr_fill::*;
+    pub use crate::hud::domain::tr_fill::*;
+    pub use crate::hud::implementation::tr_fill::*;
 
     /// Enough words around the values to tell the template apart ("%{a}: %{b}" is not).
     pub fn telling(parts: &[String]) -> bool {

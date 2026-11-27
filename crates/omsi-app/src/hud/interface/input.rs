@@ -14,6 +14,11 @@ pub(crate) mod describe {
     pub(crate) use super::super::super::implementation::describe::*;
 }
 
+/// The text templates of the tables: the values of a text the game built, and its translation.
+pub(crate) mod tr_fill {
+    pub(crate) use super::super::super::implementation::tr_fill::*;
+}
+
 /// The menu's lists and settings windows, by subject.
 pub(crate) mod lists {
     pub(crate) use super::super::super::domain::lists::*;
