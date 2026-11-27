@@ -272,7 +272,7 @@ pub(crate) struct App {
     /// Which of the game menu's lists `admin_list` holds (see `hud::lists`).
     pub(crate) list_kind: Option<crate::hud::lists::ListKind>,
     /// OMSI 2's route arrows over the road (the `nav_arrows` setting).
-    pub(crate) route_arrows: crate::route_arrows::RouteArrows,
+    pub(crate) route_arrows: crate::world::route_arrows::RouteArrows,
     /// OMSI's global key actions from `Inputs/keyboard.cfg` ([game]).
     pub(crate) game_keys: Vec<omsi_content::KeyBinding>,
     /// Keys (DirectInput scan codes, no modifier) the player bound on the Controls page to

@@ -23,7 +23,7 @@ use crate::output::{
 };
 use crate::core::services::{at_petrol_station, run_services};
 use crate::settings;
-use crate::situation::{build_situation, start_clock};
+use crate::core::situation::{build_situation, start_clock};
 use crate::weather::puddles;
 use crate::weather::rain;
 use crate::weather::weather_setup::{

@@ -13,6 +13,12 @@ pub(crate) mod app {
     pub(crate) use super::super::super::domain::app::*;
     pub(crate) use super::super::super::implementation::app::*;
 }
+/// The situation the game starts from or saves: its rules and its files.
+pub(crate) mod situation {
+    pub(crate) use super::super::super::domain::situation::*;
+    pub(crate) use super::super::super::implementation::situation::*;
+}
+
 pub(crate) use super::super::domain::cli;
 pub(crate) use super::super::implementation::launcher_link;
 

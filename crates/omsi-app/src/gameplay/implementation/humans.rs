@@ -40,7 +40,7 @@
 
 pub(crate) use crate::gameplay::domain::humans::*;
 use crate::gameplay::traffic::Traffic;
-use crate::situation::SavedRider;
+use crate::core::situation::SavedRider;
 use crate::weather::ambience;
 use crate::world::scene::World;
 use glam::{DVec2, DVec3, Mat4, Vec3};
@@ -2656,9 +2656,15 @@ impl Humans {
             return None;
         }
         let (k, beside) = self.take_spot(id)?;
-        let sp = beside
+        let mut sp = beside
             .clone()
             .unwrap_or_else(|| self.stops[&id].spots[k].clone());
+        // (standing: on the floor there, not at the place's height - #189)
+        if sp.height == 0.0 {
+            if let Some(z) = world.waiting_place_floor(sp.pos) {
+                sp.pos.z = z;
+            }
+        }
         let (dest, line) = self.draw_dest(id);
         let walk = 1.1 + (self.rand_f() as f32 * 2.0 - 1.0) * 0.2;
         let mut pax = Pax::new(walk, self.rand_f());

@@ -8,7 +8,7 @@
 
 use crate::core::cli::{parse_time, Args};
 use crate::gameplay::schedule;
-use crate::situation::start_clock;
+use crate::core::situation::start_clock;
 use crate::world::scene::World;
 use glam::DVec3;
 use std::path::{Path, PathBuf};

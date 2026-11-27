@@ -77,6 +77,20 @@ fn cache_dir() -> Result<PathBuf> {
     Ok(data.join("cache").join("schedules"))
 }
 
+/// The drawing that `file_schedule` names, when it is one of ours. The paper is drawn into
+/// the user's data folder, not into the content, and the texture lookup follows a full path
+/// only inside the content folders: without this the model showed its blank paper.
+pub(crate) fn cached_paper(name: &str) -> Option<PathBuf> {
+    paper_in_cache(name, &cache_dir().ok()?)
+}
+
+/// `name` when it is a file right inside `cache` (a full path, its folder exactly `cache`:
+/// a `..` or another folder is not followed) and exists.
+pub fn paper_in_cache(name: &str, cache: &Path) -> Option<PathBuf> {
+    let path = Path::new(name.trim());
+    (path.parent()? == cache && path.is_file()).then(|| path.to_path_buf())
+}
+
 fn set_filename(vehicle: &mut VehicleInstance, value: &str) {
     if let Some(i) = vehicle.ty.program.str_var("file_schedule") {
         vehicle.state.str_vars[i as usize] = value.to_string();

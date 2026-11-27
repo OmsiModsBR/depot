@@ -13,7 +13,7 @@ use crate::hud::nav;
 use crate::hud::start_menu as menu;
 use crate::output::{vanilla_cannot_open, Backend};
 use crate::settings;
-use crate::situation::start_clock;
+use crate::core::situation::start_clock;
 use crate::weather::ambience;
 use crate::weather::weather_setup::{initial_wetness, load_weather, setup_sky};
 use crate::world::scene::World;
@@ -467,7 +467,7 @@ impl App {
                     // saved under the world (it fell through an unloaded tile, #33) with its place
                     // not loaded: its ground is unknown, and put at sea level it would fall on
                     // through elevated terrain; left out rather than placed wrongly
-                    if let Some((x, y)) = crate::situation::spawn_without_height(&o.spawn) {
+                    if let Some((x, y)) = crate::core::situation::spawn_without_height(&o.spawn) {
                         if w.ground_height(x, y).is_none() {
                             log::warn!("situation vehicle {}: saved at an implausible height and its place is not loaded; left out", o.bus);
                             continue;
