@@ -488,6 +488,7 @@ fn camera_wgsl_matches_camera_uniform() {
         tree_wind,
         moon,
         stars,
+        glass,
     );
     let src = include_str!("../src/shaders/common/camera.wgsl");
     let module =
@@ -773,12 +774,16 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
     ] {
         let sixteen = path != ArrayPath::Storage;
         let n = textures(&camera_layout_entries(path, sixteen)) + material;
-        assert!(n <= 16, "{path:?}: {n} textures");
+        // storage carries the enhanced path's seventeenth texture; the others keep to sixteen
+        let units = if sixteen { 16 } else { 17 };
+        assert!(n <= units, "{path:?}: {n} textures");
     }
-    // (and nothing is left out where storage buffers carry the arrays)
+    // (and nothing is left out where storage buffers carry the arrays: the enhanced path
+    // reads one more, the glass transmission map, so it takes seventeen, and the device is
+    // opened with that limit or builds no enhanced path)
     assert_eq!(
         textures(&camera_layout_entries(ArrayPath::Storage, false)) + material,
-        16
+        17
     );
     // the entry points that read a texture left out are the enhanced path's, the
     // probe's, the puddles' and the reflection pass's - none made there
