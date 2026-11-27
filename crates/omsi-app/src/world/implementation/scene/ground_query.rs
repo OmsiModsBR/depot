@@ -21,6 +21,11 @@ pub const LOW_OBJECT: f32 = 0.3;
 /// drawn sunk into what they drove on.
 const PAINT_LAYER: f32 = 0.02;
 
+/// How far over a waiting place its floor is looked for (m). A place under the pavement
+/// is found up to this deep. A place over the pavement stays off a shelter's roof (2.2 m
+/// or more up) while it lies less than 2.2 m minus this over the pavement.
+pub const WAITING_PLACE_REACH: f64 = 1.1;
+
 /// What a wheel stands on at world (x, y): the faces of the roads, crossings and surface
 /// objects there, and the terrain wherever it is not cut away under them - the highest at
 /// or below `top`, and the lowest above it (a kerb the tyre is up against).
@@ -409,6 +414,16 @@ impl World {
     /// the people waiting under it on top of it.
     pub fn walk_height_near(&self, x: f64, y: f64, near: f64) -> Option<f64> {
         self.walk_height_reach(x, y, near, 0.5)
+    }
+
+    /// The floor of somebody standing at a waiting place `place` (a `[passpos]` put in its
+    /// object's frame). An object's places all lie at the height of its origin: on a stop
+    /// whose pavement slopes, a place a few metres along it lies a metre or more under the
+    /// pavement, and [`World::walk_height_near`] (half a metre up) found the face under the
+    /// pavement or nothing, and the people there stood sunk in it in a level line (#189).
+    /// Faces up to [`WAITING_PLACE_REACH`] over the place count.
+    pub fn waiting_place_floor(&self, place: DVec3) -> Option<f64> {
+        self.walk_height_reach(place.x, place.y, place.z, WAITING_PLACE_REACH)
     }
 
     /// [`World::walk_height_near`] that also sees faces up to `reach` over `near`: the walker

@@ -1487,6 +1487,9 @@ impl Humans {
                     }
                     Some(sp) => {
                         p.pos = sp.pos;
+                        if let Some(z) = world.waiting_place_floor(sp.pos) {
+                            p.pos.z = z;
+                        }
                         p.yaw = sp.face.to_radians();
                         p.pax_state = 0.0;
                     }

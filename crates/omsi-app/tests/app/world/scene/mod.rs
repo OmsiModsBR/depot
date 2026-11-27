@@ -4,6 +4,7 @@ mod navigation_road;
 mod object_path;
 mod surf_map;
 mod terrain_mapping;
+mod waiting_place;
 
 use glam::{DVec3, Mat4};
 use hashbrown::HashMap;
