@@ -113,8 +113,17 @@ pub const BODY_OUTSIDE: f64 = 0.28;
 /// and the eight round the camera's).
 const STOP_RANGE: f64 = 450.0;
 /// Pedestrians stroll within this distance of the player (m).
-/// Seconds a vehicle standing on a crossing holds back the people about to cross it.
-const STANDING_VEHICLE_HOLD: f32 = 8.0;
+/// Seconds a vehicle standing on a crossing holds back the people about to cross it: they
+/// wait on the pavement for it to drive off. After that somebody on a stroll turns round
+/// (`STANDING_VEHICLE_GIVE_UP`) and anybody else starts across and goes round it.
+const STANDING_VEHICLE_HOLD: f32 = 60.0;
+/// Seconds a stroller waits for a vehicle standing on the crossing before turning back.
+const STANDING_VEHICLE_GIVE_UP: f32 = 45.0;
+/// Why somebody waits at the kerb while a vehicle stands on the crossing.
+pub const VEHICLE_ON_CROSSING: &str = "a vehicle stands on the crossing";
+/// How far back along the pavement (m) from the kerb somebody waits for a vehicle standing
+/// on the crossing to drive off.
+const WAIT_BACK_FROM_VEHICLE: f32 = 2.5;
 const STROLL_RADIUS: f64 = 200.0;
 /// How far in front of a seat's hip point somebody stands to sit down - where the feet
 /// stay while seated (m).
@@ -1075,6 +1084,15 @@ impl PedNet {
             .or(first)
     }
 
+    /// Where somebody at `p` off the pavement (just off a bus, left standing) starts along it:
+    /// the nearest point of a path they reach without going over a carriageway, as a leg as
+    /// long as nothing that the walk goes on from.
+    pub fn start_leg(&self, net: &Network, p: DVec3) -> Option<Leg> {
+        self.nearest_with(net, p, STANDING_PAVEMENT_REACH, false)
+            .filter(|&(l, _, _)| net.lanes[l].length() > 0.35)
+            .map(|(lane, s, _)| Leg { lane, a: s, b: s })
+    }
+
     /// The junction a leg ends at, when it ends at one.
     pub fn end_node(&self, net: &Network, leg: &Leg) -> Option<usize> {
         let (a, b) = *self.ends.get(&leg.lane)?;
@@ -1341,6 +1359,21 @@ pub fn standing_vehicle_ahead(pos: DVec2, want: DVec2, blocks: &[Block]) -> bool
             there < reach && gap(b, pos) - there > VEHICLE_LOOK_AHEAD * 0.5
         }
     })
+}
+
+/// Whether a stroller held at the kerb for `held` seconds for reason `why` turns back.
+pub fn gives_up_crossing(why: &str, held: f32) -> bool {
+    match why {
+        "red light" => held > 180.0,
+        VEHICLE_ON_CROSSING => held > STANDING_VEHICLE_GIVE_UP,
+        _ => false,
+    }
+}
+
+/// How far back from the kerb along the pavement (m) person `id` waits for a vehicle standing
+/// on the crossing to drive off: clear of it, the people waiting spread out along the path.
+pub fn vehicle_wait_back(id: u32) -> f32 {
+    WAIT_BACK_FROM_VEHICLE + (id % 3) as f32 * 0.6
 }
 
 /// Velocity towards `to`, easing into the stop over the last metre.
@@ -3622,9 +3655,7 @@ impl Humans {
             if let State::Pax(x) = &self.people[i].state {
                 let (at, h, stop) = (x.pos, x.yaw.to_degrees(), x.stop);
                 self.release(i);
-                let world = None::<&World>;
-                let _ = world;
-                self.walk_street_plain(i, at, h, stop, &mut gone);
+                self.walk_street_plain(i, at, h, stop, None, &mut gone);
             }
         }
         gone.sort_unstable();
@@ -4178,6 +4209,7 @@ impl Humans {
         self.pax_frame(
             dt,
             world,
+            net,
             &buses,
             &bus_ix,
             &at_stops,
@@ -4421,13 +4453,9 @@ impl Humans {
                 // a bay, an island) walks on from the nearest one once there is one (#57)
                 if let Some(net) = net.filter(|_| look_for_pavement(self.people[i].t_state, dt)) {
                     let at = self.people[i].position;
-                    let found = self
-                        .ped
-                        .as_ref()
-                        .and_then(|pn| pn.nearest_with(net, at, STANDING_PAVEMENT_REACH, false))
-                        .filter(|&(l, _, _)| net.lanes[l].length() > 0.35);
-                    if let Some((lane, s, _)) = found {
-                        let mut walk = PedWalk::new(vec![Leg { lane, a: s, b: s }], true, 0.0);
+                    let found = self.ped.as_ref().and_then(|pn| pn.start_leg(net, at));
+                    if let Some(leg) = found {
+                        let mut walk = PedWalk::new(vec![leg], true, 0.0);
                         let w = self.walk_want(i, &mut walk, net, traffic, cars, dt);
                         self.people[i].state = State::Strolling(walk);
                         return w;
@@ -4530,12 +4558,12 @@ impl Humans {
                 Err(why) => {
                     walk.held += dt;
                     self.people[i].why = why;
-                    // a light that stays red (nobody crosses on red any more): a stroller
-                    // gives up after three minutes and walks back the way they came
-                    if walk.roam && why == "red light" && walk.held > 180.0 {
+                    // a light that stays red (nobody crosses on red any more), a vehicle that
+                    // stays on the crossing: a stroller gives up and walks back the way they came
+                    if walk.roam && gives_up_crossing(why, walk.held) {
                         if debug_pax() {
                             log::info!(
-                                "t={:.1} pax {} gives up waiting at the red light and turns back",
+                                "t={:.1} pax {} gives up waiting ({why}) and turns back",
                                 self.time,
                                 self.people[i].label()
                             );
@@ -4560,7 +4588,16 @@ impl Humans {
                     let id = self.people[i].id;
                     let spread = ((id % 5) as f64 - 2.0) * 0.45;
                     let back = 0.25 + (id % 3) as f64 * 0.45;
-                    let spot = end.truncate() + right * spread - fwd * back;
+                    let spot = if why == VEHICLE_ON_CROSSING {
+                        // back on the pavement, not at the kerb beside the vehicle: there they
+                        // stood on the road against the side of a bus that had stopped short
+                        // of the platform, until it left
+                        let (q, _) = leg.at(net, leg.len() - vehicle_wait_back(id));
+                        let lr = (leg.at(net, leg.len()).1).to_radians();
+                        q.truncate() + DVec2::new(lr.cos(), -lr.sin()) * (spread * 0.5)
+                    } else {
+                        end.truncate() + right * spread - fwd * back
+                    };
                     return Want {
                         vel: arrive(pos2, spot, pace * 0.6),
                         face: Some(h),
@@ -4685,12 +4722,12 @@ impl Humans {
                     continue;
                 }
                 let speed = v.length();
-                // a vehicle standing there (a bus at its stop with the doors open) holds
-                // people only for a moment: they walk round it, the bodies keep them out of
-                // it. Held for as long as it stood, the people who had got off a bus stopped
-                // at a crossing queued side by side at the kerb until it drove away.
+                // a vehicle standing there (a bus at its stop with the doors open): they wait
+                // back on the pavement for it to drive off (`walk_want_with`). Let across
+                // after a moment, the people who had got off a bus standing on a crossing
+                // walked into its side and stood pressed against it until it drove away.
                 if dist < half + 1.5 && (speed >= 0.5 || held < STANDING_VEHICLE_HOLD) {
-                    return Err("a vehicle stands on the crossing");
+                    return Err(VEHICLE_ON_CROSSING);
                 }
                 if speed < 0.5 {
                     continue;
