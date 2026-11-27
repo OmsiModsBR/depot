@@ -129,33 +129,36 @@ SSAO switch (`renderer/camera_uniform.rs`, read in `enhanced.wgsl` and `shader.w
 height above 0.5 m, mirrors therefore take the SSAO branch. Reported separately; this plan does not
 change it.
 
-## R-7 Overcast, closed deck and the cumulus sky (FR-009, FR-018)
+## R-7 Overcast, closed deck, precipitation and the cumulus sky (FR-009, FR-018)
 
-**Decision**:
+**Decision** (consolidated after the analyses of 2026-11-27, findings I1, G1, H1, I2):
 
-- In Enhanced (`ShadingPath::Hdr`), `lighting.shadows` no longer depends on the cloud type
-  (`weather_setup.rs`: the `!overcast` and `closed < 0.5` terms go for Hdr; the visibility term
-  `fog > 350 m` stays). The closed deck's shade comes through the map: an `Overcast` cover of 1
-  gives a layer that removes the sun everywhere.
-- In Enhanced, `apply_weather` (`omsi-app/src/world/domain/lights.rs`) takes its even greying and
-  sun dimming (`overcast = (o - 0.45) / 0.55`) only from the closed part of the cover,
-  `smoothstep(0.85, 1.0, o)` (the same "closed" the sky shader uses), plus rain as today. The
-  `Cumulus 1..3` covers (0.35, 0.55, 0.75) then grey nothing (FR-018). Vanilla+ keeps the current
-  formula (FR-013).
-- The physical weather model's cumulus stop dimming the sun evenly; its deck keeps greying the sky
-  by `closed` as today.
+- *Shadows switch*: in Enhanced (`ShadingPath::Hdr`), `lighting.shadows` no longer depends on the
+  cloud type (`weather_setup.rs`: the `!overcast` and `closed < 0.5` terms go for Hdr; the visibility
+  term `fog > 350 m` stays).
+- *Direct light is cut once, by the map*: the closed share no longer dims `sun_intensity` in
+  `apply_weather` (`omsi-app/src/world/domain/lights.rs`); the weather model's
+  `sun_intensity = 1 - closed` goes for Hdr; `enhanced_sky_input` (`sky/air.rs`) no longer multiplies
+  the reaching sun by `1 - closed`. Under a closed cover the map's optical depth removes the direct
+  sun by itself (FR-009).
+- *Precipitation*: rain or snow fall from a closed deck. In Hdr the map is drawn with the cover
+  `max(cover, wet_cover)` (`wet_cover = clamp(1.5 * rain, 0, 1)`, as the sky already uses), so a
+  rain under a `Cumulus` type shades like a deck; the even sun cuts by rain go for Hdr
+  (`sun_intensity *= 1 - 0.75 * rain` in `apply_weather`, and `* (1 - wet_cover)` in
+  `enhanced_sky_input`). Rain keeps greying the sky and its light and its part of the gloom.
+- *Sky greying and gloom*: the sky and its light (`sky_color`, `ambient`, `secondary`, `fog_color`,
+  the sky shader's grey dome) and the cloud part of the picture's gloom
+  (`l.night = max(night, 0.45 * gloom)`) follow the closed share `smoothstep(0.85, 1.0, o)` (the
+  same "closed" the sky shader uses) instead of `(o - 0.45) / 0.55`, so `Cumulus 1..3` (covers 0.35,
+  0.55, 0.75) grey nothing and bring no night look by day (FR-018).
+- *Veil*: the cirrus veil is not in the map; its even dimming of the sun (`veil_t`) and its
+  softening of the sun shadows stay. It is the one cloud that dims direct light evenly, and it does
+  so once (FR-009 as reworded).
+- Vanilla+ keeps every current formula (FR-013).
 
 **Rationale**: removes the double darkening (even dimming + per-point shade) the maintainer chose
-to drop (Q3), and lets the deck cast through the same rule as every cloud (FR-009).
-
-**Revised by the analysis of 2026-11-27 (finding I1, G1)**: the closed share greys only the sky and
-its light (`sky_color`, `ambient`, `secondary`, `fog_color`, the sky shader's grey dome); it no
-longer dims `sun_intensity`, and `enhanced_sky_input` no longer multiplies the reaching sun by
-`1 - closed`: under a closed cover the map's optical depth removes the direct sun by itself
-(FR-009), so it is cut once. The weather model's `sun_intensity = 1 - closed` goes for Hdr. The
-picture's gloom (`l.night = max(night, 0.45 * gloom)` in `apply_weather`) takes its cloud part from
-the closed share too, so `Cumulus 1..3` no longer bring the night look by day in Enhanced (rain
-keeps its part).
+to drop (Q3), lets the deck and the rain cast through the same rule as every cloud (FR-009), and
+keeps the veil, which the map does not hold, as the only even cut.
 
 ## R-8 Moonlight (FR-016, FR-017)
 

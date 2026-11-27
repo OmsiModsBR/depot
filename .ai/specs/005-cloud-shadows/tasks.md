@@ -126,8 +126,9 @@ soft edge widens with height.
 
 ## Phase 6: User Story 2 - Every cloud kind shades as dark as it is opaque (Priority: P1)
 
-**Goal**: only `Overcast`, a closed deck and precipitation grey the sky and dim the light evenly in
-Enhanced; `Overcast` no longer switches shadows off but shades through the map.
+**Goal**: only `Overcast`, a closed deck and precipitation grey the sky and its light in Enhanced;
+the direct sun is cut only by the map (rain draws a closed deck into it); `Overcast` no longer
+switches shadows off but shades through the map.
 
 **Independent test**: quickstart Q2; `weather_lighting` test; Vanilla+ golden.
 
@@ -143,6 +144,9 @@ Enhanced; `Overcast` no longer switches shadows off but shades through the map.
 - [ ] T031 [US2] [ph 3] In `apply_weather` (`crates/omsi-app/src/world/domain/lights.rs`), for `ShadingPath::Hdr` take the sky greying (`sky_color`, `ambient`, `secondary`, `fog_color`) and the cloud part of the gloom (`l.night`) from `smoothstep(0.85, 1.0, o)` (closed share) instead of `(o - 0.45) / 0.55`, and leave `sun_intensity` undimmed by clouds (the map removes the sun, FR-009); Linear path unchanged (research R-7 and its revision)
 - [ ] T032 [US2] [ph 3] In `weather_lighting` (`crates/omsi-app/src/weather/implementation/weather_setup.rs`), for Hdr drop the `!overcast` and `closed < 0.5` shadow switches, keep the visibility term; for Hdr the model sky no longer sets `sun_intensity = 1 - closed` (research R-7 revision)
 - [ ] T033 [US2] [ph 3] Check `enhanced_sky_input` (`crates/omsi-render/src/sky/air.rs`): the sky's `overcast` input is the closed share for cumulus types after T031; drop the `(1.0 - closed)` factor from `reaching` so the map alone removes the sun, also under a closed cover (FR-009); adjust the doc comments that describe the old behaviour
+
+- [ ] T046 [P] [US2] [ph 3] Tests: in `crates/omsi-app/tests/weather_lighting.rs`, Enhanced with `Cumulus 2` and rain keeps `sun_intensity` undimmed by the rain (Vanilla+ unchanged); in `crates/omsi-render/tests/cloud_shade.rs`, `Cumulus 2` with rain 0.7 shades every ground point to < 5 % of the sun, and a veil alone dims the sun evenly once (FR-009, research R-7)
+- [ ] T047 [US2] [ph 3] Draw the map with the cover `max(cover, wet_cover)` in `crates/omsi-render/src/modes/enhanced/cloud_shade.rs`, and for Hdr drop the even rain cuts of direct sun: `sun_intensity *= 1 - 0.75 * rain` in `crates/omsi-app/src/world/domain/lights.rs` and `* (1 - wet_cover)` in `enhanced_sky_input` (`crates/omsi-render/src/sky/air.rs`) (research R-7)
 
 ---
 
@@ -177,7 +181,7 @@ Enhanced; `Overcast` no longer switches shadows off but shades through the map.
 - **US1 (T007-T017)** first: it is the MVP and the base of every other story.
 - **US4 (T018-T019)** ships with US1 in P1 (one constant).
 - **US3 (T020-T026, T043-T044)** needs US1's map (P2 after P1).
-- **US2 (T027-T033)** needs US1: without the map, removing the cumulus' even dimming would leave the
+- **US2 (T027-T033, T046-T047)** needs US1: without the map, removing the cumulus' even dimming would leave the
   scene with no cloud darkening at all (P3 after P1; independent of P2).
 - **US5 (T034-T037)** needs US1 (P4 after P1; independent of P2/P3).
 - **Polish**: T038/T039 in every phase; T045 with P1; T041 last.
@@ -215,7 +219,7 @@ T007, T008, T009 (tests, in parallel)  ->  T010 -> T011 -> T012 -> T013 -> T014 
 | US1 | T007-T017 (11) | P1 |
 | US4 | T018-T019 (2) | P1 |
 | US3 | T020-T026, T043-T044 (9) | P2 |
-| US2 | T027-T033 (7) | P3 |
+| US2 | T027-T033, T046-T047 (9) | P3 |
 | US5 | T034-T037 (4) | P4 |
 | Polish | T038-T042, T045 (6) | P1-P5 |
-| **Total** | **45** | |
+| **Total** | **47** | |

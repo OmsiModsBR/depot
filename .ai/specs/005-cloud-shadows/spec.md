@@ -258,8 +258,9 @@ Story 1, and an `Overcast` sky leaves no moonlight on the ground.
   direct sun reaches, with their strength scaled by the sun that gets through the clouds there.
 - **FR-009**: The `Overcast` type and a closed deck MUST stop switching sun shadows off as a special
   case; they shade the scene through FR-001 to FR-004 like every other cloud, which removes direct
-  sun everywhere they are opaque. Direct sun (and moon) light MUST be removed only by the per-point
-  shade, never also by an even dimming, so that no cloud cuts it twice.
+  sun everywhere they are opaque. No cloud MUST cut direct sun (or moon) light twice: the clouds in
+  the per-point shade (cumulus, deck, and the deck that rain or snow falls from) cut it only there;
+  the high veil, which casts no patches, keeps its even dimming instead.
 - **FR-010**: The exposure MUST keep adapting to the light where the camera is, but MUST make up
   for only a quarter of the light a cloud's shade over the camera takes away (in log terms; today
   half), while points elsewhere in view receive their own sunlight. The same share applies to the

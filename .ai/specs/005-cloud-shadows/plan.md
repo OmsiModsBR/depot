@@ -27,8 +27,9 @@ The plan:
    shadows within it), mirrors and the reflection probe included, and drops the camera-wide
    `cloud_t` from the scene's sun (R-6);
 3. passes the weather's cloud height to the sky shader and the CPU transmittance, no floor (R-11);
-4. lets only the closed part of the cover grey the sky and dim the light evenly in Enhanced, and
-   stops switching shadows off for `Overcast` there (R-7);
+4. lets only the closed part of the cover (and precipitation) grey the sky and its light in
+   Enhanced, leaves the direct sun to the map alone (rain draws a closed deck into it), and stops
+   switching shadows off for `Overcast` there (R-7);
 5. draws the same map for the moon at night and drops the moon's even dimming (R-8);
 6. sets the exposure's cloud share to a quarter (R-12).
 
