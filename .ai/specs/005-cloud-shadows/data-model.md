@@ -10,7 +10,7 @@
 | `base` (m above the map's height zero) | `Lighting::cloud_height` (`[clouds]` height, METAR base in metres) | no floor; absent/zero/negative/non-finite -> 1400 |
 | `top` (m) | `base + 1400` | |
 | `drift` (m) | `Lighting::cloud_offset * 2500` | moves the map lookup between draws |
-| `closed` | `smoothstep(0.85, 1.0, cover)`, or the model deck's closed share | greys the sky and dims the light evenly (R-7) |
+| `closed` | `smoothstep(0.85, 1.0, cover)`, or the model deck's closed share | greys the sky and its light and drives the gloom; never dims direct sun or moon (R-7 revision) |
 | `light_dir` | sun direction by day; moon direction while the moon is the scene's light | the map is drawn for this body |
 
 ## Cloud shade map (GPU)
