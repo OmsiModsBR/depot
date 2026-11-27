@@ -41,22 +41,44 @@ impl Model {
                     m.materials.push(MaterialDef {
                         texture: texture.clone(),
                         index,
-                        change: Some((texture, index, var)),
+                        change: Some((texture.clone(), index, var)),
                         ..Default::default()
                     });
+                    // [matl_change] also selects the slot's own material, as [matl] does: the
+                    // commands after it (up to a [matl_item]) change that material, and the
+                    // record above only holds the switch. The S3Dmatrix LED panels write
+                    // `[matl_change]` and then `[matl_transmap] \S:1` and `[matl_alpha] 2`
+                    // for the slot itself; kept on the switch, the slot was drawn opaque and
+                    // the whole panel was lit.
+                    let plain = |d: &MaterialDef| {
+                        !d.item
+                            && d.change.is_none()
+                            && d.index == index
+                            && d.texture.eq_ignore_ascii_case(&texture)
+                    };
+                    let base = match m.materials.iter().position(plain) {
+                        Some(k) => m.materials.remove(k),
+                        None => MaterialDef {
+                            texture,
+                            index,
+                            ..Default::default()
+                        },
+                    };
+                    m.materials.push(base);
                 }
             }
             "matl_item" => {
-                // the variant of the preceding [matl_change]: starts as a copy of the base
-                // material, the following matl_* keywords change the variant only
+                // a variant of the last [matl_change]: a copy of the slot's material as it
+                // stands now (what the commands after the [matl_change] set included); the
+                // following matl_* keywords change the variant only
                 if let Some(mesh) = self.cur_mesh() {
-                    if let Some(change) = mesh
+                    let change = mesh
                         .materials
-                        .last()
-                        .filter(|m| m.change.is_some())
-                        .cloned()
-                    {
-                        // inherit the plain [matl] of the same slot (alpha, transmap, ...)
+                        .iter()
+                        .rev()
+                        .find(|m| !m.item && m.change.is_some())
+                        .and_then(|m| m.change.clone());
+                    if let Some((texture, index, var)) = change {
                         let base = mesh
                             .materials
                             .iter()
@@ -64,19 +86,16 @@ impl Model {
                             .find(|m| {
                                 !m.item
                                     && m.change.is_none()
-                                    && m.texture.eq_ignore_ascii_case(&change.texture)
-                                    && m.index == change.index
+                                    && m.texture.eq_ignore_ascii_case(&texture)
+                                    && m.index == index
                             })
                             .cloned();
-                        // ... and what the [matl_change] (or the item before) set on top: OMSI
-                        // copies the whole material record into the new item,
-                        // its free texture, scrolling and border with it. Copied from
-                        // the plain [matl] alone, the SD77's lit roller blind (`lights_stand`)
-                        // lost its destination text and scrolling with the lights on (#1419).
-                        let mut item = change.clone();
-                        if let Some(base) = base {
-                            item.inherit(&base);
-                        }
+                        let mut item = base.unwrap_or_else(|| MaterialDef {
+                            texture: texture.clone(),
+                            index,
+                            ..Default::default()
+                        });
+                        item.change = Some((texture, index, var));
                         item.item = true;
                         mesh.materials.push(item);
                     }
