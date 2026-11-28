@@ -510,7 +510,8 @@ fn cloud_shade_at(world: vec3<f32>) -> f32 {
     let uv = d / CLOUD_MAP_SIZE + vec2<f32>(0.5);
     let edge = max(abs(uv.x - 0.5), abs(uv.y - 0.5)) * 2.0;
     let t = cloud_map_texel(clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)));
-    return pow(mix(t, enh.cloud_shade.z, smoothstep(0.9, 1.0, edge)), inside);
+    let lit = mix(t, enh.cloud_shade.z, smoothstep(0.9, 1.0, edge));
+    return select(pow(lit, inside), lit, inside >= 1.0);
 }
 
 fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bool, eye: vec3<f32>) -> vec4<f32> {
@@ -943,7 +944,11 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         } else if (nl > 0.0 || thin) {
             shadow = sun_shadow_soft(in.world, n, thin);
         }
-        let e_sun = enh.sun_open.rgb * shadow * cloud_shade_at(in.world);
+        // (the clouds' shade is read only where the sun is used at all: not on a back face)
+        if (shadow > 0.0) {
+            shadow = shadow * cloud_shade_at(in.world);
+        }
+        let e_sun = enh.sun_open.rgb * shadow;
         if (thin) {
             // foliage: a crown of leaves facing every way, whose normals OMSI points up
             // only to light it evenly - lit by the sun from any side (the shadow map
