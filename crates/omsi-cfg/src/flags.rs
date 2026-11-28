@@ -627,6 +627,9 @@ flags! {
     DAY_AIR = "OMSI_DAY_AIR", Text, Diagnostic, "omsi-render::gpu::debug";
     /// Log the sky, its cloud cover and the lamps' glow on it.
     DEBUG_SKY = "OMSI_DEBUG_SKY", Switch, Diagnostic, "omsi-render::gpu::debug";
+    /// Dim the Enhanced sun by the clouds over the camera, as before the clouds' shade map, and
+    /// read no map (to compare the map's cost and look).
+    NO_CLOUD_SHADE = "OMSI_NO_CLOUD_SHADE", Switch, Diagnostic, "omsi-render::gpu::debug";
     /// The strength of the `[matl_envmap]` photo on reflections (default 1, 0 leaves it out).
     ENV_PHOTO = "OMSI_ENV_PHOTO", Number, Diagnostic, "omsi-render::gpu::debug";
     /// Log how much of the view the lamps light.

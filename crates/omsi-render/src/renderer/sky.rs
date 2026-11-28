@@ -131,7 +131,7 @@ impl Renderer {
         // the clouds' shade map: drawn again when what it shows has changed, and the uniform
         // says where it lies; where the device has no slot for it the scene's sun is dimmed by
         // the clouds over the camera as before (`cloud_t`)
-        let shade_map = crate::gpu::cloud_shade_fits();
+        let shade_map = crate::gpu::cloud_shade_fits() && !crate::gpu::debug().no_cloud_shade;
         let (cloud_shade, cloud_layer) = if shade_map {
             let inputs = ShadeInputs {
                 light: lighting.sun_dir.normalize_or_zero(),

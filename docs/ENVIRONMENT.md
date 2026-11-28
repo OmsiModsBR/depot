@@ -192,6 +192,7 @@ The `OMSI_*` variables the game reads, as declared in `omsi_cfg::flags`. "env.tx
 | `OMSI_NO_ATTACH_FALLBACK` | switch | `omsi-app::scene` |  | Attachments with an index the parent does not have dropped, not placed on it. |
 | `OMSI_NO_BOUNDS_CACHE` | switch | `omsi-render::gpu::debug` |  | Every instance's bounds worked out again each frame. |
 | `OMSI_NO_BUNDLES` | switch | `omsi-render::gpu::debug` |  | The main pass encoded directly, without render bundles. |
+| `OMSI_NO_CLOUD_SHADE` | switch | `omsi-render::gpu::debug` |  | Dim the Enhanced sun by the clouds over the camera, as before the clouds' shade map, and read no map (to compare the map's cost and look). |
 | `OMSI_NO_CULL` | switch | `omsi-render::gpu::debug` | yes | One-sided faces drawn from both sides. |
 | `OMSI_NO_GLARE` | switch | `omsi-render::gpu::debug` |  | No glare from the sun. |
 | `OMSI_NO_GLASS_PICTURE` | switch | `omsi-app::settings` |  | No rain drawn on the glass. |
