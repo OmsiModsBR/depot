@@ -181,10 +181,14 @@ impl SkyResources {
         scene: &Scene,
         prepass_encoder: &mut wgpu::CommandEncoder,
         own_shading: bool,
+        tset: &Option<wgpu::QuerySet>,
+        timed: &mut Vec<&'static str>,
     ) {
         if own_shading {
             self.cloud_shade
-                .encode(scene.sky_bind_group.as_ref(), prepass_encoder);
+                .encode(scene.sky_bind_group.as_ref(), prepass_encoder, || {
+                    pass_timer(tset.as_ref(), timed, "cloud shade")
+                });
         }
     }
 

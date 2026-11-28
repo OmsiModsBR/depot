@@ -138,8 +138,13 @@ impl Renderer {
             &clock.tset,
             &mut clock.timed,
         );
-        self.sky
-            .encode_cloud_shade(scene, &mut prepass_encoder, own_shading);
+        self.sky.encode_cloud_shade(
+            scene,
+            &mut prepass_encoder,
+            own_shading,
+            &clock.tset,
+            &mut clock.timed,
+        );
         self.sky.encode_probe(
             scene,
             &mut prepass_encoder,

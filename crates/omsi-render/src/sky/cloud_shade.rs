@@ -337,12 +337,21 @@ impl CloudShade {
                 bytemuck::cast_slice(&[axis[0], axis[1], sigma, taps]),
             );
         }
+        log::debug!(
+            "cloud shade: map drawn (centre {:?}, blur sigma {sigma:.2} texels)",
+            centre
+        );
         self.pending = true;
     }
 
     /// Draw the map if `set_drawn` asked for it: the light through the layer, then the blur
     /// along x and along y (the result in `view`).
-    pub fn encode(&mut self, sky_bg: Option<&wgpu::BindGroup>, encoder: &mut wgpu::CommandEncoder) {
+    pub fn encode<'a>(
+        &mut self,
+        sky_bg: Option<&wgpu::BindGroup>,
+        encoder: &mut wgpu::CommandEncoder,
+        timer: impl FnOnce() -> Option<wgpu::RenderPassTimestampWrites<'a>>,
+    ) {
         if !std::mem::take(&mut self.pending) {
             return;
         }
@@ -350,7 +359,8 @@ impl CloudShade {
                     label: &str,
                     target: &wgpu::TextureView,
                     pipeline: &wgpu::RenderPipeline,
-                    groups: &[&wgpu::BindGroup]| {
+                    groups: &[&wgpu::BindGroup],
+                    timer: Option<wgpu::RenderPassTimestampWrites<'_>>| {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -363,7 +373,7 @@ impl CloudShade {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: timer,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -402,6 +412,7 @@ impl CloudShade {
             &self.view,
             &self.depth_pipeline,
             &[&self.depth_bg, sky_bg],
+            timer(),
         );
         draw(
             encoder,
@@ -409,6 +420,7 @@ impl CloudShade {
             &self.mid_view,
             &self.blur_pipeline,
             &[&self.blur_bgs[0]],
+            None,
         );
         draw(
             encoder,
@@ -416,6 +428,7 @@ impl CloudShade {
             &self.view,
             &self.blur_pipeline,
             &[&self.blur_bgs[1]],
+            None,
         );
     }
 }
